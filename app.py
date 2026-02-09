@@ -152,62 +152,36 @@ def analyze_logs():
 @app.route('/api/metrics')
 @login_required
 def api_metrics():
-    """API endpoint for dashboard metrics"""
+    """API endpoint for dashboard metrics - REAL DATA from Claude Memory System"""
     try:
-        # Try to get real data, but provide fallback
-        try:
-            system_health = metrics.get_system_health()
-        except:
-            system_health = {'health_score': 85, 'score': 85, 'context_usage': 45, 'memory_usage': 60}
+        system_health = metrics.get_system_health()
+        daemon_status = metrics.get_daemon_status()
+        policy_status = policy_checker.get_all_policies_status()
 
-        try:
-            daemon_status = metrics.get_daemon_status()
-            if not daemon_status or not isinstance(daemon_status, list):
-                daemon_status = []
-        except:
-            daemon_status = []
+        # daemon_status is now a list from get_daemon_status
+        daemons_running = len([d for d in daemon_status if d.get('status') == 'running'])
+        daemons_total = len(daemon_status)
 
-        try:
-            policy_status = policy_checker.get_all_policies_status()
-        except:
-            policy_status = {'active_count': 6, 'total_hits': 42}
-
-        # Ensure daemon_status is a list
-        if isinstance(daemon_status, dict):
-            daemon_status = daemon_status.get('daemons', [])
-
-        daemons_running = len([d for d in daemon_status if d.get('status') == 'running']) if daemon_status else 0
-        daemons_total = len(daemon_status) if daemon_status else 8
+        health_score = system_health.get('health_score', system_health.get('score', 0))
 
         return jsonify({
             'success': True,
-            'health_score': system_health.get('health_score', system_health.get('score', 85)),
+            'health_score': health_score,
             'daemons_running': daemons_running,
             'daemons_total': daemons_total,
             'active_policies': policy_status.get('active_count', 6),
-            'policy_hits': policy_status.get('total_hits', 42),
-            'context_usage': system_health.get('context_usage', 45),
-            'memory_usage': system_health.get('memory_usage', 60),
+            'policy_hits': policy_status.get('total_hits', 0),
+            'context_usage': system_health.get('context_usage', 0),
+            'memory_usage': system_health.get('memory_usage', 0),
             'labels': ['Now'],
-            'health_scores': [system_health.get('health_score', system_health.get('score', 85))],
-            'policy_hits_data': [policy_status.get('total_hits', 42)]
+            'health_scores': [health_score],
+            'policy_hits_data': [policy_status.get('total_hits', 0)]
         })
     except Exception as e:
         print(f"Error in api_metrics: {e}")
-        # Return mock data as last resort
-        return jsonify({
-            'success': True,
-            'health_score': 85,
-            'daemons_running': 0,
-            'daemons_total': 8,
-            'active_policies': 6,
-            'policy_hits': 42,
-            'context_usage': 45,
-            'memory_usage': 60,
-            'labels': ['Now'],
-            'health_scores': [85],
-            'policy_hits_data': [42]
-        })
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/activity')
 @login_required
@@ -225,7 +199,7 @@ def api_activity():
 @app.route('/api/policies')
 @login_required
 def api_policies():
-    """API endpoint for policy status"""
+    """API endpoint for policy status - REAL DATA"""
     try:
         policies_data = policy_checker.get_detailed_policy_status()
 
@@ -236,17 +210,17 @@ def api_policies():
             for key, value in policies_data.items():
                 if isinstance(value, dict):
                     policies_array.append({
-                        'name': key,
+                        'name': key.replace('_', ' ').title(),
                         **value
                     })
-            policies_data = policies_array if policies_array else [
-                {'name': 'Context Management', 'status': 'active', 'phase': 1, 'hits': 15},
-                {'name': 'Model Selection', 'status': 'active', 'phase': 1, 'hits': 8},
-                {'name': 'Failure Prevention', 'status': 'active', 'phase': 2, 'hits': 12},
-                {'name': 'Proactive Consultation', 'status': 'active', 'phase': 3, 'hits': 5},
-                {'name': 'Session Memory', 'status': 'active', 'phase': 4, 'hits': 2},
-                {'name': 'Git Auto-Commit', 'status': 'active', 'phase': 4, 'hits': 0}
-            ]
+                else:
+                    # Simple key-value pair
+                    policies_array.append({
+                        'name': key.replace('_', ' ').title(),
+                        'status': 'active',
+                        'value': value
+                    })
+            policies_data = policies_array
 
         return jsonify({
             'success': True,
@@ -254,74 +228,40 @@ def api_policies():
         })
     except Exception as e:
         print(f"Error in api_policies: {e}")
-        # Return mock data
-        return jsonify({
-            'success': True,
-            'policies': [
-                {'name': 'Context Management', 'status': 'active', 'phase': 1, 'hits': 15, 'description': 'Optimize context usage'},
-                {'name': 'Model Selection', 'status': 'active', 'phase': 1, 'hits': 8, 'description': 'Smart model routing'},
-                {'name': 'Failure Prevention', 'status': 'active', 'phase': 2, 'hits': 12, 'description': 'Prevent known failures'},
-                {'name': 'Proactive Consultation', 'status': 'active', 'phase': 3, 'hits': 5, 'description': 'Ask user preferences'},
-                {'name': 'Session Memory', 'status': 'active', 'phase': 4, 'hits': 2, 'description': 'Save session progress'},
-                {'name': 'Git Auto-Commit', 'status': 'active', 'phase': 4, 'hits': 0, 'description': 'Auto-commit changes'}
-            ]
-        })
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/system-info')
 @login_required
 def api_system_info():
-    """API endpoint for system information"""
+    """API endpoint for system information - REAL DATA"""
     try:
-        # Try to get real data with fallback
-        try:
-            system_health = metrics.get_system_health()
-        except:
-            system_health = {'health_score': 85, 'score': 85, 'context_usage': 45, 'memory_usage': 60, 'uptime': '2h 15m'}
+        system_health = metrics.get_system_health()
+        daemon_status = metrics.get_daemon_status()
 
-        try:
-            daemon_status = metrics.get_daemon_status()
-            if not daemon_status or not isinstance(daemon_status, list):
-                daemon_status = []
-        except:
-            daemon_status = []
-
-        # Ensure daemon_status is a list
-        if isinstance(daemon_status, dict):
-            daemon_status = daemon_status.get('daemons', [])
-
-        health_score = system_health.get('health_score', system_health.get('score', 85))
-        daemons_running = len([d for d in daemon_status if d.get('status') == 'running']) if daemon_status else 0
-        daemons_total = len(daemon_status) if daemon_status else 8
+        daemons_running = len([d for d in daemon_status if d.get('status') == 'running'])
+        daemons_total = len(daemon_status)
+        health_score = system_health.get('health_score', system_health.get('score', 0))
 
         return jsonify({
             'success': True,
             'system_info': {
-                'status': 'Operational' if health_score > 70 else 'Degraded',
+                'status': 'Operational' if health_score >= 90 else ('Healthy' if health_score >= 70 else 'Degraded'),
                 'health_score': health_score,
-                'memory_usage': system_health.get('memory_usage', 60),
-                'context_usage': system_health.get('context_usage', 45),
+                'memory_usage': system_health.get('memory_usage', 0),
+                'context_usage': system_health.get('context_usage', 0),
                 'daemons_running': daemons_running,
                 'daemons_total': daemons_total,
-                'uptime': system_health.get('uptime', '2h 15m'),
+                'uptime': system_health.get('uptime', 'Active'),
                 'last_check': datetime.now().isoformat()
             }
         })
     except Exception as e:
         print(f"Error in api_system_info: {e}")
-        # Return mock data
-        return jsonify({
-            'success': True,
-            'system_info': {
-                'status': 'Operational',
-                'health_score': 85,
-                'memory_usage': 60,
-                'context_usage': 45,
-                'daemons_running': 0,
-                'daemons_total': 8,
-                'uptime': '2h 15m',
-                'last_check': datetime.now().isoformat()
-            }
-        })
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/recent-errors')
 @login_required

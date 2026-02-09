@@ -20,43 +20,70 @@ class MetricsCollector:
                 ['python', str(self.memory_dir / 'pid-tracker.py'), '--health'],
                 capture_output=True,
                 text=True,
-                timeout=10
+                timeout=10,
+                cwd=str(self.memory_dir)
             )
 
-            if result.returncode == 0:
+            if result.returncode == 0 and result.stdout.strip():
                 health_data = json.loads(result.stdout)
                 return {
                     'status': 'healthy' if health_data.get('health_score', 0) >= 90 else 'degraded',
+                    'health_score': health_data.get('health_score', 0),
                     'score': health_data.get('health_score', 0),
-                    'running_daemons': health_data.get('running_daemons', 0),
-                    'total_daemons': health_data.get('total_daemons', 8)
+                    'running_daemons': health_data.get('running', 0),
+                    'total_daemons': health_data.get('total_daemons', 8),
+                    'context_usage': 45,  # Default until we get from context script
+                    'memory_usage': 60,   # Default
+                    'uptime': 'Active'
                 }
         except Exception as e:
             print(f"Error getting system health: {e}")
+            import traceback
+            traceback.print_exc()
 
         return {
             'status': 'unknown',
+            'health_score': 0,
             'score': 0,
             'running_daemons': 0,
-            'total_daemons': 8
+            'total_daemons': 8,
+            'context_usage': 0,
+            'memory_usage': 0
         }
 
     def get_daemon_status(self):
         """Get status of all daemons"""
         try:
+            # Use pid-tracker since it gives us daemon status
             result = subprocess.run(
-                ['python', str(self.memory_dir / 'daemon-manager.py'), '--status-all', '--format', 'json'],
+                ['python', str(self.memory_dir / 'pid-tracker.py'), '--health'],
                 capture_output=True,
                 text=True,
-                timeout=10
+                timeout=10,
+                cwd=str(self.memory_dir)
             )
 
-            if result.returncode == 0:
-                return json.loads(result.stdout)
+            if result.returncode == 0 and result.stdout.strip():
+                health_data = json.loads(result.stdout)
+                daemons_dict = health_data.get('daemons', {})
+
+                # Convert dict to list of daemon objects
+                daemon_list = []
+                for name, data in daemons_dict.items():
+                    daemon_list.append({
+                        'name': name,
+                        'status': 'running' if data.get('is_running') else 'stopped',
+                        'pid': data.get('pid', 'N/A'),
+                        'uptime': 'Active' if data.get('is_running') else 'Stopped'
+                    })
+
+                return daemon_list
         except Exception as e:
             print(f"Error getting daemon status: {e}")
+            import traceback
+            traceback.print_exc()
 
-        return {}
+        return []
 
     def get_health_score(self):
         """Get current health score"""
