@@ -1,0 +1,543 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Claude Monitoring System{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center">
+            <h2 class="mb-0">
+                <i class="fas fa-tachometer-alt me-2"></i>System Dashboard
+            </h2>
+            <div class="d-flex gap-2">
+                <button class="btn btn-outline-primary" onclick="refreshDashboard()">
+                    <i class="fas fa-sync-alt me-2"></i>Refresh
+                </button>
+                <span class="badge bg-success fs-6" id="autoRefreshBadge">
+                    <i class="fas fa-circle-notch fa-spin me-1"></i>Auto-refresh: 30s
+                </span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- System Health Metrics -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body text-center">
+                <div class="display-4 mb-2" id="healthScore">
+                    <i class="fas fa-spinner fa-spin text-primary"></i>
+                </div>
+                <h5 class="card-title text-muted mb-0">Health Score</h5>
+                <div class="progress mt-3" style="height: 8px;">
+                    <div class="progress-bar bg-gradient" id="healthScoreBar" role="progressbar" style="width: 0%"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body text-center">
+                <div class="display-4 mb-2" id="daemonsRunning">
+                    <i class="fas fa-spinner fa-spin text-primary"></i>
+                </div>
+                <h5 class="card-title text-muted mb-0">Daemons Running</h5>
+                <small class="text-muted" id="daemonStatus">Checking...</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body text-center">
+                <div class="display-4 mb-2" id="activePolicies">
+                    <i class="fas fa-spinner fa-spin text-primary"></i>
+                </div>
+                <h5 class="card-title text-muted mb-0">Active Policies</h5>
+                <small class="text-muted">Out of 6 total</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body text-center">
+                <div class="display-4 mb-2" id="policyHits">
+                    <i class="fas fa-spinner fa-spin text-primary"></i>
+                </div>
+                <h5 class="card-title text-muted mb-0">Policy Hits Today</h5>
+                <small class="text-muted">Last 24 hours</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Live Metrics and Activity Feed -->
+<div class="row mb-4">
+    <div class="col-md-8">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-header bg-white border-0 pt-4 pb-3">
+                <h5 class="mb-0">
+                    <i class="fas fa-chart-line me-2"></i>Live Metrics
+                </h5>
+            </div>
+            <div class="card-body">
+                <canvas id="metricsChart" height="100"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-header bg-white border-0 pt-4 pb-3">
+                <h5 class="mb-0">
+                    <i class="fas fa-clock me-2"></i>Recent Activity
+                </h5>
+            </div>
+            <div class="card-body" style="max-height: 400px; overflow-y: auto;">
+                <div id="activityFeed">
+                    <div class="text-center text-muted py-4">
+                        <i class="fas fa-spinner fa-spin fa-2x mb-3"></i>
+                        <p>Loading activity...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Policy Status Cards -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white border-0 pt-4 pb-3">
+                <h5 class="mb-0">
+                    <i class="fas fa-shield-alt me-2"></i>Policy Status Overview
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row" id="policyCards">
+                    <div class="col-12 text-center text-muted py-4">
+                        <i class="fas fa-spinner fa-spin fa-2x mb-3"></i>
+                        <p>Loading policies...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- System Information -->
+<div class="row">
+    <div class="col-md-6">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white border-0 pt-4 pb-3">
+                <h5 class="mb-0">
+                    <i class="fas fa-info-circle me-2"></i>System Information
+                </h5>
+            </div>
+            <div class="card-body">
+                <table class="table table-borderless">
+                    <tbody id="systemInfo">
+                        <tr>
+                            <td class="text-muted">Status:</td>
+                            <td><i class="fas fa-spinner fa-spin"></i> Loading...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white border-0 pt-4 pb-3">
+                <h5 class="mb-0">
+                    <i class="fas fa-exclamation-triangle me-2"></i>Recent Errors
+                </h5>
+            </div>
+            <div class="card-body" style="max-height: 300px; overflow-y: auto;">
+                <div id="recentErrors">
+                    <div class="text-center text-muted py-4">
+                        <i class="fas fa-spinner fa-spin fa-2x mb-3"></i>
+                        <p>Loading errors...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+let metricsChart;
+let autoRefreshInterval;
+
+document.addEventListener('DOMContentLoaded', function() {
+    initializeDashboard();
+    startAutoRefresh();
+});
+
+function initializeDashboard() {
+    loadMetrics();
+    loadActivityFeed();
+    loadPolicyStatus();
+    loadSystemInfo();
+    loadRecentErrors();
+    initializeChart();
+}
+
+function loadMetrics() {
+    fetch('/api/metrics')
+        .then(response => response.json())
+        .then(data => {
+            // Update health score
+            const healthScore = data.health_score || 0;
+            document.getElementById('healthScore').innerHTML = `
+                <span class="text-${getHealthColor(healthScore)}">${healthScore}%</span>
+            `;
+            document.getElementById('healthScoreBar').style.width = healthScore + '%';
+            document.getElementById('healthScoreBar').className = `progress-bar bg-${getHealthColor(healthScore)} bg-gradient`;
+
+            // Update daemons
+            const daemonsRunning = data.daemons_running || 0;
+            const totalDaemons = data.total_daemons || 0;
+            document.getElementById('daemonsRunning').innerHTML = `
+                <span class="text-${daemonsRunning === totalDaemons ? 'success' : 'warning'}">${daemonsRunning}/${totalDaemons}</span>
+            `;
+            document.getElementById('daemonStatus').textContent = daemonsRunning === totalDaemons ? 'All systems operational' : 'Some daemons offline';
+
+            // Update active policies
+            const activePolicies = data.active_policies || 0;
+            document.getElementById('activePolicies').innerHTML = `
+                <span class="text-primary">${activePolicies}/6</span>
+            `;
+
+            // Update policy hits
+            const policyHits = data.policy_hits_today || 0;
+            document.getElementById('policyHits').innerHTML = `
+                <span class="text-info">${policyHits}</span>
+            `;
+
+            // Update chart
+            if (metricsChart && data.metrics_history) {
+                updateChart(data.metrics_history);
+            }
+        })
+        .catch(error => {
+            console.error('Error loading metrics:', error);
+            showError('Failed to load metrics');
+        });
+}
+
+function loadActivityFeed() {
+    fetch('/api/activity')
+        .then(response => response.json())
+        .then(data => {
+            const feedContainer = document.getElementById('activityFeed');
+            if (!data.activities || data.activities.length === 0) {
+                feedContainer.innerHTML = `
+                    <div class="text-center text-muted py-4">
+                        <i class="fas fa-inbox fa-2x mb-3"></i>
+                        <p>No recent activity</p>
+                    </div>
+                `;
+                return;
+            }
+
+            feedContainer.innerHTML = data.activities.map(activity => `
+                <div class="activity-item mb-3 pb-3 border-bottom">
+                    <div class="d-flex align-items-start">
+                        <div class="flex-shrink-0">
+                            <span class="badge bg-${getActivityColor(activity.type)} rounded-circle p-2">
+                                <i class="fas ${getActivityIcon(activity.type)}"></i>
+                            </span>
+                        </div>
+                        <div class="flex-grow-1 ms-3">
+                            <p class="mb-1 small">${activity.message}</p>
+                            <small class="text-muted">
+                                <i class="far fa-clock me-1"></i>${activity.timestamp}
+                            </small>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        })
+        .catch(error => {
+            console.error('Error loading activity:', error);
+            document.getElementById('activityFeed').innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    Failed to load activity feed
+                </div>
+            `;
+        });
+}
+
+function loadPolicyStatus() {
+    fetch('/api/policies')
+        .then(response => response.json())
+        .then(data => {
+            const container = document.getElementById('policyCards');
+            if (!data.policies || data.policies.length === 0) {
+                container.innerHTML = `
+                    <div class="col-12 text-center text-muted py-4">
+                        <i class="fas fa-exclamation-circle fa-2x mb-3"></i>
+                        <p>No policies found</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = data.policies.map(policy => `
+                <div class="col-md-4 mb-3">
+                    <div class="card border-0 bg-light h-100">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <h6 class="mb-0">${policy.name}</h6>
+                                <span class="badge bg-${policy.status === 'active' ? 'success' : 'secondary'}">
+                                    ${policy.status}
+                                </span>
+                            </div>
+                            <p class="small text-muted mb-2">${policy.description || 'No description'}</p>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <small class="text-muted">
+                                    <i class="fas fa-check-circle me-1"></i>
+                                    ${policy.hits || 0} hits
+                                </small>
+                                <small class="text-muted">
+                                    Phase ${policy.phase || 'N/A'}
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        })
+        .catch(error => {
+            console.error('Error loading policies:', error);
+            document.getElementById('policyCards').innerHTML = `
+                <div class="col-12">
+                    <div class="alert alert-danger">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        Failed to load policy status
+                    </div>
+                </div>
+            `;
+        });
+}
+
+function loadSystemInfo() {
+    fetch('/api/system-info')
+        .then(response => response.json())
+        .then(data => {
+            const container = document.getElementById('systemInfo');
+            container.innerHTML = `
+                <tr>
+                    <td class="text-muted">Status:</td>
+                    <td><span class="badge bg-success">Operational</span></td>
+                </tr>
+                <tr>
+                    <td class="text-muted">Memory Path:</td>
+                    <td><code>${data.memory_path || 'N/A'}</code></td>
+                </tr>
+                <tr>
+                    <td class="text-muted">Last Update:</td>
+                    <td>${data.last_update || 'Unknown'}</td>
+                </tr>
+                <tr>
+                    <td class="text-muted">Uptime:</td>
+                    <td>${data.uptime || 'N/A'}</td>
+                </tr>
+            `;
+        })
+        .catch(error => {
+            console.error('Error loading system info:', error);
+            document.getElementById('systemInfo').innerHTML = `
+                <tr>
+                    <td colspan="2">
+                        <div class="alert alert-danger mb-0">
+                            Failed to load system information
+                        </div>
+                    </td>
+                </tr>
+            `;
+        });
+}
+
+function loadRecentErrors() {
+    fetch('/api/recent-errors')
+        .then(response => response.json())
+        .then(data => {
+            const container = document.getElementById('recentErrors');
+            if (!data.errors || data.errors.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center text-muted py-4">
+                        <i class="fas fa-check-circle fa-2x mb-3 text-success"></i>
+                        <p>No recent errors</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = data.errors.map(error => `
+                <div class="alert alert-danger py-2 px-3 mb-2">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <strong>${error.message}</strong>
+                            <br>
+                            <small class="text-muted">${error.timestamp}</small>
+                        </div>
+                        <span class="badge bg-danger">${error.level}</span>
+                    </div>
+                </div>
+            `).join('');
+        })
+        .catch(error => {
+            console.error('Error loading recent errors:', error);
+            document.getElementById('recentErrors').innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    Failed to load recent errors
+                </div>
+            `;
+        });
+}
+
+function initializeChart() {
+    const ctx = document.getElementById('metricsChart').getContext('2d');
+    metricsChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: [{
+                label: 'Health Score',
+                data: [],
+                borderColor: 'rgb(102, 126, 234)',
+                backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                tension: 0.4,
+                fill: true
+            }, {
+                label: 'Policy Hits',
+                data: [],
+                borderColor: 'rgb(118, 75, 162)',
+                backgroundColor: 'rgba(118, 75, 162, 0.1)',
+                tension: 0.4,
+                fill: true
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'top'
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    max: 100
+                }
+            }
+        }
+    });
+}
+
+function updateChart(data) {
+    if (!metricsChart || !data) return;
+
+    metricsChart.data.labels = data.labels || [];
+    metricsChart.data.datasets[0].data = data.health_scores || [];
+    metricsChart.data.datasets[1].data = data.policy_hits || [];
+    metricsChart.update();
+}
+
+function refreshDashboard() {
+    const btn = event.target.closest('button');
+    const icon = btn.querySelector('i');
+    icon.classList.add('fa-spin');
+
+    initializeDashboard();
+
+    setTimeout(() => {
+        icon.classList.remove('fa-spin');
+    }, 1000);
+}
+
+function startAutoRefresh() {
+    autoRefreshInterval = setInterval(() => {
+        loadMetrics();
+        loadActivityFeed();
+        loadRecentErrors();
+    }, 30000); // Refresh every 30 seconds
+}
+
+function getHealthColor(score) {
+    if (score >= 80) return 'success';
+    if (score >= 60) return 'warning';
+    return 'danger';
+}
+
+function getActivityColor(type) {
+    const colors = {
+        'policy': 'primary',
+        'error': 'danger',
+        'warning': 'warning',
+        'success': 'success',
+        'info': 'info'
+    };
+    return colors[type] || 'secondary';
+}
+
+function getActivityIcon(type) {
+    const icons = {
+        'policy': 'fa-shield-alt',
+        'error': 'fa-exclamation-circle',
+        'warning': 'fa-exclamation-triangle',
+        'success': 'fa-check-circle',
+        'info': 'fa-info-circle'
+    };
+    return icons[type] || 'fa-circle';
+}
+
+function showError(message) {
+    console.error(message);
+}
+
+// Cleanup on page unload
+window.addEventListener('beforeunload', function() {
+    if (autoRefreshInterval) {
+        clearInterval(autoRefreshInterval);
+    }
+});
+</script>
+
+<style>
+.activity-item:last-child {
+    border-bottom: none !important;
+    padding-bottom: 0 !important;
+    margin-bottom: 0 !important;
+}
+
+.card {
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15) !important;
+}
+
+#autoRefreshBadge {
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.7;
+    }
+}
+</style>
+{% endblock %}
