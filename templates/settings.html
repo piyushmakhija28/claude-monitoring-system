@@ -48,14 +48,14 @@
                     <label for="themePreference" class="form-label fw-bold">
                         <i class="fas fa-palette me-2 text-primary"></i>Theme Preference
                     </label>
-                    <select class="form-select" id="themePreference">
+                    <select class="form-select" id="themePreference" onchange="applyThemeFromSettings()">
                         <option value="light" selected>Light Mode</option>
-                        <option value="dark">Dark Mode (Coming Soon)</option>
+                        <option value="dark">Dark Mode</option>
                         <option value="auto">Auto (System Default)</option>
                     </select>
                     <small class="text-muted d-block mt-2">
                         <i class="fas fa-info-circle"></i>
-                        Dark mode will be available in a future update
+                        Choose your preferred theme for the dashboard
                     </small>
                 </div>
 
@@ -366,6 +366,9 @@ function saveSettings() {
     // Save to localStorage
     localStorage.setItem('claudeMonitorSettings', JSON.stringify(currentSettings));
 
+    // Apply theme immediately
+    applyThemeFromSettings();
+
     // Update last saved time
     document.getElementById('lastSaved').textContent = new Date(currentSettings.lastSaved).toLocaleString();
 
@@ -456,6 +459,25 @@ document.querySelectorAll('input, select').forEach(element => {
         }
     });
 });
+
+// Apply theme from settings dropdown
+function applyThemeFromSettings() {
+    const theme = document.getElementById('themePreference').value;
+
+    if (theme === 'auto') {
+        // Use system preference
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        applyTheme(prefersDark ? 'dark' : 'light');
+    } else {
+        applyTheme(theme);
+    }
+
+    // Store preference as 'theme' in localStorage for base.html to use
+    localStorage.setItem('theme', theme === 'auto' ?
+        (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') :
+        theme
+    );
+}
 </script>
 
 <style>

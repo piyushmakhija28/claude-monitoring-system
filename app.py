@@ -13,6 +13,7 @@ from utils.metrics import MetricsCollector
 from utils.log_parser import LogParser
 from utils.policy_checker import PolicyChecker
 from utils.session_tracker import SessionTracker
+from utils.history_tracker import HistoryTracker
 
 app = Flask(__name__)
 app.secret_key = 'claude-monitoring-system-secret-key-2026'
@@ -22,6 +23,7 @@ metrics = MetricsCollector()
 log_parser = LogParser()
 policy_checker = PolicyChecker()
 session_tracker = SessionTracker()
+history_tracker = HistoryTracker()
 
 # Login credentials
 USERNAME = 'admin'
@@ -76,11 +78,32 @@ def dashboard():
     policy_status = policy_checker.get_all_policies_status()
     recent_activity = log_parser.get_recent_activity(limit=10)
 
+    # Add daily metric snapshot
+    try:
+        current_metrics = {
+            'health_score': system_health.get('health_score', 0),
+            'errors_24h': log_parser.get_error_count(hours=24),
+            'policy_hits': policy_status.get('total_hits', 0),
+            'context_usage': system_health.get('context_usage', 0),
+            'tokens_used': 0,  # Would come from session tracker
+            'daemons_running': len([d for d in daemon_status if d.get('status') == 'running']),
+            'daemons_total': len(daemon_status)
+        }
+        history_tracker.add_daily_metric(current_metrics)
+    except Exception as e:
+        print(f"Error adding daily metric: {e}")
+
+    # Get historical data
+    chart_data = history_tracker.get_chart_data(days=7)
+    summary_stats = history_tracker.get_summary_stats(days=7)
+
     return render_template('dashboard.html',
                          system_health=system_health,
                          daemon_status=daemon_status,
                          policy_status=policy_status,
-                         recent_activity=recent_activity)
+                         recent_activity=recent_activity,
+                         chart_data=chart_data,
+                         summary_stats=summary_stats)
 
 @app.route('/comparison')
 @login_required

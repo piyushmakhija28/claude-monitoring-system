@@ -23,6 +23,30 @@
             --card-bg: #ffffff;
             --text-primary: #1e293b;
             --text-secondary: #64748b;
+            --body-bg: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --navbar-bg: rgba(255, 255, 255, 0.95);
+            --table-bg: #ffffff;
+            --table-hover: #f8f9fa;
+            --border-color: #e5e7eb;
+            --shadow-color: rgba(0, 0, 0, 0.1);
+        }
+
+        [data-theme="dark"] {
+            --primary-color: #818cf8;
+            --secondary-color: #a78bfa;
+            --success-color: #34d399;
+            --warning-color: #fbbf24;
+            --danger-color: #f87171;
+            --dark-bg: #0f172a;
+            --card-bg: #1e293b;
+            --text-primary: #f1f5f9;
+            --text-secondary: #cbd5e1;
+            --body-bg: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+            --navbar-bg: rgba(30, 41, 59, 0.95);
+            --table-bg: #1e293b;
+            --table-hover: #334155;
+            --border-color: #475569;
+            --shadow-color: rgba(0, 0, 0, 0.3);
         }
 
         * {
@@ -33,16 +57,18 @@
 
         body {
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: var(--body-bg);
             min-height: 100vh;
             color: var(--text-primary);
+            transition: background 0.3s ease, color 0.3s ease;
         }
 
         .navbar {
-            background: rgba(255, 255, 255, 0.95);
+            background: var(--navbar-bg);
             backdrop-filter: blur(10px);
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.07);
+            box-shadow: 0 4px 6px var(--shadow-color);
             padding: 1rem 0;
+            transition: background 0.3s ease;
         }
 
         .navbar-brand {
@@ -77,11 +103,12 @@
         }
 
         .card {
-            border: none;
+            border: 1px solid var(--border-color);
             border-radius: 16px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
-            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            box-shadow: 0 10px 30px var(--shadow-color);
+            transition: transform 0.3s ease, box-shadow 0.3s ease, background 0.3s ease;
             background: var(--card-bg);
+            color: var(--text-primary);
         }
 
         .card:hover {
@@ -182,6 +209,79 @@
             background: linear-gradient(90deg, var(--success-color), var(--primary-color));
             border-radius: 10px;
         }
+
+        /* Table Styles */
+        .table {
+            background: var(--table-bg);
+            color: var(--text-primary);
+            transition: background 0.3s ease, color 0.3s ease;
+        }
+
+        .table thead th {
+            background: var(--table-bg);
+            color: var(--text-primary);
+            border-color: var(--border-color);
+        }
+
+        .table tbody tr {
+            background: var(--table-bg);
+            color: var(--text-primary);
+            border-color: var(--border-color);
+            transition: background 0.3s ease;
+        }
+
+        .table tbody tr:hover {
+            background: var(--table-hover);
+        }
+
+        .table td, .table th {
+            border-color: var(--border-color);
+        }
+
+        /* Form Styles for Dark Mode */
+        [data-theme="dark"] .form-control,
+        [data-theme="dark"] .form-select {
+            background-color: #334155;
+            color: #f1f5f9;
+            border-color: #475569;
+        }
+
+        [data-theme="dark"] .form-control:focus,
+        [data-theme="dark"] .form-select:focus {
+            background-color: #334155;
+            color: #f1f5f9;
+            border-color: #818cf8;
+        }
+
+        [data-theme="dark"] .form-label {
+            color: #f1f5f9;
+        }
+
+        /* Code/Badge Styles */
+        [data-theme="dark"] code {
+            background: #334155;
+            color: #f1f5f9;
+        }
+
+        [data-theme="dark"] .badge {
+            filter: brightness(1.2);
+        }
+
+        /* Alert Styles */
+        [data-theme="dark"] .alert {
+            background: #334155;
+            color: #f1f5f9;
+            border-color: #475569;
+        }
+
+        /* Metric Box Styles */
+        [data-theme="dark"] .metric-box {
+            background: #334155;
+        }
+
+        [data-theme="dark"] .metric-box:hover {
+            background: #475569;
+        }
     </style>
 
     {% block extra_css %}{% endblock %}
@@ -230,6 +330,11 @@
                         </a>
                     </li>
                     <li class="nav-item">
+                        <a class="nav-link" href="javascript:void(0);" onclick="toggleTheme()" title="Toggle Dark Mode">
+                            <i class="fas fa-moon" id="theme-icon"></i>
+                        </a>
+                    </li>
+                    <li class="nav-item">
                         <a class="nav-link" href="{{ url_for('logout') }}">
                             <i class="fas fa-sign-out-alt"></i> Logout
                         </a>
@@ -260,6 +365,38 @@
 
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <!-- Theme Switcher -->
+    <script>
+        // Load theme on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            const savedTheme = localStorage.getItem('theme') || 'light';
+            applyTheme(savedTheme);
+        });
+
+        function applyTheme(theme) {
+            if (theme === 'dark') {
+                document.documentElement.setAttribute('data-theme', 'dark');
+                const icon = document.getElementById('theme-icon');
+                if (icon) {
+                    icon.className = 'fas fa-sun';
+                }
+            } else {
+                document.documentElement.removeAttribute('data-theme');
+                const icon = document.getElementById('theme-icon');
+                if (icon) {
+                    icon.className = 'fas fa-moon';
+                }
+            }
+            localStorage.setItem('theme', theme);
+        }
+
+        function toggleTheme() {
+            const currentTheme = localStorage.getItem('theme') || 'light';
+            const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+            applyTheme(newTheme);
+        }
+    </script>
 
     {% block extra_js %}{% endblock %}
 </body>
