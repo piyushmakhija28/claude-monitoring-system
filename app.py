@@ -80,10 +80,13 @@ def dashboard():
 
     # Add daily metric snapshot
     try:
+        # Get detailed policy status (returns dict)
+        policy_status_dict = policy_checker.get_detailed_policy_status()
+
         current_metrics = {
             'health_score': system_health.get('health_score', 0),
             'errors_24h': log_parser.get_error_count(hours=24),
-            'policy_hits': policy_status.get('total_hits', 0),
+            'policy_hits': policy_status_dict.get('active_policies', 0),
             'context_usage': system_health.get('context_usage', 0),
             'tokens_used': 0,  # Would come from session tracker
             'daemons_running': len([d for d in daemon_status if d.get('status') == 'running']),
@@ -92,6 +95,8 @@ def dashboard():
         history_tracker.add_daily_metric(current_metrics)
     except Exception as e:
         print(f"Error adding daily metric: {e}")
+        import traceback
+        traceback.print_exc()
 
     # Get historical data
     chart_data = history_tracker.get_chart_data(days=7)
@@ -156,11 +161,12 @@ def api_metrics():
     try:
         system_health = metrics.get_system_health()
         daemon_status = metrics.get_daemon_status()
-        policy_status = policy_checker.get_all_policies_status()
+        # Use get_detailed_policy_status() which returns a dict
+        policy_status = policy_checker.get_detailed_policy_status()
 
-        # daemon_status is now a list from get_daemon_status
-        daemons_running = len([d for d in daemon_status if d.get('status') == 'running'])
-        daemons_total = len(daemon_status)
+        # daemon_status is a list from get_daemon_status
+        daemons_running = len([d for d in daemon_status if isinstance(d, dict) and d.get('status') == 'running'])
+        daemons_total = len(daemon_status) if daemon_status else 8
 
         health_score = system_health.get('health_score', system_health.get('score', 0))
 
@@ -169,13 +175,13 @@ def api_metrics():
             'health_score': health_score,
             'daemons_running': daemons_running,
             'daemons_total': daemons_total,
-            'active_policies': policy_status.get('active_count', 6),
-            'policy_hits': policy_status.get('total_hits', 0),
+            'active_policies': policy_status.get('active_policies', 0),
+            'policy_hits': 0,  # Will track from logs later
             'context_usage': system_health.get('context_usage', 0),
             'memory_usage': system_health.get('memory_usage', 0),
             'labels': ['Now'],
             'health_scores': [health_score],
-            'policy_hits_data': [policy_status.get('total_hits', 0)]
+            'policy_hits_data': [0]
         })
     except Exception as e:
         print(f"Error in api_metrics: {e}")
