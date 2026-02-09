@@ -149,6 +149,94 @@ def analyze_logs():
 
     return jsonify(results)
 
+@app.route('/api/metrics')
+@login_required
+def api_metrics():
+    """API endpoint for dashboard metrics"""
+    try:
+        system_health = metrics.get_system_health()
+        daemon_status = metrics.get_daemon_status()
+        policy_status = policy_checker.get_all_policies_status()
+
+        return jsonify({
+            'success': True,
+            'health_score': system_health.get('health_score', 0),
+            'daemons_running': len([d for d in daemon_status if d.get('status') == 'running']),
+            'daemons_total': len(daemon_status),
+            'active_policies': policy_status.get('active_count', 0),
+            'policy_hits': policy_status.get('total_hits', 0),
+            'context_usage': system_health.get('context_usage', 0),
+            'memory_usage': system_health.get('memory_usage', 0),
+            'labels': ['Now'],
+            'health_scores': [system_health.get('health_score', 0)],
+            'policy_hits_data': [policy_status.get('total_hits', 0)]
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/activity')
+@login_required
+def api_activity():
+    """API endpoint for recent activity"""
+    try:
+        recent_activity = log_parser.get_recent_activity(limit=10)
+        return jsonify({
+            'success': True,
+            'activities': recent_activity
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/policies')
+@login_required
+def api_policies():
+    """API endpoint for policy status"""
+    try:
+        policies_data = policy_checker.get_detailed_policy_status()
+        return jsonify({
+            'success': True,
+            'policies': policies_data
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/system-info')
+@login_required
+def api_system_info():
+    """API endpoint for system information"""
+    try:
+        system_health = metrics.get_system_health()
+        daemon_status = metrics.get_daemon_status()
+
+        return jsonify({
+            'success': True,
+            'system_info': {
+                'status': 'Operational' if system_health.get('health_score', 0) > 70 else 'Degraded',
+                'health_score': system_health.get('health_score', 0),
+                'memory_usage': system_health.get('memory_usage', 0),
+                'context_usage': system_health.get('context_usage', 0),
+                'daemons_running': len([d for d in daemon_status if d.get('status') == 'running']),
+                'daemons_total': len(daemon_status),
+                'uptime': system_health.get('uptime', 'N/A'),
+                'last_check': datetime.now().isoformat()
+            }
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/recent-errors')
+@login_required
+def api_recent_errors():
+    """API endpoint for recent errors"""
+    try:
+        errors = log_parser.get_recent_errors(limit=5)
+        return jsonify({
+            'success': True,
+            'errors': errors
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 @app.route('/api/metrics/live')
 @login_required
 def live_metrics():

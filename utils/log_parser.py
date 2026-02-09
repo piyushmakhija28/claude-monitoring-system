@@ -105,6 +105,46 @@ class LogParser:
 
         return error_count
 
+    def get_recent_errors(self, limit=5):
+        """Get recent error log entries"""
+        errors = []
+        cutoff_time = datetime.now() - timedelta(hours=24)
+
+        if self.logs_dir.exists():
+            for log_file in self.logs_dir.glob('*.log'):
+                try:
+                    with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
+                        for line in f:
+                            if 'ERROR' in line or 'CRITICAL' in line or 'FAIL' in line:
+                                # Extract timestamp
+                                timestamp_match = re.search(r'\[(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})\]', line)
+                                timestamp = timestamp_match.group(1) if timestamp_match else datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+                                # Extract error level
+                                level = 'ERROR'
+                                if 'CRITICAL' in line:
+                                    level = 'CRITICAL'
+                                elif 'FAIL' in line:
+                                    level = 'FAILED'
+
+                                # Clean message
+                                message = line.strip()
+                                if len(message) > 200:
+                                    message = message[:200] + '...'
+
+                                errors.append({
+                                    'timestamp': timestamp,
+                                    'level': level,
+                                    'message': message,
+                                    'source': log_file.name
+                                })
+                except Exception as e:
+                    print(f"Error reading {log_file}: {e}")
+
+        # Sort by timestamp (most recent first) and limit
+        errors.sort(key=lambda x: x['timestamp'], reverse=True)
+        return errors[:limit]
+
     def analyze_log_file(self, log_file_name, search_term='', log_level='all'):
         """Analyze a specific log file"""
         results = {
