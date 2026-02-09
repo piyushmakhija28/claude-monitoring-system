@@ -15,6 +15,36 @@ A comprehensive, real-time monitoring and analytics dashboard for the Claude Mem
 
 ---
 
+## 🆕 What's New in v2.1 (Feb 2026)
+
+### **Dark Mode** 🌙
+- Complete light/dark theme toggle with smooth transitions
+- Quick toggle icon in navbar (moon/sun)
+- Auto mode with system preference detection
+- All components styled for both themes
+
+### **7-Day Historical Trends** 📊
+- Interactive charts showing health score, errors, policy hits, and context usage
+- Summary statistics with trend indicators (↑ up, ↓ down, ➖ stable)
+- Automatic daily metrics tracking
+- 30-day history retention
+
+### **Enhanced Search** 🔍
+- Real-time search in Sessions table
+- Filter by status (Active/Completed/Ended)
+- Highlight matching results
+- Live result count
+
+### **Complete Package** 🎁
+- All features from v2.0 PLUS new enhancements
+- Professional error pages (404, 500)
+- Settings page with preferences
+- Export to CSV for all data types
+
+[See Full Enhancement Details](#-recent-updates-v21---feb-2026)
+
+---
+
 ## 🌟 What Makes This Special?
 
 ### **All-in-One Solution**
@@ -426,21 +456,32 @@ Login: admin / admin
 
 ---
 
-## 🎯 Future Enhancements
+## 🎯 Recent Updates (v2.1 - Feb 2026)
 
-- [ ] Email alerts for critical issues
-- [ ] Export metrics to CSV/PDF
+**✅ Just Added:**
+- ✅ **Dark Mode Toggle** - Complete light/dark theme with smooth transitions
+- ✅ **7-Day Historical Charts** - Health score, errors, policy hits, and context usage trends
+- ✅ **Enhanced Search** - Search and filter in Sessions table with live results
+- ✅ **Export to CSV** - Sessions, metrics, and logs export functionality
+- ✅ **Custom Error Pages** - Professional 404 and 500 error pages
+- ✅ **Settings Page** - User preferences with localStorage persistence
+
+**🔮 Future Enhancements:**
+- [ ] Email/SMS alerts for critical issues
+- [ ] Extended historical data (30/60/90 days)
 - [ ] Custom dashboard widgets
 - [ ] Mobile app
-- [ ] Multi-user support with roles
-- [ ] Historical data analysis (30/60/90 days)
-- [ ] Slack/Discord notifications
-- [ ] Dark mode toggle
+- [ ] Multi-user support with roles & permissions
+- [ ] Slack/Discord webhook notifications
+- [ ] Real-time WebSocket updates
+- [ ] API documentation with Swagger
+- [ ] Change password functionality
 
 ---
 
 **Made with ❤️ for Claude Memory System**
 
-Version: 2.0
+Version: 2.1 (Enhanced Edition)
 Last Updated: 2026-02-09
-Author: Claude Sonnet 4.5
+Developer: TechDeveloper (www.techdeveloper.in)
+Powered by: Claude Sonnet 4.5
