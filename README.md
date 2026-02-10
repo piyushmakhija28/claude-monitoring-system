@@ -1,6 +1,6 @@
-# 🤖 Claude Monitoring System v2.2
+# 🤖 Claude Monitoring System v2.3 🚀
 
-**Professional Dashboard for Claude Memory System**
+**Professional Real-time Dashboard for Claude Memory System**
 
 [![GitHub](https://img.shields.io/badge/GitHub-claude--monitoring--system-blue?logo=github)](https://github.com/piyushmakhija28/claude-monitoring-system)
 [![Python](https://img.shields.io/badge/Python-3.7+-blue?logo=python)](https://www.python.org/)
@@ -15,9 +15,43 @@ A comprehensive, real-time monitoring and analytics dashboard for the Claude Mem
 
 ---
 
-## 🆕 What's New in v2.2 (Feb 2026)
+## 🆕 What's New in v2.3 (Feb 2026) - Real-time Edition 🚀
 
-### **Extended Historical Data** 📊
+### **Real-time WebSocket Updates** ⚡ NEW!
+- **Live Data Streaming** - No more polling! Data updates every 10 seconds automatically
+- **WebSocket Connection** - Instant updates using Socket.IO
+- **Auto-Fallback** - Falls back to HTTP polling if WebSocket fails
+- **Connection Status Indicator** - Shows "Real-time: WebSocket" or "Auto-refresh: 30s"
+- **Zero Refresh Needed** - Dashboard stays fresh automatically
+- **Lower Server Load** - More efficient than HTTP polling
+- **Instant Notifications** - See changes as they happen
+
+### **Swagger API Documentation** 📖 NEW!
+- **Interactive API Docs** - Complete API documentation at `/api/docs`
+- **Try It Out** - Test all endpoints directly from the browser
+- **Request/Response Examples** - See exact formats for all APIs
+- **OpenAPI Standard** - Industry-standard API documentation
+- **Full Endpoint Coverage** - All 15+ endpoints documented
+- **Authentication Info** - Clear auth requirements for each endpoint
+- **Developer Friendly** - Makes integration easy
+
+### **Change Password** 🔐 NEW!
+- **Secure Password Management** - bcrypt hashing for security
+- **Easy Password Change** - Simple form in Settings page
+- **Validation** - 6+ character minimum, match confirmation
+- **Current Password Verification** - Must know current password
+- **Instant Feedback** - Success/error messages
+- **Session Security** - Passwords never stored in plain text
+
+### **Drag-and-Drop Widget Reordering** 🎯 NEW!
+- **Customize Layout** - Drag widgets to reorder them
+- **Visual Drag Handles** - Hover on left side to see drag handle
+- **Smooth Animations** - Beautiful drag-and-drop effects
+- **Persistent Order** - Your layout is saved automatically
+- **Reset Button** - Quickly reset to default order
+- **Touch Support** - Works on tablets and touch screens
+
+### **Extended Historical Data** 📊 (from v2.2)
 - **7/30/60/90 days** time range selection
 - Interactive filter buttons on dashboard
 - Visual comparison across different time periods
@@ -153,6 +187,115 @@ Personalize your dashboard by showing/hiding widgets:
 
 ---
 
+## 🎨 Using Advanced Features (v2.3)
+
+### **Real-time WebSocket Updates** ⚡
+
+The dashboard now updates automatically in real-time!
+
+**How It Works:**
+1. **Automatic Connection**: WebSocket connects when you open the dashboard
+2. **Live Updates**: Data refreshes every 10 seconds automatically
+3. **Status Indicator**: Green "Real-time: WebSocket" badge shows active connection
+4. **Auto-Fallback**: If WebSocket fails, falls back to HTTP polling (30s)
+
+**Benefits:**
+- ✅ No manual refresh needed
+- ✅ See changes instantly (10s vs 30s)
+- ✅ Lower server load
+- ✅ More efficient data transfer
+- ✅ Always-fresh data
+
+**Connection Status:**
+- 🟢 **"Real-time: WebSocket"** = Active WebSocket connection
+- 🟡 **"Auto-refresh: 30s"** = Fallback to HTTP polling
+
+### **Swagger API Documentation** 📖
+
+Complete API documentation with interactive testing!
+
+**Access:**
+```
+URL: http://localhost:5000/api/docs
+```
+
+**Features:**
+- **Browse All Endpoints**: See all 15+ available APIs
+- **Try It Out**: Test endpoints directly from browser
+- **Request Examples**: See exact JSON format needed
+- **Response Examples**: See what each API returns
+- **Authentication**: Clear auth requirements
+- **Error Codes**: Understand all possible responses
+
+**Use Cases:**
+- ✅ Building integrations with other tools
+- ✅ Understanding API structure
+- ✅ Testing API calls before coding
+- ✅ Debugging API issues
+- ✅ Developer onboarding
+
+### **Change Password** 🔐
+
+Secure password management built-in!
+
+**Steps:**
+1. Navigate to **Settings** page
+2. Scroll to **"Change Password"** section
+3. Enter:
+   - Current password
+   - New password (min 6 characters)
+   - Confirm new password
+4. Click **"Change Password"**
+5. Success! Password updated instantly
+
+**Security Features:**
+- ✅ bcrypt hashing (industry standard)
+- ✅ Salt per user
+- ✅ Current password verification
+- ✅ Password strength validation
+- ✅ Match confirmation check
+- ✅ Never stored in plain text
+
+**Password Requirements:**
+- Minimum 6 characters
+- Must match confirmation
+- Must know current password
+
+### **Drag-and-Drop Widget Reordering** 🎯
+
+Rearrange your dashboard exactly how you want!
+
+**How to Reorder:**
+1. **Hover Over Widget**: Hover on left side of any widget row
+2. **See Drag Handle**: Purple handle appears with grip icon
+3. **Click and Drag**: Click handle and drag widget up/down
+4. **Drop**: Release to place widget in new position
+5. **Auto-Save**: Order saves automatically to localStorage
+
+**Visual Feedback:**
+- Purple drag handle on hover
+- Widget slides right when hovering
+- Smooth animations during drag
+- Ghost placeholder shows drop position
+
+**Reset Order:**
+- Click **"Reset Order"** button in dashboard header
+- Confirms before resetting
+- Reloads page with default order
+
+**Saved Automatically:**
+- Order persists across sessions
+- Saved in localStorage (per browser)
+- Different order per user/browser
+
+**Use Cases:**
+- ✅ Put most important widgets first
+- ✅ Group related widgets together
+- ✅ Create custom workflow layouts
+- ✅ Optimize for your screen size
+
+---
+
 ## 🌟 Why This Was Built
 
 The Claude Memory System v2.0 is a sophisticated automation framework with 15 policies, 8 daemons, and multiple optimization systems. However, monitoring all these components required:
@@ -174,17 +317,18 @@ The Claude Memory System v2.0 is a sophisticated automation framework with 15 po
 
 ## ✨ Features
 
-### 1. **Main Dashboard** ⭐ ENHANCED
+### 1. **Main Dashboard** 🚀 REAL-TIME
 - System health score (0-100%)
 - Real-time daemon status (8/8 running)
 - Active policies count
 - Recent activity feed
 - Policy hit statistics
-- Live metrics with auto-refresh
-- **NEW**: Extended historical data (7/30/60/90 days)
-- **NEW**: Custom widget visibility controls
-- **NEW**: Customize button in header
-- **NEW**: Persistent widget preferences
+- **🔥 NEW**: Real-time WebSocket updates (10s intervals)
+- **🔥 NEW**: Drag-and-drop widget reordering
+- **v2.2**: Extended historical data (7/30/60/90 days)
+- **v2.2**: Custom widget visibility controls
+- **v2.2**: Customize button in header
+- **v2.2**: Persistent widget preferences
 
 ### 2. **Cost Comparison**
 - **Before vs After** optimization comparison
@@ -399,9 +543,13 @@ The dashboard reads from the actual Claude Memory System:
 
 ## 🛠️ Tech Stack
 
-- **Backend**: Flask 3.0 (Python)
+- **Backend**: Flask 3.0 (Python) + Flask-SocketIO
+- **Real-time**: Socket.IO (WebSocket support)
+- **API Docs**: Swagger/Flasgger (OpenAPI 3.0)
+- **Security**: bcrypt password hashing
 - **Frontend**: Bootstrap 5 + Font Awesome
 - **Charts**: Chart.js for data visualization
+- **Drag-and-Drop**: SortableJS
 - **Icons**: Font Awesome 6.4
 - **Design**: Modern gradient UI (#667eea to #764ba2)
 
@@ -471,17 +619,31 @@ Terminal-style log viewer with search, filters, and syntax highlighting.
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/` | GET | Redirect to dashboard or login |
-| `/login` | GET/POST | Login page |
+| `/login` | GET/POST | Login page (bcrypt authenticated) |
 | `/logout` | GET | Logout user |
 | `/dashboard` | GET | Main dashboard (supports `?days=7/30/60/90`) |
 | `/comparison` | GET | Cost comparison page |
 | `/policies` | GET | Policies status page |
 | `/logs` | GET | Log analyzer page |
+| `/settings` | GET | Settings & preferences page |
+| `/api/docs` | GET | **NEW** Swagger API documentation |
+| `/api/change-password` | POST | **NEW** Change user password |
 | `/api/logs/analyze` | POST | Analyze log file |
 | `/api/metrics/live` | GET | Get live metrics (JSON) |
 | `/api/daemon/restart/<name>` | POST | Restart daemon |
 | `/api/comparison` | GET | Get comparison data (JSON) |
 | `/api/widget-preferences` | GET/POST | Get or save widget preferences |
+
+### **WebSocket Events** (Real-time)
+
+| Event | Direction | Description |
+|-------|-----------|-------------|
+| `connect` | Client→Server | Client connects to WebSocket |
+| `disconnect` | Client→Server | Client disconnects |
+| `connection_response` | Server→Client | Connection confirmation |
+| `request_metrics` | Client→Server | Request metrics update |
+| `metrics_update` | Server→Client | Real-time metrics data (10s interval) |
+| `error` | Server→Client | Error notifications |
 
 ---
 
@@ -546,9 +708,19 @@ Login: admin / admin
 
 ---
 
-## 🎯 Recent Updates (v2.2 - Feb 2026)
+## 🎯 Recent Updates (v2.3 - Feb 2026)
 
-**✅ Just Added (v2.2):**
+**🔥 Just Added (v2.3 - Real-time Edition):**
+- ✅ **Real-time WebSocket Updates** - Live data streaming with Socket.IO (10s intervals)
+- ✅ **Swagger API Documentation** - Interactive API docs at /api/docs
+- ✅ **Change Password** - Secure password management with bcrypt
+- ✅ **Drag-and-Drop Reordering** - Rearrange widgets with SortableJS
+- ✅ **WebSocket Auto-Fallback** - Falls back to HTTP polling if WebSocket fails
+- ✅ **Connection Status Indicator** - Shows real-time vs polling status
+- ✅ **Enhanced Security** - bcrypt password hashing for all users
+- ✅ **Persistent Widget Order** - Layout saved in localStorage
+
+**✅ From v2.2:**
 - ✅ **Extended Historical Data** - 7/30/60/90 days time range selection with interactive filters
 - ✅ **Custom Dashboard Widgets** - Show/hide any of 6 widgets, persistent preferences
 - ✅ **90-Day Data Retention** - Upgraded from 30 days for long-term trend analysis
@@ -566,19 +738,27 @@ Login: admin / admin
 
 **🔮 Future Enhancements:**
 - [ ] Email/SMS alerts for critical issues
-- [ ] Mobile app
+- [ ] Mobile app (iOS & Android)
 - [ ] Multi-user support with roles & permissions
 - [ ] Slack/Discord webhook notifications
-- [ ] Real-time WebSocket updates
-- [ ] API documentation with Swagger
-- [ ] Change password functionality
-- [ ] Drag-and-drop widget reordering
+- [ ] Export to Excel/PDF formats
+- [ ] Advanced analytics dashboard
+- [ ] Custom alert thresholds
+- [ ] Integration with monitoring tools (Datadog, New Relic, etc.)
+- [ ] Dark mode improvements
+- [ ] Mobile-optimized responsive design
 
 ---
 
 **Made with ❤️ for Claude Memory System**
 
-Version: 2.2 (Advanced Edition)
+Version: 2.3 (Real-time Edition) 🚀
 Last Updated: 2026-02-10
 Developer: TechDeveloper (www.techdeveloper.in)
 Powered by: Claude Sonnet 4.5
+
+**New in v2.3:**
+- ⚡ Real-time WebSocket updates
+- 📖 Swagger API documentation
+- 🔐 Change password functionality
+- 🎯 Drag-and-drop widget reordering

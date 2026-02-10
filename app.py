@@ -4,19 +4,44 @@ A professional dashboard for monitoring Claude Memory System v2.0
 """
 
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify, Response
+from flask_socketio import SocketIO, emit
 from functools import wraps
 import os
 import csv
 import io
+import bcrypt
+import threading
+import time
 from datetime import datetime
 from utils.metrics import MetricsCollector
 from utils.log_parser import LogParser
 from utils.policy_checker import PolicyChecker
 from utils.session_tracker import SessionTracker
 from utils.history_tracker import HistoryTracker
+from flasgger import Swagger, swag_from
 
 app = Flask(__name__)
 app.secret_key = 'claude-monitoring-system-secret-key-2026'
+
+# Initialize SocketIO for real-time updates
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
+
+# Initialize Swagger for API documentation
+swagger_config = {
+    "headers": [],
+    "specs": [
+        {
+            "endpoint": 'apispec',
+            "route": '/api/docs/apispec.json',
+            "rule_filter": lambda rule: True,
+            "model_filter": lambda tag: True,
+        }
+    ],
+    "static_url_path": "/flasgger_static",
+    "swagger_ui": True,
+    "specs_route": "/api/docs"
+}
+swagger = Swagger(app, config=swagger_config)
 
 # Initialize utilities
 metrics = MetricsCollector()
@@ -25,9 +50,28 @@ policy_checker = PolicyChecker()
 session_tracker = SessionTracker()
 history_tracker = HistoryTracker()
 
-# Login credentials
-USERNAME = 'admin'
-PASSWORD = 'admin'
+# User database (in production, use a proper database)
+# Password: 'admin' (hashed with bcrypt)
+USERS = {
+    'admin': {
+        'password_hash': bcrypt.hashpw('admin'.encode('utf-8'), bcrypt.gensalt()).decode('utf-8'),
+        'role': 'admin'
+    }
+}
+
+def verify_password(username, password):
+    """Verify username and password"""
+    if username not in USERS:
+        return False
+    stored_hash = USERS[username]['password_hash'].encode('utf-8')
+    return bcrypt.checkpw(password.encode('utf-8'), stored_hash)
+
+def update_password(username, new_password):
+    """Update user password"""
+    if username not in USERS:
+        return False
+    USERS[username]['password_hash'] = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+    return True
 
 def login_required(f):
     """Decorator to require login"""
@@ -47,13 +91,34 @@ def index():
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    """Login page"""
+    """
+    Login page
+    ---
+    tags:
+      - Authentication
+    parameters:
+      - name: username
+        in: formData
+        type: string
+        required: true
+        description: Username
+      - name: password
+        in: formData
+        type: string
+        required: true
+        description: Password
+    responses:
+      200:
+        description: Login page or redirect to dashboard
+      302:
+        description: Redirect to dashboard on successful login
+    """
     error = None
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
 
-        if username == USERNAME and password == PASSWORD:
+        if verify_password(username, password):
             session['logged_in'] = True
             session['username'] = username
             return redirect(url_for('dashboard'))
@@ -378,8 +443,86 @@ def end_session():
 @app.route('/settings')
 @login_required
 def settings():
-    """Settings page"""
+    """
+    Settings page
+    ---
+    tags:
+      - Settings
+    responses:
+      200:
+        description: Settings page
+    """
     return render_template('settings.html')
+
+@app.route('/api/change-password', methods=['POST'])
+@login_required
+def change_password():
+    """
+    Change user password
+    ---
+    tags:
+      - Authentication
+    parameters:
+      - name: body
+        in: body
+        required: true
+        schema:
+          type: object
+          properties:
+            current_password:
+              type: string
+              description: Current password
+            new_password:
+              type: string
+              description: New password
+            confirm_password:
+              type: string
+              description: Confirm new password
+    responses:
+      200:
+        description: Password changed successfully
+        schema:
+          type: object
+          properties:
+            success:
+              type: boolean
+            message:
+              type: string
+      400:
+        description: Invalid request
+      401:
+        description: Current password incorrect
+    """
+    try:
+        data = request.get_json()
+        current_password = data.get('current_password')
+        new_password = data.get('new_password')
+        confirm_password = data.get('confirm_password')
+        username = session.get('username')
+
+        # Validate input
+        if not all([current_password, new_password, confirm_password]):
+            return jsonify({'success': False, 'message': 'All fields are required'}), 400
+
+        if new_password != confirm_password:
+            return jsonify({'success': False, 'message': 'New passwords do not match'}), 400
+
+        if len(new_password) < 6:
+            return jsonify({'success': False, 'message': 'Password must be at least 6 characters'}), 400
+
+        # Verify current password
+        if not verify_password(username, current_password):
+            return jsonify({'success': False, 'message': 'Current password is incorrect'}), 401
+
+        # Update password
+        if update_password(username, new_password):
+            return jsonify({'success': True, 'message': 'Password changed successfully'})
+        else:
+            return jsonify({'success': False, 'message': 'Failed to update password'}), 500
+
+    except Exception as e:
+        print(f"Error changing password: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
 
 @app.route('/api/export/sessions')
 @login_required
@@ -542,18 +685,96 @@ def format_number(value):
     except:
         return value
 
+# ============================================================
+# WebSocket Event Handlers for Real-time Updates
+# ============================================================
+
+@socketio.on('connect')
+def handle_connect():
+    """Handle client connection"""
+    print(f'Client connected: {request.sid}')
+    emit('connection_response', {'status': 'connected', 'message': 'Connected to Claude Monitoring System'})
+
+@socketio.on('disconnect')
+def handle_disconnect():
+    """Handle client disconnection"""
+    print(f'Client disconnected: {request.sid}')
+
+@socketio.on('request_metrics')
+def handle_metrics_request():
+    """Handle request for metrics data"""
+    try:
+        system_health = metrics.get_system_health()
+        daemon_status = metrics.get_daemon_status()
+        policy_status = policy_checker.get_detailed_policy_status()
+
+        daemons_running = len([d for d in daemon_status if d.get('status') == 'running'])
+        daemons_total = len(daemon_status) if daemon_status else 8
+        health_score = system_health.get('health_score', system_health.get('score', 0))
+
+        emit('metrics_update', {
+            'health_score': health_score,
+            'daemons_running': daemons_running,
+            'daemons_total': daemons_total,
+            'active_policies': policy_status.get('active_policies', 0),
+            'context_usage': system_health.get('context_usage', 0),
+            'memory_usage': system_health.get('memory_usage', 0),
+            'timestamp': datetime.now().isoformat()
+        })
+    except Exception as e:
+        print(f"Error emitting metrics: {e}")
+        emit('error', {'message': str(e)})
+
+# Background thread for real-time updates
+def background_thread():
+    """Background thread to emit real-time updates every 10 seconds"""
+    while True:
+        time.sleep(10)  # Update every 10 seconds
+        try:
+            system_health = metrics.get_system_health()
+            daemon_status = metrics.get_daemon_status()
+            policy_status = policy_checker.get_detailed_policy_status()
+
+            daemons_running = len([d for d in daemon_status if d.get('status') == 'running'])
+            daemons_total = len(daemon_status) if daemon_status else 8
+            health_score = system_health.get('health_score', system_health.get('score', 0))
+
+            socketio.emit('metrics_update', {
+                'health_score': health_score,
+                'daemons_running': daemons_running,
+                'daemons_total': daemons_total,
+                'active_policies': policy_status.get('active_policies', 0),
+                'context_usage': system_health.get('context_usage', 0),
+                'memory_usage': system_health.get('memory_usage', 0),
+                'timestamp': datetime.now().isoformat()
+            }, broadcast=True)
+        except Exception as e:
+            print(f"Error in background thread: {e}")
+
+# Start background thread
+thread = threading.Thread(target=background_thread, daemon=True)
+thread.start()
+
 if __name__ == '__main__':
     print("""
     ============================================================
-    Claude Monitoring System v2.0
+    Claude Monitoring System v2.3 (Real-time Edition)
     ============================================================
 
     Dashboard URL: http://localhost:5000
+    API Docs: http://localhost:5000/api/docs
     Username: admin
     Password: admin
+
+    Features:
+    ✓ Real-time WebSocket updates (10s interval)
+    ✓ Swagger API documentation
+    ✓ Change password functionality
+    ✓ Extended historical data (7/30/60/90 days)
+    ✓ Custom dashboard widgets
 
     Starting server...
     ============================================================
     """)
 
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    socketio.run(app, debug=True, host='0.0.0.0', port=5000, allow_unsafe_werkzeug=True)

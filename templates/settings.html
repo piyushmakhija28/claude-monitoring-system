@@ -236,6 +236,54 @@
             </div>
         </div>
 
+        <!-- Change Password -->
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header bg-white border-0 pt-4 pb-3">
+                <h5 class="mb-0">
+                    <i class="fas fa-key me-2"></i>Change Password
+                </h5>
+            </div>
+            <div class="card-body p-4">
+                <form id="changePasswordForm" onsubmit="changePassword(event)">
+                    <!-- Current Password -->
+                    <div class="mb-3">
+                        <label for="currentPassword" class="form-label fw-bold">
+                            <i class="fas fa-lock me-2 text-primary"></i>Current Password
+                        </label>
+                        <input type="password" class="form-control" id="currentPassword" required
+                               placeholder="Enter your current password">
+                    </div>
+
+                    <!-- New Password -->
+                    <div class="mb-3">
+                        <label for="newPassword" class="form-label fw-bold">
+                            <i class="fas fa-lock me-2 text-success"></i>New Password
+                        </label>
+                        <input type="password" class="form-control" id="newPassword" required
+                               minlength="6" placeholder="Enter new password (min 6 characters)">
+                        <small class="text-muted d-block mt-2">
+                            <i class="fas fa-info-circle"></i>
+                            Password must be at least 6 characters long
+                        </small>
+                    </div>
+
+                    <!-- Confirm Password -->
+                    <div class="mb-4">
+                        <label for="confirmPassword" class="form-label fw-bold">
+                            <i class="fas fa-lock me-2 text-success"></i>Confirm New Password
+                        </label>
+                        <input type="password" class="form-control" id="confirmPassword" required
+                               minlength="6" placeholder="Confirm new password">
+                    </div>
+
+                    <!-- Submit Button -->
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-key me-2"></i>Change Password
+                    </button>
+                </form>
+            </div>
+        </div>
+
         <!-- Action Buttons -->
         <div class="card border-0 shadow-sm mb-4">
             <div class="card-body p-4">
@@ -261,7 +309,7 @@
                 <div class="row text-center">
                     <div class="col-md-4 mb-3 mb-md-0">
                         <div class="text-muted small">Version</div>
-                        <div class="fw-bold">v2.0</div>
+                        <div class="fw-bold">v2.3</div>
                     </div>
                     <div class="col-md-4 mb-3 mb-md-0">
                         <div class="text-muted small">Last Updated</div>
@@ -477,6 +525,54 @@ function applyThemeFromSettings() {
         (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') :
         theme
     );
+}
+
+// Change password function
+function changePassword(event) {
+    event.preventDefault();
+
+    const currentPassword = document.getElementById('currentPassword').value;
+    const newPassword = document.getElementById('newPassword').value;
+    const confirmPassword = document.getElementById('confirmPassword').value;
+
+    // Validate passwords match
+    if (newPassword !== confirmPassword) {
+        showAlert('danger', 'New passwords do not match!');
+        return;
+    }
+
+    // Validate password length
+    if (newPassword.length < 6) {
+        showAlert('danger', 'Password must be at least 6 characters long!');
+        return;
+    }
+
+    // Send request to change password
+    fetch('/api/change-password', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            current_password: currentPassword,
+            new_password: newPassword,
+            confirm_password: confirmPassword
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showAlert('success', 'Password changed successfully!');
+            // Clear form
+            document.getElementById('changePasswordForm').reset();
+        } else {
+            showAlert('danger', data.message || 'Failed to change password');
+        }
+    })
+    .catch(error => {
+        console.error('Error changing password:', error);
+        showAlert('danger', 'An error occurred while changing password');
+    });
 }
 </script>
 

@@ -13,6 +13,9 @@
                 <button class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#widgetCustomizeModal">
                     <i class="fas fa-cog me-2"></i>Customize
                 </button>
+                <button class="btn btn-outline-info" onclick="resetWidgetOrder()" title="Reset widget order to default">
+                    <i class="fas fa-undo me-2"></i>Reset Order
+                </button>
                 <a href="{{ url_for('export_metrics') }}" class="btn btn-success">
                     <i class="fas fa-download me-2"></i>Export Metrics
                 </a>
@@ -26,6 +29,9 @@
         </div>
     </div>
 </div>
+
+<!-- Sortable Widgets Container -->
+<div id="sortableWidgets">
 
 <!-- System Health Metrics -->
 {% if widget_preferences.get('system_health', True) %}
@@ -268,6 +274,9 @@
     </div>
 </div>
 
+</div>
+<!-- End Sortable Widgets Container -->
+
 <!-- Widget Customization Modal -->
 <div class="modal fade" id="widgetCustomizeModal" tabindex="-1" aria-labelledby="widgetCustomizeModalLabel" aria-hidden="true">
     <div class="modal-dialog">
@@ -363,13 +372,19 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.socket.io/4.6.0/socket.io.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
 <script>
 let metricsChart;
 let autoRefreshInterval;
+let socket;
+let isWebSocketConnected = false;
 
 document.addEventListener('DOMContentLoaded', function() {
     initializeDashboard();
-    startAutoRefresh();
+    initializeWebSocket();
+    initializeSortableWidgets();
+    // Only start auto-refresh as fallback if WebSocket fails
 });
 
 function initializeDashboard() {
@@ -990,6 +1005,226 @@ function showToast(title, message, type) {
 document.getElementById('widgetCustomizeModal')?.addEventListener('show.bs.modal', function() {
     loadWidgetPreferences();
 });
+
+// ============================================================
+// WebSocket Real-time Updates
+// ============================================================
+
+function initializeWebSocket() {
+    console.log('Initializing WebSocket connection...');
+
+    // Connect to WebSocket server
+    socket = io();
+
+    // Connection established
+    socket.on('connect', function() {
+        console.log('✅ WebSocket connected!');
+        isWebSocketConnected = true;
+        updateConnectionStatus(true);
+
+        // Stop polling if it's running
+        if (autoRefreshInterval) {
+            clearInterval(autoRefreshInterval);
+            autoRefreshInterval = null;
+        }
+    });
+
+    // Connection error
+    socket.on('connect_error', function(error) {
+        console.error('❌ WebSocket connection error:', error);
+        isWebSocketConnected = false;
+        updateConnectionStatus(false);
+
+        // Fallback to polling
+        if (!autoRefreshInterval) {
+            console.log('Falling back to HTTP polling...');
+            startAutoRefresh();
+        }
+    });
+
+    // Disconnected
+    socket.on('disconnect', function() {
+        console.log('⚠️ WebSocket disconnected');
+        isWebSocketConnected = false;
+        updateConnectionStatus(false);
+
+        // Fallback to polling
+        if (!autoRefreshInterval) {
+            console.log('Falling back to HTTP polling...');
+            startAutoRefresh();
+        }
+    });
+
+    // Receive metrics updates
+    socket.on('metrics_update', function(data) {
+        console.log('📊 Received real-time metrics:', data);
+        updateDashboardWithWebSocketData(data);
+    });
+
+    // Connection response
+    socket.on('connection_response', function(data) {
+        console.log('Connection response:', data);
+    });
+
+    // Error handling
+    socket.on('error', function(error) {
+        console.error('WebSocket error:', error);
+    });
+}
+
+function updateConnectionStatus(connected) {
+    const badge = document.getElementById('autoRefreshBadge');
+    if (badge) {
+        if (connected) {
+            badge.innerHTML = '<i class="fas fa-bolt me-1"></i>Real-time: WebSocket';
+            badge.className = 'badge bg-success fs-6';
+        } else {
+            badge.innerHTML = '<i class="fas fa-sync-alt fa-spin me-1"></i>Auto-refresh: 30s';
+            badge.className = 'badge bg-warning fs-6';
+        }
+    }
+}
+
+function updateDashboardWithWebSocketData(data) {
+    try {
+        // Update health score
+        const healthScoreEl = document.getElementById('healthScore');
+        if (healthScoreEl) {
+            healthScoreEl.innerHTML = `
+                <div class="text-${getHealthColor(data.health_score)}">${data.health_score}%</div>
+            `;
+        }
+
+        // Update health score bar
+        const healthScoreBar = document.getElementById('healthScoreBar');
+        if (healthScoreBar) {
+            healthScoreBar.style.width = data.health_score + '%';
+            healthScoreBar.className = `progress-bar bg-gradient bg-${getHealthColor(data.health_score)}`;
+        }
+
+        // Update daemons
+        const daemonsEl = document.getElementById('daemonsRunning');
+        if (daemonsEl) {
+            daemonsEl.innerHTML = `
+                <div class="text-${data.daemons_running === data.daemons_total ? 'success' : 'warning'}">
+                    ${data.daemons_running}/${data.daemons_total}
+                </div>
+            `;
+        }
+
+        const daemonStatusEl = document.getElementById('daemonStatus');
+        if (daemonStatusEl) {
+            daemonStatusEl.textContent = data.daemons_running === data.daemons_total ? 'All Running' : 'Some Stopped';
+        }
+
+        // Update active policies
+        const policiesEl = document.getElementById('activePolicies');
+        if (policiesEl) {
+            policiesEl.innerHTML = `<div class="text-info">${data.active_policies}</div>`;
+        }
+
+        console.log('✅ Dashboard updated with real-time data');
+    } catch (error) {
+        console.error('Error updating dashboard with WebSocket data:', error);
+    }
+}
+
+function getHealthColor(score) {
+    if (score >= 90) return 'success';
+    if (score >= 70) return 'warning';
+    return 'danger';
+}
+
+// ============================================================
+// Drag-and-Drop Widget Reordering
+// ============================================================
+
+function initializeSortableWidgets() {
+    const sortableContainer = document.getElementById('sortableWidgets');
+    if (!sortableContainer) return;
+
+    // Load saved widget order
+    const savedOrder = localStorage.getItem('widgetOrder');
+    if (savedOrder) {
+        applyWidgetOrder(JSON.parse(savedOrder));
+    }
+
+    // Initialize Sortable.js
+    Sortable.create(sortableContainer, {
+        animation: 150,
+        handle: '.widget-drag-handle',
+        ghostClass: 'widget-ghost',
+        chosenClass: 'widget-chosen',
+        dragClass: 'widget-drag',
+        onEnd: function(evt) {
+            console.log('Widget moved from', evt.oldIndex, 'to', evt.newIndex);
+            saveWidgetOrder();
+        }
+    });
+
+    // Add drag handles to all widgets
+    addDragHandlesToWidgets();
+}
+
+function addDragHandlesToWidgets() {
+    const widgets = document.querySelectorAll('#sortableWidgets > .row');
+    widgets.forEach((widget, index) => {
+        if (!widget.querySelector('.widget-drag-handle')) {
+            // Add widget ID for tracking
+            if (!widget.id) {
+                widget.id = `widget-${index}`;
+            }
+
+            // Add drag handle
+            const dragHandle = document.createElement('div');
+            dragHandle.className = 'widget-drag-handle';
+            dragHandle.innerHTML = '<i class="fas fa-grip-vertical"></i>';
+            dragHandle.title = 'Drag to reorder';
+
+            // Insert at the beginning of the widget
+            widget.style.position = 'relative';
+            widget.insertBefore(dragHandle, widget.firstChild);
+        }
+    });
+}
+
+function saveWidgetOrder() {
+    const widgets = document.querySelectorAll('#sortableWidgets > .row');
+    const order = Array.from(widgets).map(widget => widget.id);
+
+    localStorage.setItem('widgetOrder', JSON.stringify(order));
+    console.log('Widget order saved:', order);
+
+    showToast('Success', 'Widget order saved!', 'success');
+}
+
+function applyWidgetOrder(order) {
+    const container = document.getElementById('sortableWidgets');
+    if (!container) return;
+
+    const widgets = {};
+    Array.from(container.children).forEach(widget => {
+        if (widget.id) {
+            widgets[widget.id] = widget;
+        }
+    });
+
+    // Reorder widgets based on saved order
+    order.forEach(widgetId => {
+        if (widgets[widgetId]) {
+            container.appendChild(widgets[widgetId]);
+        }
+    });
+
+    console.log('Widget order applied:', order);
+}
+
+function resetWidgetOrder() {
+    if (confirm('Reset all widgets to default order?')) {
+        localStorage.removeItem('widgetOrder');
+        location.reload();
+    }
+}
 </script>
 
 <style>
@@ -1019,6 +1254,63 @@ document.getElementById('widgetCustomizeModal')?.addEventListener('show.bs.modal
     50% {
         opacity: 0.7;
     }
+}
+
+/* Drag-and-Drop Widget Styling */
+.widget-drag-handle {
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 30px;
+    height: 60px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 0 8px 8px 0;
+    cursor: grab;
+    opacity: 0;
+    transition: opacity 0.3s, left 0.3s;
+    z-index: 10;
+    box-shadow: 2px 0 8px rgba(0, 0, 0, 0.1);
+}
+
+.widget-drag-handle:hover {
+    opacity: 1;
+    left: 0;
+}
+
+.widget-drag-handle:active {
+    cursor: grabbing;
+}
+
+.row:hover .widget-drag-handle {
+    opacity: 0.7;
+}
+
+.widget-ghost {
+    opacity: 0.4;
+    background: #f0f0f0;
+}
+
+.widget-chosen {
+    opacity: 0.8;
+}
+
+.widget-drag {
+    opacity: 0.5;
+    transform: rotate(2deg);
+}
+
+#sortableWidgets > .row {
+    transition: transform 0.2s;
+    cursor: move;
+}
+
+#sortableWidgets > .row:hover {
+    transform: translateX(10px);
 }
 </style>
 {% endblock %}
