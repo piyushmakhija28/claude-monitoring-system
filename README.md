@@ -1,4 +1,4 @@
-# 🤖 Claude Monitoring System v2.5 🚀
+# 🤖 Claude Monitoring System v2.6 🚀
 
 **Professional Real-time Analytics Dashboard for Claude Memory System**
 
@@ -12,6 +12,36 @@ A comprehensive, real-time monitoring and analytics dashboard for the Claude Mem
 **🎁 COMPLETE PACKAGE**: This repo includes **everything you need** - the monitoring dashboard + all Claude Memory System v2.0 files (24 automation scripts + 15 policies + complete documentation). Just clone, setup, and start using!
 
 **Developed by [TechDeveloper](https://www.techdeveloper.in)** 💻
+
+---
+
+## 🆕 What's New in v2.6 (Feb 2026) - Email & SMS Alerts Edition 📧📱
+
+### **Email & SMS Alerts for Critical Issues** 📧📱 NEW!
+- **Multi-Channel Alerting** - Get notified via Email AND SMS for critical events
+- **SMTP Email Support** - Works with Gmail, Outlook, custom SMTP servers
+- **Twilio SMS Integration** - Send SMS alerts to multiple phone numbers
+- **Complete Configuration UI** - Easy setup in Settings page
+- **Test Functions** - Send test emails/SMS to verify setup
+- **Smart Alert Rules**:
+  - 🎯 **Severity Filtering** - Critical only or include warnings
+  - 📋 **Alert Type Selection** - Choose which events trigger alerts (health_score, daemon_down, error_threshold, context_usage)
+  - 🔇 **Quiet Hours** - Suppress alerts during specified hours (e.g., 10 PM - 8 AM)
+  - ⏱️ **Rate Limiting** - Prevent spam (max 10 alerts/hour)
+- **Email Features**:
+  - HTML formatted emails with professional styling
+  - Custom SMTP server configuration
+  - Gmail App Password support
+  - Multiple recipients (comma-separated)
+  - From email customization
+- **SMS Features** (via Twilio):
+  - Multiple recipients support
+  - Twilio Account SID and Auth Token
+  - Custom from number
+  - Shortened messages optimized for SMS
+- **Auto-Integration** - Automatically sends alerts when thresholds are breached
+- **Secure Storage** - Credentials stored in `~/.claude/memory/alert_config.json`
+- **Alert History** - Tracks last 100 alerts for rate limiting
 
 ---
 
@@ -964,8 +994,12 @@ Terminal-style log viewer with search, filters, and syntax highlighting.
 | `/api/notifications` | GET | **NEW** Get notifications with filters |
 | `/api/notifications/<id>/read` | POST | **NEW** Mark notification as read |
 | `/api/notifications/mark-all-read` | POST | **NEW** Mark all notifications as read |
-| `/api/notification-trends` | GET | **NEW** Get notification trends (30 days) |
-| `/api/themes` | GET/POST | **NEW** Get or set dashboard theme |
+| `/api/notification-trends` | GET | Get notification trends (30 days) |
+| `/api/themes` | GET/POST | Get or set dashboard theme |
+| `/api/alert-config` | GET/POST | **NEW** Get or update Email/SMS alert configuration |
+| `/api/test-email` | POST | **NEW** Send test email to verify configuration |
+| `/api/test-sms` | POST | **NEW** Send test SMS to verify configuration |
+| `/api/send-alert` | POST | **NEW** Manually trigger an email/SMS alert |
 
 ### **WebSocket Events** (Real-time)
 
@@ -1080,7 +1114,6 @@ Login: admin / admin
 - ✅ **Settings Page** - User preferences with localStorage persistence
 
 **🔮 Future Enhancements:**
-- [ ] Email/SMS alerts for critical issues
 - [ ] Mobile app (iOS & Android)
 - [ ] Multi-user support with roles & permissions
 - [ ] Slack/Discord webhook notifications
@@ -1095,12 +1128,18 @@ Login: admin / admin
 
 **Made with ❤️ for Claude Memory System**
 
-Version: 2.5 (Mobile & Notifications Edition) 📱🔔
+Version: 2.6 (Email & SMS Alerts Edition) 📧📱
 Last Updated: 2026-02-10
 Developer: TechDeveloper (www.techdeveloper.in)
 Powered by: Claude Sonnet 4.5
 
-**New in v2.5:**
+**New in v2.6:**
+- 📧 Email alerts via SMTP (Gmail, Outlook, custom)
+- 📱 SMS alerts via Twilio
+- 🎯 Smart alert rules (severity, types, quiet hours, rate limiting)
+- 🧪 Test email/SMS functions
+
+**From v2.5:**
 - 🔔 Browser push notifications & alert history
 - 🎨 Custom dashboard themes (6 themes)
 - 🧩 Widget marketplace with 9+ widgets

@@ -8,3 +8,4 @@ bcrypt==4.1.2
 openpyxl==3.1.2
 reportlab==4.0.9
 Pillow==10.2.0
+twilio==8.10.0

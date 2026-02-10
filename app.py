@@ -19,6 +19,7 @@ from utils.policy_checker import PolicyChecker
 from utils.session_tracker import SessionTracker
 from utils.history_tracker import HistoryTracker
 from utils.notification_manager import NotificationManager
+from utils.alert_sender import AlertSender
 from flasgger import Swagger, swag_from
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
@@ -58,6 +59,7 @@ policy_checker = PolicyChecker()
 session_tracker = SessionTracker()
 history_tracker = HistoryTracker()
 notification_manager = NotificationManager()
+alert_sender = AlertSender()
 
 # User database (in production, use a proper database)
 # Password: 'admin' (hashed with bcrypt)
@@ -1414,6 +1416,7 @@ def check_alerts():
 
         # Create notifications for new alerts
         for alert in alerts:
+            # Add browser notification
             notification_manager.add_notification(
                 notification_type=alert['type'],
                 title=f"{alert['severity'].upper()}: {alert['type'].replace('_', ' ').title()}",
@@ -1421,6 +1424,17 @@ def check_alerts():
                 severity=alert['severity'],
                 data=alert
             )
+
+            # Send email/SMS alert
+            try:
+                alert_sender.send_alert(
+                    alert_type=alert['type'],
+                    severity=alert['severity'],
+                    title=alert['type'].replace('_', ' ').title(),
+                    message=alert['message']
+                )
+            except Exception as e:
+                print(f"Error sending email/SMS alert: {e}")
 
         return jsonify({
             'success': True,
@@ -1555,6 +1569,154 @@ def api_notification_trends():
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
 
+@app.route('/api/alert-config', methods=['GET', 'POST'])
+@login_required
+def alert_config():
+    """
+    Get or update alert configuration
+    ---
+    tags:
+      - Alerts
+    parameters:
+      - name: body
+        in: body
+        required: false
+        schema:
+          type: object
+          properties:
+            email:
+              type: object
+              description: Email configuration
+            sms:
+              type: object
+              description: SMS configuration
+            alert_rules:
+              type: object
+              description: Alert rules configuration
+    responses:
+      200:
+        description: Alert configuration retrieved or updated
+    """
+    if request.method == 'POST':
+        try:
+            data = request.get_json()
+            config = alert_sender.load_config()
+
+            # Update config with provided data
+            if 'email' in data:
+                config['email'] = {**config.get('email', {}), **data['email']}
+            if 'sms' in data:
+                config['sms'] = {**config.get('sms', {}), **data['sms']}
+            if 'alert_rules' in data:
+                config['alert_rules'] = {**config.get('alert_rules', {}), **data['alert_rules']}
+
+            alert_sender.save_config(config)
+
+            return jsonify({
+                'success': True,
+                'message': 'Alert configuration saved',
+                'config': config
+            })
+        except Exception as e:
+            return jsonify({'success': False, 'message': str(e)}), 500
+    else:
+        try:
+            config = alert_sender.load_config()
+            # Remove sensitive data
+            safe_config = config.copy()
+            if 'email' in safe_config and 'password' in safe_config['email']:
+                safe_config['email']['password'] = '***HIDDEN***' if safe_config['email']['password'] else ''
+            if 'sms' in safe_config and 'auth_token' in safe_config['sms']:
+                safe_config['sms']['auth_token'] = '***HIDDEN***' if safe_config['sms']['auth_token'] else ''
+
+            return jsonify({
+                'success': True,
+                'config': safe_config
+            })
+        except Exception as e:
+            return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/test-email', methods=['POST'])
+@login_required
+def test_email():
+    """
+    Send test email
+    ---
+    tags:
+      - Alerts
+    responses:
+      200:
+        description: Test email sent
+    """
+    try:
+        config = alert_sender.load_config()
+        result = alert_sender.test_email(config)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/test-sms', methods=['POST'])
+@login_required
+def test_sms():
+    """
+    Send test SMS
+    ---
+    tags:
+      - Alerts
+    responses:
+      200:
+        description: Test SMS sent
+    """
+    try:
+        config = alert_sender.load_config()
+        result = alert_sender.test_sms(config)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/send-alert', methods=['POST'])
+@login_required
+def send_alert_manual():
+    """
+    Manually send an alert
+    ---
+    tags:
+      - Alerts
+    parameters:
+      - name: body
+        in: body
+        required: true
+        schema:
+          type: object
+          properties:
+            alert_type:
+              type: string
+              description: Alert type
+            severity:
+              type: string
+              description: Severity (critical, warning, info)
+            title:
+              type: string
+              description: Alert title
+            message:
+              type: string
+              description: Alert message
+    responses:
+      200:
+        description: Alert sent
+    """
+    try:
+        data = request.get_json()
+        alert_type = data.get('alert_type', 'manual')
+        severity = data.get('severity', 'info')
+        title = data.get('title', 'Manual Alert')
+        message = data.get('message', '')
+
+        result = alert_sender.send_alert(alert_type, severity, title, message)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
 @app.errorhandler(404)
 def page_not_found(e):
     """Handle 404 errors"""
@@ -1659,7 +1821,7 @@ thread.start()
 if __name__ == '__main__':
     print("""
     ============================================================
-    Claude Monitoring System v2.5 (Mobile & Notifications Edition)
+    Claude Monitoring System v2.6 (Email & SMS Alerts Edition)
     ============================================================
 
     Dashboard URL: http://localhost:5000
@@ -1668,6 +1830,8 @@ if __name__ == '__main__':
     Password: admin
 
     Features:
+    ✓ Email & SMS alerts for critical issues
+    ✓ Smart alert rules (quiet hours, rate limiting)
     ✓ Browser push notifications & alert history
     ✓ Custom dashboard themes (6 themes)
     ✓ Widget marketplace with 9+ widgets

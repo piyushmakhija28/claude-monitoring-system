@@ -208,6 +208,184 @@
             </div>
         </div>
 
+        <!-- Email/SMS Alert Configuration -->
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header bg-white border-0 pt-4 pb-3">
+                <h5 class="mb-0">
+                    <i class="fas fa-envelope me-2"></i>Email & SMS Alerts
+                </h5>
+            </div>
+            <div class="card-body p-4">
+                <p class="text-muted mb-4">
+                    <i class="fas fa-info-circle me-2"></i>
+                    Configure email and SMS alerts for critical system events. Alerts are sent based on configured rules.
+                </p>
+
+                <!-- Email Configuration -->
+                <div class="mb-4">
+                    <h6 class="mb-3"><i class="fas fa-envelope me-2 text-primary"></i>Email Configuration</h6>
+
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" id="emailEnabled">
+                        <label class="form-check-label" for="emailEnabled">
+                            <strong>Enable Email Alerts</strong>
+                        </label>
+                    </div>
+
+                    <div id="emailConfig" style="display: none;">
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label for="smtpServer" class="form-label">SMTP Server</label>
+                                <input type="text" class="form-control" id="smtpServer" placeholder="smtp.gmail.com">
+                            </div>
+                            <div class="col-md-6">
+                                <label for="smtpPort" class="form-label">SMTP Port</label>
+                                <input type="number" class="form-control" id="smtpPort" placeholder="587">
+                            </div>
+                            <div class="col-md-6">
+                                <label for="emailUsername" class="form-label">Email Username</label>
+                                <input type="email" class="form-control" id="emailUsername" placeholder="your@email.com">
+                            </div>
+                            <div class="col-md-6">
+                                <label for="emailPassword" class="form-label">Email Password / App Password</label>
+                                <input type="password" class="form-control" id="emailPassword" placeholder="••••••••">
+                                <small class="text-muted">For Gmail, use <a href="https://myaccount.google.com/apppasswords" target="_blank">App Password</a></small>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="fromEmail" class="form-label">From Email</label>
+                                <input type="email" class="form-control" id="fromEmail" placeholder="alerts@yourdomain.com">
+                            </div>
+                            <div class="col-md-6">
+                                <label for="emailRecipients" class="form-label">Recipients (comma-separated)</label>
+                                <input type="text" class="form-control" id="emailRecipients" placeholder="admin@example.com, team@example.com">
+                            </div>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-primary mt-3" onclick="testEmail()">
+                            <i class="fas fa-paper-plane me-2"></i>Send Test Email
+                        </button>
+                    </div>
+                </div>
+
+                <hr class="my-4">
+
+                <!-- SMS Configuration -->
+                <div class="mb-4">
+                    <h6 class="mb-3"><i class="fas fa-sms me-2 text-success"></i>SMS Configuration (Twilio)</h6>
+
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" id="smsEnabled">
+                        <label class="form-check-label" for="smsEnabled">
+                            <strong>Enable SMS Alerts</strong>
+                        </label>
+                    </div>
+
+                    <div id="smsConfig" style="display: none;">
+                        <div class="alert alert-info mb-3">
+                            <i class="fas fa-info-circle me-2"></i>
+                            <strong>Twilio Setup:</strong> Get your credentials from <a href="https://www.twilio.com/console" target="_blank">Twilio Console</a>
+                        </div>
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label for="twilioAccountSid" class="form-label">Account SID</label>
+                                <input type="text" class="form-control" id="twilioAccountSid" placeholder="ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx">
+                            </div>
+                            <div class="col-md-6">
+                                <label for="twilioAuthToken" class="form-label">Auth Token</label>
+                                <input type="password" class="form-control" id="twilioAuthToken" placeholder="••••••••••••••••••••••••••••••••">
+                            </div>
+                            <div class="col-md-6">
+                                <label for="twilioFromNumber" class="form-label">From Number</label>
+                                <input type="tel" class="form-control" id="twilioFromNumber" placeholder="+1234567890">
+                            </div>
+                            <div class="col-md-6">
+                                <label for="smsRecipients" class="form-label">Recipients (comma-separated)</label>
+                                <input type="text" class="form-control" id="smsRecipients" placeholder="+1234567890, +0987654321">
+                            </div>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-success mt-3" onclick="testSMS()">
+                            <i class="fas fa-mobile-alt me-2"></i>Send Test SMS
+                        </button>
+                    </div>
+                </div>
+
+                <hr class="my-4">
+
+                <!-- Alert Rules -->
+                <div class="mb-4">
+                    <h6 class="mb-3"><i class="fas fa-sliders-h me-2 text-warning"></i>Alert Rules</h6>
+
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" id="criticalOnly" checked>
+                        <label class="form-check-label" for="criticalOnly">
+                            <strong>Critical Alerts Only</strong>
+                            <small class="d-block text-muted">Only send alerts for critical severity</small>
+                        </label>
+                    </div>
+
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" id="includeWarnings">
+                        <label class="form-check-label" for="includeWarnings">
+                            <strong>Include Warnings</strong>
+                            <small class="d-block text-muted">Also send alerts for warning severity</small>
+                        </label>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Alert Types to Send</label>
+                        <div class="form-check">
+                            <input class="form-check-input alert-type" type="checkbox" value="health_score" id="alertTypeHealth" checked>
+                            <label class="form-check-label" for="alertTypeHealth">Health Score Drops</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input alert-type" type="checkbox" value="daemon_down" id="alertTypeDaemon" checked>
+                            <label class="form-check-label" for="alertTypeDaemon">Daemon Down</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input alert-type" type="checkbox" value="error_threshold" id="alertTypeError" checked>
+                            <label class="form-check-label" for="alertTypeError">Error Threshold Exceeded</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input alert-type" type="checkbox" value="context_usage" id="alertTypeContext">
+                            <label class="form-check-label" for="alertTypeContext">Context Usage High</label>
+                        </div>
+                    </div>
+
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" id="rateLimitEnabled" checked>
+                        <label class="form-check-label" for="rateLimitEnabled">
+                            <strong>Rate Limiting</strong>
+                            <small class="d-block text-muted">Limit to 10 alerts per hour to prevent spam</small>
+                        </label>
+                    </div>
+
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" id="quietHoursEnabled">
+                        <label class="form-check-label" for="quietHoursEnabled">
+                            <strong>Quiet Hours</strong>
+                        </label>
+                    </div>
+
+                    <div id="quietHoursConfig" style="display: none;">
+                        <div class="row g-3 ms-4">
+                            <div class="col-md-6">
+                                <label for="quietHoursStart" class="form-label">Start Time</label>
+                                <input type="time" class="form-control" id="quietHoursStart" value="22:00">
+                            </div>
+                            <div class="col-md-6">
+                                <label for="quietHoursEnd" class="form-label">End Time</label>
+                                <input type="time" class="form-control" id="quietHoursEnd" value="08:00">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Save Button -->
+                <button type="button" class="btn btn-primary" onclick="saveAlertConfig()">
+                    <i class="fas fa-save me-2"></i>Save Alert Configuration
+                </button>
+            </div>
+        </div>
+
         <!-- Notification Settings -->
         <div class="card border-0 shadow-sm mb-4">
             <div class="card-header bg-white border-0 pt-4 pb-3">
@@ -796,7 +974,193 @@ document.addEventListener('DOMContentLoaded', function() {
     checkAlerts();
     // Check alerts every 30 seconds
     setInterval(checkAlerts, 30000);
+
+    // Load alert configuration
+    loadAlertConfig();
+
+    // Toggle email/SMS config visibility
+    document.getElementById('emailEnabled').addEventListener('change', function() {
+        document.getElementById('emailConfig').style.display = this.checked ? 'block' : 'none';
+    });
+
+    document.getElementById('smsEnabled').addEventListener('change', function() {
+        document.getElementById('smsConfig').style.display = this.checked ? 'block' : 'none';
+    });
+
+    document.getElementById('quietHoursEnabled').addEventListener('change', function() {
+        document.getElementById('quietHoursConfig').style.display = this.checked ? 'block' : 'none';
+    });
 });
+
+// Alert Configuration Functions
+function loadAlertConfig() {
+    fetch('/api/alert-config')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success && data.config) {
+                const config = data.config;
+
+                // Email config
+                if (config.email) {
+                    document.getElementById('emailEnabled').checked = config.email.enabled || false;
+                    document.getElementById('smtpServer').value = config.email.smtp_server || 'smtp.gmail.com';
+                    document.getElementById('smtpPort').value = config.email.smtp_port || 587;
+                    document.getElementById('emailUsername').value = config.email.username || '';
+                    document.getElementById('fromEmail').value = config.email.from_email || '';
+                    document.getElementById('emailRecipients').value = (config.email.recipients || []).join(', ');
+
+                    if (config.email.enabled) {
+                        document.getElementById('emailConfig').style.display = 'block';
+                    }
+                }
+
+                // SMS config
+                if (config.sms) {
+                    document.getElementById('smsEnabled').checked = config.sms.enabled || false;
+                    document.getElementById('twilioAccountSid').value = config.sms.account_sid || '';
+                    document.getElementById('twilioFromNumber').value = config.sms.from_number || '';
+                    document.getElementById('smsRecipients').value = (config.sms.recipients || []).join(', ');
+
+                    if (config.sms.enabled) {
+                        document.getElementById('smsConfig').style.display = 'block';
+                    }
+                }
+
+                // Alert rules
+                if (config.alert_rules) {
+                    document.getElementById('criticalOnly').checked = config.alert_rules.critical_only !== false;
+                    document.getElementById('includeWarnings').checked = config.alert_rules.include_warnings || false;
+
+                    const alertTypes = config.alert_rules.alert_types || [];
+                    document.querySelectorAll('.alert-type').forEach(checkbox => {
+                        checkbox.checked = alertTypes.includes(checkbox.value);
+                    });
+
+                    if (config.alert_rules.rate_limiting) {
+                        document.getElementById('rateLimitEnabled').checked = config.alert_rules.rate_limiting.enabled !== false;
+                    }
+
+                    if (config.alert_rules.quiet_hours) {
+                        document.getElementById('quietHoursEnabled').checked = config.alert_rules.quiet_hours.enabled || false;
+                        document.getElementById('quietHoursStart').value = config.alert_rules.quiet_hours.start || '22:00';
+                        document.getElementById('quietHoursEnd').value = config.alert_rules.quiet_hours.end || '08:00';
+
+                        if (config.alert_rules.quiet_hours.enabled) {
+                            document.getElementById('quietHoursConfig').style.display = 'block';
+                        }
+                    }
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Error loading alert config:', error);
+        });
+}
+
+function saveAlertConfig() {
+    const emailRecipients = document.getElementById('emailRecipients').value
+        .split(',').map(e => e.trim()).filter(e => e);
+    const smsRecipients = document.getElementById('smsRecipients').value
+        .split(',').map(e => e.trim()).filter(e => e);
+
+    const alertTypes = Array.from(document.querySelectorAll('.alert-type:checked'))
+        .map(checkbox => checkbox.value);
+
+    const config = {
+        email: {
+            enabled: document.getElementById('emailEnabled').checked,
+            smtp_server: document.getElementById('smtpServer').value,
+            smtp_port: parseInt(document.getElementById('smtpPort').value) || 587,
+            username: document.getElementById('emailUsername').value,
+            password: document.getElementById('emailPassword').value || undefined,
+            from_email: document.getElementById('fromEmail').value,
+            recipients: emailRecipients,
+            use_tls: true
+        },
+        sms: {
+            enabled: document.getElementById('smsEnabled').checked,
+            provider: 'twilio',
+            account_sid: document.getElementById('twilioAccountSid').value,
+            auth_token: document.getElementById('twilioAuthToken').value || undefined,
+            from_number: document.getElementById('twilioFromNumber').value,
+            recipients: smsRecipients
+        },
+        alert_rules: {
+            critical_only: document.getElementById('criticalOnly').checked,
+            include_warnings: document.getElementById('includeWarnings').checked,
+            alert_types: alertTypes,
+            quiet_hours: {
+                enabled: document.getElementById('quietHoursEnabled').checked,
+                start: document.getElementById('quietHoursStart').value,
+                end: document.getElementById('quietHoursEnd').value
+            },
+            rate_limiting: {
+                enabled: document.getElementById('rateLimitEnabled').checked,
+                max_alerts_per_hour: 10
+            }
+        }
+    };
+
+    fetch('/api/alert-config', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(config)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showAlert('success', 'Alert configuration saved successfully!');
+        } else {
+            showAlert('danger', data.message || 'Failed to save alert configuration');
+        }
+    })
+    .catch(error => {
+        console.error('Error saving alert config:', error);
+        showAlert('danger', 'An error occurred while saving alert configuration');
+    });
+}
+
+function testEmail() {
+    showAlert('info', 'Sending test email...');
+
+    fetch('/api/test-email', {
+        method: 'POST'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showAlert('success', 'Test email sent successfully! Check your inbox.');
+        } else {
+            showAlert('danger', data.message || 'Failed to send test email');
+        }
+    })
+    .catch(error => {
+        console.error('Error sending test email:', error);
+        showAlert('danger', 'An error occurred while sending test email');
+    });
+}
+
+function testSMS() {
+    showAlert('info', 'Sending test SMS...');
+
+    fetch('/api/test-sms', {
+        method: 'POST'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showAlert('success', 'Test SMS sent successfully! Check your phone.');
+        } else {
+            showAlert('danger', data.message || 'Failed to send test SMS');
+        }
+    })
+    .catch(error => {
+        console.error('Error sending test SMS:', error);
+        showAlert('danger', 'An error occurred while sending test SMS');
+    });
+}
 
 // Change password function
 function changePassword(event) {
