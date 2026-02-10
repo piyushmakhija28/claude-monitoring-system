@@ -21,6 +21,7 @@ from utils.history_tracker import HistoryTracker
 from utils.notification_manager import NotificationManager
 from utils.alert_sender import AlertSender
 from utils.community_widgets import CommunityWidgetsManager
+from utils.anomaly_detector import AnomalyDetector
 from flasgger import Swagger, swag_from
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
@@ -62,6 +63,7 @@ history_tracker = HistoryTracker()
 notification_manager = NotificationManager()
 alert_sender = AlertSender()
 community_widgets_manager = CommunityWidgetsManager()
+anomaly_detector = AnomalyDetector()
 
 # User database (in production, use a proper database)
 # Password: 'admin' (hashed with bcrypt)
@@ -2003,6 +2005,226 @@ def send_alert_manual():
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
 
+# ============================================================
+# Anomaly Detection Routes
+# ============================================================
+
+@app.route('/anomaly-detection')
+@login_required
+def anomaly_detection():
+    """
+    AI Anomaly Detection Dashboard
+    ---
+    tags:
+      - Anomaly Detection
+    responses:
+      200:
+        description: Anomaly detection dashboard page
+    """
+    stats = anomaly_detector.get_statistics()
+    insights = anomaly_detector.get_insights()
+
+    return render_template('anomaly-detection.html',
+                         stats=stats,
+                         insights=insights)
+
+@app.route('/api/anomaly/stats')
+@login_required
+def anomaly_stats():
+    """
+    Get anomaly detection statistics
+    ---
+    tags:
+      - Anomaly Detection
+    responses:
+      200:
+        description: Anomaly statistics
+        schema:
+          type: object
+          properties:
+            success:
+              type: boolean
+            stats:
+              type: object
+    """
+    try:
+        stats = anomaly_detector.get_statistics()
+        return jsonify({
+            'success': True,
+            'stats': stats
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/anomaly/insights')
+@login_required
+def anomaly_insights():
+    """
+    Get AI insights from anomaly patterns
+    ---
+    tags:
+      - Anomaly Detection
+    responses:
+      200:
+        description: AI insights and recommendations
+        schema:
+          type: object
+          properties:
+            success:
+              type: boolean
+            insights:
+              type: object
+    """
+    try:
+        insights = anomaly_detector.get_insights()
+        return jsonify({
+            'success': True,
+            'insights': insights
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/anomaly/list')
+@login_required
+def anomaly_list():
+    """
+    Get detected anomalies with optional filters
+    ---
+    tags:
+      - Anomaly Detection
+    parameters:
+      - name: limit
+        in: query
+        type: integer
+        default: 50
+        description: Maximum number of anomalies to return
+      - name: severity
+        in: query
+        type: string
+        enum: [critical, high, medium, low]
+        description: Filter by severity
+      - name: resolved
+        in: query
+        type: boolean
+        description: Filter by resolution status
+    responses:
+      200:
+        description: List of anomalies
+        schema:
+          type: object
+          properties:
+            success:
+              type: boolean
+            anomalies:
+              type: array
+    """
+    try:
+        limit = request.args.get('limit', 50, type=int)
+        severity = request.args.get('severity', None)
+        resolved = request.args.get('resolved', None)
+
+        # Convert resolved string to boolean
+        if resolved is not None:
+            resolved = resolved.lower() == 'true'
+
+        anomalies = anomaly_detector.get_anomalies(
+            limit=limit,
+            severity=severity,
+            resolved=resolved
+        )
+
+        return jsonify({
+            'success': True,
+            'anomalies': anomalies,
+            'count': len(anomalies)
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/anomaly/<anomaly_id>/acknowledge', methods=['POST'])
+@login_required
+def acknowledge_anomaly(anomaly_id):
+    """
+    Acknowledge an anomaly
+    ---
+    tags:
+      - Anomaly Detection
+    parameters:
+      - name: anomaly_id
+        in: path
+        type: string
+        required: true
+        description: Anomaly ID
+    responses:
+      200:
+        description: Anomaly acknowledged
+      404:
+        description: Anomaly not found
+    """
+    try:
+        success = anomaly_detector.acknowledge_anomaly(anomaly_id)
+
+        if success:
+            return jsonify({
+                'success': True,
+                'message': 'Anomaly acknowledged successfully'
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'message': 'Anomaly not found'
+            }), 404
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/anomaly/<anomaly_id>/resolve', methods=['POST'])
+@login_required
+def resolve_anomaly(anomaly_id):
+    """
+    Resolve an anomaly
+    ---
+    tags:
+      - Anomaly Detection
+    parameters:
+      - name: anomaly_id
+        in: path
+        type: string
+        required: true
+        description: Anomaly ID
+      - name: body
+        in: body
+        required: false
+        schema:
+          type: object
+          properties:
+            resolution_note:
+              type: string
+              description: Optional resolution note
+    responses:
+      200:
+        description: Anomaly resolved
+      404:
+        description: Anomaly not found
+    """
+    try:
+        data = request.get_json() or {}
+        resolution_note = data.get('resolution_note', '')
+
+        success = anomaly_detector.resolve_anomaly(anomaly_id, resolution_note)
+
+        if success:
+            return jsonify({
+                'success': True,
+                'message': 'Anomaly resolved successfully'
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'message': 'Anomaly not found'
+            }), 404
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
 @app.errorhandler(404)
 def page_not_found(e):
     """Handle 404 errors"""
@@ -2107,24 +2329,26 @@ thread.start()
 if __name__ == '__main__':
     print("""
     ============================================================
-    Claude Monitoring System v2.8 (Community Edition)
+    Claude Monitoring System v2.9 (AI Detection Edition)
     ============================================================
 
     Dashboard URL: http://localhost:5000
     API Docs: http://localhost:5000/api/docs
     Widget Builder: http://localhost:5000/widget-builder
     Community: http://localhost:5000/community-marketplace
+    AI Detection: http://localhost:5000/anomaly-detection
     Username: admin
     Password: admin
 
     Features:
+    ✓ AI-powered anomaly detection (6 ML algorithms)
+    ✓ Z-score, IQR, Moving Avg, Exp. Smoothing detection
+    ✓ Spike detection & trend analysis
+    ✓ AI insights & recommendations
+    ✓ Confidence scoring & severity calculation
     ✓ Community widget marketplace with sharing
-    ✓ Publish, browse, rate widgets (5-star system)
     ✓ Advanced widget builder with drag-and-drop
-    ✓ 15+ component library (charts, metrics, tables)
-    ✓ Live preview canvas with visual editor
     ✓ Email & SMS alerts for critical issues
-    ✓ Smart alert rules (quiet hours, rate limiting)
     ✓ Browser push notifications & alert history
     ✓ Custom dashboard themes (6 themes)
     ✓ Mobile-optimized responsive design

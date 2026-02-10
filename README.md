@@ -1,6 +1,6 @@
-# 🤖 Claude Monitoring System v2.8 🚀
+# 🤖 Claude Monitoring System v2.9 🚀
 
-**Professional Real-time Analytics Dashboard for Claude Memory System**
+**Professional Real-time Analytics Dashboard for Claude Memory System with AI-Powered Anomaly Detection**
 
 [![GitHub](https://img.shields.io/badge/GitHub-claude--monitoring--system-blue?logo=github)](https://github.com/piyushmakhija28/claude-monitoring-system)
 [![Python](https://img.shields.io/badge/Python-3.7+-blue?logo=python)](https://www.python.org/)
@@ -12,6 +12,96 @@ A comprehensive, real-time monitoring and analytics dashboard for the Claude Mem
 **🎁 COMPLETE PACKAGE**: This repo includes **everything you need** - the monitoring dashboard + all Claude Memory System v2.0 files (24 automation scripts + 15 policies + complete documentation). Just clone, setup, and start using!
 
 **Developed by [TechDeveloper](https://www.techdeveloper.in)** 💻
+
+---
+
+## 🆕 What's New in v2.9 (Feb 2026) - AI Detection Edition 🧠🤖
+
+### **AI-Powered Anomaly Detection with Machine Learning** 🧠🤖 NEW!
+- **Multi-Algorithm Detection Engine** - 6 ML algorithms working together:
+  - 📊 **Z-Score Analysis**: Statistical deviation detection using mean and standard deviation
+  - 📈 **IQR Method (Interquartile Range)**: Outlier detection using quartiles
+  - 📉 **Moving Average**: Trend-based detection with sliding window analysis
+  - 🎯 **Exponential Smoothing**: Weighted prediction using historical data
+  - ⚡ **Spike Detection**: Identifies sudden value changes and spikes
+  - 📊 **Trend Analysis**: Detects sudden trend changes (increase/decrease)
+- **Intelligent Anomaly Scoring**:
+  - 🎯 Confidence scoring (0-100%) based on algorithm consensus
+  - ⚖️ Anomaly detected when 2+ algorithms agree
+  - 🔢 Detailed method breakdown for each detection
+  - 📊 Individual algorithm results and scores
+- **Severity Classification**:
+  - 🔴 **Critical**: 80%+ confidence (immediate attention required)
+  - 🟠 **High**: 60-79% confidence (investigation recommended)
+  - 🟡 **Medium**: 40-59% confidence (monitor closely)
+  - 🟢 **Low**: <40% confidence (informational)
+- **AI Insights & Recommendations**:
+  - 💡 Pattern-based insights from anomaly data
+  - 🎯 Prioritized recommendations (critical, high, medium)
+  - 📊 24-hour trend analysis
+  - 🔍 Most problematic metric identification
+  - ⚠️ Critical anomaly alerts
+  - 📈 Increased activity detection
+- **Anomaly Dashboard**:
+  - 📊 Statistics cards (Total, Critical, Unresolved, Resolved)
+  - 💡 AI insights section with recommendations
+  - 🔬 Detection methods overview (6 algorithms)
+  - 📋 Anomaly list with detailed information
+  - 🔍 Advanced filtering (All, Critical, High, Unresolved)
+  - ⏱️ Auto-refresh every 30 seconds
+- **Anomaly Management**:
+  - ✅ **Acknowledge**: Mark anomalies as seen/acknowledged
+  - ✔️ **Resolve**: Mark anomalies as resolved with notes
+  - 📝 Resolution notes for documentation
+  - 🕐 Timestamp tracking (detected, acknowledged, resolved)
+  - 📊 Status tracking (new, acknowledged, resolved)
+- **Metrics Monitoring**:
+  - 💚 Health Score anomalies
+  - ❌ Error Count anomalies
+  - 🧠 Context Usage anomalies
+  - ⏱️ Response Time anomalies
+  - 🤖 Custom metric support
+- **Data Collection & History**:
+  - 💾 Stores up to 10,000 metric data points
+  - 📊 Historical anomaly records (last 1000)
+  - 🔄 Continuous learning from new data
+  - 📈 Time-series analysis
+  - 🗄️ Stored in `~/.claude/memory/anomalies/`
+- **Detection Sensitivity**:
+  - 🔴 **High**: More sensitive (catches more anomalies)
+  - 🟡 **Medium**: Balanced detection (default)
+  - 🟢 **Low**: Conservative detection (fewer false positives)
+  - ⚙️ Configurable thresholds per algorithm
+- **Model Retraining**:
+  - 🔄 Manual retrain button (future enhancement)
+  - 📊 Adaptive learning from system behavior
+  - 🎯 Improving accuracy over time
+
+**Technical Features:**
+- ✅ NumPy-powered statistical calculations
+- ✅ Real-time anomaly detection
+- ✅ Multi-method ensemble approach
+- ✅ JSON-based data persistence
+- ✅ RESTful API endpoints for all operations
+- ✅ Swagger API documentation
+- ✅ Session-based anomaly tracking
+
+**Use Cases:**
+- ✅ Detect unusual system behavior automatically
+- ✅ Get early warnings before issues become critical
+- ✅ Reduce false positives with multi-algorithm consensus
+- ✅ Track and resolve anomalies systematically
+- ✅ Analyze patterns in system metrics
+- ✅ Make data-driven decisions based on AI insights
+- ✅ Prevent downtime with predictive detection
+
+**API Endpoints:**
+- `GET /anomaly-detection` - Anomaly detection dashboard
+- `GET /api/anomaly/stats` - Get anomaly statistics
+- `GET /api/anomaly/insights` - Get AI insights and recommendations
+- `GET /api/anomaly/list` - List anomalies (supports filtering)
+- `POST /api/anomaly/<id>/acknowledge` - Acknowledge an anomaly
+- `POST /api/anomaly/<id>/resolve` - Resolve an anomaly with notes
 
 ---
 
