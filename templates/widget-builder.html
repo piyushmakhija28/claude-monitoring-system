@@ -238,6 +238,12 @@
                             <i class="fas fa-code me-1"></i>Code
                         </a>
                     </li>
+                    <li class="nav-item">
+                        <a class="nav-link" data-bs-toggle="tab" href="#commentsTab">
+                            <i class="fas fa-comments me-1"></i>Comments
+                            <span class="badge bg-primary ms-1" id="commentCountBadge">0</span>
+                        </a>
+                    </li>
                 </ul>
             </div>
             <div class="card-body p-0">
@@ -303,6 +309,30 @@
                             </button>
                         </div>
                     </div>
+
+                    <!-- Comments Tab -->
+                    <div class="tab-pane fade" id="commentsTab">
+                        <div class="comments-panel" style="max-height: 600px; overflow-y: auto;">
+                            <!-- Add Comment Form -->
+                            <div class="p-3 border-bottom bg-light sticky-top">
+                                <div class="input-group input-group-sm">
+                                    <input type="text" class="form-control" id="newCommentInput" placeholder="Add a comment or use @mention...">
+                                    <button class="btn btn-primary" onclick="addComment()">
+                                        <i class="fas fa-paper-plane"></i>
+                                    </button>
+                                </div>
+                                <div id="mentionSuggestions" class="mention-suggestions" style="display: none;"></div>
+                            </div>
+
+                            <!-- Comments List -->
+                            <div id="commentsList" class="p-3">
+                                <div class="text-center text-muted py-5">
+                                    <i class="fas fa-comments fa-2x mb-3"></i>
+                                    <p>No comments yet. Be the first to comment!</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -333,9 +363,11 @@
 </div>
 
 <link rel="stylesheet" href="{{ url_for('static', filename='css/version-control.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/comments.css') }}">
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="{{ url_for('static', filename='js/version-control.js') }}"></script>
+<script src="{{ url_for('static', filename='js/comments.js') }}"></script>
 <script>
 let widgetData = {
     components: [],
