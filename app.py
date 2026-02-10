@@ -25,6 +25,10 @@ from utils.anomaly_detector import AnomalyDetector
 from utils.predictive_analytics import PredictiveAnalytics
 from utils.alert_routing import AlertRoutingEngine
 from utils.memory_system_monitor import MemorySystemMonitor
+from utils.widget_version_manager import WidgetVersionManager
+from utils.widget_comments_manager import WidgetCommentsManager
+from utils.collaboration_manager import CollaborationSessionManager
+from utils.trending_calculator import TrendingCalculator
 from flasgger import Swagger, swag_from
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
@@ -70,6 +74,10 @@ anomaly_detector = AnomalyDetector()
 predictive_analytics = PredictiveAnalytics()
 alert_routing = AlertRoutingEngine()
 memory_system_monitor = MemorySystemMonitor()
+widget_version_manager = WidgetVersionManager()
+widget_comments_manager = WidgetCommentsManager()
+collaboration_manager = CollaborationSessionManager()
+trending_calculator = TrendingCalculator()
 
 # User database (in production, use a proper database)
 # Password: 'admin' (hashed with bcrypt)
@@ -883,6 +891,502 @@ def rate_community_widget(widget_id):
         return jsonify({
             'success': True,
             'message': 'Rating submitted successfully'
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+# ============================================================
+# Widget Version Control API
+# ============================================================
+
+@app.route('/api/widgets/<widget_id>/versions/create', methods=['POST'])
+@login_required
+def create_widget_version(widget_id):
+    """Create a new version of a widget"""
+    try:
+        data = request.get_json()
+        widget_data = data.get('widget_data')
+        version_type = data.get('version_type', 'patch')
+        commit_message = data.get('commit_message', '')
+
+        username = session.get('username', 'admin')
+
+        version = widget_version_manager.create_version(
+            widget_id=widget_id,
+            widget_data=widget_data,
+            version_type=version_type,
+            commit_message=commit_message,
+            created_by=username
+        )
+
+        return jsonify({
+            'success': True,
+            'version': version
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/widgets/<widget_id>/versions', methods=['GET'])
+@login_required
+def get_widget_versions(widget_id):
+    """Get all versions for a widget"""
+    try:
+        limit = int(request.args.get('limit', 50))
+        offset = int(request.args.get('offset', 0))
+
+        versions = widget_version_manager.get_version_list(widget_id, limit, offset)
+
+        return jsonify({
+            'success': True,
+            'versions': versions,
+            'total': len(versions)
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/widgets/<widget_id>/versions/<version>', methods=['GET'])
+@login_required
+def get_widget_version(widget_id, version):
+    """Get specific version data"""
+    try:
+        version_data = widget_version_manager.get_version(widget_id, version)
+
+        if not version_data:
+            return jsonify({'success': False, 'message': 'Version not found'}), 404
+
+        return jsonify({
+            'success': True,
+            'version_data': version_data
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/widgets/<widget_id>/versions/<version>/diff', methods=['GET'])
+@login_required
+def get_widget_version_diff(widget_id, version):
+    """Get diff between current and specified version"""
+    try:
+        from_version = request.args.get('from', version)
+        to_version = request.args.get('to', widget_version_manager.get_current_version(widget_id).get('version'))
+
+        diff = widget_version_manager.get_diff(widget_id, from_version, to_version)
+
+        return jsonify({
+            'success': True,
+            'diff': diff
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/widgets/<widget_id>/versions/<version>/rollback', methods=['POST'])
+@login_required
+def rollback_widget_version(widget_id, version):
+    """Rollback widget to a previous version"""
+    try:
+        username = session.get('username', 'admin')
+
+        new_version = widget_version_manager.rollback_version(
+            widget_id=widget_id,
+            target_version=version,
+            created_by=username
+        )
+
+        return jsonify({
+            'success': True,
+            'message': f'Rolled back to version {version}',
+            'new_version': new_version
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/widgets/<widget_id>/versions/<version>', methods=['DELETE'])
+@login_required
+def delete_widget_version(widget_id, version):
+    """Delete a specific version"""
+    try:
+        success = widget_version_manager.delete_version(widget_id, version)
+
+        if not success:
+            return jsonify({'success': False, 'message': 'Version not found or cannot be deleted'}), 404
+
+        return jsonify({
+            'success': True,
+            'message': f'Version {version} deleted successfully'
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+# ============================================================
+# Widget Comments & Discussions API
+# ============================================================
+
+@app.route('/api/widgets/<widget_id>/comments', methods=['POST'])
+@login_required
+def add_widget_comment(widget_id):
+    """Add a comment to a widget"""
+    try:
+        data = request.get_json()
+        content = data.get('content')
+        parent_comment_id = data.get('parent_comment_id')
+
+        if not content or len(content.strip()) == 0:
+            return jsonify({'success': False, 'message': 'Comment cannot be empty'}), 400
+
+        username = session.get('username', 'admin')
+
+        comment = widget_comments_manager.add_comment(
+            widget_id=widget_id,
+            author=username,
+            content=content,
+            parent_comment_id=parent_comment_id
+        )
+
+        # Emit real-time notification
+        socketio.emit('comment:new', {
+            'widget_id': widget_id,
+            'comment': comment
+        }, broadcast=True)
+
+        return jsonify({
+            'success': True,
+            'comment': comment
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/widgets/<widget_id>/comments', methods=['GET'])
+@login_required
+def get_widget_comments(widget_id):
+    """Get all comments for a widget"""
+    try:
+        limit = int(request.args.get('limit', 50))
+        offset = int(request.args.get('offset', 0))
+        thread_id = request.args.get('thread_id')
+
+        comments = widget_comments_manager.get_comments(
+            widget_id=widget_id,
+            limit=limit,
+            offset=offset,
+            thread_id=thread_id
+        )
+
+        return jsonify({
+            'success': True,
+            'comments': comments,
+            'total': len(comments)
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/widgets/<widget_id>/comments/<comment_id>', methods=['PUT'])
+@login_required
+def update_widget_comment(widget_id, comment_id):
+    """Update a comment"""
+    try:
+        data = request.get_json()
+        new_content = data.get('content')
+
+        if not new_content or len(new_content.strip()) == 0:
+            return jsonify({'success': False, 'message': 'Comment cannot be empty'}), 400
+
+        username = session.get('username', 'admin')
+
+        comment = widget_comments_manager.update_comment(
+            widget_id=widget_id,
+            comment_id=comment_id,
+            author=username,
+            new_content=new_content
+        )
+
+        if not comment:
+            return jsonify({'success': False, 'message': 'Comment not found or unauthorized'}), 404
+
+        return jsonify({
+            'success': True,
+            'comment': comment
+        })
+    except PermissionError as e:
+        return jsonify({'success': False, 'message': str(e)}), 403
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/widgets/<widget_id>/comments/<comment_id>', methods=['DELETE'])
+@login_required
+def delete_widget_comment(widget_id, comment_id):
+    """Delete a comment"""
+    try:
+        username = session.get('username', 'admin')
+        is_admin = USERS.get(username, {}).get('role') == 'admin'
+
+        success = widget_comments_manager.delete_comment(
+            widget_id=widget_id,
+            comment_id=comment_id,
+            author=username,
+            is_admin=is_admin
+        )
+
+        if not success:
+            return jsonify({'success': False, 'message': 'Comment not found'}), 404
+
+        return jsonify({
+            'success': True,
+            'message': 'Comment deleted successfully'
+        })
+    except PermissionError as e:
+        return jsonify({'success': False, 'message': str(e)}), 403
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/widgets/<widget_id>/comments/<comment_id>/react', methods=['POST'])
+@login_required
+def add_comment_reaction(widget_id, comment_id):
+    """Add a reaction to a comment"""
+    try:
+        data = request.get_json()
+        reaction_type = data.get('reaction_type', 'thumbs_up')
+
+        username = session.get('username', 'admin')
+
+        comment = widget_comments_manager.add_reaction(
+            widget_id=widget_id,
+            comment_id=comment_id,
+            user=username,
+            reaction_type=reaction_type
+        )
+
+        if not comment:
+            return jsonify({'success': False, 'message': 'Comment not found'}), 404
+
+        return jsonify({
+            'success': True,
+            'comment': comment
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/notifications/comments', methods=['GET'])
+@login_required
+def get_comment_notifications():
+    """Get comment notifications for current user"""
+    try:
+        username = session.get('username', 'admin')
+        limit = int(request.args.get('limit', 20))
+
+        mentions = widget_comments_manager.get_user_mentions(username, limit)
+
+        return jsonify({
+            'success': True,
+            'mentions': mentions,
+            'total': len(mentions)
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+# ============================================================
+# Real-time Collaboration API
+# ============================================================
+
+@app.route('/api/widgets/<widget_id>/collaborate/start', methods=['POST'])
+@login_required
+def start_collaboration_session(widget_id):
+    """Start a new collaboration session"""
+    try:
+        data = request.get_json()
+        duration_hours = data.get('duration_hours', 2)
+
+        username = session.get('username', 'admin')
+
+        session_data = collaboration_manager.create_session(
+            widget_id=widget_id,
+            creator=username,
+            session_duration_hours=duration_hours
+        )
+
+        return jsonify({
+            'success': True,
+            'session': session_data
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/widgets/<widget_id>/collaborate/<session_id>/join', methods=['POST'])
+@login_required
+def join_collaboration_session(widget_id, session_id):
+    """Join an existing collaboration session"""
+    try:
+        data = request.get_json()
+        socket_id = data.get('socket_id', '')
+
+        username = session.get('username', 'admin')
+
+        session_data = collaboration_manager.join_session(
+            session_id=session_id,
+            user_id=username,
+            socket_id=socket_id
+        )
+
+        if not session_data:
+            return jsonify({'success': False, 'message': 'Session not found or expired'}), 404
+
+        return jsonify({
+            'success': True,
+            'session': session_data
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/widgets/<widget_id>/collaborate/<session_id>/leave', methods=['POST'])
+@login_required
+def leave_collaboration_session(widget_id, session_id):
+    """Leave a collaboration session"""
+    try:
+        username = session.get('username', 'admin')
+
+        success = collaboration_manager.leave_session(
+            session_id=session_id,
+            user_id=username
+        )
+
+        if not success:
+            return jsonify({'success': False, 'message': 'Session not found'}), 404
+
+        return jsonify({
+            'success': True,
+            'message': 'Left session successfully'
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/widgets/<widget_id>/collaborate/<session_id>/status', methods=['GET'])
+@login_required
+def get_collaboration_status(widget_id, session_id):
+    """Get collaboration session status"""
+    try:
+        session_data = collaboration_manager.get_session(session_id)
+
+        if not session_data:
+            return jsonify({'success': False, 'message': 'Session not found'}), 404
+
+        return jsonify({
+            'success': True,
+            'session': session_data
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+# ============================================================
+# Featured & Trending Widgets API
+# ============================================================
+
+@app.route('/api/widgets/featured', methods=['GET'])
+@login_required
+def get_featured_widgets():
+    """Get featured widgets"""
+    try:
+        featured = trending_calculator.get_featured_widgets()
+
+        return jsonify({
+            'success': True,
+            'featured': featured,
+            'total': len(featured)
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/widgets/trending', methods=['GET'])
+@login_required
+def get_trending_widgets():
+    """Get trending widgets"""
+    try:
+        period_days = int(request.args.get('period', 1))
+        force_refresh = request.args.get('refresh', 'false').lower() == 'true'
+
+        trending = trending_calculator.get_trending_cached(
+            time_period_days=period_days,
+            force_refresh=force_refresh
+        )
+
+        return jsonify({
+            'success': True,
+            'trending': trending,
+            'period_days': period_days,
+            'total': len(trending)
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/widgets/<widget_id>/feature', methods=['POST'])
+@login_required
+def feature_widget(widget_id):
+    """Feature a widget (admin only)"""
+    try:
+        username = session.get('username', 'admin')
+        is_admin = USERS.get(username, {}).get('role') == 'admin'
+
+        if not is_admin:
+            return jsonify({'success': False, 'message': 'Admin access required'}), 403
+
+        success = trending_calculator.add_featured(widget_id, username)
+
+        if not success:
+            return jsonify({'success': False, 'message': 'Widget not found or already featured'}), 404
+
+        return jsonify({
+            'success': True,
+            'message': 'Widget featured successfully'
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/widgets/<widget_id>/feature', methods=['DELETE'])
+@login_required
+def unfeature_widget(widget_id):
+    """Remove featured status (admin only)"""
+    try:
+        username = session.get('username', 'admin')
+        is_admin = USERS.get(username, {}).get('role') == 'admin'
+
+        if not is_admin:
+            return jsonify({'success': False, 'message': 'Admin access required'}), 403
+
+        success = trending_calculator.remove_featured(widget_id)
+
+        if not success:
+            return jsonify({'success': False, 'message': 'Widget not found in featured list'}), 404
+
+        return jsonify({
+            'success': True,
+            'message': 'Featured status removed'
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/widgets/trending/calculate', methods=['POST'])
+@login_required
+def recalculate_trending():
+    """Recalculate trending widgets (admin only)"""
+    try:
+        username = session.get('username', 'admin')
+        is_admin = USERS.get(username, {}).get('role') == 'admin'
+
+        if not is_admin:
+            return jsonify({'success': False, 'message': 'Admin access required'}), 403
+
+        trending_calculator.invalidate_cache()
+
+        # Recalculate for all periods
+        trending_24h = trending_calculator.get_trending_cached(1, force_refresh=True)
+        trending_7d = trending_calculator.get_trending_cached(7, force_refresh=True)
+        trending_30d = trending_calculator.get_trending_cached(30, force_refresh=True)
+
+        return jsonify({
+            'success': True,
+            'message': 'Trending data recalculated',
+            'stats': {
+                'trending_24h': len(trending_24h),
+                'trending_7d': len(trending_7d),
+                'trending_30d': len(trending_30d)
+            }
         })
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
@@ -2803,6 +3307,184 @@ def handle_metrics_request():
         })
     except Exception as e:
         print(f"Error emitting metrics: {e}")
+        emit('error', {'message': str(e)})
+
+# ============================================================
+# WebSocket Handlers for Real-time Collaboration
+# ============================================================
+
+@socketio.on('collaboration:join')
+def handle_collaboration_join(data):
+    """Handle user joining a collaboration session"""
+    try:
+        session_id = data.get('session_id')
+        widget_id = data.get('widget_id')
+        username = session.get('username', 'admin')
+
+        # Join session
+        session_data = collaboration_manager.join_session(
+            session_id=session_id,
+            user_id=username,
+            socket_id=request.sid
+        )
+
+        if session_data:
+            # Notify other participants
+            emit('collaboration:user_joined', {
+                'session_id': session_id,
+                'user_id': username,
+                'color': next((p['color'] for p in session_data['participants'] if p['user_id'] == username), '#FF5733'),
+                'timestamp': datetime.utcnow().isoformat() + 'Z'
+            }, broadcast=True, include_self=False)
+
+            # Send current session state to joiner
+            emit('collaboration:session_state', {
+                'session': session_data
+            })
+        else:
+            emit('error', {'message': 'Session not found or expired'})
+
+    except Exception as e:
+        print(f"Error in collaboration:join: {e}")
+        emit('error', {'message': str(e)})
+
+@socketio.on('collaboration:leave')
+def handle_collaboration_leave(data):
+    """Handle user leaving a collaboration session"""
+    try:
+        session_id = data.get('session_id')
+        username = session.get('username', 'admin')
+
+        success = collaboration_manager.leave_session(
+            session_id=session_id,
+            user_id=username
+        )
+
+        if success:
+            # Notify other participants
+            emit('collaboration:user_left', {
+                'session_id': session_id,
+                'user_id': username,
+                'timestamp': datetime.utcnow().isoformat() + 'Z'
+            }, broadcast=True, include_self=False)
+
+    except Exception as e:
+        print(f"Error in collaboration:leave: {e}")
+        emit('error', {'message': str(e)})
+
+@socketio.on('collaboration:cursor_move')
+def handle_cursor_move(data):
+    """Handle cursor movement updates"""
+    try:
+        session_id = data.get('session_id')
+        cursor_position = data.get('cursor_position')
+        username = session.get('username', 'admin')
+
+        # Update cursor position
+        collaboration_manager.update_cursor(
+            session_id=session_id,
+            user_id=username,
+            cursor_position=cursor_position
+        )
+
+        # Broadcast to other participants
+        emit('collaboration:cursor_update', {
+            'session_id': session_id,
+            'user_id': username,
+            'cursor_position': cursor_position,
+            'timestamp': datetime.utcnow().isoformat() + 'Z'
+        }, broadcast=True, include_self=False)
+
+    except Exception as e:
+        print(f"Error in collaboration:cursor_move: {e}")
+
+@socketio.on('collaboration:edit')
+def handle_collaboration_edit(data):
+    """Handle edit operations"""
+    try:
+        session_id = data.get('session_id')
+        operation = data.get('operation')
+        username = session.get('username', 'admin')
+
+        # Log operation
+        collaboration_manager.log_operation(
+            session_id=session_id,
+            user_id=username,
+            operation=operation
+        )
+
+        # Broadcast to other participants
+        emit('collaboration:operation', {
+            'session_id': session_id,
+            'user_id': username,
+            'operation': operation,
+            'timestamp': datetime.utcnow().isoformat() + 'Z'
+        }, broadcast=True, include_self=False)
+
+    except Exception as e:
+        print(f"Error in collaboration:edit: {e}")
+        emit('error', {'message': str(e)})
+
+@socketio.on('collaboration:lock_request')
+def handle_lock_request(data):
+    """Handle line lock requests"""
+    try:
+        session_id = data.get('session_id')
+        editor = data.get('editor')
+        line_range = tuple(data.get('line_range', [0, 0]))
+        username = session.get('username', 'admin')
+
+        # Request lock
+        result = collaboration_manager.request_lock(
+            session_id=session_id,
+            user_id=username,
+            editor=editor,
+            line_range=line_range
+        )
+
+        if result.get('granted'):
+            emit('collaboration:lock_granted', {
+                'session_id': session_id,
+                'lock_key': result.get('lock_key'),
+                'editor': editor,
+                'line_range': line_range
+            })
+
+            # Notify others
+            emit('collaboration:lock_acquired', {
+                'session_id': session_id,
+                'user_id': username,
+                'editor': editor,
+                'line_range': line_range
+            }, broadcast=True, include_self=False)
+        else:
+            emit('collaboration:conflict', {
+                'message': result.get('reason'),
+                'locked_by': result.get('locked_by')
+            })
+
+    except Exception as e:
+        print(f"Error in collaboration:lock_request: {e}")
+        emit('error', {'message': str(e)})
+
+@socketio.on('collaboration:chat')
+def handle_collaboration_chat(data):
+    """Handle chat messages in collaboration session"""
+    try:
+        session_id = data.get('session_id')
+        message = data.get('message')
+        username = session.get('username', 'admin')
+
+        # Broadcast chat message
+        emit('collaboration:chat_message', {
+            'session_id': session_id,
+            'user_id': username,
+            'message': message,
+            'timestamp': datetime.utcnow().isoformat() + 'Z'
+        }, broadcast=True)
+
+    except Exception as e:
+        print(f"Error in collaboration:chat: {e}")
         emit('error', {'message': str(e)})
 
 # Background thread for real-time updates
