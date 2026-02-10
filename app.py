@@ -23,6 +23,7 @@ from utils.alert_sender import AlertSender
 from utils.community_widgets import CommunityWidgetsManager
 from utils.anomaly_detector import AnomalyDetector
 from utils.predictive_analytics import PredictiveAnalytics
+from utils.alert_routing import AlertRoutingEngine
 from flasgger import Swagger, swag_from
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
@@ -66,6 +67,7 @@ alert_sender = AlertSender()
 community_widgets_manager = CommunityWidgetsManager()
 anomaly_detector = AnomalyDetector()
 predictive_analytics = PredictiveAnalytics()
+alert_routing = AlertRoutingEngine()
 
 # User database (in production, use a proper database)
 # Password: 'admin' (hashed with bcrypt)
@@ -2431,6 +2433,254 @@ def train_forecast_models():
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
 
+# ============================================================
+# Alert Routing and Escalation Routes
+# ============================================================
+
+@app.route('/alert-routing')
+@login_required
+def alert_routing_page():
+    """
+    Alert Routing Dashboard
+    ---
+    tags:
+      - Alert Routing
+    responses:
+      200:
+        description: Alert routing dashboard page
+    """
+    return render_template('alert-routing.html')
+
+@app.route('/api/alert-routing/stats')
+@login_required
+def alert_routing_stats():
+    """
+    Get alert routing statistics
+    ---
+    tags:
+      - Alert Routing
+    responses:
+      200:
+        description: Alert routing statistics
+    """
+    try:
+        stats = alert_routing.get_statistics()
+        return jsonify({
+            'success': True,
+            'stats': stats
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/alert-routing/active-alerts')
+@login_required
+def get_active_routed_alerts():
+    """
+    Get active alerts
+    ---
+    tags:
+      - Alert Routing
+    responses:
+      200:
+        description: List of active alerts
+    """
+    try:
+        alerts = alert_routing.get_active_alerts()
+        return jsonify({
+            'success': True,
+            'alerts': alerts
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/alert-routing/rules', methods=['GET', 'POST'])
+@login_required
+def routing_rules():
+    """
+    Get or create routing rules
+    ---
+    tags:
+      - Alert Routing
+    """
+    if request.method == 'POST':
+        try:
+            data = request.get_json()
+            rules_data = alert_routing.load_routing_rules()
+
+            # Generate ID
+            rule_id = f"rule_{len(rules_data['rules']) + 1}"
+            data['id'] = rule_id
+
+            rules_data['rules'].append(data)
+            alert_routing.save_routing_rules(rules_data)
+
+            return jsonify({
+                'success': True,
+                'message': 'Routing rule created',
+                'rule_id': rule_id
+            })
+        except Exception as e:
+            return jsonify({'success': False, 'message': str(e)}), 500
+    else:
+        try:
+            rules_data = alert_routing.load_routing_rules()
+            return jsonify({
+                'success': True,
+                'rules': rules_data['rules']
+            })
+        except Exception as e:
+            return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/alert-routing/rules/<rule_id>/toggle', methods=['POST'])
+@login_required
+def toggle_routing_rule(rule_id):
+    """Toggle routing rule enabled status"""
+    try:
+        rules_data = alert_routing.load_routing_rules()
+        rule = next((r for r in rules_data['rules'] if r['id'] == rule_id), None)
+
+        if not rule:
+            return jsonify({'success': False, 'message': 'Rule not found'}), 404
+
+        rule['enabled'] = not rule.get('enabled', True)
+        alert_routing.save_routing_rules(rules_data)
+
+        return jsonify({
+            'success': True,
+            'enabled': rule['enabled']
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/alert-routing/policies')
+@login_required
+def get_escalation_policies():
+    """
+    Get escalation policies
+    ---
+    tags:
+      - Alert Routing
+    """
+    try:
+        policies_data = alert_routing.load_escalation_policies()
+        return jsonify({
+            'success': True,
+            'policies': policies_data['policies']
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/alert-routing/on-call-schedules')
+@login_required
+def get_on_call_schedules():
+    """
+    Get on-call schedules
+    ---
+    tags:
+      - Alert Routing
+    """
+    try:
+        schedules_data = alert_routing.load_on_call_schedules()
+
+        # Get current on-call for each schedule
+        current_on_call = {}
+        for schedule in schedules_data['schedules']:
+            current_on_call[schedule['id']] = alert_routing.get_current_on_call(schedule['id'])
+
+        return jsonify({
+            'success': True,
+            'schedules': schedules_data['schedules'],
+            'current_on_call': current_on_call
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/alert-routing/channels')
+@login_required
+def get_notification_channels():
+    """
+    Get notification channels
+    ---
+    tags:
+      - Alert Routing
+    """
+    try:
+        channels_data = alert_routing.load_notification_channels()
+        return jsonify({
+            'success': True,
+            'channels': channels_data['channels']
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/alert-routing/alerts/<alert_id>/acknowledge', methods=['POST'])
+@login_required
+def acknowledge_routed_alert(alert_id):
+    """Acknowledge a routed alert"""
+    try:
+        data = request.get_json() or {}
+        acknowledged_by = data.get('acknowledged_by', 'admin')
+
+        success = alert_routing.acknowledge_alert(alert_id, acknowledged_by)
+
+        if success:
+            return jsonify({
+                'success': True,
+                'message': 'Alert acknowledged'
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'message': 'Alert not found'
+            }), 404
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/alert-routing/alerts/<alert_id>/resolve', methods=['POST'])
+@login_required
+def resolve_routed_alert(alert_id):
+    """Resolve a routed alert"""
+    try:
+        data = request.get_json() or {}
+        resolved_by = data.get('resolved_by', 'admin')
+        resolution_note = data.get('resolution_note', '')
+
+        success = alert_routing.resolve_alert(alert_id, resolved_by, resolution_note)
+
+        if success:
+            return jsonify({
+                'success': True,
+                'message': 'Alert resolved'
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'message': 'Alert not found'
+            }), 404
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/alert-routing/alerts/create', methods=['POST'])
+@login_required
+def create_routed_alert():
+    """
+    Create a new routed alert
+    ---
+    tags:
+      - Alert Routing
+    """
+    try:
+        data = request.get_json()
+        alert = alert_routing.create_alert(data)
+
+        return jsonify({
+            'success': True,
+            'message': 'Alert created and routed',
+            'alert': alert
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
 @app.errorhandler(404)
 def page_not_found(e):
     """Handle 404 errors"""
@@ -2535,7 +2785,7 @@ thread.start()
 if __name__ == '__main__':
     print("""
     ============================================================
-    Claude Monitoring System v2.10 (Forecasting Edition)
+    Claude Monitoring System v2.11 (Alert Routing Edition)
     ============================================================
 
     Dashboard URL: http://localhost:5000
@@ -2544,24 +2794,25 @@ if __name__ == '__main__':
     Community: http://localhost:5000/community-marketplace
     AI Detection: http://localhost:5000/anomaly-detection
     Forecasting: http://localhost:5000/predictive-analytics
+    Alert Routing: http://localhost:5000/alert-routing
     Username: admin
     Password: admin
 
     Features:
+    ✓ Custom alert routing & escalation policies
+    ✓ Multi-level escalation chains (up to 3 levels)
+    ✓ On-call schedules with weekly rotation
+    ✓ Multiple notification channels (email, SMS, Slack, webhook)
+    ✓ Conditional routing rules (severity, time, metric)
+    ✓ Alert acknowledgment & resolution tracking
     ✓ Predictive analytics & forecasting (5 algorithms)
     ✓ Time series forecasting with confidence intervals
-    ✓ Capacity breach predictions & planning
-    ✓ Ensemble method (weighted average)
-    ✓ Linear regression, exponential smoothing
-    ✓ Moving average, seasonal pattern detection
     ✓ AI-powered anomaly detection (6 ML algorithms)
     ✓ Spike detection, trend analysis & insights
     ✓ Community widget marketplace with sharing
     ✓ Advanced widget builder with drag-and-drop
     ✓ Email & SMS alerts for critical issues
-    ✓ Browser push notifications & alert history
     ✓ Custom dashboard themes (6 themes)
-    ✓ Mobile-optimized responsive design
     ✓ Real-time WebSocket updates (10s interval)
 
     Starting server...

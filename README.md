@@ -1,6 +1,6 @@
-# 🤖 Claude Monitoring System v2.10 🚀
+# 🤖 Claude Monitoring System v2.11 🚀
 
-**Professional Real-time Analytics Dashboard for Claude Memory System with AI-Powered Anomaly Detection & Predictive Forecasting**
+**Professional Real-time Analytics Dashboard for Claude Memory System with AI-Powered Anomaly Detection, Predictive Forecasting & Custom Alert Routing**
 
 [![GitHub](https://img.shields.io/badge/GitHub-claude--monitoring--system-blue?logo=github)](https://github.com/piyushmakhija28/claude-monitoring-system)
 [![Python](https://img.shields.io/badge/Python-3.7+-blue?logo=python)](https://www.python.org/)
@@ -12,6 +12,122 @@ A comprehensive, real-time monitoring and analytics dashboard for the Claude Mem
 **🎁 COMPLETE PACKAGE**: This repo includes **everything you need** - the monitoring dashboard + all Claude Memory System v2.0 files (24 automation scripts + 15 policies + complete documentation). Just clone, setup, and start using!
 
 **Developed by [TechDeveloper](https://www.techdeveloper.in)** 💻
+
+---
+
+## 🆕 What's New in v2.11 (Feb 2026) - Alert Routing Edition 🚨📮
+
+### **Custom Alert Routing & Escalation Engine** 🚨📮 NEW!
+- **Advanced Routing Rules** - Route alerts based on multiple conditions:
+  - 📊 **Severity-based Routing**: Critical, high, medium, low
+  - 🎯 **Metric-based Routing**: Route by specific metrics
+  - ⏰ **Time-based Routing**: Business hours vs. after-hours
+  - 📅 **Day-based Routing**: Weekday vs. weekend routing
+  - 🏷️ **Tag-based Routing**: Custom tag matching
+  - 🔧 **AND/OR Logic**: Complex condition combinations
+- **Multi-Level Escalation Policies**:
+  - 📊 **Level 1**: Primary on-call (customizable timeout)
+  - 📈 **Level 2**: Secondary on-call escalation
+  - 🎯 **Level 3**: Manager/executive escalation
+  - 🔄 **Auto-escalation**: Escalate if not acknowledged in X minutes
+  - 🔁 **Repeat Escalation**: Restart policy if unresolved (max repeats configurable)
+  - ⏱️ **Timeout Configuration**: Custom timeout per level (5-60 minutes)
+- **On-Call Schedule Management**:
+  - 📅 **Weekly Rotation**: Automatic weekly on-call rotation
+  - 👥 **Multiple Schedules**: Primary, secondary, tertiary rotations
+  - 🔄 **Auto-rotation**: Automatic rotation based on start date
+  - 🌍 **Timezone Support**: Schedule timezone configuration
+  - 👤 **Current On-Call**: Real-time on-call person identification
+  - 📊 **Rotation History**: Track who was on-call when
+- **Notification Channels**:
+  - 📧 **Email**: SMTP-based email notifications
+  - 📱 **SMS**: Twilio-powered SMS alerts
+  - 💬 **Slack**: Slack webhook integration
+  - 🔗 **Custom Webhooks**: POST to any HTTP endpoint
+  - ✅ **Channel Status**: Enable/disable channels individually
+  - 🎯 **Channel Groups**: Send to multiple channels per alert
+- **Alert Lifecycle Management**:
+  - 🔔 **Creation**: Automatic alert routing on creation
+  - 👀 **Acknowledgment**: Mark alerts as seen/acknowledged
+  - ✅ **Resolution**: Resolve alerts with notes
+  - 📊 **Status Tracking**: Active, acknowledged, resolved
+  - 📝 **History**: Complete alert lifecycle audit trail
+  - ⏱️ **Timestamps**: Created, acknowledged, resolved times
+- **Routing Rule Priority**:
+  - 🥇 **Priority Levels**: 1 = highest priority
+  - 📊 **Execution Order**: Rules executed by priority
+  - 🎯 **First Match**: Option to stop after first match
+  - 🔄 **Multiple Matches**: Option to execute all matching rules
+- **Escalation History**:
+  - 📊 **Level Tracking**: Record each escalation level
+  - ⏱️ **Timestamps**: When each level was triggered
+  - 👥 **Targets**: Who was notified at each level
+  - 📢 **Channels**: Which channels were used
+  - 🔄 **Repeat Count**: Track escalation repeats
+- **Alert Deduplication** (Future):
+  - 🔄 **Grouping**: Group similar alerts
+  - ⏱️ **Time Windows**: Deduplicate within time window
+  - 🎯 **Smart Matching**: Fingerprint-based deduplication
+- **Dashboard Features**:
+  - 📊 **Active Alerts**: Real-time active alerts list
+  - 📋 **Routing Rules**: Manage all routing rules
+  - 📈 **Escalation Policies**: Configure escalation chains
+  - 👥 **On-Call Schedules**: View and manage schedules
+  - 📢 **Notification Channels**: Configure channels
+  - 📊 **Statistics**: Alert counts by severity, status, metric
+  - 🔄 **Auto-refresh**: Updates every 30 seconds
+- **Rule Actions**:
+  - 📢 **Notify**: Send to notification channels
+  - 📈 **Escalate**: Start escalation policy
+  - 🏷️ **Tag**: Add tags to alerts
+  - 🔕 **Suppress**: Suppress notifications (quiet mode)
+  - 🔗 **Webhook**: Trigger custom webhooks
+- **Conditional Routing Examples**:
+  - Critical alerts → Email + SMS + Slack + Escalate
+  - High alerts during business hours → Email only
+  - After-hours alerts → SMS + Escalate immediately
+  - Weekend alerts → Secondary on-call rotation
+  - Specific metric alerts → Dedicated Slack channel
+
+**Technical Features:**
+- ✅ JSON-based configuration storage
+- ✅ RESTful API for all operations
+- ✅ Swagger API documentation
+- ✅ Real-time alert processing
+- ✅ Escalation state machine
+- ✅ On-call rotation calculator
+- ✅ Alert history tracking (last 1000)
+
+**Use Cases:**
+- ✅ Route critical alerts to multiple channels
+- ✅ Escalate unacknowledged alerts automatically
+- ✅ Manage on-call rotations effortlessly
+- ✅ Customize routing by time/day/severity
+- ✅ Track alert lifecycle from creation to resolution
+- ✅ Prevent alert fatigue with smart routing
+- ✅ Ensure critical alerts never go unnoticed
+- ✅ Integrate with existing tools via webhooks
+
+**API Endpoints:**
+- `GET /alert-routing` - Alert routing dashboard
+- `GET /api/alert-routing/stats` - Statistics
+- `GET /api/alert-routing/active-alerts` - Active alerts list
+- `GET /api/alert-routing/rules` - Get routing rules
+- `POST /api/alert-routing/rules` - Create routing rule
+- `POST /api/alert-routing/rules/<id>/toggle` - Enable/disable rule
+- `GET /api/alert-routing/policies` - Get escalation policies
+- `GET /api/alert-routing/on-call-schedules` - Get on-call schedules
+- `GET /api/alert-routing/channels` - Get notification channels
+- `POST /api/alert-routing/alerts/create` - Create new alert
+- `POST /api/alert-routing/alerts/<id>/acknowledge` - Acknowledge alert
+- `POST /api/alert-routing/alerts/<id>/resolve` - Resolve alert
+
+**Data Storage:**
+- `~/.claude/memory/alert_routing/routing_rules.json` - Routing rules
+- `~/.claude/memory/alert_routing/escalation_policies.json` - Escalation policies
+- `~/.claude/memory/alert_routing/on_call_schedules.json` - On-call schedules
+- `~/.claude/memory/alert_routing/notification_channels.json` - Channels config
+- `~/.claude/memory/alert_routing/alert_history.json` - Alert history
 
 ---
 
