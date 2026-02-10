@@ -236,6 +236,96 @@
             </div>
         </div>
 
+        <!-- Alert Thresholds -->
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header bg-white border-0 pt-4 pb-3">
+                <h5 class="mb-0">
+                    <i class="fas fa-bell me-2"></i>Alert Thresholds
+                </h5>
+            </div>
+            <div class="card-body p-4">
+                <p class="text-muted mb-4">
+                    <i class="fas fa-info-circle me-2"></i>
+                    Set custom thresholds for system alerts. You'll be notified when metrics cross these values.
+                </p>
+
+                <!-- Health Score Threshold -->
+                <div class="mb-4">
+                    <label for="healthScoreThreshold" class="form-label fw-bold">
+                        <i class="fas fa-heartbeat me-2 text-danger"></i>Health Score Threshold
+                    </label>
+                    <div class="d-flex align-items-center gap-3">
+                        <input type="range" class="form-range flex-grow-1" id="healthScoreThreshold"
+                               min="0" max="100" value="{{ alert_thresholds.health_score }}" step="5"
+                               oninput="updateThresholdValue('healthScore', this.value)">
+                        <span class="badge bg-danger fs-6" id="healthScoreValue" style="min-width: 60px;">
+                            {{ alert_thresholds.health_score }}%
+                        </span>
+                    </div>
+                    <small class="text-muted d-block mt-2">
+                        Alert when health score falls below this value
+                    </small>
+                </div>
+
+                <!-- Error Count Threshold -->
+                <div class="mb-4">
+                    <label for="errorCountThreshold" class="form-label fw-bold">
+                        <i class="fas fa-exclamation-triangle me-2 text-warning"></i>Error Count Threshold (per hour)
+                    </label>
+                    <div class="d-flex align-items-center gap-3">
+                        <input type="range" class="form-range flex-grow-1" id="errorCountThreshold"
+                               min="0" max="50" value="{{ alert_thresholds.error_count }}" step="5"
+                               oninput="updateThresholdValue('errorCount', this.value)">
+                        <span class="badge bg-warning fs-6" id="errorCountValue" style="min-width: 60px;">
+                            {{ alert_thresholds.error_count }}
+                        </span>
+                    </div>
+                    <small class="text-muted d-block mt-2">
+                        Alert when errors exceed this count per hour
+                    </small>
+                </div>
+
+                <!-- Context Usage Threshold -->
+                <div class="mb-4">
+                    <label for="contextUsageThreshold" class="form-label fw-bold">
+                        <i class="fas fa-database me-2 text-info"></i>Context Usage Threshold
+                    </label>
+                    <div class="d-flex align-items-center gap-3">
+                        <input type="range" class="form-range flex-grow-1" id="contextUsageThreshold"
+                               min="50" max="100" value="{{ alert_thresholds.context_usage }}" step="5"
+                               oninput="updateThresholdValue('contextUsage', this.value)">
+                        <span class="badge bg-info fs-6" id="contextUsageValue" style="min-width: 60px;">
+                            {{ alert_thresholds.context_usage }}%
+                        </span>
+                    </div>
+                    <small class="text-muted d-block mt-2">
+                        Alert when context usage exceeds this percentage
+                    </small>
+                </div>
+
+                <!-- Daemon Down Alert -->
+                <div class="form-check form-switch mb-4">
+                    <input class="form-check-input" type="checkbox" id="daemonDownAlert"
+                           {{ 'checked' if alert_thresholds.daemon_down else '' }}>
+                    <label class="form-check-label" for="daemonDownAlert">
+                        <strong><i class="fas fa-server me-2 text-primary"></i>Alert on Daemon Down</strong>
+                        <small class="d-block text-muted">Get notified when any daemon stops running</small>
+                    </label>
+                </div>
+
+                <!-- Save Button -->
+                <button type="button" class="btn btn-primary" onclick="saveAlertThresholds()">
+                    <i class="fas fa-save me-2"></i>Save Alert Thresholds
+                </button>
+
+                <!-- Current Alerts Badge -->
+                <div class="mt-4 p-3 bg-light rounded" id="currentAlerts" style="display: none;">
+                    <h6 class="mb-2"><i class="fas fa-bell me-2 text-warning"></i>Active Alerts</h6>
+                    <div id="alertsList"></div>
+                </div>
+            </div>
+        </div>
+
         <!-- Change Password -->
         <div class="card border-0 shadow-sm mb-4">
             <div class="card-header bg-white border-0 pt-4 pb-3">
@@ -526,6 +616,74 @@ function applyThemeFromSettings() {
         theme
     );
 }
+
+// Alert Thresholds Functions
+function updateThresholdValue(type, value) {
+    document.getElementById(type + 'Value').textContent = value + (type === 'errorCount' ? '' : '%');
+}
+
+function saveAlertThresholds() {
+    const thresholds = {
+        health_score: parseInt(document.getElementById('healthScoreThreshold').value),
+        error_count: parseInt(document.getElementById('errorCountThreshold').value),
+        context_usage: parseInt(document.getElementById('contextUsageThreshold').value),
+        daemon_down: document.getElementById('daemonDownAlert').checked
+    };
+
+    fetch('/api/alert-thresholds', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(thresholds)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showAlert('success', 'Alert thresholds saved successfully!');
+            checkAlerts();  // Check if any alerts are currently triggered
+        } else {
+            showAlert('danger', data.message || 'Failed to save alert thresholds');
+        }
+    })
+    .catch(error => {
+        console.error('Error saving alert thresholds:', error);
+        showAlert('danger', 'An error occurred while saving alert thresholds');
+    });
+}
+
+function checkAlerts() {
+    fetch('/api/check-alerts')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const alertsContainer = document.getElementById('currentAlerts');
+                const alertsList = document.getElementById('alertsList');
+
+                if (data.alert_count > 0) {
+                    alertsContainer.style.display = 'block';
+                    alertsList.innerHTML = data.alerts.map(alert => `
+                        <div class="alert alert-${alert.severity === 'critical' ? 'danger' : 'warning'} py-2 mb-2">
+                            <i class="fas fa-${alert.severity === 'critical' ? 'exclamation-circle' : 'exclamation-triangle'} me-2"></i>
+                            <strong>${alert.type.replace('_', ' ').toUpperCase()}:</strong> ${alert.message}
+                        </div>
+                    `).join('');
+                } else {
+                    alertsContainer.style.display = 'none';
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Error checking alerts:', error);
+        });
+}
+
+// Check alerts on page load
+document.addEventListener('DOMContentLoaded', function() {
+    checkAlerts();
+    // Check alerts every 30 seconds
+    setInterval(checkAlerts, 30000);
+});
 
 // Change password function
 function changePassword(event) {

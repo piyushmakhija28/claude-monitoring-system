@@ -1,6 +1,6 @@
-# 🤖 Claude Monitoring System v2.3 🚀
+# 🤖 Claude Monitoring System v2.4 🚀
 
-**Professional Real-time Dashboard for Claude Memory System**
+**Professional Real-time Analytics Dashboard for Claude Memory System**
 
 [![GitHub](https://img.shields.io/badge/GitHub-claude--monitoring--system-blue?logo=github)](https://github.com/piyushmakhija28/claude-monitoring-system)
 [![Python](https://img.shields.io/badge/Python-3.7+-blue?logo=python)](https://www.python.org/)
@@ -15,9 +15,44 @@ A comprehensive, real-time monitoring and analytics dashboard for the Claude Mem
 
 ---
 
-## 🆕 What's New in v2.3 (Feb 2026) - Real-time Edition 🚀
+## 🆕 What's New in v2.4 (Feb 2026) - Analytics Edition 📊
 
-### **Real-time WebSocket Updates** ⚡ NEW!
+### **Export to Excel/PDF** 📄 NEW!
+- **Multi-Format Export** - Export data in Excel (.xlsx) or PDF formats
+- **Comprehensive Reports** - Sessions, metrics, logs, and analytics reports
+- **Professional Formatting** - Styled headers, colored backgrounds, proper layouts
+- **One-Click Download** - Export buttons throughout the dashboard
+- **Excel Features** - Workbook sheets, cell styling, proper column widths
+- **PDF Features** - Tables, charts summaries, professional layouts
+- **Bulk Export** - Export up to 1000 records at once
+
+### **Advanced Analytics Dashboard** 📈 NEW!
+- **Dedicated Analytics Page** - Complete analytics dashboard with deep insights
+- **Trend Analysis** - Week-over-week, month-over-month comparisons
+- **Performance Metrics** - Health scores, error rates, daemon uptime
+- **Cost Analysis** - Visual cost savings with doughnut charts
+- **Policy Impact** - Effectiveness metrics with pie charts
+- **Usage Patterns** - Peak hours, busiest days, usage trends
+- **Time Range Filters** - 7/30/60/90 day analysis
+- **Interactive Charts** - Line, bar, doughnut, and pie charts
+- **Export Ready** - Export analytics to Excel/PDF
+
+### **Custom Alert Thresholds** 🔔 NEW!
+- **Configurable Alerts** - Set your own threshold values
+- **4 Alert Types**:
+  - Health Score threshold (customizable %)
+  - Error count threshold (per hour)
+  - Context usage threshold (%)
+  - Daemon down alerts (on/off)
+- **Visual Sliders** - Easy-to-use range sliders
+- **Real-time Monitoring** - Checks every 30 seconds
+- **Alert Severity** - Warning vs Critical levels
+- **Active Alerts Display** - See triggered alerts in Settings
+- **API Endpoint** - Check alerts programmatically
+
+### **From v2.3:**
+
+### **Real-time WebSocket Updates** ⚡
 - **Live Data Streaming** - No more polling! Data updates every 10 seconds automatically
 - **WebSocket Connection** - Instant updates using Socket.IO
 - **Auto-Fallback** - Falls back to HTTP polling if WebSocket fails
@@ -296,6 +331,188 @@ Rearrange your dashboard exactly how you want!
 
 ---
 
+## 🎨 Using Latest Features (v2.4)
+
+### **Export to Excel/PDF** 📄
+
+Export your data in professional formats!
+
+**Available Export Types:**
+1. **Sessions** - All session history with metrics
+2. **Metrics** - Current system health and daemon status
+3. **Logs** - Recent activity logs (up to 1000 entries)
+4. **Analytics** - Complete analytics report with charts
+
+**How to Export:**
+
+**Excel (.xlsx):**
+```
+URL Pattern: /api/export/excel/{type}
+Examples:
+- /api/export/excel/sessions
+- /api/export/excel/metrics
+- /api/export/excel/logs
+- /api/export/excel/analytics
+```
+
+**PDF (.pdf):**
+```
+URL Pattern: /api/export/pdf/{type}
+Examples:
+- /api/export/pdf/sessions
+- /api/export/pdf/metrics
+- /api/export/pdf/logs
+- /api/export/pdf/analytics
+```
+
+**From UI:**
+- **Dashboard**: Export buttons for metrics
+- **Sessions Page**: Export sessions button
+- **Logs Page**: Export logs button
+- **Analytics Page**: Export analytics button
+
+**Excel Features:**
+- ✅ Professional styling (colored headers, proper fonts)
+- ✅ Multiple sheets for complex data
+- ✅ Auto-sized columns
+- ✅ Cell formatting
+- ✅ Opens in Excel, Google Sheets, LibreOffice
+
+**PDF Features:**
+- ✅ Professional layout with title and date
+- ✅ Formatted tables with headers
+- ✅ Color-coded data
+- ✅ Pagination for large datasets
+- ✅ Ready to print
+
+### **Advanced Analytics Dashboard** 📈
+
+Deep insights into your system!
+
+**Access:**
+```
+URL: http://localhost:5000/analytics
+```
+
+**Features:**
+
+**1. Key Metrics Cards:**
+- Average Health Score (with trend %)
+- Total Errors (with trend %)
+- Daemon Uptime %
+- Policy Effectiveness %
+
+**2. Trend Analysis Charts:**
+- Health Score Trend (line chart)
+- Error Distribution (bar chart)
+- Shows patterns over time
+
+**3. Cost Analysis:**
+- Before/After comparison
+- Visual savings percentage
+- Doughnut chart breakdown
+- Total savings calculation
+
+**4. Policy Impact:**
+- Context Optimizations count
+- Failures Prevented count
+- Model Selections count
+- Pie chart distribution
+
+**5. Usage Patterns:**
+- Peak Hour identification
+- Busiest Day
+- Peak Period analysis
+
+**6. Time Range Filter:**
+- 7 Days - Last week
+- 30 Days - Last month
+- 60 Days - Last 2 months
+- 90 Days - Last quarter
+
+**Use Cases:**
+- ✅ **Executive Reports** - High-level overview
+- ✅ **Trend Spotting** - Identify patterns
+- ✅ **Performance Review** - Month-over-month comparison
+- ✅ **Cost Justification** - Show ROI
+- ✅ **System Health** - Long-term health tracking
+
+### **Custom Alert Thresholds** 🔔
+
+Set your own alert limits!
+
+**Access:**
+```
+URL: http://localhost:5000/settings
+Section: Alert Thresholds
+```
+
+**Available Thresholds:**
+
+**1. Health Score Threshold (0-100%):**
+- Default: 70%
+- Alert when health score falls below this value
+- Severity: Warning (50-70%), Critical (<50%)
+
+**2. Error Count Threshold (per hour):**
+- Default: 10 errors/hour
+- Alert when errors exceed this count
+- Severity: Warning
+
+**3. Context Usage Threshold (50-100%):**
+- Default: 85%
+- Alert when context usage exceeds this
+- Severity: Warning
+
+**4. Daemon Down Alert (on/off):**
+- Default: On
+- Alert when any daemon stops running
+- Severity: Critical
+
+**How to Configure:**
+1. Go to **Settings** page
+2. Scroll to **"Alert Thresholds"** section
+3. Use sliders to adjust thresholds
+4. Toggle daemon alert on/off
+5. Click **"Save Alert Thresholds"**
+6. Alerts checked every 30 seconds
+
+**Alert Checking:**
+```bash
+# API Endpoint
+GET /api/check-alerts
+
+# Response
+{
+  "success": true,
+  "alert_count": 2,
+  "alerts": [
+    {
+      "type": "health_score",
+      "severity": "warning",
+      "message": "Health score is 65%",
+      "value": 65,
+      "threshold": 70
+    }
+  ]
+}
+```
+
+**Active Alerts Display:**
+- Shows in Settings page below threshold controls
+- Updates automatically every 30 seconds
+- Color-coded by severity (yellow=warning, red=critical)
+- Lists all currently triggered alerts
+
+**Use Cases:**
+- ✅ **Proactive Monitoring** - Catch issues early
+- ✅ **Custom Standards** - Set your own limits
+- ✅ **Team Alerts** - Different teams, different thresholds
+- ✅ **Testing** - Lower thresholds during testing
+- ✅ **Production** - Stricter thresholds in production
+
+---
+
 ## 🌟 Why This Was Built
 
 The Claude Memory System v2.0 is a sophisticated automation framework with 15 policies, 8 daemons, and multiple optimization systems. However, monitoring all these components required:
@@ -323,14 +540,25 @@ The Claude Memory System v2.0 is a sophisticated automation framework with 15 po
 - Active policies count
 - Recent activity feed
 - Policy hit statistics
-- **🔥 NEW**: Real-time WebSocket updates (10s intervals)
-- **🔥 NEW**: Drag-and-drop widget reordering
+- **🔥 v2.3**: Real-time WebSocket updates (10s intervals)
+- **🔥 v2.3**: Drag-and-drop widget reordering
 - **v2.2**: Extended historical data (7/30/60/90 days)
 - **v2.2**: Custom widget visibility controls
 - **v2.2**: Customize button in header
 - **v2.2**: Persistent widget preferences
 
-### 2. **Cost Comparison**
+### 2. **Analytics Dashboard** 📊 NEW v2.4
+- **Comprehensive Analytics** - Dedicated analytics page
+- **Trend Analysis** - Multi-period comparisons
+- **Key Metrics Cards** - Health, errors, uptime, effectiveness
+- **Interactive Charts** - 6+ chart types (line, bar, pie, doughnut)
+- **Cost Analysis** - Before/after comparison with savings
+- **Policy Impact** - Effectiveness breakdown by type
+- **Usage Patterns** - Peak hours and busy periods
+- **Time Range Filters** - 7/30/60/90 day views
+- **Export Options** - Excel and PDF export
+
+### 3. **Cost Comparison**
 - **Before vs After** optimization comparison
 - Token usage reduction visualization
 - Cost savings calculator
@@ -338,7 +566,7 @@ The Claude Memory System v2.0 is a sophisticated automation framework with 15 po
 - Optimization impact analysis
 - Visual charts for easy understanding
 
-### 3. **Policy Monitoring**
+### 4. **Policy Monitoring**
 - All 6 policies status at a glance
 - Phase-wise implementation tracking
 - Policy execution history
@@ -346,7 +574,7 @@ The Claude Memory System v2.0 is a sophisticated automation framework with 15 po
 - Last triggered timestamps
 - Filterable views (all/active/inactive)
 
-### 4. **Log Analyzer**
+### 5. **Log Analyzer**
 - View all log files in one place
 - Search functionality
 - Filter by level (ERROR/WARNING/INFO/DEBUG)
@@ -355,7 +583,7 @@ The Claude Memory System v2.0 is a sophisticated automation framework with 15 po
 - Error trend analysis
 - Top issues identification
 
-### 5. **Session Tracking** ⭐ NEW
+### 6. **Session Tracking**
 - **Unique Session IDs** - Each session gets a unique identifier
 - **Current Session Monitoring** - Real-time metrics for active session
 - **Session History** - Last 10 completed sessions
@@ -547,8 +775,9 @@ The dashboard reads from the actual Claude Memory System:
 - **Real-time**: Socket.IO (WebSocket support)
 - **API Docs**: Swagger/Flasgger (OpenAPI 3.0)
 - **Security**: bcrypt password hashing
+- **Export**: openpyxl (Excel), ReportLab (PDF)
 - **Frontend**: Bootstrap 5 + Font Awesome
-- **Charts**: Chart.js for data visualization
+- **Charts**: Chart.js for data visualization (6+ chart types)
 - **Drag-and-Drop**: SortableJS
 - **Icons**: Font Awesome 6.4
 - **Design**: Modern gradient UI (#667eea to #764ba2)
@@ -623,6 +852,7 @@ Terminal-style log viewer with search, filters, and syntax highlighting.
 | `/logout` | GET | Logout user |
 | `/dashboard` | GET | Main dashboard (supports `?days=7/30/60/90`) |
 | `/comparison` | GET | Cost comparison page |
+| `/analytics` | GET | **NEW** Advanced analytics dashboard |
 | `/policies` | GET | Policies status page |
 | `/logs` | GET | Log analyzer page |
 | `/settings` | GET | Settings & preferences page |
@@ -633,6 +863,10 @@ Terminal-style log viewer with search, filters, and syntax highlighting.
 | `/api/daemon/restart/<name>` | POST | Restart daemon |
 | `/api/comparison` | GET | Get comparison data (JSON) |
 | `/api/widget-preferences` | GET/POST | Get or save widget preferences |
+| `/api/export/excel/<type>` | GET | **NEW** Export to Excel (sessions/metrics/logs/analytics) |
+| `/api/export/pdf/<type>` | GET | **NEW** Export to PDF (sessions/metrics/logs/analytics) |
+| `/api/alert-thresholds` | GET/POST | **NEW** Get or set alert thresholds |
+| `/api/check-alerts` | GET | **NEW** Check current alerts against thresholds |
 
 ### **WebSocket Events** (Real-time)
 
@@ -708,9 +942,19 @@ Login: admin / admin
 
 ---
 
-## 🎯 Recent Updates (v2.3 - Feb 2026)
+## 🎯 Recent Updates (v2.4 - Feb 2026)
 
-**🔥 Just Added (v2.3 - Real-time Edition):**
+**🔥 Just Added (v2.4 - Analytics Edition):**
+- ✅ **Export to Excel/PDF** - Professional multi-format exports
+- ✅ **Advanced Analytics Dashboard** - Comprehensive analytics page with 6+ charts
+- ✅ **Custom Alert Thresholds** - Configurable alert limits for 4 metrics
+- ✅ **Trend Analysis** - Week/month/quarter comparisons
+- ✅ **Cost Analysis Charts** - Visual cost savings breakdown
+- ✅ **Policy Impact Charts** - Effectiveness visualization
+- ✅ **Usage Patterns** - Peak hours and busy period analysis
+- ✅ **Active Alerts Display** - Real-time alert monitoring
+
+**From v2.3 (Real-time Edition):**
 - ✅ **Real-time WebSocket Updates** - Live data streaming with Socket.IO (10s intervals)
 - ✅ **Swagger API Documentation** - Interactive API docs at /api/docs
 - ✅ **Change Password** - Secure password management with bcrypt
@@ -741,23 +985,28 @@ Login: admin / admin
 - [ ] Mobile app (iOS & Android)
 - [ ] Multi-user support with roles & permissions
 - [ ] Slack/Discord webhook notifications
-- [ ] Export to Excel/PDF formats
-- [ ] Advanced analytics dashboard
-- [ ] Custom alert thresholds
 - [ ] Integration with monitoring tools (Datadog, New Relic, etc.)
-- [ ] Dark mode improvements
+- [ ] Browser push notifications
+- [ ] Alert history and trends
+- [ ] Custom dashboard themes
+- [ ] Widget marketplace
 - [ ] Mobile-optimized responsive design
 
 ---
 
 **Made with ❤️ for Claude Memory System**
 
-Version: 2.3 (Real-time Edition) 🚀
+Version: 2.4 (Analytics Edition) 📊
 Last Updated: 2026-02-10
 Developer: TechDeveloper (www.techdeveloper.in)
 Powered by: Claude Sonnet 4.5
 
-**New in v2.3:**
+**New in v2.4:**
+- 📄 Export to Excel/PDF formats
+- 📈 Advanced analytics dashboard
+- 🔔 Custom alert thresholds
+
+**From v2.3:**
 - ⚡ Real-time WebSocket updates
 - 📖 Swagger API documentation
 - 🔐 Change password functionality

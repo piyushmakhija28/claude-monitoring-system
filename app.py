@@ -3,7 +3,7 @@ Claude Monitoring System
 A professional dashboard for monitoring Claude Memory System v2.0
 """
 
-from flask import Flask, render_template, request, redirect, url_for, session, jsonify, Response
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify, Response, send_file
 from flask_socketio import SocketIO, emit
 from functools import wraps
 import os
@@ -19,6 +19,13 @@ from utils.policy_checker import PolicyChecker
 from utils.session_tracker import SessionTracker
 from utils.history_tracker import HistoryTracker
 from flasgger import Swagger, swag_from
+from openpyxl import Workbook
+from openpyxl.styles import Font, PatternFill, Alignment
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import letter, A4
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import inch
 
 app = Flask(__name__)
 app.secret_key = 'claude-monitoring-system-secret-key-2026'
@@ -72,6 +79,73 @@ def update_password(username, new_password):
         return False
     USERS[username]['password_hash'] = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
     return True
+
+# ============================================================
+# Analytics Helper Functions
+# ============================================================
+
+def calculate_trend(values):
+    """Calculate trend percentage change"""
+    if not values or len(values) < 2:
+        return {'direction': 'stable', 'percentage': 0}
+
+    first_half = values[:len(values)//2]
+    second_half = values[len(values)//2:]
+
+    first_avg = sum(first_half) / len(first_half) if first_half else 0
+    second_avg = sum(second_half) / len(second_half) if second_half else 0
+
+    if first_avg == 0:
+        return {'direction': 'stable', 'percentage': 0}
+
+    change = ((second_avg - first_avg) / first_avg) * 100
+
+    direction = 'up' if change > 5 else ('down' if change < -5 else 'stable')
+
+    return {
+        'direction': direction,
+        'percentage': round(abs(change), 1),
+        'current': round(second_avg, 1),
+        'previous': round(first_avg, 1)
+    }
+
+def calculate_policy_effectiveness():
+    """Calculate policy effectiveness metrics"""
+    try:
+        optimization_impact = metrics.get_optimization_impact()
+        total_opts = optimization_impact.get('total_optimizations', 0)
+
+        if total_opts == 0:
+            return {'effectiveness': 0, 'total_interventions': 0}
+
+        return {
+            'effectiveness': min(100, (total_opts / 100) * 100),  # Normalize to percentage
+            'total_interventions': total_opts,
+            'context_optimizations': optimization_impact.get('context_optimizations', 0),
+            'failures_prevented': optimization_impact.get('failures_prevented', 0),
+            'model_selections': optimization_impact.get('model_selections', 0)
+        }
+    except:
+        return {'effectiveness': 0, 'total_interventions': 0}
+
+def calculate_daemon_uptime(daemon_status):
+    """Calculate daemon uptime percentage"""
+    if not daemon_status:
+        return 0
+
+    running = len([d for d in daemon_status if d.get('status') == 'running'])
+    total = len(daemon_status)
+
+    return round((running / total) * 100, 1) if total > 0 else 0
+
+def calculate_peak_hours(historical_data):
+    """Calculate peak usage hours (placeholder)"""
+    # This is a simplified version - in production, you'd analyze actual usage patterns
+    return {
+        'peak_hour': '10:00 AM - 11:00 AM',
+        'peak_day': 'Monday',
+        'busiest_period': 'Morning (9 AM - 12 PM)'
+    }
 
 def login_required(f):
     """Decorator to require login"""
@@ -452,7 +526,60 @@ def settings():
       200:
         description: Settings page
     """
-    return render_template('settings.html')
+    # Get alert thresholds from session
+    alert_thresholds = session.get('alert_thresholds', {
+        'health_score': 70,
+        'error_count': 10,
+        'context_usage': 85,
+        'daemon_down': True
+    })
+    return render_template('settings.html', alert_thresholds=alert_thresholds)
+
+@app.route('/analytics')
+@login_required
+def analytics():
+    """
+    Advanced Analytics Dashboard
+    ---
+    tags:
+      - Analytics
+    responses:
+      200:
+        description: Analytics dashboard page
+    """
+    # Get time range
+    days = request.args.get('days', 30, type=int)
+    if days not in [7, 30, 60, 90]:
+        days = 30
+
+    # Get comprehensive analytics data
+    system_health = metrics.get_system_health()
+    daemon_status = metrics.get_daemon_status()
+
+    # Historical data
+    historical_data = history_tracker.get_last_n_days(days)
+    chart_data = history_tracker.get_chart_data(days)
+    summary_stats = history_tracker.get_summary_stats(days)
+
+    # Calculate trends
+    analytics_data = {
+        'health_trend': calculate_trend(chart_data.get('health_scores', [])),
+        'error_trend': calculate_trend(chart_data.get('errors', [])),
+        'context_trend': calculate_trend(chart_data.get('context_usage', [])),
+        'policy_effectiveness': calculate_policy_effectiveness(),
+        'daemon_uptime': calculate_daemon_uptime(daemon_status),
+        'peak_hours': calculate_peak_hours(historical_data),
+        'cost_analysis': metrics.get_cost_comparison(),
+        'optimization_impact': metrics.get_optimization_impact()
+    }
+
+    return render_template('analytics.html',
+                         selected_days=days,
+                         system_health=system_health,
+                         daemon_status=daemon_status,
+                         chart_data=chart_data,
+                         summary_stats=summary_stats,
+                         analytics_data=analytics_data)
 
 @app.route('/api/change-password', methods=['POST'])
 @login_required
@@ -631,6 +758,238 @@ def export_logs():
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
 
+@app.route('/api/export/excel/<type>')
+@login_required
+def export_excel(type):
+    """
+    Export data to Excel format
+    ---
+    tags:
+      - Export
+    parameters:
+      - name: type
+        in: path
+        type: string
+        required: true
+        description: Type of data to export (sessions/metrics/logs/analytics)
+    responses:
+      200:
+        description: Excel file download
+    """
+    try:
+        wb = Workbook()
+        ws = wb.active
+
+        # Styling
+        header_fill = PatternFill(start_color="667EEA", end_color="667EEA", fill_type="solid")
+        header_font = Font(bold=True, color="FFFFFF")
+
+        if type == 'sessions':
+            ws.title = "Sessions"
+            sessions_history = session_tracker.get_sessions_history()
+
+            # Headers
+            headers = ['Session ID', 'Start Time', 'End Time', 'Duration (min)', 'Commands', 'Tokens Used', 'Cost ($)', 'Status']
+            ws.append(headers)
+
+            # Style headers
+            for cell in ws[1]:
+                cell.fill = header_fill
+                cell.font = header_font
+                cell.alignment = Alignment(horizontal='center')
+
+            # Data
+            for sess in sessions_history:
+                ws.append([
+                    sess.get('session_id', 'N/A'),
+                    sess.get('start_time', 'N/A'),
+                    sess.get('end_time', 'N/A'),
+                    sess.get('duration_minutes', 0),
+                    sess.get('commands_executed', 0),
+                    sess.get('tokens_used', 0),
+                    sess.get('estimated_cost', 0),
+                    sess.get('status', 'N/A')
+                ])
+
+        elif type == 'metrics':
+            ws.title = "Metrics"
+            system_health = metrics.get_system_health()
+            daemon_status = metrics.get_daemon_status()
+
+            # Headers
+            headers = ['Metric', 'Value', 'Status', 'Timestamp']
+            ws.append(headers)
+
+            # Style headers
+            for cell in ws[1]:
+                cell.fill = header_fill
+                cell.font = header_font
+                cell.alignment = Alignment(horizontal='center')
+
+            # Data
+            ws.append(['Health Score', system_health.get('health_score', 0), 'N/A', datetime.now().isoformat()])
+            ws.append(['Memory Usage', system_health.get('memory_usage', 0), 'N/A', datetime.now().isoformat()])
+            ws.append(['Active Daemons', len([d for d in daemon_status if d.get('status') == 'running']), 'N/A', datetime.now().isoformat()])
+            ws.append(['Total Daemons', len(daemon_status), 'N/A', datetime.now().isoformat()])
+
+        elif type == 'logs':
+            ws.title = "Logs"
+            recent_activity = log_parser.get_recent_activity(limit=1000)
+
+            # Headers
+            headers = ['Timestamp', 'Level', 'Policy', 'Action', 'Message']
+            ws.append(headers)
+
+            # Style headers
+            for cell in ws[1]:
+                cell.fill = header_fill
+                cell.font = header_font
+                cell.alignment = Alignment(horizontal='center')
+
+            # Data
+            for activity in recent_activity:
+                ws.append([
+                    activity.get('timestamp', 'N/A'),
+                    activity.get('level', 'N/A'),
+                    activity.get('policy', 'N/A'),
+                    activity.get('action', 'N/A'),
+                    activity.get('message', 'N/A')
+                ])
+
+        # Save to bytes
+        excel_file = io.BytesIO()
+        wb.save(excel_file)
+        excel_file.seek(0)
+
+        filename = f'claude_{type}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx'
+
+        return send_file(
+            excel_file,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            as_attachment=True,
+            download_name=filename
+        )
+    except Exception as e:
+        print(f"Error exporting Excel: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/export/pdf/<type>')
+@login_required
+def export_pdf(type):
+    """
+    Export data to PDF format
+    ---
+    tags:
+      - Export
+    parameters:
+      - name: type
+        in: path
+        type: string
+        required: true
+        description: Type of data to export (sessions/metrics/logs/analytics)
+    responses:
+      200:
+        description: PDF file download
+    """
+    try:
+        pdf_buffer = io.BytesIO()
+        doc = SimpleDocTemplate(pdf_buffer, pagesize=letter)
+        elements = []
+
+        styles = getSampleStyleSheet()
+        title_style = ParagraphStyle(
+            'CustomTitle',
+            parent=styles['Heading1'],
+            fontSize=24,
+            textColor=colors.HexColor('#667eea'),
+            spaceAfter=30,
+            alignment=1  # Center
+        )
+
+        # Title
+        title = Paragraph(f'Claude Monitoring System - {type.title()} Report', title_style)
+        elements.append(title)
+        elements.append(Spacer(1, 0.3*inch))
+
+        # Date
+        date_text = Paragraph(f'Generated: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}', styles['Normal'])
+        elements.append(date_text)
+        elements.append(Spacer(1, 0.3*inch))
+
+        if type == 'sessions':
+            sessions_history = session_tracker.get_sessions_history()
+
+            # Table data
+            data = [['Session ID', 'Start Time', 'Duration (min)', 'Commands', 'Tokens', 'Cost ($)', 'Status']]
+
+            for sess in sessions_history[-20:]:  # Last 20 sessions
+                data.append([
+                    sess.get('session_id', 'N/A')[:8],
+                    sess.get('start_time', 'N/A')[:16],
+                    str(sess.get('duration_minutes', 0)),
+                    str(sess.get('commands_executed', 0)),
+                    str(sess.get('tokens_used', 0)),
+                    str(sess.get('estimated_cost', 0)),
+                    sess.get('status', 'N/A')
+                ])
+
+        elif type == 'metrics':
+            system_health = metrics.get_system_health()
+            daemon_status = metrics.get_daemon_status()
+
+            # Table data
+            data = [['Metric', 'Value', 'Timestamp']]
+            data.append(['Health Score', f"{system_health.get('health_score', 0)}%", datetime.now().strftime("%Y-%m-%d %H:%M:%S")])
+            data.append(['Memory Usage', f"{system_health.get('memory_usage', 0)}%", datetime.now().strftime("%Y-%m-%d %H:%M:%S")])
+            data.append(['Active Daemons', f"{len([d for d in daemon_status if d.get('status') == 'running'])}/{len(daemon_status)}", datetime.now().strftime("%Y-%m-%d %H:%M:%S")])
+
+        elif type == 'logs':
+            recent_activity = log_parser.get_recent_activity(limit=50)
+
+            # Table data
+            data = [['Timestamp', 'Level', 'Policy', 'Message']]
+
+            for activity in recent_activity:
+                data.append([
+                    activity.get('timestamp', 'N/A')[:16],
+                    activity.get('level', 'N/A'),
+                    activity.get('policy', 'N/A')[:15],
+                    activity.get('message', 'N/A')[:40]
+                ])
+
+        # Create table
+        table = Table(data)
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#667eea')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 12),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black)
+        ]))
+
+        elements.append(table)
+
+        # Build PDF
+        doc.build(elements)
+        pdf_buffer.seek(0)
+
+        filename = f'claude_{type}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.pdf'
+
+        return send_file(
+            pdf_buffer,
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name=filename
+        )
+    except Exception as e:
+        print(f"Error exporting PDF: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'message': str(e)}), 500
+
 @app.route('/api/widget-preferences', methods=['GET', 'POST'])
 @login_required
 def widget_preferences():
@@ -653,6 +1012,147 @@ def widget_preferences():
             'recent_errors': True
         })
         return jsonify({'success': True, 'preferences': prefs})
+
+@app.route('/api/alert-thresholds', methods=['GET', 'POST'])
+@login_required
+def alert_thresholds():
+    """
+    Get or update alert thresholds
+    ---
+    tags:
+      - Alerts
+    parameters:
+      - name: body
+        in: body
+        required: false
+        schema:
+          type: object
+          properties:
+            health_score:
+              type: integer
+              description: Health score threshold (0-100)
+            error_count:
+              type: integer
+              description: Error count threshold per hour
+            context_usage:
+              type: integer
+              description: Context usage threshold percentage
+            daemon_down:
+              type: boolean
+              description: Alert when daemon is down
+    responses:
+      200:
+        description: Alert thresholds saved or retrieved
+    """
+    if request.method == 'POST':
+        try:
+            data = request.get_json()
+            thresholds = {
+                'health_score': data.get('health_score', 70),
+                'error_count': data.get('error_count', 10),
+                'context_usage': data.get('context_usage', 85),
+                'daemon_down': data.get('daemon_down', True)
+            }
+            session['alert_thresholds'] = thresholds
+            return jsonify({'success': True, 'message': 'Alert thresholds saved', 'thresholds': thresholds})
+        except Exception as e:
+            return jsonify({'success': False, 'message': str(e)}), 500
+    else:
+        # GET request - return current thresholds
+        thresholds = session.get('alert_thresholds', {
+            'health_score': 70,
+            'error_count': 10,
+            'context_usage': 85,
+            'daemon_down': True
+        })
+        return jsonify({'success': True, 'thresholds': thresholds})
+
+@app.route('/api/check-alerts')
+@login_required
+def check_alerts():
+    """
+    Check current metrics against alert thresholds
+    ---
+    tags:
+      - Alerts
+    responses:
+      200:
+        description: Alert status
+        schema:
+          type: object
+          properties:
+            alerts:
+              type: array
+              items:
+                type: object
+    """
+    try:
+        thresholds = session.get('alert_thresholds', {
+            'health_score': 70,
+            'error_count': 10,
+            'context_usage': 85,
+            'daemon_down': True
+        })
+
+        system_health = metrics.get_system_health()
+        daemon_status = metrics.get_daemon_status()
+
+        alerts = []
+
+        # Check health score
+        health_score = system_health.get('health_score', 0)
+        if health_score < thresholds.get('health_score', 70):
+            alerts.append({
+                'type': 'health_score',
+                'severity': 'warning' if health_score >= 50 else 'critical',
+                'message': f'Health score is {health_score}% (threshold: {thresholds.get("health_score")}%)',
+                'value': health_score,
+                'threshold': thresholds.get('health_score')
+            })
+
+        # Check context usage
+        context_usage = system_health.get('context_usage', 0)
+        if context_usage > thresholds.get('context_usage', 85):
+            alerts.append({
+                'type': 'context_usage',
+                'severity': 'warning',
+                'message': f'Context usage is {context_usage}% (threshold: {thresholds.get("context_usage")}%)',
+                'value': context_usage,
+                'threshold': thresholds.get('context_usage')
+            })
+
+        # Check daemons
+        if thresholds.get('daemon_down', True):
+            down_daemons = [d for d in daemon_status if d.get('status') != 'running']
+            if down_daemons:
+                alerts.append({
+                    'type': 'daemon_down',
+                    'severity': 'critical',
+                    'message': f'{len(down_daemons)} daemon(s) are down',
+                    'daemons': [d.get('name') for d in down_daemons]
+                })
+
+        # Check error count (last hour)
+        error_count = log_parser.get_error_count(hours=1)
+        if error_count > thresholds.get('error_count', 10):
+            alerts.append({
+                'type': 'error_count',
+                'severity': 'warning',
+                'message': f'{error_count} errors in last hour (threshold: {thresholds.get("error_count")})',
+                'value': error_count,
+                'threshold': thresholds.get('error_count')
+            })
+
+        return jsonify({
+            'success': True,
+            'alert_count': len(alerts),
+            'alerts': alerts,
+            'timestamp': datetime.now().isoformat()
+        })
+
+    except Exception as e:
+        print(f"Error checking alerts: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
 
 @app.errorhandler(404)
 def page_not_found(e):
