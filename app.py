@@ -24,6 +24,7 @@ from utils.community_widgets import CommunityWidgetsManager
 from utils.anomaly_detector import AnomalyDetector
 from utils.predictive_analytics import PredictiveAnalytics
 from utils.alert_routing import AlertRoutingEngine
+from utils.memory_system_monitor import MemorySystemMonitor
 from flasgger import Swagger, swag_from
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
@@ -68,6 +69,7 @@ community_widgets_manager = CommunityWidgetsManager()
 anomaly_detector = AnomalyDetector()
 predictive_analytics = PredictiveAnalytics()
 alert_routing = AlertRoutingEngine()
+memory_system_monitor = MemorySystemMonitor()
 
 # User database (in production, use a proper database)
 # Password: 'admin' (hashed with bcrypt)
@@ -2681,6 +2683,57 @@ def create_routed_alert():
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
 
+# ============================================================
+# Memory System Integration Routes
+# ============================================================
+
+@app.route('/api/memory-system/health')
+@login_required
+def memory_system_health():
+    """
+    Get Claude Memory System v2.2.0 comprehensive health stats
+    ---
+    tags:
+      - Memory System
+    responses:
+      200:
+        description: Complete memory system health metrics
+    """
+    try:
+        stats = memory_system_monitor.get_comprehensive_stats()
+        return jsonify({
+            'success': True,
+            'stats': stats
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/memory-system/daemons')
+@login_required
+def memory_system_daemons():
+    """Get daemon status"""
+    try:
+        daemons = memory_system_monitor.get_daemon_status()
+        return jsonify({
+            'success': True,
+            'daemons': daemons
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/memory-system/policies')
+@login_required
+def memory_system_policies():
+    """Get policy status"""
+    try:
+        policies = memory_system_monitor.get_policy_status()
+        return jsonify({
+            'success': True,
+            'policies': policies
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
 @app.errorhandler(404)
 def page_not_found(e):
     """Handle 404 errors"""
@@ -2785,7 +2838,7 @@ thread.start()
 if __name__ == '__main__':
     print("""
     ============================================================
-    Claude Monitoring System v2.11 (Alert Routing Edition)
+    Claude Monitoring System v2.12 (Memory Integration Edition)
     ============================================================
 
     Dashboard URL: http://localhost:5000
@@ -2798,19 +2851,22 @@ if __name__ == '__main__':
     Username: admin
     Password: admin
 
-    Features:
+    🧠 Memory System v2.2.0 Integration:
+    ✓ 8 Daemon health monitoring (context, auto-save, git, etc.)
+    ✓ 10 Policy enforcement tracking (active status)
+    ✓ Context optimization metrics (cache hits, token savings)
+    ✓ Failure prevention stats (auto-fixes, patterns learned)
+    ✓ Model selection distribution (haiku/sonnet/opus usage)
+    ✓ Session memory tracking (active sessions, pruning)
+    ✓ Git auto-commit activity monitoring
+    ✓ Overall system health score calculation
+
+    🚀 Advanced Features:
     ✓ Custom alert routing & escalation policies
     ✓ Multi-level escalation chains (up to 3 levels)
-    ✓ On-call schedules with weekly rotation
-    ✓ Multiple notification channels (email, SMS, Slack, webhook)
-    ✓ Conditional routing rules (severity, time, metric)
-    ✓ Alert acknowledgment & resolution tracking
     ✓ Predictive analytics & forecasting (5 algorithms)
-    ✓ Time series forecasting with confidence intervals
     ✓ AI-powered anomaly detection (6 ML algorithms)
-    ✓ Spike detection, trend analysis & insights
     ✓ Community widget marketplace with sharing
-    ✓ Advanced widget builder with drag-and-drop
     ✓ Email & SMS alerts for critical issues
     ✓ Custom dashboard themes (6 themes)
     ✓ Real-time WebSocket updates (10s interval)

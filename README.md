@@ -1,6 +1,6 @@
-# 🤖 Claude Monitoring System v2.11 🚀
+# 🤖 Claude Monitoring System v2.12 🚀
 
-**Professional Real-time Analytics Dashboard for Claude Memory System with AI-Powered Anomaly Detection, Predictive Forecasting & Custom Alert Routing**
+**Professional Real-time Analytics Dashboard with Complete Claude Memory System v2.2.0 Integration, AI-Powered Anomaly Detection, Predictive Forecasting & Custom Alert Routing**
 
 [![GitHub](https://img.shields.io/badge/GitHub-claude--monitoring--system-blue?logo=github)](https://github.com/piyushmakhija28/claude-monitoring-system)
 [![Python](https://img.shields.io/badge/Python-3.7+-blue?logo=python)](https://www.python.org/)
@@ -12,6 +12,148 @@ A comprehensive, real-time monitoring and analytics dashboard for the Claude Mem
 **🎁 COMPLETE PACKAGE**: This repo includes **everything you need** - the monitoring dashboard + all Claude Memory System v2.0 files (24 automation scripts + 15 policies + complete documentation). Just clone, setup, and start using!
 
 **Developed by [TechDeveloper](https://www.techdeveloper.in)** 💻
+
+---
+
+## 🆕 What's New in v2.12 (Feb 2026) - Memory System Integration Edition 🧠⚡
+
+### **Complete Claude Memory System v2.2.0 Integration** 🧠⚡ NEW!
+- **8 Daemon Health Monitoring** - Real-time status of all automation daemons:
+  - 🔄 **Context Daemon**: Monitors context usage every 10 minutes
+  - 💾 **Session Auto-Save Daemon**: Auto-saves session state every 15 minutes
+  - 📊 **Preference Tracker Daemon**: Tracks user preferences every 20 minutes
+  - 🎯 **Skill Suggester Daemon**: Suggests relevant skills every 5 minutes
+  - 📝 **Git Auto-Commit Daemon**: Auto-commits changes every 15 minutes
+  - 🗑️ **Session Pruning Daemon**: Prunes old sessions daily
+  - 🔍 **Pattern Detection Daemon**: Detects usage patterns weekly
+  - 🛡️ **Failure Prevention Daemon**: Monitors failures every 6 hours
+  - ✅ **PID Tracking**: Process ID monitoring for each daemon
+  - 📊 **Last Activity**: Timestamp of last daemon activity
+  - 🔴 **Status Indicators**: Running, stopped, error, not_started
+
+- **10 Policy Enforcement Tracking** - Monitor all active policies:
+  - ✅ **Core Skills Mandate**: Enforced execution order
+  - 📊 **Model Selection**: Haiku/Sonnet/Opus usage tracking
+  - 💬 **Proactive Consultation**: User preference learning
+  - 💾 **Session Memory**: Auto-save and restore
+  - 🛡️ **Failure Prevention**: Auto-fix patterns
+  - 📁 **File Management**: Smart file operations
+  - 📝 **Git Auto-Commit**: Automatic commits
+  - 👤 **User Preferences**: Preference storage
+  - 🗑️ **Session Pruning**: Old session cleanup
+  - 🔗 **Context Integration**: Context + session sync
+  - 📈 **Enforcement Metrics**: Times each policy was applied
+  - 📝 **Recent Activity**: Last 10 policy enforcement actions
+
+- **Context Optimization Metrics** - Token and cache efficiency:
+  - 📊 **Cache Statistics**: Cache size and file count
+  - 🎯 **Cache Hit Rate**: Successful cache retrievals
+  - 💾 **Cached Files**: Number of files in cache
+  - 💰 **Token Savings**: Estimated tokens saved (~500 per hit)
+  - ⚡ **Optimizations Applied**: Total optimization count
+  - 📈 **Efficiency Score**: Overall cache effectiveness
+
+- **Failure Prevention Statistics** - Auto-fix tracking:
+  - 🛡️ **Failures Prevented**: Total failures caught
+  - ✅ **Auto-Fixes Applied**: Automatic corrections made
+  - 📚 **Patterns Learned**: Knowledge base size
+  - 🔧 **By Tool**: Breakdown by tool (Bash, Edit, Read, Grep)
+  - 📝 **Recent Fixes**: Last 10 auto-fix applications
+  - 🎯 **Success Rate**: Percentage of prevented failures
+
+- **Model Selection Distribution** - AI model usage analytics:
+  - 🚀 **Haiku Usage**: Fast searches and reads (target: 35-45%)
+  - 🎯 **Sonnet Usage**: Implementation and editing (target: 50-60%)
+  - 🧠 **Opus Usage**: Architecture and planning (target: 3-8%)
+  - 📊 **Total Requests**: Complete request count
+  - 📈 **Usage Percentages**: Distribution visualization
+  - ✅ **Compliance**: Whether usage matches policy targets
+
+- **Session Memory Statistics** - Session tracking and management:
+  - 📊 **Total Sessions**: All project sessions
+  - ✅ **Active Sessions**: Modified in last 7 days
+  - 🗑️ **Pruned Sessions**: Cleaned up sessions
+  - 💾 **Total Size**: Storage used by sessions (MB)
+  - 📈 **Session Activity**: Recent session operations
+  - 🔍 **Session Health**: Storage efficiency
+
+- **Git Auto-Commit Activity** - Automated commit tracking:
+  - 📝 **Total Commits**: All auto-commits made
+  - 📅 **Commits Today**: Today's commit count
+  - 📊 **Commits This Week**: Weekly commit activity
+  - 📝 **Recent Commits**: Last 10 commit messages
+  - ⏱️ **Commit Frequency**: Average commits per day
+  - 🎯 **Commit Patterns**: Timing and trigger analysis
+
+- **System Health Score** - Overall memory system health:
+  - 📊 **Overall Score**: 0-100 health rating
+  - 🔧 **Daemon Health**: Running daemon percentage (40% weight)
+  - 🚨 **Critical Health**: Critical daemon status (30% weight)
+  - 📋 **Policy Activity**: Recent policy usage (20% weight)
+  - 💾 **Cache Efficiency**: Cache effectiveness (10% weight)
+  - ✅ **Health Status**: Healthy (80+), Degraded (60-79), Critical (<60)
+
+- **Dashboard Integration** - Memory stats on main dashboard:
+  - 📊 **Health Cards**: System health overview
+  - 🔧 **Daemon Status Grid**: Visual daemon health
+  - 📋 **Policy Enforcement Chart**: Policy usage over time
+  - 💾 **Cache Performance**: Hit rate visualization
+  - 🎯 **Model Distribution**: Usage pie chart
+  - 📈 **Real-time Updates**: Auto-refresh every 30 seconds
+
+**Technical Implementation:**
+- ✅ Cross-platform daemon monitoring (Windows/Linux/Mac)
+- ✅ psutil for process management
+- ✅ Log file parsing and analysis
+- ✅ JSON-based statistics aggregation
+- ✅ RESTful API for all metrics
+- ✅ Real-time health scoring algorithm
+
+**Use Cases:**
+- ✅ Monitor memory system automation health
+- ✅ Track policy compliance and enforcement
+- ✅ Optimize context usage and token consumption
+- ✅ Ensure daemon uptime and reliability
+- ✅ Analyze model selection patterns
+- ✅ Monitor git automation activity
+- ✅ Track session memory efficiency
+- ✅ Identify system degradation early
+
+**API Endpoints:**
+- `GET /api/memory-system/health` - Complete health statistics
+- `GET /api/memory-system/daemons` - Daemon status details
+- `GET /api/memory-system/policies` - Policy status and activity
+
+**Integration Points:**
+- Main dashboard shows memory system health cards
+- Real-time daemon status monitoring
+- Policy enforcement visualization
+- Context optimization metrics
+- Automatic health alerts when score drops
+
+**Memory System Components Monitored:**
+```
+~/.claude/memory/
+├── logs/                           # All daemon logs
+│   ├── context-daemon.log
+│   ├── session-auto-save-daemon.log
+│   ├── git-auto-commit.log
+│   ├── policy-hits.log
+│   ├── model-usage.log
+│   ├── context-cache.log
+│   └── failures.log
+├── .pids/                          # Daemon PID files
+├── .cache/                         # Context cache
+├── sessions/                       # Project sessions
+├── failure-kb.json                 # Failure patterns
+└── [10 policy files]               # All policies
+```
+
+**Health Score Calculation:**
+- Daemon Health (40%): Running daemons / Total daemons
+- Critical Health (30%): Critical daemons running
+- Policy Activity (20%): Recent policy enforcements
+- Cache Efficiency (10%): Cache hits and usage
 
 ---
 
