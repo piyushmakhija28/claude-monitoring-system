@@ -23,6 +23,27 @@ Just clone, setup, and start using!
 
 ---
 
+## 📑 Table of Contents
+
+### 🚀 Quick Navigation
+- [📚 Claude Memory System Documentation](#-claude-memory-system-documentation)
+- [🆕 What's New](#-whats-new)
+  - [v2.13 - Widget Collaboration](#-whats-new-in-v213-feb-2026---widget-collaboration-edition-)
+  - [v2.12 - Memory System Integration](#-whats-new-in-v212-feb-2026---memory-system-integration-edition-)
+  - [v2.11 - Alert Routing](#-whats-new-in-v211-feb-2026---alert-routing-edition-)
+  - [v2.10 - Forecasting](#-whats-new-in-v210-feb-2026---forecasting-edition-)
+- [✨ Complete Feature Overview](#-complete-feature-overview)
+- [📦 What's Included](#-whats-included)
+- [🚀 Quick Start Guide](#-quick-start-guide)
+- [📊 Core Features](#core-features)
+- [🔧 Installation](#installation)
+- [⚙️ Configuration](#configuration)
+- [📡 API Reference](#api-reference)
+- [🛠️ Troubleshooting](#troubleshooting)
+- [📄 License](#-license)
+
+---
+
 ## 📚 Claude Memory System Documentation
 
 **IMPORTANT**: Yeh project mein **complete Claude Memory System v2.2.0 ka documentation** bhi included hai!
