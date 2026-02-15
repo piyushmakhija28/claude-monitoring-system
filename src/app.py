@@ -593,7 +593,7 @@ def dashboard_themes():
           properties:
             theme:
               type: string
-              description: Theme name (default/dark/blue/purple/green/orange)
+              description: Theme name (default/dark/blue/purple/green/orange/cyberpunk/ocean/forest/sunset/nord/tokyo-night/dracula/monokai)
     responses:
       200:
         description: Theme saved or retrieved
@@ -609,6 +609,85 @@ def dashboard_themes():
     else:
         theme = session.get('dashboard_theme', 'default')
         return jsonify({'success': True, 'theme': theme})
+
+@app.route('/api/themes/custom', methods=['GET', 'POST', 'DELETE'])
+@login_required
+def custom_themes():
+    """
+    Manage custom themes (save/load/delete)
+    ---
+    tags:
+      - Themes
+    parameters:
+      - name: body
+        in: body
+        required: false
+        schema:
+          type: object
+          properties:
+            name:
+              type: string
+              description: Custom theme name
+            theme_data:
+              type: object
+              description: Theme configuration (colors, typography, etc.)
+    responses:
+      200:
+        description: Custom theme operation successful
+    """
+    if request.method == 'POST':
+        # Save custom theme
+        try:
+            data = request.get_json()
+            theme_name = data.get('name', 'custom-theme-1')
+            theme_data = data.get('theme_data', {})
+
+            # Store in session (in production, save to database)
+            if 'custom_themes' not in session:
+                session['custom_themes'] = {}
+
+            session['custom_themes'][theme_name] = {
+                'data': theme_data,
+                'created_at': datetime.now().isoformat(),
+                'updated_at': datetime.now().isoformat()
+            }
+
+            return jsonify({
+                'success': True,
+                'message': f'Custom theme "{theme_name}" saved successfully',
+                'theme_name': theme_name
+            })
+        except Exception as e:
+            return jsonify({'success': False, 'message': str(e)}), 500
+
+    elif request.method == 'DELETE':
+        # Delete custom theme
+        try:
+            data = request.get_json()
+            theme_name = data.get('name')
+
+            if 'custom_themes' in session and theme_name in session['custom_themes']:
+                del session['custom_themes'][theme_name]
+                return jsonify({
+                    'success': True,
+                    'message': f'Custom theme "{theme_name}" deleted successfully'
+                })
+            else:
+                return jsonify({
+                    'success': False,
+                    'message': f'Custom theme "{theme_name}" not found'
+                }), 404
+        except Exception as e:
+            return jsonify({'success': False, 'message': str(e)}), 500
+
+    else:
+        # GET: List all custom themes
+        custom_themes = session.get('custom_themes', {})
+        return jsonify({
+            'success': True,
+            'themes': custom_themes,
+            'count': len(custom_themes)
+        })
 
 @app.route('/widgets')
 @login_required

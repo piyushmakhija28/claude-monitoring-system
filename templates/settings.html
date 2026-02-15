@@ -198,11 +198,291 @@
                             </div>
                         </div>
                     </div>
+
+                    <!-- Cyberpunk Theme -->
+                    <div class="col-md-4">
+                        <div class="theme-card" data-theme="cyberpunk" onclick="selectTheme('cyberpunk')">
+                            <div class="theme-preview">
+                                <div class="theme-color" style="background: linear-gradient(135deg, #ff00ff 0%, #00ffff 100%);"></div>
+                                <div class="theme-color" style="background: #0a0a0a;"></div>
+                                <div class="theme-color" style="background: #1a1a2e;"></div>
+                            </div>
+                            <div class="theme-info">
+                                <h6 class="mb-1"><i class="fas fa-robot text-info me-2"></i>Cyberpunk</h6>
+                                <small class="text-muted">Neon pink & cyan with dark background</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Ocean Theme -->
+                    <div class="col-md-4">
+                        <div class="theme-card" data-theme="ocean" onclick="selectTheme('ocean')">
+                            <div class="theme-preview">
+                                <div class="theme-color" style="background: linear-gradient(135deg, #0077be 0%, #00a8e8 100%);"></div>
+                                <div class="theme-color" style="background: #e0f4ff;"></div>
+                                <div class="theme-color" style="background: #f0f9ff;"></div>
+                            </div>
+                            <div class="theme-info">
+                                <h6 class="mb-1"><i class="fas fa-water text-primary me-2"></i>Ocean</h6>
+                                <small class="text-muted">Deep blue ocean with wave accents</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Forest Theme -->
+                    <div class="col-md-4">
+                        <div class="theme-card" data-theme="forest" onclick="selectTheme('forest')">
+                            <div class="theme-preview">
+                                <div class="theme-color" style="background: linear-gradient(135deg, #2d5016 0%, #4a7c59 100%);"></div>
+                                <div class="theme-color" style="background: #d4edda;"></div>
+                                <div class="theme-color" style="background: #f1f8f4;"></div>
+                            </div>
+                            <div class="theme-info">
+                                <h6 class="mb-1"><i class="fas fa-tree text-success me-2"></i>Forest</h6>
+                                <small class="text-muted">Deep forest green with nature feel</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Sunset Theme -->
+                    <div class="col-md-4">
+                        <div class="theme-card" data-theme="sunset" onclick="selectTheme('sunset')">
+                            <div class="theme-preview">
+                                <div class="theme-color" style="background: linear-gradient(135deg, #ff6b6b 0%, #ffd93d 100%);"></div>
+                                <div class="theme-color" style="background: #ffe5e5;"></div>
+                                <div class="theme-color" style="background: #fff8dc;"></div>
+                            </div>
+                            <div class="theme-info">
+                                <h6 class="mb-1"><i class="fas fa-sun text-warning me-2"></i>Sunset</h6>
+                                <small class="text-muted">Warm sunset red to golden yellow</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Nord Theme -->
+                    <div class="col-md-4">
+                        <div class="theme-card" data-theme="nord" onclick="selectTheme('nord')">
+                            <div class="theme-preview">
+                                <div class="theme-color" style="background: linear-gradient(135deg, #5e81ac 0%, #81a1c1 100%);"></div>
+                                <div class="theme-color" style="background: #eceff4;"></div>
+                                <div class="theme-color" style="background: #d8dee9;"></div>
+                            </div>
+                            <div class="theme-info">
+                                <h6 class="mb-1"><i class="fas fa-snowflake text-info me-2"></i>Nord</h6>
+                                <small class="text-muted">Arctic blue with cool accents</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tokyo Night Theme -->
+                    <div class="col-md-4">
+                        <div class="theme-card" data-theme="tokyo-night" onclick="selectTheme('tokyo-night')">
+                            <div class="theme-preview">
+                                <div class="theme-color" style="background: linear-gradient(135deg, #7aa2f7 0%, #bb9af7 100%);"></div>
+                                <div class="theme-color" style="background: #1a1b26;"></div>
+                                <div class="theme-color" style="background: #24283b;"></div>
+                            </div>
+                            <div class="theme-info">
+                                <h6 class="mb-1"><i class="fas fa-city text-primary me-2"></i>Tokyo Night</h6>
+                                <small class="text-muted">Modern dark with blue & purple</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Dracula Theme -->
+                    <div class="col-md-4">
+                        <div class="theme-card" data-theme="dracula" onclick="selectTheme('dracula')">
+                            <div class="theme-preview">
+                                <div class="theme-color" style="background: linear-gradient(135deg, #bd93f9 0%, #ff79c6 100%);"></div>
+                                <div class="theme-color" style="background: #282a36;"></div>
+                                <div class="theme-color" style="background: #44475a;"></div>
+                            </div>
+                            <div class="theme-info">
+                                <h6 class="mb-1"><i class="fas fa-vampire text-danger me-2"></i>Dracula</h6>
+                                <small class="text-muted">Popular dark with purple & pink</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Monokai Theme -->
+                    <div class="col-md-4">
+                        <div class="theme-card" data-theme="monokai" onclick="selectTheme('monokai')">
+                            <div class="theme-preview">
+                                <div class="theme-color" style="background: linear-gradient(135deg, #f92672 0%, #a6e22e 100%);"></div>
+                                <div class="theme-color" style="background: #272822;"></div>
+                                <div class="theme-color" style="background: #3e3d32;"></div>
+                            </div>
+                            <div class="theme-info">
+                                <h6 class="mb-1"><i class="fas fa-code text-success me-2"></i>Monokai</h6>
+                                <small class="text-muted">Classic dark with vibrant colors</small>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="mt-3">
                     <span class="badge bg-success" id="themeStatus" style="display: none;">
                         <i class="fas fa-check me-1"></i>Theme applied successfully
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Custom Theme Builder -->
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header bg-white border-0 pt-4 pb-3">
+                <h5 class="mb-0">
+                    <i class="fas fa-paint-brush me-2"></i>Custom Theme Builder
+                </h5>
+            </div>
+            <div class="card-body p-4">
+                <p class="text-muted mb-4">
+                    <i class="fas fa-magic me-2"></i>
+                    Create your own custom theme with personalized colors, fonts, and styling.
+                </p>
+
+                <!-- Color Customization -->
+                <div class="mb-4">
+                    <h6 class="mb-3"><i class="fas fa-palette me-2 text-primary"></i>Color Scheme</h6>
+                    <div class="row g-3">
+                        <div class="col-md-3">
+                            <label for="primaryColor" class="form-label">Primary Color</label>
+                            <input type="color" class="form-control form-control-color" id="primaryColor" value="#667eea" title="Choose primary color">
+                            <small class="text-muted">Main brand color</small>
+                        </div>
+                        <div class="col-md-3">
+                            <label for="secondaryColor" class="form-label">Secondary Color</label>
+                            <input type="color" class="form-control form-control-color" id="secondaryColor" value="#764ba2" title="Choose secondary color">
+                            <small class="text-muted">Accent color</small>
+                        </div>
+                        <div class="col-md-3">
+                            <label for="backgroundColor" class="form-label">Background Color</label>
+                            <input type="color" class="form-control form-control-color" id="backgroundColor" value="#f8f9fa" title="Choose background color">
+                            <small class="text-muted">Page background</small>
+                        </div>
+                        <div class="col-md-3">
+                            <label for="textColor" class="form-label">Text Color</label>
+                            <input type="color" class="form-control form-control-color" id="textColor" value="#212529" title="Choose text color">
+                            <small class="text-muted">Main text color</small>
+                        </div>
+                        <div class="col-md-3">
+                            <label for="successColor" class="form-label">Success Color</label>
+                            <input type="color" class="form-control form-control-color" id="successColor" value="#10b981" title="Choose success color">
+                            <small class="text-muted">Success states</small>
+                        </div>
+                        <div class="col-md-3">
+                            <label for="warningColor" class="form-label">Warning Color</label>
+                            <input type="color" class="form-control form-control-color" id="warningColor" value="#f59e0b" title="Choose warning color">
+                            <small class="text-muted">Warning states</small>
+                        </div>
+                        <div class="col-md-3">
+                            <label for="dangerColor" class="form-label">Danger Color</label>
+                            <input type="color" class="form-control form-control-color" id="dangerColor" value="#ef4444" title="Choose danger color">
+                            <small class="text-muted">Error states</small>
+                        </div>
+                        <div class="col-md-3">
+                            <label for="infoColor" class="form-label">Info Color</label>
+                            <input type="color" class="form-control form-control-color" id="infoColor" value="#3b82f6" title="Choose info color">
+                            <small class="text-muted">Info states</small>
+                        </div>
+                    </div>
+                </div>
+
+                <hr class="my-4">
+
+                <!-- Font Customization -->
+                <div class="mb-4">
+                    <h6 class="mb-3"><i class="fas fa-font me-2 text-success"></i>Typography</h6>
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label for="fontFamily" class="form-label">Font Family</label>
+                            <select class="form-select" id="fontFamily">
+                                <option value="system-ui">System Default</option>
+                                <option value="Inter">Inter (Modern)</option>
+                                <option value="Roboto">Roboto (Clean)</option>
+                                <option value="Open Sans">Open Sans (Friendly)</option>
+                                <option value="Lato">Lato (Elegant)</option>
+                                <option value="Poppins">Poppins (Rounded)</option>
+                                <option value="Montserrat">Montserrat (Geometric)</option>
+                                <option value="Nunito">Nunito (Soft)</option>
+                                <option value="Source Sans Pro">Source Sans Pro</option>
+                                <option value="JetBrains Mono">JetBrains Mono (Code)</option>
+                                <option value="Fira Code">Fira Code (Code)</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="fontSize" class="form-label">Base Font Size</label>
+                            <select class="form-select" id="fontSize">
+                                <option value="12px">Small (12px)</option>
+                                <option value="14px" selected>Medium (14px)</option>
+                                <option value="16px">Large (16px)</option>
+                                <option value="18px">Extra Large (18px)</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="fontWeight" class="form-label">Font Weight</label>
+                            <select class="form-select" id="fontWeight">
+                                <option value="300">Light (300)</option>
+                                <option value="400" selected>Normal (400)</option>
+                                <option value="500">Medium (500)</option>
+                                <option value="600">Semi-Bold (600)</option>
+                                <option value="700">Bold (700)</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <hr class="my-4">
+
+                <!-- Preview & Actions -->
+                <div class="mb-3">
+                    <h6 class="mb-3"><i class="fas fa-eye me-2 text-info"></i>Live Preview</h6>
+                    <div id="customThemePreview" class="p-4 border rounded" style="background: var(--bg-color, #f8f9fa);">
+                        <h5 style="color: var(--primary-color, #667eea); font-family: var(--font-family, system-ui); font-size: var(--font-size, 14px); font-weight: var(--font-weight, 400);">
+                            Sample Heading
+                        </h5>
+                        <p style="color: var(--text-color, #212529); font-family: var(--font-family, system-ui); font-size: var(--font-size, 14px);">
+                            This is sample text showing how your custom theme will look.
+                        </p>
+                        <div class="d-flex gap-2 mt-3">
+                            <span class="badge" style="background-color: var(--success-color, #10b981);">Success</span>
+                            <span class="badge" style="background-color: var(--warning-color, #f59e0b);">Warning</span>
+                            <span class="badge" style="background-color: var(--danger-color, #ef4444);">Danger</span>
+                            <span class="badge" style="background-color: var(--info-color, #3b82f6);">Info</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="row g-2">
+                    <div class="col-md-3">
+                        <button type="button" class="btn btn-primary w-100" onclick="applyCustomTheme()">
+                            <i class="fas fa-check me-2"></i>Apply Theme
+                        </button>
+                    </div>
+                    <div class="col-md-3">
+                        <button type="button" class="btn btn-success w-100" onclick="saveCustomTheme()">
+                            <i class="fas fa-save me-2"></i>Save Theme
+                        </button>
+                    </div>
+                    <div class="col-md-3">
+                        <button type="button" class="btn btn-info w-100" onclick="exportTheme()">
+                            <i class="fas fa-download me-2"></i>Export Theme
+                        </button>
+                    </div>
+                    <div class="col-md-3">
+                        <button type="button" class="btn btn-warning w-100" onclick="importTheme()">
+                            <i class="fas fa-upload me-2"></i>Import Theme
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Import File Input (Hidden) -->
+                <input type="file" id="themeImportFile" accept=".json" style="display: none;" onchange="handleThemeImport(event)">
+
+                <div class="mt-3">
+                    <span class="badge bg-info" id="customThemeStatus" style="display: none;">
+                        <i class="fas fa-info-circle me-1"></i>Custom theme ready
                     </span>
                 </div>
             </div>
@@ -1277,6 +1557,50 @@ function applyThemeColors(themeName) {
         'orange': {
             primary: 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)',
             background: '#fed7aa'
+        },
+        'cyberpunk': {
+            primary: 'linear-gradient(135deg, #ff00ff 0%, #00ffff 100%)',
+            background: '#0a0a0a'
+        },
+        'ocean': {
+            primary: 'linear-gradient(135deg, #0077be 0%, #00a8e8 100%)',
+            background: '#e0f4ff'
+        },
+        'forest': {
+            primary: 'linear-gradient(135deg, #2d5016 0%, #4a7c59 100%)',
+            background: '#d4edda'
+        },
+        'sunset': {
+            primary: 'linear-gradient(135deg, #ff6b6b 0%, #ffd93d 100%)',
+            background: '#ffe5e5'
+        },
+        'nord': {
+            primary: 'linear-gradient(135deg, #5e81ac 0%, #81a1c1 100%)',
+            background: '#eceff4'
+        },
+        'tokyo-night': {
+            primary: 'linear-gradient(135deg, #7aa2f7 0%, #bb9af7 100%)',
+            background: '#1a1b26'
+        },
+        'dracula': {
+            primary: 'linear-gradient(135deg, #bd93f9 0%, #ff79c6 100%)',
+            background: '#282a36'
+        },
+        'monokai': {
+            primary: 'linear-gradient(135deg, #f92672 0%, #a6e22e 100%)',
+            background: '#272822'
+        },
+        'purple': {
+            primary: 'linear-gradient(135deg, #a855f7 0%, #7c3aed 100%)',
+            background: '#f3e8ff'
+        },
+        'green': {
+            primary: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+            background: '#d1fae5'
+        },
+        'orange': {
+            primary: 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)',
+            background: '#fed7aa'
         }
     };
 
@@ -1299,7 +1623,261 @@ document.addEventListener('DOMContentLoaded', function() {
         savedCard.classList.add('active');
     }
     applyThemeColors(savedTheme);
+
+    // Initialize custom theme builder listeners
+    initCustomThemeBuilder();
 });
+
+// ========================================
+// CUSTOM THEME BUILDER FUNCTIONS
+// ========================================
+
+function initCustomThemeBuilder() {
+    // Add event listeners for color pickers
+    const colorInputs = ['primaryColor', 'secondaryColor', 'backgroundColor', 'textColor',
+                        'successColor', 'warningColor', 'dangerColor', 'infoColor'];
+
+    colorInputs.forEach(id => {
+        const input = document.getElementById(id);
+        if (input) {
+            input.addEventListener('input', updateCustomThemePreview);
+        }
+    });
+
+    // Add event listeners for font settings
+    const fontInputs = ['fontFamily', 'fontSize', 'fontWeight'];
+    fontInputs.forEach(id => {
+        const input = document.getElementById(id);
+        if (input) {
+            input.addEventListener('change', updateCustomThemePreview);
+        }
+    });
+
+    // Load saved custom theme if exists
+    const savedCustomTheme = localStorage.getItem('customTheme');
+    if (savedCustomTheme) {
+        loadCustomThemeToBuilder(JSON.parse(savedCustomTheme));
+    }
+}
+
+function updateCustomThemePreview() {
+    const preview = document.getElementById('customThemePreview');
+    if (!preview) return;
+
+    // Get color values
+    const primaryColor = document.getElementById('primaryColor').value;
+    const secondaryColor = document.getElementById('secondaryColor').value;
+    const backgroundColor = document.getElementById('backgroundColor').value;
+    const textColor = document.getElementById('textColor').value;
+    const successColor = document.getElementById('successColor').value;
+    const warningColor = document.getElementById('warningColor').value;
+    const dangerColor = document.getElementById('dangerColor').value;
+    const infoColor = document.getElementById('infoColor').value;
+
+    // Get font values
+    const fontFamily = document.getElementById('fontFamily').value;
+    const fontSize = document.getElementById('fontSize').value;
+    const fontWeight = document.getElementById('fontWeight').value;
+
+    // Apply to preview
+    preview.style.setProperty('--primary-color', primaryColor);
+    preview.style.setProperty('--secondary-color', secondaryColor);
+    preview.style.setProperty('--bg-color', backgroundColor);
+    preview.style.setProperty('--text-color', textColor);
+    preview.style.setProperty('--success-color', successColor);
+    preview.style.setProperty('--warning-color', warningColor);
+    preview.style.setProperty('--danger-color', dangerColor);
+    preview.style.setProperty('--info-color', infoColor);
+    preview.style.setProperty('--font-family', fontFamily);
+    preview.style.setProperty('--font-size', fontSize);
+    preview.style.setProperty('--font-weight', fontWeight);
+}
+
+function applyCustomTheme() {
+    // Get all custom theme values
+    const customTheme = collectCustomTheme();
+
+    // Apply to document root
+    applyCustomThemeToPage(customTheme);
+
+    // Show success message
+    const statusBadge = document.getElementById('customThemeStatus');
+    if (statusBadge) {
+        statusBadge.textContent = '✓ Custom theme applied!';
+        statusBadge.className = 'badge bg-success';
+        statusBadge.style.display = 'inline-block';
+
+        setTimeout(() => {
+            statusBadge.style.display = 'none';
+        }, 3000);
+    }
+}
+
+function saveCustomTheme() {
+    const customTheme = collectCustomTheme();
+
+    // Save to localStorage
+    localStorage.setItem('customTheme', JSON.stringify(customTheme));
+
+    // Apply immediately
+    applyCustomThemeToPage(customTheme);
+
+    // Show success message
+    const statusBadge = document.getElementById('customThemeStatus');
+    if (statusBadge) {
+        statusBadge.textContent = '✓ Custom theme saved!';
+        statusBadge.className = 'badge bg-success';
+        statusBadge.style.display = 'inline-block';
+
+        setTimeout(() => {
+            statusBadge.style.display = 'none';
+        }, 3000);
+    }
+
+    showAlert('success', 'Custom theme saved successfully!');
+}
+
+function exportTheme() {
+    const customTheme = collectCustomTheme();
+
+    // Add metadata
+    customTheme.metadata = {
+        name: prompt('Enter a name for this theme:', 'My Custom Theme') || 'Custom Theme',
+        author: prompt('Enter author name (optional):', '') || 'Anonymous',
+        version: '1.0.0',
+        createdAt: new Date().toISOString()
+    };
+
+    // Convert to JSON
+    const themeJSON = JSON.stringify(customTheme, null, 2);
+
+    // Create blob and download
+    const blob = new Blob([themeJSON], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${customTheme.metadata.name.replace(/\s+/g, '-').toLowerCase()}-theme.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    showAlert('success', 'Theme exported successfully!');
+}
+
+function importTheme() {
+    const fileInput = document.getElementById('themeImportFile');
+    if (fileInput) {
+        fileInput.click();
+    }
+}
+
+function handleThemeImport(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            const theme = JSON.parse(e.target.result);
+
+            // Validate theme structure
+            if (!theme.colors || !theme.typography) {
+                throw new Error('Invalid theme format');
+            }
+
+            // Load theme to builder
+            loadCustomThemeToBuilder(theme);
+
+            // Apply theme
+            applyCustomThemeToPage(theme);
+
+            // Save to localStorage
+            localStorage.setItem('customTheme', JSON.stringify(theme));
+
+            showAlert('success', `Theme "${theme.metadata?.name || 'Imported Theme'}" loaded successfully!`);
+        } catch (error) {
+            console.error('Error importing theme:', error);
+            showAlert('danger', 'Failed to import theme. Please check the file format.');
+        }
+    };
+    reader.readAsText(file);
+
+    // Reset file input
+    event.target.value = '';
+}
+
+function collectCustomTheme() {
+    return {
+        colors: {
+            primary: document.getElementById('primaryColor').value,
+            secondary: document.getElementById('secondaryColor').value,
+            background: document.getElementById('backgroundColor').value,
+            text: document.getElementById('textColor').value,
+            success: document.getElementById('successColor').value,
+            warning: document.getElementById('warningColor').value,
+            danger: document.getElementById('dangerColor').value,
+            info: document.getElementById('infoColor').value
+        },
+        typography: {
+            fontFamily: document.getElementById('fontFamily').value,
+            fontSize: document.getElementById('fontSize').value,
+            fontWeight: document.getElementById('fontWeight').value
+        }
+    };
+}
+
+function loadCustomThemeToBuilder(theme) {
+    if (theme.colors) {
+        document.getElementById('primaryColor').value = theme.colors.primary || '#667eea';
+        document.getElementById('secondaryColor').value = theme.colors.secondary || '#764ba2';
+        document.getElementById('backgroundColor').value = theme.colors.background || '#f8f9fa';
+        document.getElementById('textColor').value = theme.colors.text || '#212529';
+        document.getElementById('successColor').value = theme.colors.success || '#10b981';
+        document.getElementById('warningColor').value = theme.colors.warning || '#f59e0b';
+        document.getElementById('dangerColor').value = theme.colors.danger || '#ef4444';
+        document.getElementById('infoColor').value = theme.colors.info || '#3b82f6';
+    }
+
+    if (theme.typography) {
+        document.getElementById('fontFamily').value = theme.typography.fontFamily || 'system-ui';
+        document.getElementById('fontSize').value = theme.typography.fontSize || '14px';
+        document.getElementById('fontWeight').value = theme.typography.fontWeight || '400';
+    }
+
+    // Update preview
+    updateCustomThemePreview();
+}
+
+function applyCustomThemeToPage(theme) {
+    const root = document.documentElement;
+
+    // Apply colors
+    root.style.setProperty('--bs-primary', theme.colors.primary);
+    root.style.setProperty('--bs-secondary', theme.colors.secondary);
+    root.style.setProperty('--bs-body-bg', theme.colors.background);
+    root.style.setProperty('--bs-body-color', theme.colors.text);
+    root.style.setProperty('--bs-success', theme.colors.success);
+    root.style.setProperty('--bs-warning', theme.colors.warning);
+    root.style.setProperty('--bs-danger', theme.colors.danger);
+    root.style.setProperty('--bs-info', theme.colors.info);
+
+    // Apply typography
+    root.style.setProperty('--bs-body-font-family', theme.typography.fontFamily);
+    root.style.setProperty('--bs-body-font-size', theme.typography.fontSize);
+    root.style.setProperty('--bs-body-font-weight', theme.typography.fontWeight);
+
+    // Apply to body
+    document.body.style.fontFamily = theme.typography.fontFamily;
+    document.body.style.fontSize = theme.typography.fontSize;
+    document.body.style.fontWeight = theme.typography.fontWeight;
+    document.body.style.backgroundColor = theme.colors.background;
+    document.body.style.color = theme.colors.text;
+}
+
+// ========================================
+// END CUSTOM THEME BUILDER FUNCTIONS
+// ========================================
 </script>
 
 <style>
