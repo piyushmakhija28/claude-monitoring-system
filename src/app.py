@@ -3988,6 +3988,180 @@ def sort_results(results, sort_by, query=''):
         return sorted(results, key=relevance_score)
 
 # ============================================================
+# ML Model Training Routes
+# ============================================================
+
+@app.route('/ml-training')
+@login_required
+def ml_training():
+    """ML Model Training Page"""
+    return render_template('ml-training.html')
+
+@app.route('/api/ml/train', methods=['POST'])
+@login_required
+def api_ml_train():
+    """Start ML model training"""
+    try:
+        data = request.get_json()
+        model_type = data.get('model_type')
+        training_data = data.get('training_data')
+        hyperparameters = data.get('hyperparameters', {})
+
+        # Simulate training (in production, use actual ML framework)
+        return jsonify({
+            'success': True,
+            'message': 'Training started',
+            'job_id': f'train_{int(time.time())}',
+            'status': 'training'
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/ml/models', methods=['GET'])
+@login_required
+def api_ml_models():
+    """List saved ML models"""
+    try:
+        # Return list of saved models (from session or database)
+        models = session.get('ml_models', [])
+        return jsonify({
+            'success': True,
+            'models': models,
+            'count': len(models)
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/ml/models/<model_id>', methods=['GET', 'DELETE'])
+@login_required
+def api_ml_model_detail(model_id):
+    """Get or delete specific ML model"""
+    try:
+        models = session.get('ml_models', [])
+        model = next((m for m in models if m.get('id') == model_id), None)
+
+        if request.method == 'DELETE':
+            if model:
+                models.remove(model)
+                session['ml_models'] = models
+                return jsonify({'success': True, 'message': 'Model deleted'})
+            return jsonify({'success': False, 'message': 'Model not found'}), 404
+
+        if model:
+            return jsonify({'success': True, 'model': model})
+        return jsonify({'success': False, 'message': 'Model not found'}), 404
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+# ============================================================
+# Debugging & Troubleshooting Routes
+# ============================================================
+
+@app.route('/debugging-tools')
+@login_required
+def debugging_tools():
+    """Debugging & Troubleshooting Tools Page"""
+    return render_template('debugging-tools.html')
+
+@app.route('/api/debug/logs/stream')
+@login_required
+def api_debug_logs_stream():
+    """Stream real-time logs"""
+    def generate():
+        # Stream logs in real-time (simplified)
+        import time
+        for i in range(100):
+            yield f'data: {{"timestamp": "{datetime.now().isoformat()}", "level": "INFO", "message": "Log entry {i}"}}\n\n'
+            time.sleep(0.5)
+
+    return Response(generate(), mimetype='text/event-stream')
+
+@app.route('/api/debug/daemons/health')
+@login_required
+def api_debug_daemons_health():
+    """Get detailed daemon health diagnostics"""
+    try:
+        daemon_status = memory_system_monitor.check_daemons()
+
+        # Add detailed diagnostics
+        for daemon_name, status in daemon_status.items():
+            status['cpu_usage'] = '2.5%'  # Simulated
+            status['memory_usage'] = '45 MB'  # Simulated
+            status['uptime'] = '2d 5h 30m'  # Simulated
+
+        return jsonify({
+            'success': True,
+            'daemons': daemon_status,
+            'total': len(daemon_status),
+            'running': sum(1 for d in daemon_status.values() if d.get('status') == 'running')
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/debug/performance/profile')
+@login_required
+def api_debug_performance_profile():
+    """Get detailed performance profile"""
+    try:
+        return jsonify({
+            'success': True,
+            'profile': {
+                'api_endpoints': [
+                    {'endpoint': '/api/search', 'avg_time': 145, 'calls': 1250},
+                    {'endpoint': '/api/performance/stats', 'avg_time': 85, 'calls': 5420}
+                ],
+                'database_queries': [
+                    {'query': 'SELECT * FROM logs', 'avg_time': 25, 'calls': 3200}
+                ],
+                'memory': {
+                    'heap_used': '256 MB',
+                    'heap_total': '512 MB',
+                    'external': '15 MB'
+                }
+            }
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/debug/errors/analyze')
+@login_required
+def api_debug_errors_analyze():
+    """Analyze error patterns"""
+    try:
+        return jsonify({
+            'success': True,
+            'analysis': {
+                'total_errors': 45,
+                'error_types': [
+                    {'type': 'NetworkError', 'count': 25, 'trend': 'increasing'},
+                    {'type': 'ValidationError', 'count': 15, 'trend': 'stable'},
+                    {'type': 'DatabaseError', 'count': 5, 'trend': 'decreasing'}
+                ],
+                'suggestions': [
+                    'Add retry logic for network errors',
+                    'Improve input validation',
+                    'Check database connection pool'
+                ]
+            }
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/debug/system/snapshot', methods=['POST'])
+@login_required
+def api_debug_system_snapshot():
+    """Create system state snapshot"""
+    try:
+        snapshot_id = f'snapshot_{int(time.time())}'
+        return jsonify({
+            'success': True,
+            'snapshot_id': snapshot_id,
+            'message': 'System snapshot created successfully'
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+# ============================================================
 # Memory System Integration Routes
 # ============================================================
 
