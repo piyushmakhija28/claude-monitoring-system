@@ -1,8 +1,8 @@
-# Claude Monitoring System - Architecture Documentation
+# Claude Insight - Architecture Documentation
 
 ## Overview
 
-The Claude Monitoring System is a professional-grade monitoring and analytics platform designed to track, analyze, and optimize Claude AI's memory system performance. This document describes the system architecture, design patterns, and key components.
+The Claude Insight is a professional-grade monitoring and analytics platform designed to track, analyze, and optimize Claude AI's memory system performance. This document describes the system architecture, design patterns, and key components.
 
 ## Architecture Pattern
 
@@ -38,7 +38,7 @@ The system follows a **layered architecture** pattern with clear separation of c
 ## Directory Structure
 
 ```
-claude-monitoring-system/
+claude-insight/
 ├── src/                          # Source code root
 │   ├── __init__.py
 │   ├── app.py                    # Flask app initialization
@@ -330,8 +330,8 @@ gunicorn --worker-class eventlet -w 1 --bind 0.0.0.0:5000 run:app
 
 ### Docker
 ```bash
-docker build -t claude-monitoring-system .
-docker run -p 5000:5000 claude-monitoring-system
+docker build -t claude-insight .
+docker run -p 5000:5000 claude-insight
 ```
 
 ## Contributing

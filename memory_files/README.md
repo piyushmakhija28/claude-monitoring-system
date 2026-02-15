@@ -1,6 +1,6 @@
 # Claude Memory System v2.2.0 - Complete Files
 
-This directory contains all files from the Claude Memory System v2.2.0, integrated into the Claude Monitoring System.
+This directory contains all files from the Claude Memory System v2.2.0, integrated into the Claude Insight.
 
 ## 📁 Directory Structure
 
@@ -185,7 +185,7 @@ memory_files/
 
 ## 🎯 Usage in Monitoring System
 
-The Claude Monitoring System (v2.12) integrates with these files to provide:
+The Claude Insight (v2.12) integrates with these files to provide:
 
 1. **Real-time daemon health monitoring**
 2. **Policy enforcement tracking**
@@ -210,4 +210,4 @@ The monitoring system reads log files, PID files, and configuration files to pro
 **Version:** 2.2.0
 **Status:** ✅ FULLY OPERATIONAL
 **Last Updated:** February 2026
-**Integration:** Claude Monitoring System v2.12
+**Integration:** Claude Insight v2.12

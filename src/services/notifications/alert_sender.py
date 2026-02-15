@@ -170,13 +170,13 @@ class AlertSender:
             </head>
             <body>
                 <div class="header">
-                    <h2>🤖 Claude Monitoring System Alert</h2>
+                    <h2>🤖 Claude Insight Alert</h2>
                 </div>
                 <div class="content">
                     {body}
                 </div>
                 <div class="footer">
-                    <p>This is an automated alert from Claude Monitoring System v2.5</p>
+                    <p>This is an automated alert from Claude Insight v2.5</p>
                     <p>Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
                 </div>
             </body>
@@ -309,11 +309,11 @@ class AlertSender:
 
     def test_email(self, config):
         """Send test email"""
-        subject = "[TEST] Claude Monitoring System"
-        body = "This is a test email from Claude Monitoring System. If you receive this, email alerts are working correctly!"
+        subject = "[TEST] Claude Insight"
+        body = "This is a test email from Claude Insight. If you receive this, email alerts are working correctly!"
         return self.send_email(subject, body, config)
 
     def test_sms(self, config):
         """Send test SMS"""
-        message = "[TEST] Claude Monitoring System - SMS alerts are working!"
+        message = "[TEST] Claude Insight - SMS alerts are working!"
         return self.send_sms(message, config)

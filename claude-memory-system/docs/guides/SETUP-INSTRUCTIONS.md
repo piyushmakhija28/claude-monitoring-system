@@ -106,7 +106,7 @@ bash ~/.claude/memory/verify-system.sh
 ### **Step 5: Run the dashboard**
 ```bash
 # Go back to dashboard directory
-cd ../../claude-monitoring-system
+cd ../../claude-insight
 
 # Install dependencies (if not done)
 pip install -r requirements.txt

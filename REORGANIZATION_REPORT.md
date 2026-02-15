@@ -1,4 +1,4 @@
-# Claude Monitoring System - Reorganization Report
+# Claude Insight - Reorganization Report
 
 **Date**: 2026-02-15
 **Status**: ✅ COMPLETED SUCCESSFULLY
@@ -8,14 +8,14 @@
 
 ## Executive Summary
 
-The Claude Monitoring System codebase has been successfully reorganized from a flat structure into a professional, modular package architecture. All files have been copied (NOT deleted) to their new locations, imports have been updated, and the new structure has been verified to work correctly.
+The Claude Insight codebase has been successfully reorganized from a flat structure into a professional, modular package architecture. All files have been copied (NOT deleted) to their new locations, imports have been updated, and the new structure has been verified to work correctly.
 
 ---
 
 ## Directory Structure Created
 
 ```
-claude-monitoring-system/
+claude-insight/
 ├── src/                                    # NEW: Source code root
 │   ├── __init__.py                         # Created
 │   ├── app.py                              # Copied & updated imports

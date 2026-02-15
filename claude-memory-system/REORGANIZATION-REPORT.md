@@ -2,7 +2,7 @@
 
 **Date:** 2026-02-15
 **Version:** 2.0
-**Location:** `C:\Users\techd\Documents\workspace-spring-tool-suite-4-4.27.0-new\claude-monitoring-system\claude-memory-system`
+**Location:** `C:\Users\techd\Documents\workspace-spring-tool-suite-4-4.27.0-new\claude-insight\claude-memory-system`
 
 ---
 

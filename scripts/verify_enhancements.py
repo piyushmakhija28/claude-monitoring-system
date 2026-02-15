@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Verification script for Claude Monitoring System enhancements
+Verification script for Claude Insight enhancements
 Checks if all new features are properly installed
 """
 
@@ -10,7 +10,7 @@ import sys
 def verify_files():
     """Verify all required files exist"""
     print("=" * 60)
-    print("Claude Monitoring System - Enhancement Verification")
+    print("Claude Insight - Enhancement Verification")
     print("=" * 60)
     print()
 

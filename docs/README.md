@@ -1,8 +1,8 @@
-# 🤖 Claude Monitoring System v2.13
+# 🤖 Claude Insight v2.13
 
 **Professional Real-time Analytics Dashboard with Complete Claude Memory System v2.2.0 Integration**
 
-[![GitHub](https://img.shields.io/badge/GitHub-claude--monitoring--system-blue?logo=github)](https://github.com/piyushmakhija28/claude-monitoring-system)
+[![GitHub](https://img.shields.io/badge/GitHub-claude--monitoring--system-blue?logo=github)](https://github.com/piyushmakhija28/claude-insight)
 [![Python](https://img.shields.io/badge/Python-3.7+-blue?logo=python)](https://www.python.org/)
 [![Flask](https://img.shields.io/badge/Flask-3.0-green?logo=flask)](https://flask.palletsprojects.com/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -69,7 +69,7 @@ A comprehensive, real-time monitoring and analytics dashboard for the Claude Mem
 
 ## Overview
 
-The Claude Monitoring System is a professional-grade dashboard that provides complete visibility into your Claude Memory System v2.2.0 deployment. Monitor daemon health, track policy enforcement, analyze token consumption, detect anomalies, and optimize performance - all in real-time.
+The Claude Insight is a professional-grade dashboard that provides complete visibility into your Claude Memory System v2.2.0 deployment. Monitor daemon health, track policy enforcement, analyze token consumption, detect anomalies, and optimize performance - all in real-time.
 
 ### Why This Was Built
 
@@ -366,8 +366,8 @@ Create → Route → Notify → Escalate → Acknowledge → Resolve
 
 #### 1. Clone the Repository
 ```bash
-git clone https://github.com/piyushmakhija28/claude-monitoring-system.git
-cd claude-monitoring-system
+git clone https://github.com/piyushmakhija28/claude-insight.git
+cd claude-insight
 ```
 
 #### 2. Install Dependencies
@@ -993,8 +993,8 @@ secret-manager:
 
 #### 1. Clone Repository
 ```bash
-git clone https://github.com/piyushmakhija28/claude-monitoring-system.git
-cd claude-monitoring-system
+git clone https://github.com/piyushmakhija28/claude-insight.git
+cd claude-insight
 ```
 
 #### 2. Install Python Dependencies
@@ -1536,7 +1536,7 @@ Full Swagger documentation available at: **http://localhost:5000/api/docs**
 ## Project Structure
 
 ```
-claude-monitoring-system/
+claude-insight/
 ├── app.py                          # Main Flask application (3,560 lines)
 ├── requirements.txt                # Python dependencies
 ├── verify_enhancements.py          # Installation verification
@@ -1837,7 +1837,7 @@ If you encounter issues:
 2. **Run health check**: `bash ~/.claude/memory/verify-system.sh`
 3. **View dashboard**: `bash ~/.claude/memory/dashboard-v2.sh`
 4. **Read documentation**: `claude-memory-system/MASTER-README.md`
-5. **Open GitHub issue**: [Report issue](https://github.com/piyushmakhija28/claude-monitoring-system/issues)
+5. **Open GitHub issue**: [Report issue](https://github.com/piyushmakhija28/claude-insight/issues)
 
 ---
 
@@ -1971,13 +1971,13 @@ SOFTWARE.
 
 **Developer:** TechDeveloper
 **Website:** [www.techdeveloper.in](https://www.techdeveloper.in)
-**GitHub:** [piyushmakhija28/claude-monitoring-system](https://github.com/piyushmakhija28/claude-monitoring-system)
+**GitHub:** [piyushmakhija28/claude-insight](https://github.com/piyushmakhija28/claude-insight)
 
 **Support:**
-- 🐛 [Report Bug](https://github.com/piyushmakhija28/claude-monitoring-system/issues)
-- ✨ [Request Feature](https://github.com/piyushmakhija28/claude-monitoring-system/issues)
+- 🐛 [Report Bug](https://github.com/piyushmakhija28/claude-insight/issues)
+- ✨ [Request Feature](https://github.com/piyushmakhija28/claude-insight/issues)
 - 📖 [Documentation](./claude-memory-system/MASTER-README.md)
-- 💬 [Discussions](https://github.com/piyushmakhija28/claude-monitoring-system/discussions)
+- 💬 [Discussions](https://github.com/piyushmakhija28/claude-insight/discussions)
 
 ---
 

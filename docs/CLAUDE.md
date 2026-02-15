@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Claude Monitoring System v2.13** - A professional real-time analytics dashboard for monitoring the Claude Memory System v2.2.0. This Flask-based web application provides complete visibility into daemon health, policy enforcement, token consumption, anomaly detection, and performance optimization.
+**Claude Insight v2.13** - A professional real-time analytics dashboard for monitoring the Claude Memory System v2.2.0. This Flask-based web application provides complete visibility into daemon health, policy enforcement, token consumption, anomaly detection, and performance optimization.
 
 **Key Capabilities:**
 - Real-time monitoring of 8-9 background daemons
@@ -351,7 +351,7 @@ def protected_route():
 ### Application Settings (app.py)
 
 ```python
-app.secret_key = 'claude-monitoring-system-secret-key-2026'
+app.secret_key = 'claude-insight-secret-key-2026'
 # Change in production!
 
 # SocketIO config
@@ -492,7 +492,7 @@ When working with Memory System files (`claude-memory-system/`):
 ## Project Structure Summary
 
 ```
-claude-monitoring-system/
+claude-insight/
 ├── app.py                         # Main Flask application (3,500+ lines)
 ├── requirements.txt               # Python dependencies (14 packages)
 ├── verify_enhancements.py         # Enhancement validation script

@@ -1,6 +1,6 @@
 """
-Claude Monitoring System
-A professional dashboard for monitoring Claude Memory System v2.0
+Claude Insight
+A professional real-time analytics and performance insights dashboard for Claude Memory System v2.2.0
 """
 
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify, Response, send_file
@@ -48,7 +48,7 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 
 app = Flask(__name__)
-app.secret_key = 'claude-monitoring-system-secret-key-2026'
+app.secret_key = 'claude-insight-secret-key-2026'
 
 # Initialize SocketIO for real-time updates
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
@@ -1985,7 +1985,7 @@ def export_pdf(type):
         )
 
         # Title
-        title = Paragraph(f'Claude Monitoring System - {type.title()} Report', title_style)
+        title = Paragraph(f'Claude Insight - {type.title()} Report', title_style)
         elements.append(title)
         elements.append(Spacer(1, 0.3*inch))
 
@@ -3286,7 +3286,7 @@ def format_number(value):
 def handle_connect():
     """Handle client connection"""
     print(f'Client connected: {request.sid}')
-    emit('connection_response', {'status': 'connected', 'message': 'Connected to Claude Monitoring System'})
+    emit('connection_response', {'status': 'connected', 'message': 'Connected to Claude Insight'})
 
 @socketio.on('disconnect')
 def handle_disconnect():
@@ -3529,7 +3529,7 @@ thread.start()
 if __name__ == '__main__':
     print("""
     ============================================================
-    Claude Monitoring System v2.12 (Memory Integration Edition)
+    Claude Insight v2.12 (Memory Integration Edition)
     ============================================================
 
     Dashboard URL: http://localhost:5000

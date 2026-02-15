@@ -1,4 +1,4 @@
-"""Configuration Management for Claude Monitoring System"""
+"""Configuration Management for Claude Insight"""
 
 import os
 from pathlib import Path

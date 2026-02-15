@@ -1,5 +1,5 @@
 """
-Setup configuration for Claude Monitoring System
+Setup configuration for Claude Insight
 """
 
 from setuptools import setup, find_packages
@@ -20,14 +20,14 @@ if requirements_file.exists():
     ]
 
 setup(
-    name='claude-monitoring-system',
+    name='claude-insight',
     version='1.0.0',
-    description='Advanced monitoring and analytics dashboard for Claude AI memory system',
+    description='Advanced real-time analytics and performance insights for Claude AI memory system',
     long_description=long_description,
     long_description_content_type='text/markdown',
     author='TechDeveloper',
     author_email='',
-    url='https://github.com/yourusername/claude-monitoring-system',
+    url='https://github.com/yourusername/claude-insight',
     license='MIT',
 
     # Package configuration
@@ -42,7 +42,7 @@ setup(
     # Entry points
     entry_points={
         'console_scripts': [
-            'claude-monitoring=run:main',
+            'claude-insight=run:main',
         ],
     },
 
@@ -62,10 +62,10 @@ setup(
     ],
 
     # Additional metadata
-    keywords='claude ai monitoring dashboard analytics flask',
+    keywords='claude ai monitoring dashboard analytics flask insight performance',
     project_urls={
-        'Documentation': 'https://github.com/yourusername/claude-monitoring-system/docs',
-        'Source': 'https://github.com/yourusername/claude-monitoring-system',
-        'Tracker': 'https://github.com/yourusername/claude-monitoring-system/issues',
+        'Documentation': 'https://github.com/yourusername/claude-insight/docs',
+        'Source': 'https://github.com/yourusername/claude-insight',
+        'Tracker': 'https://github.com/yourusername/claude-insight/issues',
     },
 )

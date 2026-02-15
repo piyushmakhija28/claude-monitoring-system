@@ -1,5 +1,5 @@
 """
-Claude Monitoring System - Application Entry Point
+Claude Insight - Application Entry Point
 
 This is the main entry point for running the Flask application.
 """
@@ -22,7 +22,7 @@ if __name__ == '__main__':
     config.init_app(app)
 
     # Run application
-    print("Starting Claude Monitoring System...")
+    print("Starting Claude Insight...")
     print(f"Environment: {config.__class__.__name__}")
     print(f"Debug mode: {config.DEBUG}")
 
