@@ -3443,6 +3443,551 @@ def api_performance_trends():
         return jsonify({'success': False, 'message': str(e)}), 500
 
 # ============================================================
+# Advanced Search Routes
+# ============================================================
+
+@app.route('/advanced-search')
+@login_required
+def advanced_search():
+    """Advanced Search & Filtering Page"""
+    return render_template('advanced-search.html')
+
+@app.route('/api/search', methods=['POST'])
+@login_required
+def api_search():
+    """
+    Perform global search across all data sources
+    ---
+    tags:
+      - Search
+    parameters:
+      - name: body
+        in: body
+        required: true
+        schema:
+          type: object
+          properties:
+            query:
+              type: string
+              description: Search query
+            regex_mode:
+              type: boolean
+              description: Enable regex pattern matching
+            filters:
+              type: object
+              description: Search filters (data_sources, date_range, severities, etc.)
+    responses:
+      200:
+        description: Search results with metadata
+    """
+    try:
+        import re
+        data = request.get_json()
+        query = data.get('query', '').strip()
+        regex_mode = data.get('regex_mode', False)
+        filters = data.get('filters', {})
+
+        if not query:
+            return jsonify({
+                'success': False,
+                'message': 'Query parameter is required'
+            }), 400
+
+        # Start timing
+        start_time = time.time()
+
+        # Collect results from all data sources
+        all_results = []
+        sources_searched = []
+
+        # Get selected data sources
+        data_sources = filters.get('data_sources', ['all'])
+        if 'all' in data_sources:
+            data_sources = ['logs', 'sessions', 'policies', 'daemons', 'performance', 'alerts', 'widgets']
+
+        # Search in each data source
+        if 'logs' in data_sources:
+            log_results = search_logs(query, regex_mode, filters)
+            all_results.extend(log_results)
+            sources_searched.append('logs')
+
+        if 'sessions' in data_sources:
+            session_results = search_sessions(query, regex_mode, filters)
+            all_results.extend(session_results)
+            sources_searched.append('sessions')
+
+        if 'policies' in data_sources:
+            policy_results = search_policies(query, regex_mode, filters)
+            all_results.extend(policy_results)
+            sources_searched.append('policies')
+
+        if 'daemons' in data_sources:
+            daemon_results = search_daemons(query, regex_mode, filters)
+            all_results.extend(daemon_results)
+            sources_searched.append('daemons')
+
+        if 'performance' in data_sources:
+            perf_results = search_performance(query, regex_mode, filters)
+            all_results.extend(perf_results)
+            sources_searched.append('performance')
+
+        if 'alerts' in data_sources:
+            alert_results = search_alerts(query, regex_mode, filters)
+            all_results.extend(alert_results)
+            sources_searched.append('alerts')
+
+        if 'widgets' in data_sources:
+            widget_results = search_widgets(query, regex_mode, filters)
+            all_results.extend(widget_results)
+            sources_searched.append('widgets')
+
+        # Filter by severity
+        severities = filters.get('severities', [])
+        if severities:
+            all_results = [r for r in all_results if r.get('severity', '').lower() in [s.lower() for s in severities]]
+
+        # Filter by date range
+        date_range = filters.get('date_range', 'all')
+        if date_range != 'all':
+            all_results = filter_by_date_range(all_results, date_range, filters)
+
+        # Filter by tags
+        tags = filters.get('tags', [])
+        if tags:
+            all_results = [r for r in all_results if any(tag in r.get('tags', []) for tag in tags)]
+
+        # Sort results
+        sort_by = filters.get('sort_by', 'relevance')
+        all_results = sort_results(all_results, sort_by, query)
+
+        # Apply limit
+        limit = filters.get('limit', '100')
+        if limit != 'all':
+            all_results = all_results[:int(limit)]
+
+        # Calculate search time
+        search_time = int((time.time() - start_time) * 1000)  # ms
+
+        return jsonify({
+            'success': True,
+            'results': all_results,
+            'stats': {
+                'total_results': len(all_results),
+                'search_time': search_time,
+                'sources_searched': len(sources_searched),
+                'query': query
+            }
+        })
+
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Search failed: {str(e)}'
+        }), 500
+
+@app.route('/api/search/export', methods=['POST'])
+@login_required
+def api_search_export():
+    """
+    Export search results to various formats
+    ---
+    tags:
+      - Search
+    parameters:
+      - name: body
+        in: body
+        required: true
+        schema:
+          type: object
+          properties:
+            format:
+              type: string
+              enum: [csv, json, excel]
+              description: Export format
+            results:
+              type: array
+              description: Search results to export
+    responses:
+      200:
+        description: Exported file
+    """
+    try:
+        data = request.get_json()
+        export_format = data.get('format', 'csv')
+        results = data.get('results', [])
+
+        if not results:
+            return jsonify({
+                'success': False,
+                'message': 'No results to export'
+            }), 400
+
+        if export_format == 'csv':
+            # Create CSV
+            output = io.StringIO()
+            writer = csv.DictWriter(output, fieldnames=['id', 'source', 'timestamp', 'severity', 'content', 'tags'])
+            writer.writeheader()
+            for result in results:
+                writer.writerow({
+                    'id': result.get('id', ''),
+                    'source': result.get('source', ''),
+                    'timestamp': result.get('timestamp', ''),
+                    'severity': result.get('severity', ''),
+                    'content': result.get('content', ''),
+                    'tags': ','.join(result.get('tags', []))
+                })
+
+            # Create response
+            csv_data = output.getvalue()
+            response = Response(csv_data, mimetype='text/csv')
+            response.headers['Content-Disposition'] = f'attachment; filename=search_results_{int(time.time())}.csv'
+            return response
+
+        elif export_format == 'json':
+            # Create JSON
+            json_data = {
+                'exported_at': datetime.now().isoformat(),
+                'total_results': len(results),
+                'results': results
+            }
+
+            response = Response(
+                json.dumps(json_data, indent=2),
+                mimetype='application/json'
+            )
+            response.headers['Content-Disposition'] = f'attachment; filename=search_results_{int(time.time())}.json'
+            return response
+
+        elif export_format == 'excel':
+            # Create Excel
+            wb = Workbook()
+            ws = wb.active
+            ws.title = 'Search Results'
+
+            # Headers
+            headers = ['ID', 'Source', 'Timestamp', 'Severity', 'Content', 'Tags']
+            ws.append(headers)
+
+            # Style headers
+            for cell in ws[1]:
+                cell.font = Font(bold=True)
+                cell.fill = PatternFill(start_color='366092', end_color='366092', fill_type='solid')
+                cell.alignment = Alignment(horizontal='center')
+
+            # Data rows
+            for result in results:
+                ws.append([
+                    result.get('id', ''),
+                    result.get('source', ''),
+                    result.get('timestamp', ''),
+                    result.get('severity', ''),
+                    result.get('content', ''),
+                    ','.join(result.get('tags', []))
+                ])
+
+            # Save to BytesIO
+            excel_file = io.BytesIO()
+            wb.save(excel_file)
+            excel_file.seek(0)
+
+            response = Response(excel_file.read(), mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+            response.headers['Content-Disposition'] = f'attachment; filename=search_results_{int(time.time())}.xlsx'
+            return response
+
+        else:
+            return jsonify({
+                'success': False,
+                'message': f'Unsupported export format: {export_format}'
+            }), 400
+
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Export failed: {str(e)}'
+        }), 500
+
+@app.route('/api/search/suggestions')
+@login_required
+def api_search_suggestions():
+    """
+    Get search suggestions (autocomplete)
+    ---
+    tags:
+      - Search
+    parameters:
+      - name: query
+        in: query
+        type: string
+        description: Partial search query
+    responses:
+      200:
+        description: List of search suggestions
+    """
+    try:
+        query = request.args.get('query', '').strip()
+
+        if len(query) < 2:
+            return jsonify({
+                'success': True,
+                'suggestions': []
+            })
+
+        # Generate suggestions based on common search patterns
+        suggestions = []
+
+        # Add recent searches (from history)
+        # This would typically come from a database
+
+        # Add common search patterns
+        common_patterns = [
+            f'severity:critical {query}',
+            f'severity:high {query}',
+            f'source:logs {query}',
+            f'source:sessions {query}',
+            f'date:today {query}',
+            f'date:last7days {query}'
+        ]
+
+        suggestions.extend([p for p in common_patterns if query.lower() in p.lower()][:5])
+
+        return jsonify({
+            'success': True,
+            'suggestions': suggestions
+        })
+
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': str(e)
+        }), 500
+
+# ============================================================
+# Search Helper Functions
+# ============================================================
+
+def search_logs(query, regex_mode, filters):
+    """Search in logs"""
+    results = []
+    try:
+        # Get logs from log_parser
+        logs = log_parser.get_recent_logs(limit=1000)
+
+        for i, log in enumerate(logs):
+            content = log.get('message', '')
+            if match_query(content, query, regex_mode):
+                results.append({
+                    'id': f'log-{i}',
+                    'source': 'logs',
+                    'timestamp': log.get('timestamp', datetime.now().isoformat()),
+                    'severity': log.get('level', 'info'),
+                    'content': content,
+                    'tags': log.get('tags', [])
+                })
+    except Exception as e:
+        print(f"Error searching logs: {e}")
+
+    return results
+
+def search_sessions(query, regex_mode, filters):
+    """Search in sessions"""
+    results = []
+    try:
+        # Get sessions from session_tracker
+        sessions = session_tracker.get_all_sessions()
+
+        for session_id, session in sessions.items():
+            content = f"Session {session_id}: {session.get('description', '')}"
+            if match_query(content, query, regex_mode):
+                results.append({
+                    'id': f'session-{session_id}',
+                    'source': 'sessions',
+                    'timestamp': session.get('started_at', datetime.now().isoformat()),
+                    'severity': 'info',
+                    'content': content,
+                    'tags': session.get('tags', [])
+                })
+    except Exception as e:
+        print(f"Error searching sessions: {e}")
+
+    return results
+
+def search_policies(query, regex_mode, filters):
+    """Search in policies"""
+    results = []
+    try:
+        # Get policies from policy_checker
+        policies = policy_checker.get_all_policies()
+
+        for i, policy in enumerate(policies):
+            content = f"{policy.get('name', '')}: {policy.get('description', '')}"
+            if match_query(content, query, regex_mode):
+                results.append({
+                    'id': f'policy-{i}',
+                    'source': 'policies',
+                    'timestamp': policy.get('last_checked', datetime.now().isoformat()),
+                    'severity': 'medium' if policy.get('enforced') else 'low',
+                    'content': content,
+                    'tags': ['policy', policy.get('category', 'general')]
+                })
+    except Exception as e:
+        print(f"Error searching policies: {e}")
+
+    return results
+
+def search_daemons(query, regex_mode, filters):
+    """Search in daemon status"""
+    results = []
+    try:
+        # Get daemon status from memory_system_monitor
+        daemon_status = memory_system_monitor.check_daemons()
+
+        for daemon_name, status in daemon_status.items():
+            content = f"Daemon {daemon_name}: {status.get('status', 'unknown')}"
+            if match_query(content, query, regex_mode):
+                severity = 'success' if status.get('status') == 'running' else 'critical'
+                results.append({
+                    'id': f'daemon-{daemon_name}',
+                    'source': 'daemons',
+                    'timestamp': datetime.now().isoformat(),
+                    'severity': severity,
+                    'content': content,
+                    'tags': ['daemon', daemon_name]
+                })
+    except Exception as e:
+        print(f"Error searching daemons: {e}")
+
+    return results
+
+def search_performance(query, regex_mode, filters):
+    """Search in performance data"""
+    results = []
+    try:
+        # Get slow operations from performance_profiler
+        slow_ops = performance_profiler.get_slow_operations(limit=500)
+
+        for i, op in enumerate(slow_ops):
+            content = f"{op.get('tool', '')}: {op.get('target', '')} ({op.get('duration_ms', 0)}ms)"
+            if match_query(content, query, regex_mode):
+                results.append({
+                    'id': f'perf-{i}',
+                    'source': 'performance',
+                    'timestamp': op.get('timestamp', datetime.now().isoformat()),
+                    'severity': 'warning' if op.get('duration_ms', 0) > 5000 else 'medium',
+                    'content': content,
+                    'tags': ['performance', op.get('tool', '')]
+                })
+    except Exception as e:
+        print(f"Error searching performance: {e}")
+
+    return results
+
+def search_alerts(query, regex_mode, filters):
+    """Search in alerts"""
+    results = []
+    try:
+        # Get alerts from notification_manager
+        alerts = notification_manager.get_recent_alerts(limit=500)
+
+        for i, alert in enumerate(alerts):
+            content = f"{alert.get('title', '')}: {alert.get('message', '')}"
+            if match_query(content, query, regex_mode):
+                results.append({
+                    'id': f'alert-{i}',
+                    'source': 'alerts',
+                    'timestamp': alert.get('created_at', datetime.now().isoformat()),
+                    'severity': alert.get('severity', 'medium'),
+                    'content': content,
+                    'tags': alert.get('tags', [])
+                })
+    except Exception as e:
+        print(f"Error searching alerts: {e}")
+
+    return results
+
+def search_widgets(query, regex_mode, filters):
+    """Search in widgets"""
+    results = []
+    try:
+        # Get widgets from community_widgets_manager
+        widgets = community_widgets_manager.list_widgets()
+
+        for i, widget in enumerate(widgets):
+            content = f"{widget.get('name', '')}: {widget.get('description', '')}"
+            if match_query(content, query, regex_mode):
+                results.append({
+                    'id': f'widget-{i}',
+                    'source': 'widgets',
+                    'timestamp': widget.get('created_at', datetime.now().isoformat()),
+                    'severity': 'info',
+                    'content': content,
+                    'tags': widget.get('tags', [])
+                })
+    except Exception as e:
+        print(f"Error searching widgets: {e}")
+
+    return results
+
+def match_query(content, query, regex_mode):
+    """Check if content matches query"""
+    try:
+        if regex_mode:
+            import re
+            return bool(re.search(query, content, re.IGNORECASE))
+        else:
+            return query.lower() in content.lower()
+    except:
+        return False
+
+def filter_by_date_range(results, date_range, filters):
+    """Filter results by date range"""
+    from datetime import datetime, timedelta
+
+    now = datetime.now()
+
+    if date_range == 'today':
+        start_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    elif date_range == 'yesterday':
+        start_date = (now - timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+        end_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        return [r for r in results if start_date <= datetime.fromisoformat(r['timestamp'].replace('Z', '')) < end_date]
+    elif date_range == 'last7days':
+        start_date = now - timedelta(days=7)
+    elif date_range == 'last30days':
+        start_date = now - timedelta(days=30)
+    elif date_range == 'last90days':
+        start_date = now - timedelta(days=90)
+    elif date_range == 'custom':
+        start_date = datetime.fromisoformat(filters.get('start_date', now.isoformat()))
+        end_date = datetime.fromisoformat(filters.get('end_date', now.isoformat()))
+        return [r for r in results if start_date <= datetime.fromisoformat(r['timestamp'].replace('Z', '')) <= end_date]
+    else:
+        return results
+
+    return [r for r in results if datetime.fromisoformat(r['timestamp'].replace('Z', '')) >= start_date]
+
+def sort_results(results, sort_by, query=''):
+    """Sort search results"""
+    if sort_by == 'date_desc':
+        return sorted(results, key=lambda x: x.get('timestamp', ''), reverse=True)
+    elif sort_by == 'date_asc':
+        return sorted(results, key=lambda x: x.get('timestamp', ''))
+    elif sort_by == 'severity':
+        severity_order = {'critical': 0, 'high': 1, 'warning': 2, 'medium': 3, 'low': 4, 'info': 5, 'success': 6}
+        return sorted(results, key=lambda x: severity_order.get(x.get('severity', 'info'), 5))
+    elif sort_by == 'source':
+        return sorted(results, key=lambda x: x.get('source', ''))
+    else:  # relevance
+        # Simple relevance scoring based on query position in content
+        def relevance_score(result):
+            content = result.get('content', '').lower()
+            query_lower = query.lower()
+            if query_lower in content:
+                return content.index(query_lower)
+            return 99999
+
+        return sorted(results, key=relevance_score)
+
+# ============================================================
 # Memory System Integration Routes
 # ============================================================
 
