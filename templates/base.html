@@ -475,71 +475,120 @@
             </button>
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav ms-auto">
+                    <!-- Dashboard -->
                     <li class="nav-item">
                         <a class="nav-link {% if request.endpoint == 'dashboard' %}active{% endif %}" href="{{ url_for('dashboard') }}">
                             <i class="fas fa-tachometer-alt"></i> Dashboard
                         </a>
                     </li>
-                    <li class="nav-item">
-                        <a class="nav-link {% if request.endpoint == 'comparison' %}active{% endif %}" href="{{ url_for('comparison') }}">
-                            <i class="fas fa-chart-line"></i> Cost Comparison
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link {% if request.endpoint == 'analytics' %}active{% endif %}" href="{{ url_for('analytics') }}">
+
+                    <!-- Analytics Dropdown -->
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle {% if request.endpoint in ['analytics', 'comparison', 'predictive_analytics_page', 'performance_profiling'] %}active{% endif %}"
+                           href="#" id="analyticsDropdown" role="button" data-bs-toggle="dropdown">
                             <i class="fas fa-chart-bar"></i> Analytics
                         </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="{{ url_for('analytics') }}">
+                                <i class="fas fa-chart-bar me-2"></i>Analytics Dashboard
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('comparison') }}">
+                                <i class="fas fa-chart-line me-2"></i>Cost Comparison
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('predictive_analytics_page') }}">
+                                <i class="fas fa-chart-line me-2"></i>Forecasting
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('performance_profiling') }}">
+                                <i class="fas fa-tachometer-alt me-2"></i>Performance
+                            </a></li>
+                        </ul>
                     </li>
-                    <li class="nav-item">
-                        <a class="nav-link {% if request.endpoint == 'automation_dashboard' %}active{% endif %}" href="{{ url_for('automation_dashboard') }}">
-                            <i class="fas fa-robot"></i> Automation
+
+                    <!-- AI & Automation Dropdown -->
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle {% if request.endpoint in ['automation_dashboard', 'anomaly_detection', 'ml_training'] %}active{% endif %}"
+                           href="#" id="aiDropdown" role="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-brain"></i> AI & Automation
                         </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="{{ url_for('automation_dashboard') }}">
+                                <i class="fas fa-robot me-2"></i>Automation
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('anomaly_detection') }}">
+                                <i class="fas fa-brain me-2"></i>AI Detection
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('ml_training') }}">
+                                <i class="fas fa-brain me-2"></i>ML Training
+                            </a></li>
+                        </ul>
                     </li>
-                    <li class="nav-item">
-                        <a class="nav-link {% if request.endpoint == 'anomaly_detection' %}active{% endif %}" href="{{ url_for('anomaly_detection') }}">
-                            <i class="fas fa-brain"></i> AI Detection
+
+                    <!-- Sessions & Search Dropdown -->
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle {% if request.endpoint in ['sessions', 'session_search.session_search_page', 'advanced_search', 'logs'] %}active{% endif %}"
+                           href="#" id="sessionsDropdown" role="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-history"></i> Sessions
                         </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="{{ url_for('sessions') }}">
+                                <i class="fas fa-history me-2"></i>Session History
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('session_search.session_search_page') }}">
+                                <i class="fas fa-search me-2"></i>Session Search
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('advanced_search') }}">
+                                <i class="fas fa-search me-2"></i>Advanced Search
+                            </a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="{{ url_for('logs') }}">
+                                <i class="fas fa-file-alt me-2"></i>Logs
+                            </a></li>
+                        </ul>
                     </li>
-                    <li class="nav-item">
-                        <a class="nav-link {% if request.endpoint == 'predictive_analytics_page' %}active{% endif %}" href="{{ url_for('predictive_analytics_page') }}">
-                            <i class="fas fa-chart-line"></i> Forecasting
+
+                    <!-- Widgets Dropdown -->
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle {% if request.endpoint in ['widgets', 'widget_builder', 'community_marketplace'] %}active{% endif %}"
+                           href="#" id="widgetsDropdown" role="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-puzzle-piece"></i> Widgets
                         </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="{{ url_for('widgets') }}">
+                                <i class="fas fa-store me-2"></i>Marketplace
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('widget_builder') }}">
+                                <i class="fas fa-magic me-2"></i>Widget Builder
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('dashboard_builder') }}">
+                                <i class="fas fa-th-large me-2"></i>Dashboard Builder
+                            </a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="{{ url_for('community_marketplace') }}">
+                                <i class="fas fa-users me-2"></i>Community
+                            </a></li>
+                        </ul>
                     </li>
-                    <li class="nav-item">
-                        <a class="nav-link {% if request.endpoint == 'alert_routing_page' %}active{% endif %}" href="{{ url_for('alert_routing_page') }}">
-                            <i class="fas fa-route"></i> Alert Routing
+
+                    <!-- Tools Dropdown -->
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle {% if request.endpoint in ['debugging_tools', 'plugins', 'alert_routing_page'] %}active{% endif %}"
+                           href="#" id="toolsDropdown" role="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-tools"></i> Tools
                         </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="{{ url_for('debugging_tools') }}">
+                                <i class="fas fa-bug me-2"></i>Debugging
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('plugins') }}">
+                                <i class="fas fa-puzzle-piece me-2"></i>Plugins
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('alert_routing_page') }}">
+                                <i class="fas fa-route me-2"></i>Alert Routing
+                            </a></li>
+                        </ul>
                     </li>
-                    <li class="nav-item">
-                        <a class="nav-link {% if request.endpoint == 'performance_profiling' %}active{% endif %}" href="{{ url_for('performance_profiling') }}">
-                            <i class="fas fa-tachometer-alt"></i> Performance
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link {% if request.endpoint == 'advanced_search' %}active{% endif %}" href="{{ url_for('advanced_search') }}">
-                            <i class="fas fa-search"></i> Search
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link {% if request.endpoint == 'ml_training' %}active{% endif %}" href="{{ url_for('ml_training') }}">
-                            <i class="fas fa-brain"></i> ML Training
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link {% if request.endpoint == 'debugging_tools' %}active{% endif %}" href="{{ url_for('debugging_tools') }}">
-                            <i class="fas fa-bug"></i> Debug
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link {% if request.endpoint == 'dashboard_builder' %}active{% endif %}" href="{{ url_for('dashboard_builder') }}">
-                            <i class="fas fa-th-large"></i> Builder
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link {% if request.endpoint == 'plugins' %}active{% endif %}" href="{{ url_for('plugins') }}">
-                            <i class="fas fa-puzzle-piece"></i> Plugins
-                        </a>
-                    </li>
+
+                    <!-- Integrations Dropdown -->
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle {% if request.endpoint in ['integrations', 'notification_channels'] %}active{% endif %}"
                            href="#" id="integrationsDropdown" role="button" data-bs-toggle="dropdown">
@@ -554,61 +603,36 @@
                             </a></li>
                         </ul>
                     </li>
-                    <li class="nav-item">
-                        <a class="nav-link {% if request.endpoint == 'policies' %}active{% endif %}" href="{{ url_for('policies') }}">
-                            <i class="fas fa-shield-alt"></i> Policies
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link {% if request.endpoint == 'logs' %}active{% endif %}" href="{{ url_for('logs') }}">
-                            <i class="fas fa-file-alt"></i> Logs
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link {% if request.endpoint == 'sessions' %}active{% endif %}" href="{{ url_for('sessions') }}">
-                            <i class="fas fa-history"></i> Sessions
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link {% if request.endpoint == 'session_search.session_search_page' %}active{% endif %}" href="{{ url_for('session_search.session_search_page') }}">
-                            <i class="fas fa-search"></i> Session Search
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link {% if request.endpoint == 'claude_credentials.credentials_page' %}active{% endif %}" href="{{ url_for('claude_credentials.credentials_page') }}">
-                            <i class="fas fa-key"></i> Claude API
-                        </a>
-                    </li>
+
+                    <!-- Settings Dropdown -->
                     <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle {% if request.endpoint in ['widgets', 'widget_builder', 'community_marketplace'] %}active{% endif %}"
-                           href="#" id="widgetsDropdown" role="button" data-bs-toggle="dropdown">
-                            <i class="fas fa-puzzle-piece"></i> Widgets
+                        <a class="nav-link dropdown-toggle {% if request.endpoint in ['settings', 'twofa_settings', 'claude_credentials.credentials_page', 'policies'] %}active{% endif %}"
+                           href="#" id="settingsDropdown" role="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-cog"></i> Settings
                         </a>
-                        <ul class="dropdown-menu">
-                            <li><a class="dropdown-item" href="{{ url_for('widgets') }}">
-                                <i class="fas fa-store me-2"></i>Marketplace
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            <li><a class="dropdown-item" href="{{ url_for('settings') }}">
+                                <i class="fas fa-cog me-2"></i>General Settings
                             </a></li>
-                            <li><a class="dropdown-item" href="{{ url_for('widget_builder') }}">
-                                <i class="fas fa-magic me-2"></i>Builder
+                            <li><a class="dropdown-item" href="{{ url_for('claude_credentials.credentials_page') }}">
+                                <i class="fas fa-key me-2"></i>Claude API
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('twofa_settings') }}">
+                                <i class="fas fa-shield-alt me-2"></i>2FA Security
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('policies') }}">
+                                <i class="fas fa-shield-alt me-2"></i>Policies
                             </a></li>
                             <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item" href="{{ url_for('community_marketplace') }}">
-                                <i class="fas fa-users me-2"></i>Community
+                            <li><a class="dropdown-item" href="{{ url_for('logout') }}">
+                                <i class="fas fa-sign-out-alt me-2"></i>Logout
                             </a></li>
                         </ul>
                     </li>
+
+                    <!-- User Actions -->
                     <li class="nav-item">
-                        <a class="nav-link {% if request.endpoint == 'settings' %}active{% endif %}" href="{{ url_for('settings') }}">
-                            <i class="fas fa-cog"></i> Settings
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link {% if request.endpoint == 'twofa_settings' %}active{% endif %}" href="{{ url_for('twofa_settings') }}">
-                            <i class="fas fa-shield-alt"></i> 2FA
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link {% if request.endpoint == 'notifications' %}active{% endif %}" href="{{ url_for('notifications') }}">
+                        <a class="nav-link {% if request.endpoint == 'notifications' %}active{% endif %}" href="{{ url_for('notifications') }}" title="Notifications">
                             <i class="fas fa-bell"></i>
                             <span class="badge bg-danger notification-badge" id="notificationBadge" style="display: none;">0</span>
                         </a>
@@ -620,30 +644,25 @@
                     </li>
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" id="languageDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false" title="Change Language">
-                            <i class="fas fa-globe"></i> <span id="currentLanguage">English</span>
+                            <i class="fas fa-globe"></i>
                         </a>
                         <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="languageDropdown">
                             <li><a class="dropdown-item" href="javascript:void(0);" onclick="changeLanguage('en')">
-                                <i class="fas fa-check" id="lang-check-en" style="visibility: hidden;"></i> English
+                                <i class="fas fa-check me-2" id="lang-check-en" style="visibility: hidden;"></i> English
                             </a></li>
                             <li><a class="dropdown-item" href="javascript:void(0);" onclick="changeLanguage('hi')">
-                                <i class="fas fa-check" id="lang-check-hi" style="visibility: hidden;"></i> हिन्दी
+                                <i class="fas fa-check me-2" id="lang-check-hi" style="visibility: hidden;"></i> हिन्दी
                             </a></li>
                             <li><a class="dropdown-item" href="javascript:void(0);" onclick="changeLanguage('es')">
-                                <i class="fas fa-check" id="lang-check-es" style="visibility: hidden;"></i> Español
+                                <i class="fas fa-check me-2" id="lang-check-es" style="visibility: hidden;"></i> Español
                             </a></li>
                             <li><a class="dropdown-item" href="javascript:void(0);" onclick="changeLanguage('fr')">
-                                <i class="fas fa-check" id="lang-check-fr" style="visibility: hidden;"></i> Français
+                                <i class="fas fa-check me-2" id="lang-check-fr" style="visibility: hidden;"></i> Français
                             </a></li>
                             <li><a class="dropdown-item" href="javascript:void(0);" onclick="changeLanguage('de')">
-                                <i class="fas fa-check" id="lang-check-de" style="visibility: hidden;"></i> Deutsch
+                                <i class="fas fa-check me-2" id="lang-check-de" style="visibility: hidden;"></i> Deutsch
                             </a></li>
                         </ul>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('logout') }}">
-                            <i class="fas fa-sign-out-alt"></i> Logout
-                        </a>
                     </li>
                 </ul>
             </div>
@@ -658,15 +677,176 @@
     </div>
 
     {% if session.logged_in %}
-    <div class="footer">
-        <p>
-            <strong>Claude Insight v2.0</strong><br>
-            Developed with <i class="fas fa-heart text-danger pulse"></i> by <strong>TechDeveloper</strong><br>
-            <a href="https://www.techdeveloper.in" target="_blank" style="color: white; text-decoration: none;">
-                <i class="fas fa-globe"></i> www.techdeveloper.in
-            </a>
-        </p>
-    </div>
+    <!-- Professional Footer -->
+    <footer class="modern-footer mt-5">
+        <div class="container">
+            <div class="row py-4">
+                <!-- About Section -->
+                <div class="col-lg-4 col-md-6 mb-4">
+                    <h5 class="footer-heading">
+                        <i class="fas fa-robot me-2"></i>Claude Insight
+                    </h5>
+                    <p class="footer-text">
+                        Professional analytics and performance insights dashboard for Claude Memory System.
+                        Monitor, analyze, and optimize your AI workflows in real-time.
+                    </p>
+                    <div class="footer-version">
+                        <span class="badge bg-primary">
+                            <i class="fas fa-code-branch me-1"></i>v{{ app_version }}
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Quick Links -->
+                <div class="col-lg-2 col-md-6 mb-4">
+                    <h6 class="footer-heading">Quick Links</h6>
+                    <ul class="footer-links">
+                        <li><a href="{{ url_for('dashboard') }}"><i class="fas fa-angle-right me-2"></i>Dashboard</a></li>
+                        <li><a href="{{ url_for('analytics') }}"><i class="fas fa-angle-right me-2"></i>Analytics</a></li>
+                        <li><a href="{{ url_for('sessions') }}"><i class="fas fa-angle-right me-2"></i>Sessions</a></li>
+                        <li><a href="{{ url_for('widgets') }}"><i class="fas fa-angle-right me-2"></i>Widgets</a></li>
+                    </ul>
+                </div>
+
+                <!-- Resources -->
+                <div class="col-lg-2 col-md-6 mb-4">
+                    <h6 class="footer-heading">Resources</h6>
+                    <ul class="footer-links">
+                        <li><a href="https://github.com/piyushmakhija28/claude-insight" target="_blank">
+                            <i class="fab fa-github me-2"></i>GitHub
+                        </a></li>
+                        <li><a href="{{ url_for('logs') }}"><i class="fas fa-angle-right me-2"></i>Documentation</a></li>
+                        <li><a href="{{ url_for('policies') }}"><i class="fas fa-angle-right me-2"></i>Policies</a></li>
+                        <li><a href="{{ url_for('settings') }}"><i class="fas fa-angle-right me-2"></i>Settings</a></li>
+                    </ul>
+                </div>
+
+                <!-- Support & Contact -->
+                <div class="col-lg-4 col-md-6 mb-4">
+                    <h6 class="footer-heading">Support & Contact</h6>
+                    <ul class="footer-links">
+                        <li>
+                            <a href="https://www.techdeveloper.in" target="_blank">
+                                <i class="fas fa-globe me-2"></i>www.techdeveloper.in
+                            </a>
+                        </li>
+                        <li>
+                            <a href="https://github.com/piyushmakhija28/claude-insight/issues" target="_blank">
+                                <i class="fas fa-bug me-2"></i>Report Issues
+                            </a>
+                        </li>
+                        <li>
+                            <a href="https://github.com/piyushmakhija28/claude-insight/discussions" target="_blank">
+                                <i class="fas fa-comments me-2"></i>Community
+                            </a>
+                        </li>
+                    </ul>
+                    <div class="footer-social mt-3">
+                        <a href="https://github.com/piyushmakhija28" target="_blank" class="social-icon" title="GitHub">
+                            <i class="fab fa-github"></i>
+                        </a>
+                        <a href="https://www.techdeveloper.in" target="_blank" class="social-icon" title="Website">
+                            <i class="fas fa-globe"></i>
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Footer Bottom -->
+            <div class="footer-bottom py-3 border-top border-secondary">
+                <div class="row align-items-center">
+                    <div class="col-md-6 text-center text-md-start">
+                        <p class="mb-0 footer-copyright">
+                            &copy; 2026 Claude Insight. Made with
+                            <i class="fas fa-heart text-danger pulse mx-1"></i>
+                            by <strong>TechDeveloper</strong>
+                        </p>
+                    </div>
+                    <div class="col-md-6 text-center text-md-end">
+                        <p class="mb-0 footer-license">
+                            <i class="fas fa-code me-1"></i>
+                            Open Source • Cross-Platform • Privacy-First
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <style>
+        .modern-footer {
+            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+            color: #cbd5e1;
+            margin-top: auto;
+        }
+        .footer-heading {
+            color: #f1f5f9;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            font-size: 1rem;
+        }
+        .footer-text {
+            color: #94a3b8;
+            font-size: 0.9rem;
+            line-height: 1.6;
+        }
+        .footer-links {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        .footer-links li {
+            margin-bottom: 0.5rem;
+        }
+        .footer-links a {
+            color: #94a3b8;
+            text-decoration: none;
+            font-size: 0.9rem;
+            transition: all 0.3s ease;
+        }
+        .footer-links a:hover {
+            color: #6366f1;
+            padding-left: 5px;
+        }
+        .footer-version {
+            margin-top: 1rem;
+        }
+        .footer-social {
+            display: flex;
+            gap: 1rem;
+        }
+        .social-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 36px;
+            height: 36px;
+            background: rgba(99, 102, 241, 0.1);
+            color: #6366f1;
+            border-radius: 8px;
+            text-decoration: none;
+            transition: all 0.3s ease;
+        }
+        .social-icon:hover {
+            background: #6366f1;
+            color: white;
+            transform: translateY(-2px);
+        }
+        .footer-bottom {
+            border-top: 1px solid rgba(148, 163, 184, 0.2) !important;
+        }
+        .footer-copyright, .footer-license {
+            font-size: 0.85rem;
+            color: #94a3b8;
+        }
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+        .pulse {
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+    </style>
     {% endif %}
 
     <!-- Bootstrap JS -->
