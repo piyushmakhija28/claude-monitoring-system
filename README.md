@@ -1,6 +1,6 @@
-# 🤖 Claude Insight v2.17.2
+# 🤖 Claude Insight v2.18.0
 
-**Professional Real-time Analytics Dashboard with Complete Claude Memory System v2.4.0 Integration**
+**Professional Real-time Analytics Dashboard with Complete Claude Memory System v2.5.0 Integration**
 
 [![GitHub](https://img.shields.io/badge/GitHub-claude--monitoring--system-blue?logo=github)](https://github.com/piyushmakhija28/claude-insight)
 [![Python](https://img.shields.io/badge/Python-3.7+-blue?logo=python)](https://www.python.org/)
@@ -9,7 +9,7 @@
 
 A comprehensive, real-time monitoring and analytics dashboard for the Claude Memory System v2.2.0. Track system health, analyze costs, monitor policies, and optimize performance - all from one beautiful interface with AI-powered anomaly detection, predictive forecasting, and custom alert routing.
 
-**🎁 COMPLETE PACKAGE**: This repo includes **everything you need** - the monitoring dashboard + **complete Claude Memory System v2.4.0 files**:
+**🎁 COMPLETE PACKAGE**: This repo includes **everything you need** - the monitoring dashboard + **complete Claude Memory System v2.5.0 files**:
 - ✅ **139 files** - All automation scripts, policies, and documentation
 - ✅ **8-9 daemons** - Complete daemon monitoring scripts
 - ✅ **81 automation scripts** - Python & Shell scripts for all features
@@ -43,6 +43,7 @@ A comprehensive, real-time monitoring and analytics dashboard for the Claude Mem
 ### 🎨 Dashboard Features
 - [📊 Core Monitoring](#core-monitoring-features)
 - [🧠 Memory System Integration](#memory-system-integration-v212)
+- [🚨 Auto-Fix Enforcement System](#auto-fix-enforcement-system-v250) **NEW! 🔥**
 - [📋 Plan Detection System](#plan-detection-system-v240) **NEW! 🎉**
 - [🤖 Complete Automation System Dashboard](#-complete-automation-system-dashboard-v2171-new) **NEW! 🎉**
 - [⚡ Performance Profiling](#performance-profiling-v214)
@@ -139,6 +140,154 @@ The Claude Memory System v2.2.0 is a powerful automation framework that:
 - **Context Usage**: Real-time token consumption monitoring
 - **Cache Performance**: Hit rates and efficiency
 - **Error Tracking**: Failure prevention statistics
+
+---
+
+### 🚨 Auto-Fix Enforcement System (v2.5.0) **NEW! 🔥**
+
+**🚨 CRITICAL: If ANY policy or system fails → STOP ALL WORK → FIX IMMEDIATELY**
+
+The Auto-Fix Enforcement System implements **zero-tolerance failure policy** with automatic fixing capabilities.
+
+#### 🎯 Philosophy
+
+**Zero Tolerance for Failures:**
+- ❌ Don't work around failures
+- ❌ Don't ignore warnings
+- ❌ Don't proceed with broken systems
+- ✅ **Fix immediately and properly**
+
+**Blocking Enforcement:**
+- Python missing → **BLOCK ALL WORK**
+- Critical files missing → **BLOCK ALL WORK**
+- Session not started → **BLOCK ALL WORK**
+- Enforcer not initialized → **BLOCK ALL WORK**
+
+#### ✨ Key Features
+
+**6 Comprehensive System Checks:**
+1. 🐍 **Python Availability** (CRITICAL) - Verifies Python command works
+2. 📁 **Critical Files** (CRITICAL) - Ensures all system files present
+3. 🔒 **Blocking Enforcer** (CRITICAL) - Validates enforcer initialized
+4. 📊 **Session State** (HIGH) - Checks session started and context checked
+5. 🤖 **Daemon Status** (INFO) - Reports daemon health (not blocking)
+6. 📂 **Git Repository** (INFO) - Checks for uncommitted changes
+
+**Auto-Fix Capabilities:**
+- ✅ **Can auto-fix:** Blocking enforcer state, session markers
+- ⚠️ **Manual fix:** Python installation, missing files, daemon restart
+
+**Smart Failure Handling:**
+```
+Check System → Failure Found?
+                    ↓ Yes
+              Auto-Fix Possible?
+                    ↓ Yes
+              Apply Auto-Fix
+                    ↓
+              Re-check System
+                    ↓
+              Still Failing?
+                    ↓ Yes
+         🚨 BLOCK WORK + Show Fix Instructions
+```
+
+#### 📊 Example Output
+
+**All Systems OK:**
+```
+🔍 [1/6] Checking Python...
+   ✅ Python available: Python 3.13.12
+🔍 [2/6] Checking critical files...
+   ✅ All critical files present
+🔍 [3/6] Checking blocking enforcer...
+   ✅ Blocking enforcer initialized
+🔍 [4/6] Checking session state...
+   ✅ Session state valid
+🔍 [5/6] Checking daemons...
+   ℹ️ Daemons: 8 running, 1 stopped
+🔍 [6/6] Checking git repositories...
+   ✅ Git repository clean
+
+✅ ALL SYSTEMS OPERATIONAL - NO FAILURES DETECTED
+```
+
+**With Failures (Blocked):**
+```
+🔍 [1/6] Checking Python...
+   ❌ Python NOT FOUND - CRITICAL!
+
+🚨 SYSTEM FAILURES DETECTED - WORK BLOCKED
+
+🔴 CRITICAL FAILURES: 1
+   [1] Python: Python command not found or not working
+   📋 Fix Instructions:
+      • Install Python from python.org
+      • Add Python to PATH
+      • Verify: python --version
+
+🚨 WORK IS BLOCKED - FIX ALL FAILURES BEFORE CONTINUING
+```
+
+#### 🚀 Usage
+
+**Automatic (Recommended):**
+```bash
+export PYTHONIOENCODING=utf-8
+bash ~/.claude/memory/auto-fix-enforcer.sh
+```
+
+**Check Only (No Auto-Fix):**
+```bash
+bash ~/.claude/memory/auto-fix-enforcer.sh --check
+```
+
+**JSON Output:**
+```bash
+python ~/.claude/memory/auto-fix-enforcer.py --json
+```
+
+#### 🔗 Integration
+
+**STEP -1 in Execution Flow:**
+- Runs **BEFORE** all other steps
+- Mandatory check before EVERY user request
+- Work cannot proceed if exit code ≠ 0
+- Only continues when all systems operational
+
+**Files:**
+- `scripts/auto-fix-enforcer.py` - Main logic (600+ lines)
+- `scripts/auto-fix-enforcer.sh` - Shell wrapper
+- `docs/auto-fix-enforcement.md` - Full documentation (400+ lines)
+
+#### ⚙️ Exit Codes
+
+| Code | Meaning | Action |
+|------|---------|--------|
+| 0 | ✅ All OK | Continue work |
+| 1 | ⚠️ General failure | Check and fix |
+| 2+ | 🔴 Critical failures | BLOCKED - fix immediately |
+
+#### 🎯 Priority Levels
+
+| Level | Symbol | Meaning | Action |
+|-------|--------|---------|--------|
+| CRITICAL | 🔴 | System cannot function | BLOCK immediately |
+| HIGH | 🟠 | Major degradation | BLOCK, fix soon |
+| MEDIUM | 🟡 | Minor issues | WARN, fix when convenient |
+| INFO | ℹ️ | Informational | Continue, no action |
+
+#### 📖 Documentation
+
+**Complete guide:** `~/.claude/memory/docs/auto-fix-enforcement.md`
+
+Covers:
+- All system checks in detail
+- Auto-fix capabilities and limitations
+- Integration with blocking enforcer
+- Troubleshooting guide
+- Exit codes and priority levels
+- Future enhancements
 
 ---
 
