@@ -67,14 +67,14 @@ def main():
 
     try:
         old_version, new_version = bump_version(bump_type)
-        print(f"✅ Version bumped: {old_version} → {new_version}")
-        print(f"📝 Next steps:")
+        print(f"[OK] Version bumped: {old_version} -> {new_version}")
+        print(f"Next steps:")
         print(f"   1. git add VERSION")
         print(f"   2. git commit -m \"chore: bump version to {new_version}\"")
         print(f"   3. git tag v{new_version}")
         print(f"   4. git push origin main --tags")
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"[ERROR] {e}")
         sys.exit(1)
 
 
