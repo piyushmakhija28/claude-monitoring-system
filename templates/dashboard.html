@@ -759,6 +759,13 @@ function initializeHistoricalCharts() {
         scales: {
             y: {
                 beginAtZero: true,
+                min: 0,
+                ticks: {
+                    stepSize: 10,
+                    callback: function(value) {
+                        return Math.max(0, value);
+                    }
+                },
                 grid: {
                     color: 'rgba(0, 0, 0, 0.05)'
                 }
@@ -796,7 +803,14 @@ function initializeHistoricalCharts() {
                         ...commonOptions.scales,
                         y: {
                             ...commonOptions.scales.y,
-                            max: 100
+                            min: 0,
+                            max: 100,
+                            ticks: {
+                                stepSize: 20,
+                                callback: function(value) {
+                                    return Math.max(0, Math.min(100, value));
+                                }
+                            }
                         }
                     }
                 }
@@ -880,7 +894,14 @@ function initializeHistoricalCharts() {
                         ...commonOptions.scales,
                         y: {
                             ...commonOptions.scales.y,
-                            max: 100
+                            min: 0,
+                            max: 100,
+                            ticks: {
+                                stepSize: 20,
+                                callback: function(value) {
+                                    return Math.max(0, Math.min(100, value)) + '%';
+                                }
+                            }
                         }
                     }
                 }

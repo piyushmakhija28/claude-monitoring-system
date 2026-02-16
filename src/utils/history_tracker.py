@@ -116,13 +116,16 @@ class HistoryTracker:
                 'tokens_used': []
             }
 
+        # Reverse the list to show oldest to newest (left to right on chart)
+        metrics_ascending = list(reversed(metrics))
+
         return {
-            'dates': [m['date'] for m in metrics],
-            'health_scores': [m.get('health_score', 0) for m in metrics],
-            'errors': [m.get('errors_24h', 0) for m in metrics],
-            'policy_hits': [m.get('policy_hits', 0) for m in metrics],
-            'context_usage': [m.get('context_usage', 0) for m in metrics],
-            'tokens_used': [m.get('tokens_used', 0) for m in metrics]
+            'dates': [m['date'] for m in metrics_ascending],
+            'health_scores': [max(0, m.get('health_score', 0)) for m in metrics_ascending],
+            'errors': [max(0, m.get('errors_24h', 0)) for m in metrics_ascending],
+            'policy_hits': [max(0, m.get('policy_hits', 0)) for m in metrics_ascending],
+            'context_usage': [max(0, min(100, m.get('context_usage', 0))) for m in metrics_ascending],
+            'tokens_used': [max(0, m.get('tokens_used', 0)) for m in metrics_ascending]
         }
 
     def get_summary_stats(self, days=7):
