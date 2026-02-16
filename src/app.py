@@ -1,6 +1,6 @@
 """
 Claude Insight
-A professional real-time analytics and performance insights dashboard for Claude Memory System v2.2.0
+A professional real-time analytics and performance insights dashboard for Claude Memory System
 """
 
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify, Response, send_file
@@ -60,9 +60,28 @@ from reportlab.lib.pagesizes import letter, A4
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
+from pathlib import Path
+
+# Read application version
+def get_version():
+    """Read version from VERSION file"""
+    try:
+        version_file = Path(__file__).parent.parent / "VERSION"
+        if version_file.exists():
+            return version_file.read_text().strip()
+        return "2.5.0"
+    except:
+        return "2.5.0"
+
+APP_VERSION = get_version()
 
 app = Flask(__name__)
 app.secret_key = 'claude-insight-secret-key-2026'
+
+# Make version available to all templates
+@app.context_processor
+def inject_version():
+    return dict(app_version=APP_VERSION)
 
 # Register blueprints
 app.register_blueprint(session_search_bp)
