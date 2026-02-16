@@ -25,14 +25,14 @@ When you create:
 
 | Type | Source Location | Destination | Trigger |
 |------|-----------------|-------------|---------|
-| **Skills** | `~/.claude/skills/{skill-name}/` | `claude-insight/claude-memory-system/skills/` | New skill created |
-| **Agents** | `~/.claude/agents/{agent-name}/` | `claude-insight/claude-memory-system/agents/` | New agent created |
-| **Policies** | `~/.claude/memory/**/*-policy.md` | `claude-insight/claude-memory-system/policies/` | New/updated policy |
-| **Docs** | `~/.claude/memory/docs/*.md` | `claude-insight/claude-memory-system/docs/` | New/updated doc |
-| **Scripts** | `~/.claude/memory/scripts/**/*.py` | `claude-insight/claude-memory-system/scripts/` | New script |
-| **Config** | `~/.claude/memory/config/*.json` | `claude-insight/claude-memory-system/config/` | Config change |
-| **CLAUDE.md** | `~/.claude/CLAUDE.md` | `claude-insight/claude-memory-system/CLAUDE.md` | Version update |
-| **MASTER-README** | `~/.claude/memory/MASTER-README.md` | `claude-insight/claude-memory-system/MASTER-README.md` | Major update |
+| **Skills** | `~/.claude/skills/{skill-name}/` | `claude-insight/skills/` | New skill created |
+| **Agents** | `~/.claude/agents/{agent-name}/` | `claude-insight/agents/` | New agent created |
+| **Policies** | `~/.claude/memory/**/*-policy.md` | `claude-insight/policies/` | New/updated policy |
+| **Docs** | `~/.claude/memory/docs/*.md` | `claude-insight/memory-docs/` | New/updated doc |
+| **Scripts** | `~/.claude/memory/scripts/**/*.py` | `claude-insight/memory-scripts/` | New script |
+| **Config** | `~/.claude/memory/config/*.json` | `claude-insight/config/` | Config change |
+| **CLAUDE.md** | `~/.claude/CLAUDE.md` | `claude-insight/CLAUDE.md` | Version update |
+| **MASTER-README** | `~/.claude/memory/MASTER-README.md` | `claude-insight/MASTER-README.md` | Major update |
 
 ---
 
@@ -72,17 +72,17 @@ echo "✅ Full sync completed!"
 
 **New Skill:**
 ```bash
-cp -r ~/.claude/skills/{skill-name} /c/Users/techd/Documents/workspace-spring-tool-suite-4-4.27.0-new/claude-insight/claude-memory-system/skills/
+cp -r ~/.claude/skills/{skill-name} /c/Users/techd/Documents/workspace-spring-tool-suite-4-4.27.0-new/claude-insight/skills/
 ```
 
 **New Agent:**
 ```bash
-cp -r ~/.claude/agents/{agent-name} /c/Users/techd/Documents/workspace-spring-tool-suite-4-4.27.0-new/claude-insight/claude-memory-system/agents/
+cp -r ~/.claude/agents/{agent-name} /c/Users/techd/Documents/workspace-spring-tool-suite-4-4.27.0-new/claude-insight/agents/
 ```
 
 **Updated Policy:**
 ```bash
-cp ~/.claude/memory/**/{policy-file}.md /c/Users/techd/Documents/workspace-spring-tool-suite-4-4.27.0-new/claude-insight/claude-memory-system/policies/
+cp ~/.claude/memory/**/{policy-file}.md /c/Users/techd/Documents/workspace-spring-tool-suite-4-4.27.0-new/claude-insight/policies/
 ```
 
 ---
@@ -123,16 +123,16 @@ After syncing, always verify:
 
 ```bash
 # Verify skill exists
-ls /c/Users/techd/Documents/workspace-spring-tool-suite-4-4.27.0-new/claude-insight/claude-memory-system/skills/{skill-name}
+ls /c/Users/techd/Documents/workspace-spring-tool-suite-4-4.27.0-new/claude-insight/skills/{skill-name}
 
 # Verify agent exists
-ls /c/Users/techd/Documents/workspace-spring-tool-suite-4-4.27.0-new/claude-insight/claude-memory-system/agents/{agent-name}
+ls /c/Users/techd/Documents/workspace-spring-tool-suite-4-4.27.0-new/claude-insight/agents/{agent-name}
 
 # Verify policy exists
-find /c/Users/techd/Documents/workspace-spring-tool-suite-4-4.27.0-new/claude-insight/claude-memory-system/policies -name "{policy-file}.md"
+find /c/Users/techd/Documents/workspace-spring-tool-suite-4-4.27.0-new/claude-insight/policies -name "{policy-file}.md"
 
 # Verify docs synced
-ls /c/Users/techd/Documents/workspace-spring-tool-suite-4-4.27.0-new/claude-insight/claude-memory-system/docs/*.md | wc -l
+ls /c/Users/techd/Documents/workspace-spring-tool-suite-4-4.27.0-new/claude-insight/memory-docs/*.md | wc -l
 ```
 
 **Expected Results:**
@@ -207,7 +207,7 @@ bash full-sync.sh  # Or run manual commands above
 ## 📂 Directory Structure After Sync
 
 ```
-claude-insight/claude-memory-system/
+claude-insight/
 ├── CLAUDE.md (synced from ~/.claude/)
 ├── MASTER-README.md (synced from ~/.claude/memory/)
 │
@@ -229,12 +229,12 @@ claude-insight/claude-memory-system/
 │   ├── 03-execution-system/
 │   └── testing/
 │
-├── docs/ (synced from ~/.claude/memory/docs/)
+├── memory-docs/ (synced from ~/.claude/memory/docs/)
 │   ├── ADVANCED-TOKEN-OPTIMIZATION.md
 │   ├── java-project-structure.md
 │   └── ... (50+ docs)
 │
-├── scripts/ (synced from ~/.claude/memory/scripts/)
+├── memory-scripts/ (synced from ~/.claude/memory/scripts/)
 │   ├── automation/
 │   ├── daemons/
 │   └── ... (81+ scripts)
@@ -266,11 +266,11 @@ claude-insight/claude-memory-system/
 **Solution:**
 ```bash
 # Check if destination exists
-mkdir -p /c/Users/techd/Documents/workspace-spring-tool-suite-4-4.27.0-new/claude-insight/claude-memory-system/skills
-mkdir -p /c/Users/techd/Documents/workspace-spring-tool-suite-4-4.27.0-new/claude-insight/claude-memory-system/agents
+mkdir -p /c/Users/techd/Documents/workspace-spring-tool-suite-4-4.27.0-new/claude-insight/skills
+mkdir -p /c/Users/techd/Documents/workspace-spring-tool-suite-4-4.27.0-new/claude-insight/agents
 
 # Try sync again
-cp -r ~/.claude/skills/* /c/Users/techd/Documents/workspace-spring-tool-suite-4-4.27.0-new/claude-insight/claude-memory-system/skills/
+cp -r ~/.claude/skills/* /c/Users/techd/Documents/workspace-spring-tool-suite-4-4.27.0-new/claude-insight/skills/
 ```
 
 ### Issue: File not copied
@@ -280,7 +280,7 @@ cp -r ~/.claude/skills/* /c/Users/techd/Documents/workspace-spring-tool-suite-4-
 ls ~/.claude/skills/{skill-name}
 
 # If exists, retry copy with verbose
-cp -rv ~/.claude/skills/{skill-name} /c/Users/techd/Documents/workspace-spring-tool-suite-4-4.27.0-new/claude-insight/claude-memory-system/skills/
+cp -rv ~/.claude/skills/{skill-name} /c/Users/techd/Documents/workspace-spring-tool-suite-4-4.27.0-new/claude-insight/skills/
 ```
 
 ### Issue: Partial sync

@@ -977,7 +977,7 @@ bash ~/.claude/memory/startup-hook.sh
 
 ## What's Included
 
-### Memory System Files (139 files in `claude-memory-system/`)
+### Memory System Files (320+ files)
 
 #### 📖 Complete Documentation
 - **MASTER-README.md**: Complete consolidated guide (1,500+ lines)
@@ -1126,7 +1126,7 @@ The Claude Memory System v2.2.0 is a comprehensive automation framework that mak
 
 ### Documentation Location
 
-All documentation is in the `claude-memory-system/` folder:
+All documentation is in the root directory:
 
 📖 **[MASTER-README.md](./claude-memory-system/MASTER-README.md)** - Complete consolidated guide
 - 14 major sections with 100+ indexed subsections
@@ -1311,7 +1311,6 @@ RESULT: Code that follows ALL standards
 ### File Organization
 
 ```
-claude-memory-system/
 ├── policies/
 │   ├── 01-sync-system/              # 🔵 Foundation Layer
 │   │   ├── session-management/
@@ -2395,29 +2394,47 @@ claude-insight/
 │   ├── daemons/                    # Old daemon files
 │   └── policies/                   # Old policies
 │
-└── claude-memory-system/           # Memory System v2.2.0 (139 files)
-    ├── MASTER-README.md            # Complete documentation (1,500+ lines)
-    ├── CLAUDE.md                   # Global configuration
-    ├── HOW-IT-WORKS.md             # Architecture guide
-    ├── API-REFERENCE.md            # API documentation
-    ├── MEMORY-SYSTEM-QUICKSTART.md # Quick start guide
-    │
-    ├── docs/                       # Java Spring Boot docs (10 files)
-    │   ├── java-project-structure.md
-    │   ├── spring-cloud-config.md
-    │   ├── secret-management.md
-    │   ├── api-design-standards.md
-    │   ├── error-handling-standards.md
-    │   ├── security-best-practices.md
-    │   ├── logging-standards.md
-    │   ├── database-standards.md
-    │   ├── java-agent-strategy.md
-    │   └── git-and-context.md
-    │
-    ├── (daemon scripts - 8-9 files)
-    ├── (automation scripts - 81 files)
-    ├── (policy files - 12 active + 38 docs)
-    └── (configuration files - 10+ files)
+├── MASTER-README.md                # Complete documentation (1,500+ lines)
+├── CLAUDE.md                       # Global configuration (v2.4.0)
+├── FILE-INDEX.md                   # File organization index
+├── QUICK-NAVIGATION-GUIDE.md       # Navigation guide
+│
+├── policies/                       # All policy files (18+ organized by layer)
+│   ├── 01-sync-system/             # Foundation layer
+│   ├── 02-standards-system/        # Standards layer
+│   ├── 03-execution-system/        # Execution layer
+│   └── testing/                    # Testing policies
+│
+├── memory-docs/                    # Memory system documentation (50+ files)
+│   ├── spring-cloud-config.md
+│   ├── secret-management.md
+│   ├── java-project-structure.md
+│   ├── api-design-standards.md
+│   └── ... (50+ files)
+│
+├── memory-scripts/                 # Automation scripts (81+ files)
+│   ├── automation/                 # Core automation
+│   ├── daemons/                    # 9 daemon scripts
+│   ├── monitors/                   # Monitoring tools
+│   └── ... (81+ files)
+│
+├── skills/                         # All skills (28+ skills)
+│   ├── java-spring-boot-microservices/
+│   ├── docker/
+│   ├── kubernetes/
+│   └── ... (28+ skills)
+│
+├── agents/                         # All agents (12+ agents)
+│   ├── spring-boot-microservices/
+│   ├── orchestrator-agent/
+│   └── ... (12+ agents)
+│
+├── config/                         # Configuration files
+│   ├── skills-registry.json
+│   ├── user-preferences.json
+│   └── ... (6+ configs)
+│
+└── archive/                        # Archived files
 ```
 
 ---

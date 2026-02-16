@@ -16,139 +16,83 @@ This repository now contains **100% of everything** needed to run the complete C
 
 ```
 claude-insight/
-├── claude-memory-system/                    # COMPLETE MEMORY SYSTEM
-│   ├── CLAUDE.md                            # Global configuration (v2.4.0)
-│   ├── MASTER-README.md                     # Complete documentation (1,500+ lines)
-│   │
-│   ├── policies/                            # ALL POLICY FILES
-│   │   ├── 01-sync-system/                  # Foundation Layer
-│   │   │   ├── session-management/
-│   │   │   │   ├── session-memory-policy.md
-│   │   │   │   └── session-pruning-policy.md
-│   │   │   ├── user-preferences/
-│   │   │   │   └── user-preferences-policy.md
-│   │   │   └── pattern-detection/
-│   │   │       └── cross-project-patterns-policy.md
-│   │   │
-│   │   ├── 02-standards-system/             # Standards Layer
-│   │   │   └── coding-standards-enforcement-policy.md
-│   │   │
-│   │   ├── 03-execution-system/             # Execution Layer
-│   │   │   ├── 00-prompt-generation/
-│   │   │   │   └── prompt-generation-policy.md
-│   │   │   ├── 01-task-breakdown/
-│   │   │   │   └── automatic-task-breakdown-policy.md
-│   │   │   ├── 02-plan-mode/
-│   │   │   │   └── auto-plan-mode-suggestion-policy.md
-│   │   │   ├── 04-model-selection/
-│   │   │   │   └── intelligent-model-selection-policy.md
-│   │   │   ├── 05-skill-agent-selection/
-│   │   │   │   └── auto-skill-agent-selection-policy.md
-│   │   │   ├── 06-tool-optimization/
-│   │   │   │   └── tool-usage-optimization-policy.md
-│   │   │   ├── 08-progress-tracking/
-│   │   │   │   ├── task-phase-enforcement-policy.md
-│   │   │   │   └── task-progress-tracking-policy.md
-│   │   │   ├── 09-git-commit/
-│   │   │   │   └── git-auto-commit-policy.md
-│   │   │   ├── file-management-policy.md
-│   │   │   └── proactive-consultation-policy.md
-│   │   │
-│   │   ├── testing/
-│   │   │   └── test-case-policy.md
-│   │   │
-│   │   └── [Legacy policy files for compatibility]
-│   │       ├── common-failures-prevention.md
-│   │       ├── core-skills-mandate.md
-│   │       ├── git-auto-commit-policy.md
-│   │       ├── model-selection-enforcement.md
-│   │       └── ... (12 total)
-│   │
-│   ├── docs/                                # DOCUMENTATION (50+ files)
-│   │   ├── ADVANCED-TOKEN-OPTIMIZATION.md
-│   │   ├── API-REFERENCE.md
-│   │   ├── COMPLETE-SYSTEM-FLOW.md
-│   │   ├── api-design-standards.md
-│   │   ├── database-standards.md
-│   │   ├── error-handling-standards.md
-│   │   ├── java-project-structure.md
-│   │   ├── spring-cloud-config.md
-│   │   ├── secret-management.md
-│   │   ├── github-cli-usage.md
-│   │   ├── architecture/
-│   │   ├── guides/
-│   │   └── ... (50+ files)
-│   │
-│   ├── scripts/                             # AUTOMATION SCRIPTS (81+ files)
-│   │   ├── automation/                      # Core automation
-│   │   ├── daemons/                         # 9 daemon scripts
-│   │   ├── failure-learning/                # Failure prevention
-│   │   ├── maintenance/                     # Maintenance tools
-│   │   ├── management/                      # Management scripts
-│   │   ├── monitors/                        # Monitoring tools
-│   │   ├── trackers/                        # Tracking scripts
-│   │   └── utils/                           # Utility scripts
-│   │
-│   ├── skills/                              # ALL SKILLS (28+ skills)
-│   │   ├── adaptive-skill-intelligence/
-│   │   ├── animations-core/
-│   │   ├── context-management-core/
-│   │   ├── css-core/
-│   │   ├── docker/
-│   │   ├── java-design-patterns-core/
-│   │   ├── java-spring-boot-microservices/
-│   │   ├── jenkins-pipeline/
-│   │   ├── kubernetes/
-│   │   ├── migration/
-│   │   ├── model-selection-core/
-│   │   ├── nosql-core/
-│   │   ├── rdbms-core/
-│   │   ├── seo-keyword-research-core/
-│   │   ├── spring-boot-design-patterns-core/
-│   │   ├── backend/
-│   │   │   ├── android-backend-engineer/
-│   │   │   └── swift-backend-engineer/
-│   │   ├── frontend/
-│   │   │   ├── angular-engineer/
-│   │   │   └── swiftui-designer/
-│   │   ├── devops/
-│   │   │   ├── devops-engineer/
-│   │   │   └── qa-testing-agent/
-│   │   ├── mobile/
-│   │   │   ├── android-ui-designer/
-│   │   └── ... (28+ skills total)
-│   │
-│   ├── agents/                              # ALL AGENTS (12+ agents)
-│   │   ├── android-backend-engineer/
-│   │   ├── android-ui-designer/
-│   │   ├── angular-engineer/
-│   │   ├── devops-engineer/
-│   │   ├── dynamic-seo-agent/
-│   │   ├── orchestrator-agent/
-│   │   ├── qa-testing-agent/
-│   │   ├── spring-boot-microservices/
-│   │   ├── static-seo-agent/
-│   │   ├── swift-backend-engineer/
-│   │   ├── swiftui-designer/
-│   │   └── ui-ux-designer/
-│   │
-│   └── config/                              # CONFIGURATION FILES
-│       ├── skills-registry.json
-│       ├── user-preferences.json
-│       ├── cross-project-patterns.json
-│       ├── consultation-preferences.json
-│       ├── failure-kb.json
-│       └── README.md
+├── CLAUDE.md                            # Global configuration (v2.4.0)
+├── MASTER-README.md                     # Complete documentation (1,500+ lines)
+├── FILE-INDEX.md                        # File organization index
+├── QUICK-NAVIGATION-GUIDE.md            # Navigation guide
 │
-├── src/                                     # CLAUDE INSIGHT APPLICATION
+├── policies/                            # ALL POLICY FILES (18+ organized by layer)
+│   ├── 01-sync-system/                  # Foundation Layer
+│   │   ├── session-management/
+│   │   │   ├── session-memory-policy.md
+│   │   │   └── session-pruning-policy.md
+│   │   ├── user-preferences/
+│   │   │   └── user-preferences-policy.md
+│   │   └── pattern-detection/
+│   │       └── cross-project-patterns-policy.md
+│   │
+│   ├── 02-standards-system/             # Standards Layer
+│   │   └── coding-standards-enforcement-policy.md
+│   │
+│   ├── 03-execution-system/             # Execution Layer
+│   │   ├── 00-prompt-generation/
+│   │   ├── 01-task-breakdown/
+│   │   ├── 02-plan-mode/
+│   │   ├── 04-model-selection/
+│   │   ├── 05-skill-agent-selection/
+│   │   ├── 06-tool-optimization/
+│   │   ├── 08-progress-tracking/
+│   │   └── 09-git-commit/
+│   │
+│   └── testing/
+│       └── test-case-policy.md
+│
+├── memory-docs/                         # DOCUMENTATION (50+ files)
+│   ├── ADVANCED-TOKEN-OPTIMIZATION.md
+│   ├── API-REFERENCE.md
+│   ├── spring-cloud-config.md
+│   ├── secret-management.md
+│   ├── java-project-structure.md
+│   ├── api-design-standards.md
+│   ├── error-handling-standards.md
+│   ├── database-standards.md
+│   └── ... (50+ files)
+│
+├── memory-scripts/                      # AUTOMATION SCRIPTS (81+ files)
+│   ├── automation/                      # Core automation
+│   ├── daemons/                         # 9 daemon scripts
+│   ├── monitors/                        # Monitoring tools
+│   ├── trackers/                        # Tracking scripts
+│   └── ... (81+ files)
+│
+├── skills/                              # ALL SKILLS (28+ skills)
+│   ├── java-spring-boot-microservices/
+│   ├── docker/
+│   ├── kubernetes/
+│   ├── migration/
+│   └── ... (28+ skills)
+│
+├── agents/                              # ALL AGENTS (12+ agents)
+│   ├── spring-boot-microservices/
+│   ├── orchestrator-agent/
+│   ├── devops-engineer/
+│   ├── qa-testing-agent/
+│   └── ... (12+ agents)
+│
+├── config/                              # CONFIGURATION FILES
+│   ├── skills-registry.json
+│   ├── user-preferences.json
+│   └── ... (6+ configs)
+│
+├── archive/                             # Archived files
+│
+├── src/                                 # CLAUDE INSIGHT APPLICATION
 │   ├── services/
 │   │   ├── monitoring/
 │   │   │   ├── automation_tracker.py        # NEW v2.17.1
 │   │   │   ├── skill_agent_tracker.py      # NEW v2.17.1
 │   │   │   ├── optimization_tracker.py     # NEW v2.17.1
-│   │   │   ├── memory_system_monitor.py
-│   │   │   ├── performance_profiler.py
-│   │   │   └── ... (6 monitoring services)
+│   │   │   └── ... (9 services)
 │   │   ├── ai/
 │   │   │   ├── anomaly_detector.py
 │   │   │   ├── predictive_analytics.py
@@ -241,7 +185,7 @@ pip install -r requirements.txt
 xcopy /E /I /Y claude-memory-system\* %USERPROFILE%\.claude\memory\
 
 # Linux/Mac
-cp -r claude-memory-system/* ~/.claude/memory/
+cp -r * ~/.claude/memory/
 ```
 
 ### 4. Start Daemons (Optional)
