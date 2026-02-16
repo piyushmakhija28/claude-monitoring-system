@@ -3,13 +3,19 @@
 {% block title %}Dashboard - Claude Insight{% endblock %}
 
 {% block content %}
+<!-- Page Header -->
+<div class="page-header mb-4">
+    <h1 class="page-title">
+        <i class="fas fa-tachometer-alt me-3"></i>
+        System Dashboard
+    </h1>
+    <div class="page-subtitle">Real-time monitoring and analytics</div>
+</div>
+
 <div class="row mb-4">
     <div class="col-12">
-        <div class="d-flex justify-content-between align-items-center">
-            <h2 class="mb-0">
-                <i class="fas fa-tachometer-alt me-2"></i>System Dashboard
-            </h2>
-            <div class="d-flex gap-2">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+            <div class="d-flex gap-2 flex-wrap">
                 <button class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#widgetCustomizeModal">
                     <i class="fas fa-cog me-2"></i>Customize
                 </button>
@@ -36,49 +42,53 @@
 <!-- System Health Metrics -->
 {% if widget_preferences.get('system_health', True) %}
 <div class="row mb-4" id="systemHealthWidget">
-    <div class="col-md-3">
-        <div class="card border-0 shadow-sm h-100">
-            <div class="card-body text-center">
-                <div class="display-4 mb-2" id="healthScore">
-                    <i class="fas fa-spinner fa-spin text-primary"></i>
+    <div class="col-xl-3 col-lg-6 col-md-6 mb-4">
+        <div class="card stat-card h-100">
+            <div class="card-body position-relative">
+                <i class="fas fa-heartbeat stat-icon text-success"></i>
+                <div class="stat-value text-success" id="healthScore">
+                    <i class="fas fa-spinner fa-spin"></i>
                 </div>
-                <h5 class="card-title text-muted mb-0">Health Score</h5>
-                <div class="progress mt-3" style="height: 8px;">
-                    <div class="progress-bar bg-gradient" id="healthScoreBar" role="progressbar" style="width: 0%"></div>
+                <div class="stat-label">Health Score</div>
+                <div class="progress mt-3" style="height: 6px; border-radius: 10px; background: rgba(16, 185, 129, 0.1);">
+                    <div class="progress-bar bg-success" id="healthScoreBar" role="progressbar" style="width: 0%; border-radius: 10px;"></div>
                 </div>
             </div>
         </div>
     </div>
-    <div class="col-md-3">
-        <div class="card border-0 shadow-sm h-100">
-            <div class="card-body text-center">
-                <div class="display-4 mb-2" id="daemonsRunning">
-                    <i class="fas fa-spinner fa-spin text-primary"></i>
+    <div class="col-xl-3 col-lg-6 col-md-6 mb-4">
+        <div class="card stat-card h-100">
+            <div class="card-body position-relative">
+                <i class="fas fa-server stat-icon text-primary"></i>
+                <div class="stat-value text-primary" id="daemonsRunning">
+                    <i class="fas fa-spinner fa-spin"></i>
                 </div>
-                <h5 class="card-title text-muted mb-0">Daemons Running</h5>
-                <small class="text-muted" id="daemonStatus">Checking...</small>
+                <div class="stat-label">Daemons Running</div>
+                <small class="text-muted mt-2 d-block" id="daemonStatus">Checking...</small>
             </div>
         </div>
     </div>
-    <div class="col-md-3">
-        <div class="card border-0 shadow-sm h-100">
-            <div class="card-body text-center">
-                <div class="display-4 mb-2" id="activePolicies">
-                    <i class="fas fa-spinner fa-spin text-primary"></i>
+    <div class="col-xl-3 col-lg-6 col-md-6 mb-4">
+        <div class="card stat-card h-100">
+            <div class="card-body position-relative">
+                <i class="fas fa-shield-alt stat-icon text-info"></i>
+                <div class="stat-value text-info" id="activePolicies">
+                    <i class="fas fa-spinner fa-spin"></i>
                 </div>
-                <h5 class="card-title text-muted mb-0">Active Policies</h5>
-                <small class="text-muted">Out of 6 total</small>
+                <div class="stat-label">Active Policies</div>
+                <small class="text-muted mt-2 d-block">Out of 6 total</small>
             </div>
         </div>
     </div>
-    <div class="col-md-3">
-        <div class="card border-0 shadow-sm h-100">
-            <div class="card-body text-center">
-                <div class="display-4 mb-2" id="policyHits">
-                    <i class="fas fa-spinner fa-spin text-primary"></i>
+    <div class="col-xl-3 col-lg-6 col-md-6 mb-4">
+        <div class="card stat-card h-100">
+            <div class="card-body position-relative">
+                <i class="fas fa-chart-line stat-icon text-warning"></i>
+                <div class="stat-value text-warning" id="policyHits">
+                    <i class="fas fa-spinner fa-spin"></i>
                 </div>
-                <h5 class="card-title text-muted mb-0">Policy Hits Today</h5>
-                <small class="text-muted">Last 24 hours</small>
+                <div class="stat-label">Policy Hits Today</div>
+                <small class="text-muted mt-2 d-block">Last 24 hours</small>
             </div>
         </div>
     </div>
@@ -87,11 +97,12 @@
 
 <!-- Live Metrics and Activity Feed -->
 <div class="row mb-4">
-    <div class="col-md-8">
-        <div class="card border-0 shadow-sm h-100">
-            <div class="card-header bg-white border-0 pt-4 pb-3">
-                <h5 class="mb-0">
-                    <i class="fas fa-chart-line me-2"></i>Live Metrics
+    <div class="col-lg-8 mb-4 mb-lg-0">
+        <div class="card h-100">
+            <div class="card-header">
+                <h5>
+                    <i class="fas fa-chart-line"></i>
+                    Live Metrics
                 </h5>
             </div>
             <div class="card-body">
@@ -100,11 +111,12 @@
         </div>
     </div>
     {% if widget_preferences.get('recent_activity', True) %}
-    <div class="col-md-4" id="recentActivityWidget">
-        <div class="card border-0 shadow-sm h-100">
-            <div class="card-header bg-white border-0 pt-4 pb-3">
-                <h5 class="mb-0">
-                    <i class="fas fa-clock me-2"></i>Recent Activity
+    <div class="col-lg-4" id="recentActivityWidget">
+        <div class="card h-100">
+            <div class="card-header">
+                <h5>
+                    <i class="fas fa-clock"></i>
+                    Recent Activity
                 </h5>
             </div>
             <div class="card-body" style="max-height: 400px; overflow-y: auto;">
@@ -124,11 +136,12 @@
 {% if widget_preferences.get('historical_charts', True) %}
 <div class="row mb-4" id="historicalChartsWidget">
     <div class="col-12">
-        <div class="card border-0 shadow-sm">
-            <div class="card-header bg-white border-0 pt-4 pb-3">
-                <div class="d-flex justify-content-between align-items-center flex-wrap">
-                    <h5 class="mb-2 mb-md-0">
-                        <i class="fas fa-chart-area me-2"></i>Historical Trends
+        <div class="card">
+            <div class="card-header">
+                <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+                    <h5>
+                        <i class="fas fa-chart-area"></i>
+                        Historical Trends
                     </h5>
 
                     <!-- Time Range Filter -->
@@ -219,13 +232,16 @@
 
 <!-- Policy Execution Tracking -->
 <div class="row mb-4">
-    <div class="col-md-8">
-        <div class="card border-0 shadow-sm">
-            <div class="card-header bg-white border-0 pt-4 pb-3">
-                <h5 class="mb-0">
-                    <i class="fas fa-chart-line me-2"></i>Policy Execution Timeline
-                    <span class="badge bg-success ms-2" id="policyHealthBadge">Loading...</span>
-                </h5>
+    <div class="col-lg-8 mb-4 mb-lg-0">
+        <div class="card">
+            <div class="card-header">
+                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <h5>
+                        <i class="fas fa-chart-line"></i>
+                        Policy Execution Timeline
+                    </h5>
+                    <span class="badge bg-success" id="policyHealthBadge">Loading...</span>
+                </div>
             </div>
             <div class="card-body">
                 <canvas id="policyExecutionTimelineChart" height="80"></canvas>
@@ -238,11 +254,12 @@
             </div>
         </div>
     </div>
-    <div class="col-md-4">
-        <div class="card border-0 shadow-sm">
-            <div class="card-header bg-white border-0 pt-4 pb-3">
-                <h5 class="mb-0">
-                    <i class="fas fa-tasks me-2"></i>Enforcement Steps
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-header">
+                <h5>
+                    <i class="fas fa-tasks"></i>
+                    Enforcement Steps
                 </h5>
             </div>
             <div class="card-body" style="max-height: 300px; overflow-y: auto;">
@@ -260,10 +277,11 @@
 <!-- Recent Policy Executions -->
 <div class="row mb-4">
     <div class="col-12">
-        <div class="card border-0 shadow-sm">
-            <div class="card-header bg-white border-0 pt-4 pb-3">
-                <h5 class="mb-0">
-                    <i class="fas fa-history me-2"></i>Recent Policy Executions
+        <div class="card">
+            <div class="card-header">
+                <h5>
+                    <i class="fas fa-history"></i>
+                    Recent Policy Executions
                 </h5>
             </div>
             <div class="card-body">
@@ -295,10 +313,11 @@
 <!-- Policy Status Cards -->
 <div class="row mb-4">
     <div class="col-12">
-        <div class="card border-0 shadow-sm">
-            <div class="card-header bg-white border-0 pt-4 pb-3">
-                <h5 class="mb-0">
-                    <i class="fas fa-shield-alt me-2"></i>Policy Status Overview
+        <div class="card">
+            <div class="card-header">
+                <h5>
+                    <i class="fas fa-shield-alt"></i>
+                    Policy Status Overview
                 </h5>
             </div>
             <div class="card-body">
@@ -315,11 +334,12 @@
 
 <!-- System Information -->
 <div class="row">
-    <div class="col-md-6">
-        <div class="card border-0 shadow-sm">
-            <div class="card-header bg-white border-0 pt-4 pb-3">
-                <h5 class="mb-0">
-                    <i class="fas fa-info-circle me-2"></i>System Information
+    <div class="col-lg-6 mb-4 mb-lg-0">
+        <div class="card">
+            <div class="card-header">
+                <h5>
+                    <i class="fas fa-info-circle"></i>
+                    System Information
                 </h5>
             </div>
             <div class="card-body">
@@ -334,11 +354,12 @@
             </div>
         </div>
     </div>
-    <div class="col-md-6">
-        <div class="card border-0 shadow-sm">
-            <div class="card-header bg-white border-0 pt-4 pb-3">
-                <h5 class="mb-0">
-                    <i class="fas fa-exclamation-triangle me-2"></i>Recent Errors
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header">
+                <h5>
+                    <i class="fas fa-exclamation-triangle"></i>
+                    Recent Errors
                 </h5>
             </div>
             <div class="card-body" style="max-height: 300px; overflow-y: auto;">

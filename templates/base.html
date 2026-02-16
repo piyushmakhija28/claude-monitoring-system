@@ -337,10 +337,40 @@
             padding: 2rem;
             transition: margin-left 0.3s ease;
             flex: 1;
+            min-height: calc(100vh - 70px);
+            background: #f8fafc;
+        }
+
+        [data-theme="dark"] .admin-content {
+            background: #0f172a;
         }
 
         .admin-content.sidebar-collapsed {
             margin-left: 0;
+        }
+
+        /* Page Header */
+        .page-header {
+            margin-bottom: 2rem;
+        }
+
+        .page-title {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+        }
+
+        .page-title i {
+            color: #6366f1;
+        }
+
+        .page-subtitle {
+            font-size: 0.95rem;
+            color: var(--text-secondary);
+            margin-left: 3.5rem;
         }
 
         .navbar {
@@ -466,44 +496,101 @@
         }
 
         .card {
-            border: 1px solid #e5e7eb;
-            border-radius: 12px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-            transition: all 0.3s ease;
+            border: none;
+            border-radius: 16px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             background: #ffffff;
             color: var(--text-primary);
             margin-bottom: 1.5rem;
+            overflow: hidden;
         }
 
         [data-theme="dark"] .card {
             background: #1e293b;
-            border-color: #334155;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+            border: 1px solid #334155;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.3);
         }
 
         .card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 16px rgba(0,0,0,0.1);
+            transform: translateY(-4px);
+            box-shadow: 0 12px 24px rgba(0,0,0,0.12), 0 4px 8px rgba(0,0,0,0.08);
         }
 
         [data-theme="dark"] .card:hover {
-            box-shadow: 0 8px 16px rgba(0,0,0,0.3);
+            box-shadow: 0 12px 24px rgba(0,0,0,0.4), 0 4px 8px rgba(0,0,0,0.2);
+        }
+
+        /* Stat Cards (Metric Cards) */
+        .stat-card {
+            position: relative;
+            overflow: hidden;
+        }
+
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, #6366f1, #8b5cf6);
+        }
+
+        .stat-card .card-body {
+            padding: 1.5rem;
+        }
+
+        .stat-value {
+            font-size: 2.5rem;
+            font-weight: 700;
+            line-height: 1;
+            margin-bottom: 0.5rem;
+        }
+
+        .stat-label {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .stat-icon {
+            position: absolute;
+            right: 1.5rem;
+            top: 1.5rem;
+            font-size: 2.5rem;
+            opacity: 0.15;
         }
 
         .card-header {
-            background: #f8fafc;
+            background: linear-gradient(135deg, #f8fafc 0%, #ffffff 100%);
             color: #1e293b;
             border-bottom: 1px solid #e5e7eb;
-            border-radius: 12px 12px 0 0 !important;
-            padding: 1rem 1.5rem;
+            border-radius: 16px 16px 0 0 !important;
+            padding: 1.25rem 1.5rem;
             font-weight: 600;
-            font-size: 1.1rem;
+            font-size: 1rem;
         }
 
         [data-theme="dark"] .card-header {
-            background: #0f172a;
+            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
             color: #f1f5f9;
             border-bottom-color: #334155;
+        }
+
+        .card-header h5 {
+            margin: 0;
+            font-size: 1rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+        }
+
+        .card-header h5 i {
+            color: #6366f1;
+            margin-right: 0.5rem;
         }
 
         .card-body {
@@ -554,18 +641,70 @@
             color: #991b1b;
         }
 
-        .btn-primary {
-            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
-            border: none;
-            padding: 0.75rem 1.5rem;
+        /* Button Styles */
+        .btn {
             border-radius: 10px;
-            font-weight: 600;
-            transition: all 0.3s ease;
+            padding: 0.625rem 1.25rem;
+            font-weight: 500;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            border: none;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+            color: white;
         }
 
         .btn-primary:hover {
             transform: translateY(-2px);
-            box-shadow: 0 10px 20px rgba(99, 102, 241, 0.3);
+            box-shadow: 0 8px 16px rgba(99, 102, 241, 0.3);
+            background: linear-gradient(135deg, #5558e3, #7c4de7);
+        }
+
+        .btn-outline-primary {
+            border: 2px solid #6366f1;
+            color: #6366f1;
+            background: transparent;
+        }
+
+        .btn-outline-primary:hover {
+            background: #6366f1;
+            color: white;
+            transform: translateY(-2px);
+        }
+
+        .btn-outline-secondary {
+            border: 2px solid #94a3b8;
+            color: #94a3b8;
+            background: transparent;
+        }
+
+        .btn-outline-secondary:hover {
+            background: #94a3b8;
+            color: white;
+            transform: translateY(-2px);
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #10b981, #059669);
+            color: white;
+        }
+
+        .btn-success:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 16px rgba(16, 185, 129, 0.3);
+        }
+
+        .btn-outline-info {
+            border: 2px solid #06b6d4;
+            color: #06b6d4;
+            background: transparent;
+        }
+
+        .btn-outline-info:hover {
+            background: #06b6d4;
+            color: white;
+            transform: translateY(-2px);
         }
 
         .footer {
@@ -582,6 +721,74 @@
         @keyframes pulse {
             0%, 100% { opacity: 1; }
             50% { opacity: 0.7; }
+        }
+
+        /* Fade In Animation */
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .fade-in {
+            animation: fadeIn 0.5s ease-out forwards;
+        }
+
+        /* Stat Card Animation */
+        .stat-card {
+            animation: fadeIn 0.6s ease-out forwards;
+        }
+
+        .stat-card:nth-child(1) {
+            animation-delay: 0.1s;
+        }
+
+        .stat-card:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+
+        .stat-card:nth-child(3) {
+            animation-delay: 0.3s;
+        }
+
+        .stat-card:nth-child(4) {
+            animation-delay: 0.4s;
+        }
+
+        /* Loading Animation */
+        @keyframes shimmer {
+            0% {
+                background-position: -1000px 0;
+            }
+            100% {
+                background-position: 1000px 0;
+            }
+        }
+
+        .loading-shimmer {
+            background: linear-gradient(
+                90deg,
+                #f0f0f0 25%,
+                #e0e0e0 50%,
+                #f0f0f0 75%
+            );
+            background-size: 1000px 100%;
+            animation: shimmer 2s infinite;
+        }
+
+        [data-theme="dark"] .loading-shimmer {
+            background: linear-gradient(
+                90deg,
+                #1e293b 25%,
+                #334155 50%,
+                #1e293b 75%
+            );
+            background-size: 1000px 100%;
         }
 
         .progress-custom {
@@ -678,7 +885,71 @@
             border-radius: 10px;
         }
 
+        /* Responsive Admin Layout */
+        @media (max-width: 1024px) {
+            .admin-sidebar {
+                transform: translateX(-260px);
+                z-index: 1100;
+            }
+
+            .admin-sidebar.show-mobile {
+                transform: translateX(0);
+            }
+
+            .admin-header {
+                left: 0 !important;
+            }
+
+            .admin-content {
+                margin-left: 0 !important;
+            }
+
+            .sidebar-overlay {
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: rgba(0, 0, 0, 0.5);
+                z-index: 1050;
+                display: none;
+            }
+
+            .sidebar-overlay.show {
+                display: block;
+            }
+        }
+
         /* Mobile Responsive Styles */
+        @media (max-width: 991px) {
+            .header-search input {
+                width: 200px;
+            }
+
+            .user-info {
+                display: none;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .admin-header {
+                padding: 0 1rem;
+            }
+
+            .header-search {
+                display: none;
+            }
+
+            .header-right {
+                gap: 0.5rem;
+            }
+
+            .admin-content {
+                padding: 1rem;
+            }
+        }
+
+        /* Original Mobile Styles */
         @media (max-width: 991px) {
             .navbar-brand {
                 font-size: 1.2rem;
@@ -806,6 +1077,81 @@
             }
         }
 
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+            border-radius: 10px;
+        }
+
+        [data-theme="dark"] ::-webkit-scrollbar-track {
+            background: #1e293b;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 10px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+
+        [data-theme="dark"] ::-webkit-scrollbar-thumb {
+            background: #475569;
+        }
+
+        [data-theme="dark"] ::-webkit-scrollbar-thumb:hover {
+            background: #64748b;
+        }
+
+        /* Smooth Transitions */
+        * {
+            transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+        }
+
+        /* Badge Styles */
+        .badge {
+            padding: 0.375rem 0.75rem;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 0.75rem;
+        }
+
+        /* Activity Feed Styling */
+        .activity-item {
+            transition: background 0.2s ease;
+            border-radius: 8px;
+            padding: 0.75rem;
+        }
+
+        .activity-item:hover {
+            background: rgba(99, 102, 241, 0.05);
+        }
+
+        /* Table Improvements */
+        .table {
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        .table thead th {
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.75rem;
+            letter-spacing: 0.5px;
+            padding: 1rem;
+        }
+
+        .table tbody td {
+            padding: 1rem;
+            vertical-align: middle;
+        }
+
         /* Touch device optimizations */
         @media (hover: none) and (pointer: coarse) {
             .btn, .nav-link, .list-group-item, .card {
@@ -849,6 +1195,243 @@
 </head>
 <body>
     {% if session.logged_in %}
+    <!-- Admin Dashboard Layout -->
+    <div class="admin-wrapper">
+        <!-- Sidebar Navigation -->
+        <aside class="admin-sidebar" id="adminSidebar">
+            <div class="sidebar-brand">
+                <i class="fas fa-robot"></i>
+                <span class="sidebar-brand-text">Claude Insight</span>
+            </div>
+
+            <nav class="sidebar-menu">
+                <div class="sidebar-menu-item">
+                    <a href="{{ url_for('dashboard') }}" class="sidebar-menu-link {% if request.endpoint == 'dashboard' %}active{% endif %}">
+                        <i class="fas fa-tachometer-alt"></i>
+                        <span>Dashboard</span>
+                    </a>
+                </div>
+
+                <div class="sidebar-menu-item">
+                    <a href="#" class="sidebar-menu-link" onclick="toggleSubmenu('analyticsSubmenu')">
+                        <i class="fas fa-chart-bar"></i>
+                        <span>Analytics</span>
+                        <i class="fas fa-chevron-down ms-auto"></i>
+                    </a>
+                    <div class="sidebar-submenu" id="analyticsSubmenu">
+                        <a href="{{ url_for('analytics') }}" class="sidebar-submenu-link">Analytics Dashboard</a>
+                        <a href="{{ url_for('comparison') }}" class="sidebar-submenu-link">Cost Comparison</a>
+                        <a href="{{ url_for('predictive_analytics_page') }}" class="sidebar-submenu-link">Forecasting</a>
+                        <a href="{{ url_for('performance_profiling') }}" class="sidebar-submenu-link">Performance</a>
+                    </div>
+                </div>
+
+                <div class="sidebar-menu-item">
+                    <a href="#" class="sidebar-menu-link" onclick="toggleSubmenu('aiSubmenu')">
+                        <i class="fas fa-brain"></i>
+                        <span>AI & Automation</span>
+                        <i class="fas fa-chevron-down ms-auto"></i>
+                    </a>
+                    <div class="sidebar-submenu" id="aiSubmenu">
+                        <a href="{{ url_for('automation_dashboard') }}" class="sidebar-submenu-link">Automation</a>
+                        <a href="{{ url_for('anomaly_detection') }}" class="sidebar-submenu-link">AI Detection</a>
+                        <a href="{{ url_for('ml_training') }}" class="sidebar-submenu-link">ML Training</a>
+                    </div>
+                </div>
+
+                <div class="sidebar-menu-item">
+                    <a href="#" class="sidebar-menu-link" onclick="toggleSubmenu('sessionsSubmenu')">
+                        <i class="fas fa-history"></i>
+                        <span>Sessions</span>
+                        <i class="fas fa-chevron-down ms-auto"></i>
+                    </a>
+                    <div class="sidebar-submenu" id="sessionsSubmenu">
+                        <a href="{{ url_for('sessions') }}" class="sidebar-submenu-link">Session History</a>
+                        <a href="{{ url_for('session_search.session_search_page') }}" class="sidebar-submenu-link">Session Search</a>
+                        <a href="{{ url_for('advanced_search') }}" class="sidebar-submenu-link">Advanced Search</a>
+                        <a href="{{ url_for('logs') }}" class="sidebar-submenu-link">Logs</a>
+                    </div>
+                </div>
+
+                <div class="sidebar-menu-item">
+                    <a href="#" class="sidebar-menu-link" onclick="toggleSubmenu('widgetsSubmenu')">
+                        <i class="fas fa-puzzle-piece"></i>
+                        <span>Widgets</span>
+                        <i class="fas fa-chevron-down ms-auto"></i>
+                    </a>
+                    <div class="sidebar-submenu" id="widgetsSubmenu">
+                        <a href="{{ url_for('widgets') }}" class="sidebar-submenu-link">Marketplace</a>
+                        <a href="{{ url_for('widget_builder') }}" class="sidebar-submenu-link">Widget Builder</a>
+                        <a href="{{ url_for('dashboard_builder') }}" class="sidebar-submenu-link">Dashboard Builder</a>
+                        <a href="{{ url_for('community_marketplace') }}" class="sidebar-submenu-link">Community</a>
+                    </div>
+                </div>
+
+                <div class="sidebar-menu-item">
+                    <a href="#" class="sidebar-menu-link" onclick="toggleSubmenu('toolsSubmenu')">
+                        <i class="fas fa-tools"></i>
+                        <span>Tools</span>
+                        <i class="fas fa-chevron-down ms-auto"></i>
+                    </a>
+                    <div class="sidebar-submenu" id="toolsSubmenu">
+                        <a href="{{ url_for('debugging_tools') }}" class="sidebar-submenu-link">Debugging</a>
+                        <a href="{{ url_for('plugins') }}" class="sidebar-submenu-link">Plugins</a>
+                        <a href="{{ url_for('alert_routing_page') }}" class="sidebar-submenu-link">Alert Routing</a>
+                    </div>
+                </div>
+
+                <div class="sidebar-menu-item">
+                    <a href="#" class="sidebar-menu-link" onclick="toggleSubmenu('integrationsSubmenu')">
+                        <i class="fas fa-plug"></i>
+                        <span>Integrations</span>
+                        <i class="fas fa-chevron-down ms-auto"></i>
+                    </a>
+                    <div class="sidebar-submenu" id="integrationsSubmenu">
+                        <a href="{{ url_for('integrations') }}" class="sidebar-submenu-link">Monitoring</a>
+                        <a href="{{ url_for('notification_channels') }}" class="sidebar-submenu-link">Notifications</a>
+                    </div>
+                </div>
+
+                <div class="sidebar-menu-item">
+                    <a href="#" class="sidebar-menu-link" onclick="toggleSubmenu('settingsSubmenu')">
+                        <i class="fas fa-cog"></i>
+                        <span>Settings</span>
+                        <i class="fas fa-chevron-down ms-auto"></i>
+                    </a>
+                    <div class="sidebar-submenu" id="settingsSubmenu">
+                        <a href="{{ url_for('settings') }}" class="sidebar-submenu-link">General Settings</a>
+                        <a href="{{ url_for('claude_credentials.credentials_page') }}" class="sidebar-submenu-link">Claude API</a>
+                        <a href="{{ url_for('twofa_settings') }}" class="sidebar-submenu-link">2FA Security</a>
+                        <a href="{{ url_for('policies') }}" class="sidebar-submenu-link">Policies</a>
+                    </div>
+                </div>
+            </nav>
+        </aside>
+
+        <!-- Top Header -->
+        <header class="admin-header" id="adminHeader">
+            <div class="header-left">
+                <button class="sidebar-toggle" onclick="toggleSidebar()">
+                    <i class="fas fa-bars"></i>
+                </button>
+
+                <div class="header-search">
+                    <i class="fas fa-search"></i>
+                    <input type="text" placeholder="Search..." id="globalSearch">
+                </div>
+            </div>
+
+            <div class="header-right">
+                <button class="header-icon" onclick="toggleTheme()" title="Toggle Theme">
+                    <i class="fas fa-moon" id="theme-icon"></i>
+                </button>
+
+                <button class="header-icon" href="{{ url_for('notifications') }}" title="Notifications">
+                    <i class="fas fa-bell"></i>
+                    <span class="header-badge" id="notificationCount" style="display: none;">0</span>
+                </button>
+
+                <div class="user-menu" onclick="toggleUserMenu()">
+                    <div class="user-avatar">
+                        <i class="fas fa-user"></i>
+                    </div>
+                    <div class="user-info">
+                        <div class="user-name">Admin</div>
+                        <div class="user-role">Administrator</div>
+                    </div>
+                    <i class="fas fa-chevron-down ms-2"></i>
+                </div>
+
+                <div class="dropdown-menu dropdown-menu-end" id="userDropdown" style="display: none; position: absolute; right: 0; top: 60px;">
+                    <a class="dropdown-item" href="{{ url_for('settings') }}">
+                        <i class="fas fa-cog me-2"></i>Settings
+                    </a>
+                    <a class="dropdown-item" href="{{ url_for('logout') }}">
+                        <i class="fas fa-sign-out-alt me-2"></i>Logout
+                    </a>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content Area -->
+        <main class="admin-content" id="adminContent">
+            <div class="container-fluid">
+                {% block content %}{% endblock %}
+            </div>
+        </main>
+    </div>
+
+    <!-- Sidebar Overlay for Mobile -->
+    <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeMobileSidebar()"></div>
+
+    <script>
+        function toggleSidebar() {
+            const sidebar = document.getElementById('adminSidebar');
+            const header = document.getElementById('adminHeader');
+            const content = document.getElementById('adminContent');
+            const overlay = document.getElementById('sidebarOverlay');
+            const isMobile = window.innerWidth <= 1024;
+
+            if (isMobile) {
+                // Mobile: Show/hide sidebar with overlay
+                sidebar.classList.toggle('show-mobile');
+                overlay.classList.toggle('show');
+            } else {
+                // Desktop: Collapse sidebar
+                sidebar.classList.toggle('collapsed');
+                header.classList.toggle('sidebar-collapsed');
+                content.classList.toggle('sidebar-collapsed');
+                localStorage.setItem('sidebarCollapsed', sidebar.classList.contains('collapsed'));
+            }
+        }
+
+        function closeMobileSidebar() {
+            const sidebar = document.getElementById('adminSidebar');
+            const overlay = document.getElementById('sidebarOverlay');
+
+            sidebar.classList.remove('show-mobile');
+            overlay.classList.remove('show');
+        }
+
+        function toggleSubmenu(id) {
+            event.preventDefault();
+            const submenu = document.getElementById(id);
+            const allSubmenus = document.querySelectorAll('.sidebar-submenu');
+
+            allSubmenus.forEach(menu => {
+                if (menu.id !== id) {
+                    menu.classList.remove('show');
+                }
+            });
+
+            submenu.classList.toggle('show');
+        }
+
+        function toggleUserMenu() {
+            const dropdown = document.getElementById('userDropdown');
+            dropdown.style.display = dropdown.style.display === 'none' ? 'block' : 'none';
+        }
+
+        // Close user menu when clicking outside
+        document.addEventListener('click', function(event) {
+            const userMenu = document.querySelector('.user-menu');
+            const dropdown = document.getElementById('userDropdown');
+
+            if (!userMenu.contains(event.target) && dropdown) {
+                dropdown.style.display = 'none';
+            }
+        });
+
+        // Load sidebar state
+        document.addEventListener('DOMContentLoaded', function() {
+            const sidebarCollapsed = localStorage.getItem('sidebarCollapsed') === 'true';
+            if (sidebarCollapsed) {
+                toggleSidebar();
+            }
+        });
+    </script>
+    {% else %}
+    <!-- Login Page (No Admin Layout) -->
     <nav class="navbar navbar-expand-lg">
         <div class="container">
             <a class="navbar-brand" href="{{ url_for('dashboard') }}">
@@ -860,206 +1443,17 @@
             </button>
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav ms-auto">
-                    <!-- Dashboard -->
-                    <li class="nav-item">
-                        <a class="nav-link {% if request.endpoint == 'dashboard' %}active{% endif %}" href="{{ url_for('dashboard') }}">
-                            <i class="fas fa-tachometer-alt"></i> Dashboard
-                        </a>
-                    </li>
-
-                    <!-- Analytics Dropdown -->
-                    <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle {% if request.endpoint in ['analytics', 'comparison', 'predictive_analytics_page', 'performance_profiling'] %}active{% endif %}"
-                           href="#" id="analyticsDropdown" role="button" data-bs-toggle="dropdown">
-                            <i class="fas fa-chart-bar"></i> Analytics
-                        </a>
-                        <ul class="dropdown-menu">
-                            <li><a class="dropdown-item" href="{{ url_for('analytics') }}">
-                                <i class="fas fa-chart-bar me-2"></i>Analytics Dashboard
-                            </a></li>
-                            <li><a class="dropdown-item" href="{{ url_for('comparison') }}">
-                                <i class="fas fa-chart-line me-2"></i>Cost Comparison
-                            </a></li>
-                            <li><a class="dropdown-item" href="{{ url_for('predictive_analytics_page') }}">
-                                <i class="fas fa-chart-line me-2"></i>Forecasting
-                            </a></li>
-                            <li><a class="dropdown-item" href="{{ url_for('performance_profiling') }}">
-                                <i class="fas fa-tachometer-alt me-2"></i>Performance
-                            </a></li>
-                        </ul>
-                    </li>
-
-                    <!-- AI & Automation Dropdown -->
-                    <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle {% if request.endpoint in ['automation_dashboard', 'anomaly_detection', 'ml_training'] %}active{% endif %}"
-                           href="#" id="aiDropdown" role="button" data-bs-toggle="dropdown">
-                            <i class="fas fa-brain"></i> AI & Automation
-                        </a>
-                        <ul class="dropdown-menu">
-                            <li><a class="dropdown-item" href="{{ url_for('automation_dashboard') }}">
-                                <i class="fas fa-robot me-2"></i>Automation
-                            </a></li>
-                            <li><a class="dropdown-item" href="{{ url_for('anomaly_detection') }}">
-                                <i class="fas fa-brain me-2"></i>AI Detection
-                            </a></li>
-                            <li><a class="dropdown-item" href="{{ url_for('ml_training') }}">
-                                <i class="fas fa-brain me-2"></i>ML Training
-                            </a></li>
-                        </ul>
-                    </li>
-
-                    <!-- Sessions & Search Dropdown -->
-                    <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle {% if request.endpoint in ['sessions', 'session_search.session_search_page', 'advanced_search', 'logs'] %}active{% endif %}"
-                           href="#" id="sessionsDropdown" role="button" data-bs-toggle="dropdown">
-                            <i class="fas fa-history"></i> Sessions
-                        </a>
-                        <ul class="dropdown-menu">
-                            <li><a class="dropdown-item" href="{{ url_for('sessions') }}">
-                                <i class="fas fa-history me-2"></i>Session History
-                            </a></li>
-                            <li><a class="dropdown-item" href="{{ url_for('session_search.session_search_page') }}">
-                                <i class="fas fa-search me-2"></i>Session Search
-                            </a></li>
-                            <li><a class="dropdown-item" href="{{ url_for('advanced_search') }}">
-                                <i class="fas fa-search me-2"></i>Advanced Search
-                            </a></li>
-                            <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item" href="{{ url_for('logs') }}">
-                                <i class="fas fa-file-alt me-2"></i>Logs
-                            </a></li>
-                        </ul>
-                    </li>
-
-                    <!-- Widgets Dropdown -->
-                    <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle {% if request.endpoint in ['widgets', 'widget_builder', 'community_marketplace'] %}active{% endif %}"
-                           href="#" id="widgetsDropdown" role="button" data-bs-toggle="dropdown">
-                            <i class="fas fa-puzzle-piece"></i> Widgets
-                        </a>
-                        <ul class="dropdown-menu">
-                            <li><a class="dropdown-item" href="{{ url_for('widgets') }}">
-                                <i class="fas fa-store me-2"></i>Marketplace
-                            </a></li>
-                            <li><a class="dropdown-item" href="{{ url_for('widget_builder') }}">
-                                <i class="fas fa-magic me-2"></i>Widget Builder
-                            </a></li>
-                            <li><a class="dropdown-item" href="{{ url_for('dashboard_builder') }}">
-                                <i class="fas fa-th-large me-2"></i>Dashboard Builder
-                            </a></li>
-                            <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item" href="{{ url_for('community_marketplace') }}">
-                                <i class="fas fa-users me-2"></i>Community
-                            </a></li>
-                        </ul>
-                    </li>
-
-                    <!-- Tools Dropdown -->
-                    <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle {% if request.endpoint in ['debugging_tools', 'plugins', 'alert_routing_page'] %}active{% endif %}"
-                           href="#" id="toolsDropdown" role="button" data-bs-toggle="dropdown">
-                            <i class="fas fa-tools"></i> Tools
-                        </a>
-                        <ul class="dropdown-menu">
-                            <li><a class="dropdown-item" href="{{ url_for('debugging_tools') }}">
-                                <i class="fas fa-bug me-2"></i>Debugging
-                            </a></li>
-                            <li><a class="dropdown-item" href="{{ url_for('plugins') }}">
-                                <i class="fas fa-puzzle-piece me-2"></i>Plugins
-                            </a></li>
-                            <li><a class="dropdown-item" href="{{ url_for('alert_routing_page') }}">
-                                <i class="fas fa-route me-2"></i>Alert Routing
-                            </a></li>
-                        </ul>
-                    </li>
-
-                    <!-- Integrations Dropdown -->
-                    <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle {% if request.endpoint in ['integrations', 'notification_channels'] %}active{% endif %}"
-                           href="#" id="integrationsDropdown" role="button" data-bs-toggle="dropdown">
-                            <i class="fas fa-plug"></i> Integrations
-                        </a>
-                        <ul class="dropdown-menu">
-                            <li><a class="dropdown-item" href="{{ url_for('integrations') }}">
-                                <i class="fas fa-chart-line me-2"></i>Monitoring
-                            </a></li>
-                            <li><a class="dropdown-item" href="{{ url_for('notification_channels') }}">
-                                <i class="fas fa-paper-plane me-2"></i>Notifications
-                            </a></li>
-                        </ul>
-                    </li>
-
-                    <!-- Settings Dropdown -->
-                    <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle {% if request.endpoint in ['settings', 'twofa_settings', 'claude_credentials.credentials_page', 'policies'] %}active{% endif %}"
-                           href="#" id="settingsDropdown" role="button" data-bs-toggle="dropdown">
-                            <i class="fas fa-cog"></i> Settings
-                        </a>
-                        <ul class="dropdown-menu dropdown-menu-end">
-                            <li><a class="dropdown-item" href="{{ url_for('settings') }}">
-                                <i class="fas fa-cog me-2"></i>General Settings
-                            </a></li>
-                            <li><a class="dropdown-item" href="{{ url_for('claude_credentials.credentials_page') }}">
-                                <i class="fas fa-key me-2"></i>Claude API
-                            </a></li>
-                            <li><a class="dropdown-item" href="{{ url_for('twofa_settings') }}">
-                                <i class="fas fa-shield-alt me-2"></i>2FA Security
-                            </a></li>
-                            <li><a class="dropdown-item" href="{{ url_for('policies') }}">
-                                <i class="fas fa-shield-alt me-2"></i>Policies
-                            </a></li>
-                            <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item" href="{{ url_for('logout') }}">
-                                <i class="fas fa-sign-out-alt me-2"></i>Logout
-                            </a></li>
-                        </ul>
-                    </li>
-
-                    <!-- User Actions -->
-                    <li class="nav-item">
-                        <a class="nav-link {% if request.endpoint == 'notifications' %}active{% endif %}" href="{{ url_for('notifications') }}" title="Notifications">
-                            <i class="fas fa-bell"></i>
-                            <span class="badge bg-danger notification-badge" id="notificationBadge" style="display: none;">0</span>
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="javascript:void(0);" onclick="toggleTheme()" title="Toggle Dark Mode">
-                            <i class="fas fa-moon" id="theme-icon"></i>
-                        </a>
-                    </li>
-                    <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" id="languageDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false" title="Change Language">
-                            <i class="fas fa-globe"></i>
-                        </a>
-                        <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="languageDropdown">
-                            <li><a class="dropdown-item" href="javascript:void(0);" onclick="changeLanguage('en')">
-                                <i class="fas fa-check me-2" id="lang-check-en" style="visibility: hidden;"></i> English
-                            </a></li>
-                            <li><a class="dropdown-item" href="javascript:void(0);" onclick="changeLanguage('hi')">
-                                <i class="fas fa-check me-2" id="lang-check-hi" style="visibility: hidden;"></i> हिन्दी
-                            </a></li>
-                            <li><a class="dropdown-item" href="javascript:void(0);" onclick="changeLanguage('es')">
-                                <i class="fas fa-check me-2" id="lang-check-es" style="visibility: hidden;"></i> Español
-                            </a></li>
-                            <li><a class="dropdown-item" href="javascript:void(0);" onclick="changeLanguage('fr')">
-                                <i class="fas fa-check me-2" id="lang-check-fr" style="visibility: hidden;"></i> Français
-                            </a></li>
-                            <li><a class="dropdown-item" href="javascript:void(0);" onclick="changeLanguage('de')">
-                                <i class="fas fa-check me-2" id="lang-check-de" style="visibility: hidden;"></i> Deutsch
-                            </a></li>
-                        </ul>
-                    </li>
                 </ul>
             </div>
         </div>
     </nav>
-    {% endif %}
 
     <div class="main-content">
         <div class="container">
             {% block content %}{% endblock %}
         </div>
     </div>
+    {% endif %}
 
     {% if session.logged_in %}
     <!-- Professional Footer -->
