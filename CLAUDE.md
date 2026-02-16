@@ -1,7 +1,25 @@
 # Memory System - ACTIVE ENFORCEMENT MODE
 
-**VERSION:** 2.4.0 (Migration System Mode)
+**VERSION:** 2.5.0 (Zero-Tolerance Failure Policy)
 **STATUS:** 🟢 FULLY OPERATIONAL
+
+---
+
+> ## 🚨🚨🚨 ZERO-TOLERANCE POLICY 🚨🚨🚨
+>
+> **IF ANY POLICY OR SYSTEM FAILS → ALL WORK STOPS IMMEDIATELY**
+>
+> **MANDATORY FIRST STEP BEFORE ANY ACTION:**
+> ```bash
+> export PYTHONIOENCODING=utf-8
+> bash ~/.claude/memory/auto-fix-enforcer.sh
+> ```
+>
+> **Exit Code ≠ 0 = BLOCKED - No work until fixed!**
+>
+> See section: [Zero-Tolerance Failure Policy](#-zero-tolerance-failure-policy-v250-)
+
+---
 
 > **📖 COMPREHENSIVE DOCUMENTATION:** For complete system documentation with full indexing, all policies, Java Spring Boot standards, optimization strategies, security best practices, and detailed examples, see:
 >
@@ -37,6 +55,82 @@ python ~/.claude/memory/session-start-check.py
 ```
 
 **⚠️ CRITICAL: Always use `python` command, NOT `python3`!**
+
+---
+
+## 🚨 ZERO-TOLERANCE FAILURE POLICY (v2.5.0) 🚨
+
+**🔴 CRITICAL RULE: IF ANY POLICY OR SYSTEM FAILS → STOP ALL WORK IMMEDIATELY**
+
+### **Mandatory Before EVERY Action:**
+
+```bash
+export PYTHONIOENCODING=utf-8
+bash ~/.claude/memory/auto-fix-enforcer.sh
+```
+
+**Exit Code 0:** ✅ All systems OK → Continue work
+**Exit Code ≠ 0:** 🚨 **STOP EVERYTHING** → Fix failures → Retry
+
+### **What Gets Checked:**
+
+| Check | Priority | If Fails |
+|-------|----------|----------|
+| Python availability | 🔴 CRITICAL | **BLOCK ALL WORK** |
+| Critical files present | 🔴 CRITICAL | **BLOCK ALL WORK** |
+| Blocking enforcer initialized | 🔴 CRITICAL | **BLOCK ALL WORK** (auto-fix) |
+| Session state valid | 🟠 HIGH | **BLOCK ALL WORK** |
+| Daemon status | ℹ️ INFO | Continue (just report) |
+| Git repository | ℹ️ INFO | Continue (just report) |
+
+### **Enforcement Rules:**
+
+1. **🚨 BEFORE responding to ANY user request:**
+   - Run auto-fix-enforcer.sh FIRST
+   - Check exit code
+   - If ≠ 0: **STOP, report failures, wait for fix**
+
+2. **🚨 BEFORE using ANY tool:**
+   - Verify systems are OK
+   - If enforcer failed earlier: **REFUSE to proceed**
+
+3. **🚨 BEFORE starting ANY task:**
+   - Systems must be operational
+   - No exceptions, no workarounds
+
+4. **🚨 IF any failure detected:**
+   - **IMMEDIATELY stop all work**
+   - Report failure clearly
+   - Provide fix instructions
+   - Wait for user to fix
+   - Re-run enforcer
+   - Only continue when exit code = 0
+
+### **Auto-Fix Capabilities:**
+
+- ✅ **Can auto-fix:** Blocking enforcer state, session markers
+- ⚠️ **Manual fix needed:** Python install, missing files, daemons
+
+### **Philosophy:**
+
+- ❌ **NEVER** work around failures
+- ❌ **NEVER** ignore warnings
+- ❌ **NEVER** proceed with broken systems
+- ✅ **ALWAYS** fix immediately and properly
+- ✅ **ALWAYS** verify before continuing
+
+### **Example:**
+
+```
+User: "Create a new service"
+Me:
+  1. Run auto-fix-enforcer.sh
+  2. Check exit code
+  3. If 0 → Proceed with creating service
+  4. If ≠ 0 → "🚨 System failures detected. Fix these first: [list]"
+```
+
+**📖 Full docs:** `~/.claude/memory/docs/auto-fix-enforcement.md`
 
 ---
 
@@ -904,13 +998,14 @@ Task(subagent_type="migration-expert", prompt="...")
 
 ---
 
-**VERSION:** 2.4.0 (Migration System Mode)
+**VERSION:** 2.5.0 (Zero-Tolerance Failure Policy)
 **LAST UPDATED:** 2026-02-16
 **STATUS:** 🟢 FULLY OPERATIONAL
 **LOCATION:** `~/.claude/CLAUDE.md`
 
 **CHANGELOG:**
-- v2.4.0 (2026-02-15): Added Migration Skill & Migration Expert Agent
+- v2.5.0 (2026-02-16): 🚨 Added Auto-Fix Enforcement System - Zero-Tolerance Failure Policy
+- v2.4.0 (2026-02-16): Added Plan Detection System (Free/Pro/Team/Enterprise)
 - v2.3.0 (2026-02-15): Added GitHub CLI (`gh`) mandatory enforcement
 - v2.2.0 (2026-02-10): Active enforcement mode restored
 - v2.1.0 (2026-02-09): Initial memory system release
