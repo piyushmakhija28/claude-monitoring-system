@@ -56,7 +56,7 @@ class TestAppRoutes(unittest.TestCase):
     def test_login_redirect_when_authenticated(self):
         """Test login redirects to dashboard when already authenticated"""
         with self.client.session_transaction() as sess:
-            sess['authenticated'] = True
+            sess['logged_in'] = True
 
         response = self.client.get('/login')
         self.assertEqual(response.status_code, 302)  # Redirect
@@ -92,7 +92,7 @@ class TestAppRoutes(unittest.TestCase):
     def test_logout(self):
         """Test logout functionality"""
         with self.client.session_transaction() as sess:
-            sess['authenticated'] = True
+            sess['logged_in'] = True
 
         response = self.client.get('/logout', follow_redirects=False)
         self.assertEqual(response.status_code, 302)
@@ -105,7 +105,7 @@ class TestAppRoutes(unittest.TestCase):
     def test_2fa_settings_page(self):
         """Test 2FA settings page access"""
         with self.client.session_transaction() as sess:
-            sess['authenticated'] = True
+            sess['logged_in'] = True
 
         response = self.client.get('/2fa-settings')
         self.assertEqual(response.status_code, 200)
@@ -119,7 +119,7 @@ class TestAppRoutes(unittest.TestCase):
     def test_2fa_status_enabled(self, mock_open):
         """Test 2FA status when enabled"""
         with self.client.session_transaction() as sess:
-            sess['authenticated'] = True
+            sess['logged_in'] = True
 
         mock_file = MagicMock()
         mock_file.read.return_value = 'test_secret'
@@ -135,7 +135,7 @@ class TestAppRoutes(unittest.TestCase):
     def test_2fa_setup(self, mock_open, mock_random):
         """Test 2FA setup"""
         with self.client.session_transaction() as sess:
-            sess['authenticated'] = True
+            sess['logged_in'] = True
 
         mock_random.return_value = 'TEST_SECRET_KEY'
         mock_file = MagicMock()
@@ -152,7 +152,7 @@ class TestAppRoutes(unittest.TestCase):
     def test_dashboard_authenticated(self):
         """Test dashboard access when authenticated"""
         with self.client.session_transaction() as sess:
-            sess['authenticated'] = True
+            sess['logged_in'] = True
 
         response = self.client.get('/dashboard')
         self.assertEqual(response.status_code, 200)
@@ -165,7 +165,7 @@ class TestAppRoutes(unittest.TestCase):
     def test_comparison_page(self):
         """Test comparison page access"""
         with self.client.session_transaction() as sess:
-            sess['authenticated'] = True
+            sess['logged_in'] = True
 
         response = self.client.get('/comparison')
         self.assertEqual(response.status_code, 200)
@@ -173,7 +173,7 @@ class TestAppRoutes(unittest.TestCase):
     def test_policies_page(self):
         """Test policies page access"""
         with self.client.session_transaction() as sess:
-            sess['authenticated'] = True
+            sess['logged_in'] = True
 
         response = self.client.get('/policies')
         self.assertEqual(response.status_code, 200)
@@ -181,7 +181,7 @@ class TestAppRoutes(unittest.TestCase):
     def test_logs_page(self):
         """Test logs page access"""
         with self.client.session_transaction() as sess:
-            sess['authenticated'] = True
+            sess['logged_in'] = True
 
         response = self.client.get('/logs')
         self.assertEqual(response.status_code, 200)
@@ -192,7 +192,7 @@ class TestAppRoutes(unittest.TestCase):
     def test_api_metrics(self, mock_health):
         """Test metrics API endpoint"""
         with self.client.session_transaction() as sess:
-            sess['authenticated'] = True
+            sess['logged_in'] = True
 
         mock_health.return_value = {
             'status': 'healthy',
@@ -210,7 +210,7 @@ class TestAppRoutes(unittest.TestCase):
     def test_api_activity(self, mock_activity):
         """Test activity API endpoint"""
         with self.client.session_transaction() as sess:
-            sess['authenticated'] = True
+            sess['logged_in'] = True
 
         mock_activity.return_value = {
             'recent_activity': [],
@@ -226,7 +226,7 @@ class TestAppRoutes(unittest.TestCase):
     def test_api_policies(self, mock_policies):
         """Test policies API endpoint"""
         with self.client.session_transaction() as sess:
-            sess['authenticated'] = True
+            sess['logged_in'] = True
 
         mock_policies.return_value = [
             {'name': 'test-policy', 'status': 'active'}
@@ -241,7 +241,7 @@ class TestAppRoutes(unittest.TestCase):
     def test_api_system_info(self, mock_sysinfo):
         """Test system info API endpoint"""
         with self.client.session_transaction() as sess:
-            sess['authenticated'] = True
+            sess['logged_in'] = True
 
         mock_sysinfo.return_value = {
             'version': '2.5.0',
@@ -260,7 +260,7 @@ class TestAppRoutes(unittest.TestCase):
     def test_export_csv(self, mock_logs):
         """Test CSV export"""
         with self.client.session_transaction() as sess:
-            sess['authenticated'] = True
+            sess['logged_in'] = True
 
         mock_logs.return_value = [
             {'timestamp': '2026-02-16 10:00:00', 'level': 'INFO', 'message': 'Test'}
@@ -274,7 +274,7 @@ class TestAppRoutes(unittest.TestCase):
     def test_export_json(self, mock_logs):
         """Test JSON export"""
         with self.client.session_transaction() as sess:
-            sess['authenticated'] = True
+            sess['logged_in'] = True
 
         mock_logs.return_value = [
             {'timestamp': '2026-02-16 10:00:00', 'level': 'INFO', 'message': 'Test'}
@@ -289,7 +289,7 @@ class TestAppRoutes(unittest.TestCase):
     def test_dashboard_builder_page(self):
         """Test dashboard builder page access"""
         with self.client.session_transaction() as sess:
-            sess['authenticated'] = True
+            sess['logged_in'] = True
 
         response = self.client.get('/dashboard-builder')
         self.assertEqual(response.status_code, 200)
@@ -298,7 +298,7 @@ class TestAppRoutes(unittest.TestCase):
     def test_save_dashboard(self, mock_open):
         """Test saving dashboard configuration"""
         with self.client.session_transaction() as sess:
-            sess['authenticated'] = True
+            sess['logged_in'] = True
 
         mock_file = MagicMock()
         mock_open.return_value.__enter__.return_value = mock_file
@@ -317,7 +317,7 @@ class TestAppRoutes(unittest.TestCase):
     def test_list_dashboards(self, mock_exists, mock_open):
         """Test listing dashboards"""
         with self.client.session_transaction() as sess:
-            sess['authenticated'] = True
+            sess['logged_in'] = True
 
         mock_file = MagicMock()
         mock_file.read.return_value = json.dumps([{
@@ -336,7 +336,7 @@ class TestAppRoutes(unittest.TestCase):
     def test_plugins_page(self):
         """Test plugins page access"""
         with self.client.session_transaction() as sess:
-            sess['authenticated'] = True
+            sess['logged_in'] = True
 
         response = self.client.get('/plugins')
         self.assertEqual(response.status_code, 200)
@@ -346,7 +346,7 @@ class TestAppRoutes(unittest.TestCase):
     def test_get_installed_plugins(self, mock_exists, mock_open):
         """Test getting installed plugins"""
         with self.client.session_transaction() as sess:
-            sess['authenticated'] = True
+            sess['logged_in'] = True
 
         mock_file = MagicMock()
         mock_file.read.return_value = json.dumps([{
@@ -366,7 +366,7 @@ class TestAppRoutes(unittest.TestCase):
     def test_integrations_page(self):
         """Test integrations page access"""
         with self.client.session_transaction() as sess:
-            sess['authenticated'] = True
+            sess['logged_in'] = True
 
         response = self.client.get('/integrations')
         self.assertEqual(response.status_code, 200)
@@ -374,7 +374,7 @@ class TestAppRoutes(unittest.TestCase):
     def test_metrics_page(self):
         """Test metrics page access"""
         with self.client.session_transaction() as sess:
-            sess['authenticated'] = True
+            sess['logged_in'] = True
 
         response = self.client.get('/metrics')
         self.assertEqual(response.status_code, 200)
@@ -384,7 +384,7 @@ class TestAppRoutes(unittest.TestCase):
     def test_notification_channels_page(self):
         """Test notification channels page access"""
         with self.client.session_transaction() as sess:
-            sess['authenticated'] = True
+            sess['logged_in'] = True
 
         response = self.client.get('/notification-channels')
         self.assertEqual(response.status_code, 200)
@@ -393,7 +393,7 @@ class TestAppRoutes(unittest.TestCase):
     def test_save_slack_config(self, mock_open):
         """Test saving Slack notification config"""
         with self.client.session_transaction() as sess:
-            sess['authenticated'] = True
+            sess['logged_in'] = True
 
         mock_file = MagicMock()
         mock_open.return_value.__enter__.return_value = mock_file
@@ -422,7 +422,7 @@ class TestAppRoutes(unittest.TestCase):
     def test_invalid_json_post(self):
         """Test handling of invalid JSON in POST"""
         with self.client.session_transaction() as sess:
-            sess['authenticated'] = True
+            sess['logged_in'] = True
 
         response = self.client.post('/api/dashboards/save',
             data='invalid json',

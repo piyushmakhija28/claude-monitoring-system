@@ -111,10 +111,12 @@ class PasswordValidator:
         if not re.search(r'[!@#$%^&*(),.?":{}|<>]', password):
             return False, "Password must contain at least one special character"
 
-        # Check for common passwords
-        common_passwords = ['password', 'admin123', 'letmein', '123456', 'qwerty']
-        if password.lower() in common_passwords:
-            return False, "Password is too common. Please choose a stronger password."
+        # Check for common passwords (case-insensitive, substring match)
+        common_passwords = ['password', 'admin', 'letmein', '123456', 'qwerty', 'welcome', 'passw0rd']
+        password_lower = password.lower()
+        for common in common_passwords:
+            if common in password_lower:
+                return False, "Password contains common patterns. Please choose a stronger password."
 
         return True, "Password is valid"
 
@@ -237,13 +239,14 @@ class CommandValidator:
 class LogSanitizer:
     """Sanitize sensitive data from log messages"""
 
-    PATTERNS = {
-        'email': (r'[\w\.-]+@[\w\.-]+\.\w+', '[EMAIL_REDACTED]'),
-        'phone': (r'\d{3}[-.]?\d{3}[-.]?\d{4}', '[PHONE_REDACTED]'),
-        'api_key': (r'[A-Za-z0-9]{32,}', '[API_KEY_REDACTED]'),
-        'password': (r'password["\']?\s*[:=]\s*["\']?[\w!@#$%^&*]+', 'password=[PASSWORD_REDACTED]'),
-        'token': (r'token["\']?\s*[:=]\s*["\']?[\w-]+', 'token=[TOKEN_REDACTED]'),
-    }
+    # Order matters: More specific patterns should come before general ones
+    PATTERNS = [
+        ('api_key', r'(?:api[_\s-]?key[:\s=]+\s*)([A-Za-z0-9]{12,})', r'[API_KEY_REDACTED]'),
+        ('password', r'password["\']?\s*[:=]\s*["\']?[\w!@#$%^&*]+', 'password=[PASSWORD_REDACTED]'),
+        ('token', r'token["\']?\s*[:=]\s*["\']?[\w-]+', 'token=[TOKEN_REDACTED]'),
+        ('email', r'[\w\.-]+@[\w\.-]+\.\w+', '[EMAIL_REDACTED]'),
+        ('phone', r'\d{3}[-.]?\d{3}[-.]?\d{4}', '[PHONE_REDACTED]'),
+    ]
 
     @staticmethod
     def sanitize(message: str) -> str:
@@ -258,7 +261,7 @@ class LogSanitizer:
         """
         sanitized = message
 
-        for pattern_name, (pattern, replacement) in LogSanitizer.PATTERNS.items():
+        for pattern_name, pattern, replacement in LogSanitizer.PATTERNS:
             sanitized = re.sub(pattern, replacement, sanitized, flags=re.IGNORECASE)
 
         return sanitized
