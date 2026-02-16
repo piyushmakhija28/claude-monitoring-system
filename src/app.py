@@ -3,6 +3,11 @@ Claude Insight
 A professional real-time analytics and performance insights dashboard for Claude Memory System
 """
 
+# Fix module imports - add src directory to path
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent))
+
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify, Response, send_file
 from flask_socketio import SocketIO, emit
 from functools import wraps
@@ -28,6 +33,7 @@ from services.monitoring.performance_profiler import PerformanceProfiler
 from services.monitoring.automation_tracker import AutomationTracker
 from services.monitoring.skill_agent_tracker import SkillAgentTracker
 from services.monitoring.optimization_tracker import OptimizationTracker
+from services.monitoring.policy_execution_tracker import PolicyExecutionTracker
 
 # Import AI services
 from services.ai.anomaly_detector import AnomalyDetector
@@ -137,6 +143,7 @@ bottleneck_analyzer = BottleneckAnalyzer()
 automation_tracker = AutomationTracker()
 skill_agent_tracker = SkillAgentTracker()
 optimization_tracker = OptimizationTracker()
+policy_execution_tracker = PolicyExecutionTracker()
 
 # User database (in production, use a proper database)
 # Password: 'admin' (hashed with bcrypt)
@@ -1139,6 +1146,79 @@ def api_model_usage():
             'total_requests': 0,
             'counts': {},
             'percentages': {}
+        }), 500
+
+@app.route('/api/policy-execution-stats')
+@login_required
+def api_policy_execution_stats():
+    """API endpoint for policy execution statistics"""
+    try:
+        hours = request.args.get('hours', 24, type=int)
+        stats = policy_execution_tracker.get_execution_stats(hours=hours)
+        return jsonify({
+            'success': True,
+            **stats
+        })
+    except Exception as e:
+        print(f"Error in api_policy_execution_stats: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'total_executions': 0,
+            'by_category': {},
+            'by_status': {}
+        }), 500
+
+@app.route('/api/enforcement-status')
+@login_required
+def api_enforcement_status():
+    """API endpoint for enforcement status (all steps)"""
+    try:
+        status = policy_execution_tracker.get_enforcement_status()
+        health = policy_execution_tracker.get_policy_health()
+
+        return jsonify({
+            'success': True,
+            'enforcement': status,
+            'health': health
+        })
+    except Exception as e:
+        print(f"Error in api_enforcement_status: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'enforcement': {'steps': [], 'completed_count': 0, 'total_count': 8},
+            'health': {'health_score': 0, 'status': 'UNKNOWN'}
+        }), 500
+
+@app.route('/api/policy-timeline')
+@login_required
+def api_policy_timeline():
+    """API endpoint for policy execution timeline (for charting)"""
+    try:
+        hours = request.args.get('hours', 24, type=int)
+        timeline = policy_execution_tracker.get_execution_timeline(hours=hours)
+        executions = policy_execution_tracker.parse_policy_log(hours=hours)
+
+        # Get recent 10 executions
+        recent = sorted(
+            executions,
+            key=lambda x: x['timestamp'],
+            reverse=True
+        )[:10]
+
+        return jsonify({
+            'success': True,
+            'timeline': timeline,
+            'recent_executions': recent
+        })
+    except Exception as e:
+        print(f"Error in api_policy_timeline: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'timeline': {'labels': [], 'data': []},
+            'recent_executions': []
         }), 500
 
 @app.route('/sessions')

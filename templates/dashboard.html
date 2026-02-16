@@ -217,6 +217,81 @@
 </div>
 {% endif %}
 
+<!-- Policy Execution Tracking -->
+<div class="row mb-4">
+    <div class="col-md-8">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white border-0 pt-4 pb-3">
+                <h5 class="mb-0">
+                    <i class="fas fa-chart-line me-2"></i>Policy Execution Timeline
+                    <span class="badge bg-success ms-2" id="policyHealthBadge">Loading...</span>
+                </h5>
+            </div>
+            <div class="card-body">
+                <canvas id="policyExecutionTimelineChart" height="80"></canvas>
+                <div class="mt-3">
+                    <small class="text-muted">
+                        <i class="fas fa-info-circle me-1"></i>
+                        Shows when automation policies are actually executed (not just running daemons)
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white border-0 pt-4 pb-3">
+                <h5 class="mb-0">
+                    <i class="fas fa-tasks me-2"></i>Enforcement Steps
+                </h5>
+            </div>
+            <div class="card-body" style="max-height: 300px; overflow-y: auto;">
+                <div id="enforcementSteps">
+                    <div class="text-center text-muted py-4">
+                        <i class="fas fa-spinner fa-spin fa-2x mb-3"></i>
+                        <p>Loading enforcement status...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Policy Executions -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white border-0 pt-4 pb-3">
+                <h5 class="mb-0">
+                    <i class="fas fa-history me-2"></i>Recent Policy Executions
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Time</th>
+                                <th>Policy</th>
+                                <th>Category</th>
+                                <th>Status</th>
+                                <th>Message</th>
+                            </tr>
+                        </thead>
+                        <tbody id="recentExecutionsTable">
+                            <tr>
+                                <td colspan="5" class="text-center text-muted">
+                                    <i class="fas fa-spinner fa-spin"></i> Loading...
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Policy Status Cards -->
 <div class="row mb-4">
     <div class="col-12">
@@ -973,10 +1048,177 @@ function initializeModelUsageChart() {
         });
 }
 
+// Initialize Policy Execution Tracking
+function initializePolicyExecutionTracking() {
+    // Fetch enforcement status
+    fetch('/api/enforcement-status')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                updateEnforcementSteps(data.enforcement);
+                updatePolicyHealth(data.health);
+            }
+        })
+        .catch(error => {
+            console.error('Error loading enforcement status:', error);
+        });
+
+    // Fetch policy timeline
+    fetch('/api/policy-timeline?hours=24')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                createPolicyTimelineChart(data.timeline);
+                updateRecentExecutions(data.recent_executions);
+            }
+        })
+        .catch(error => {
+            console.error('Error loading policy timeline:', error);
+        });
+}
+
+function updateEnforcementSteps(enforcement) {
+    const container = document.getElementById('enforcementSteps');
+    if (!container || !enforcement || !enforcement.steps) return;
+
+    let html = '';
+    enforcement.steps.forEach(step => {
+        const icon = step.completed ?
+            '<i class="fas fa-check-circle text-success me-2"></i>' :
+            '<i class="fas fa-circle text-secondary me-2"></i>';
+
+        const layerColors = {
+            'SYNC': 'primary',
+            'STANDARDS': 'success',
+            'EXECUTION': 'danger'
+        };
+
+        const layerColor = layerColors[step.layer] || 'secondary';
+
+        html += `
+            <div class="mb-3 p-2 border-start border-${layerColor} border-3">
+                <div class="d-flex align-items-center">
+                    ${icon}
+                    <div class="flex-grow-1">
+                        <strong>${step.name}</strong>
+                        <small class="text-muted ms-2">
+                            <span class="badge bg-${layerColor}">${step.layer}</span>
+                        </small>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+
+    container.innerHTML = html;
+}
+
+function updatePolicyHealth(health) {
+    const badge = document.getElementById('policyHealthBadge');
+    if (!badge || !health) return;
+
+    const statusClasses = {
+        'EXCELLENT': 'bg-success',
+        'GOOD': 'bg-info',
+        'FAIR': 'bg-warning',
+        'POOR': 'bg-danger'
+    };
+
+    badge.className = `badge ms-2 ${statusClasses[health.status] || 'bg-secondary'}`;
+    badge.textContent = `${health.status} (${health.health_score}/100)`;
+}
+
+function createPolicyTimelineChart(timeline) {
+    try {
+        const canvas = document.getElementById('policyExecutionTimelineChart');
+        if (!canvas || !timeline) return;
+
+        new Chart(canvas.getContext('2d'), {
+            type: 'line',
+            data: {
+                labels: timeline.labels || [],
+                datasets: [{
+                    label: 'Policy Executions',
+                    data: timeline.data || [],
+                    borderColor: 'rgb(99, 102, 241)',
+                    backgroundColor: 'rgba(99, 102, 241, 0.1)',
+                    tension: 0.4,
+                    fill: true,
+                    pointRadius: 4,
+                    pointHoverRadius: 6
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        min: 0,
+                        ticks: {
+                            stepSize: 1
+                        }
+                    }
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Error creating policy timeline chart:', error);
+    }
+}
+
+function updateRecentExecutions(executions) {
+    const tbody = document.getElementById('recentExecutionsTable');
+    if (!tbody || !executions) return;
+
+    if (executions.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="5" class="text-center text-muted">No recent policy executions</td>
+            </tr>
+        `;
+        return;
+    }
+
+    let html = '';
+    executions.forEach(exec => {
+        const timestamp = new Date(exec.timestamp);
+        const timeStr = timestamp.toLocaleTimeString();
+
+        const statusBadges = {
+            'OK': 'success',
+            'CHECK': 'success',
+            'SKIP': 'warning',
+            'ERROR': 'danger',
+            'SLEEP': 'secondary'
+        };
+
+        const badgeClass = statusBadges[exec.status] || 'secondary';
+
+        html += `
+            <tr>
+                <td><small>${timeStr}</small></td>
+                <td><code>${exec.policy_name}</code></td>
+                <td><span class="badge bg-info">${exec.policy_category}</span></td>
+                <td><span class="badge bg-${badgeClass}">${exec.status}</span></td>
+                <td><small class="text-muted">${exec.message}</small></td>
+            </tr>
+        `;
+    });
+
+    tbody.innerHTML = html;
+}
+
 // Call this after page loads
 document.addEventListener('DOMContentLoaded', function() {
     initializeHistoricalCharts();
     initializeModelUsageChart();
+    initializePolicyExecutionTracking();
 });
 
 // Cleanup on page unload
