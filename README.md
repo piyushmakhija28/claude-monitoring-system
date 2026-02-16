@@ -1,6 +1,6 @@
-# 🤖 Claude Insight v2.17.1
+# 🤖 Claude Insight v2.17.2
 
-**Professional Real-time Analytics Dashboard with Complete Claude Memory System v2.2.0 Integration**
+**Professional Real-time Analytics Dashboard with Complete Claude Memory System v2.4.0 Integration**
 
 [![GitHub](https://img.shields.io/badge/GitHub-claude--monitoring--system-blue?logo=github)](https://github.com/piyushmakhija28/claude-insight)
 [![Python](https://img.shields.io/badge/Python-3.7+-blue?logo=python)](https://www.python.org/)
@@ -9,7 +9,7 @@
 
 A comprehensive, real-time monitoring and analytics dashboard for the Claude Memory System v2.2.0. Track system health, analyze costs, monitor policies, and optimize performance - all from one beautiful interface with AI-powered anomaly detection, predictive forecasting, and custom alert routing.
 
-**🎁 COMPLETE PACKAGE**: This repo includes **everything you need** - the monitoring dashboard + **complete Claude Memory System v2.2.0 files**:
+**🎁 COMPLETE PACKAGE**: This repo includes **everything you need** - the monitoring dashboard + **complete Claude Memory System v2.4.0 files**:
 - ✅ **139 files** - All automation scripts, policies, and documentation
 - ✅ **8-9 daemons** - Complete daemon monitoring scripts
 - ✅ **81 automation scripts** - Python & Shell scripts for all features
@@ -43,6 +43,7 @@ A comprehensive, real-time monitoring and analytics dashboard for the Claude Mem
 ### 🎨 Dashboard Features
 - [📊 Core Monitoring](#core-monitoring-features)
 - [🧠 Memory System Integration](#memory-system-integration-v212)
+- [📋 Plan Detection System](#plan-detection-system-v240) **NEW! 🎉**
 - [🤖 Complete Automation System Dashboard](#-complete-automation-system-dashboard-v2171-new) **NEW! 🎉**
 - [⚡ Performance Profiling](#performance-profiling-v214)
 - [🔐 Two-Factor Authentication](#two-factor-authentication-2fa-v216) **NEW!**
@@ -124,6 +125,7 @@ The Claude Memory System v2.2.0 is a powerful automation framework that:
 - **Policy Compliance**: Track enforcement of all 14 active policies
 - **Performance Metrics**: Response times, context usage, error tracking
 - **Session Tracking**: Active sessions, history, incomplete work detection
+- **📋 Plan Detection**: Auto-detects active Claude Code subscription (Free/Pro/Team/Enterprise) **NEW!**
 - **Export Options**: CSV, Excel, PDF reports
 
 #### 💰 Cost Analysis
@@ -137,6 +139,116 @@ The Claude Memory System v2.2.0 is a powerful automation framework that:
 - **Context Usage**: Real-time token consumption monitoring
 - **Cache Performance**: Hit rates and efficiency
 - **Error Tracking**: Failure prevention statistics
+
+---
+
+### 📋 Plan Detection System (v2.4.0) **NEW!**
+
+**Automatically detects and displays your active Claude Code subscription plan!**
+
+#### 🎯 What It Does
+
+The Plan Detection System automatically identifies which Claude Code plan you're using:
+- 🆓 **Free Plan** - Basic features, limited usage (100K context tokens)
+- ⭐ **Pro Plan** - Full features, extended context (200K tokens), background tasks
+- 👥 **Team Plan** - Pro + team collaboration, shared workspaces
+- 🏢 **Enterprise Plan** - All features, SLA guarantee, custom deployment
+
+#### ⚡ Key Features
+
+**Automatic Detection:**
+- ✅ Runs automatically on every session start
+- ✅ Shows plan info in session initialization
+- ✅ Caches results for 24 hours
+- ✅ Updates when cache expires
+
+**Detection Methods:**
+- Analyzes Claude config files (`~/.claude/config.json`)
+- Checks available features (background tasks, team collaboration, etc.)
+- Validates context limits and API quotas
+- Monitors feature flags and system capabilities
+
+**Output Formats:**
+```bash
+# Full display with features and limits
+bash ~/.claude/memory/scripts/plan-detector.sh
+
+# Summary only (for session start)
+bash ~/.claude/memory/scripts/plan-detector.sh --summary
+
+# JSON output (for programmatic use)
+bash ~/.claude/memory/scripts/plan-detector.sh --json
+```
+
+#### 📊 Example Output
+
+**Session Start (Summary):**
+```
+[6/6] Detecting active Claude Code plan...
+✅ Active Plan: ⭐ Pro Plan | Limits: 200K tokens
+```
+
+**Full Display:**
+```
+================================================================================
+📋 CLAUDE CODE SUBSCRIPTION PLAN
+================================================================================
+
+🎯 Active Plan: ⭐ Pro Plan
+📅 Detected: 2026-02-16
+✅ Status: ACTIVE
+
+📦 Features:
+   ✓ Full features
+   ✓ Priority support
+   ✓ Extended context
+   ✓ Background tasks
+
+⚙️ Limits:
+   • Max Context: 200K tokens
+   • Max Requests: Unlimited
+
+================================================================================
+```
+
+#### 🔧 Technical Details
+
+**Files:**
+- `~/.claude/memory/scripts/plan-detector.py` - Python detection logic
+- `~/.claude/memory/scripts/plan-detector.sh` - Shell wrapper
+- `~/.claude/memory/docs/plan-detection.md` - Full documentation
+- `~/.claude/memory/.plan-cache.json` - Cached plan info
+
+**Integration Points:**
+1. **Session Start**: Auto-runs in `session-start.sh`
+2. **Dashboard**: Displays plan in health check
+3. **Context Monitor**: Adjusts limits based on detected plan
+4. **Optimization**: Enables plan-specific optimizations
+
+**Cache System:**
+- Location: `~/.claude/memory/.plan-cache.json`
+- Validity: 24 hours
+- Auto-refresh when stale
+- Clear cache: `rm ~/.claude/memory/.plan-cache.json`
+
+#### 💡 Use Cases
+
+1. **Context Optimization**: Automatically adjust context usage thresholds based on plan limits
+2. **Feature Gating**: Enable/disable features based on plan availability
+3. **Cost Tracking**: Different cost models for different plans
+4. **Support**: Provide plan-specific help and documentation
+5. **Upgrade Prompts**: Suggest upgrades when hitting limits
+
+#### 📖 Documentation
+
+**Full documentation:** `~/.claude/memory/docs/plan-detection.md`
+
+Covers:
+- Detailed detection methods
+- Configuration options
+- Troubleshooting guide
+- Python API usage
+- Integration examples
 
 ---
 

@@ -24,7 +24,8 @@ bash ~/.claude/memory/session-start.sh
 2. ✅ Checks all 9 daemon PIDs and status
 3. ✅ Shows latest recommendations (model, skills, agents)
 4. ✅ Shows context status (OK/WARNING/CRITICAL)
-5. ✅ Provides complete system health summary
+5. ✅ **Detects active Claude Code plan (Free/Pro/Team/Enterprise)**
+6. ✅ Provides complete system health summary
 
 **I MUST apply these recommendations BEFORE responding!**
 
@@ -53,6 +54,34 @@ python ~/.claude/memory/session-start-check.py
 
 ---
 
+## 📋 PLAN DETECTION (AUTO)
+
+**Automatically detects your active Claude Code subscription plan!**
+
+**Detected Plans:**
+- 🆓 **Free Plan** - Basic features, limited usage (100K context)
+- ⭐ **Pro Plan** - Full features, extended context (200K), background tasks
+- 👥 **Team Plan** - Pro + team collaboration, shared workspaces
+- 🏢 **Enterprise Plan** - All features, SLA, custom deployment
+
+**Auto-runs on session start** to show your current plan and limits.
+
+**Manual check:**
+```bash
+# Full display
+bash ~/.claude/memory/scripts/plan-detector.sh
+
+# Summary only
+bash ~/.claude/memory/scripts/plan-detector.sh --summary
+
+# JSON output
+bash ~/.claude/memory/scripts/plan-detector.sh --json
+```
+
+**📖 Full docs:** `~/.claude/memory/docs/plan-detection.md`
+
+---
+
 ## 🗺️ SYSTEM STRUCTURE
 
 | Resource | Path |
@@ -62,6 +91,94 @@ python ~/.claude/memory/session-start-check.py
 | Logs | `~/.claude/memory/logs/` |
 | Sessions | `~/.claude/memory/sessions/` |
 | Templates | `~/.claude/memory/templates/` |
+| Plan Detection | `~/.claude/memory/scripts/plan-detector.py` |
+| Claude Insight | `C:\Users\techd\Documents\workspace-spring-tool-suite-4-4.27.0-new\claude-insight\` |
+
+---
+
+## 🔄 AUTO-SYNC TO CLAUDE-INSIGHT (MANDATORY)
+
+**🚨 CRITICAL: Whenever ANY of the following are created or modified, they MUST be automatically copied to Claude Insight repository to keep everything in sync!**
+
+### What to Sync:
+
+| Type | Source | Destination | When |
+|------|--------|-------------|------|
+| **New Skill** | `~/.claude/skills/{skill-name}/` | `claude-insight/claude-memory-system/skills/{skill-name}/` | Immediately after creation |
+| **New Agent** | `~/.claude/agents/{agent-name}/` | `claude-insight/claude-memory-system/agents/{agent-name}/` | Immediately after creation |
+| **New Policy** | `~/.claude/memory/**/*-policy.md` | `claude-insight/claude-memory-system/policies/` | Immediately after creation |
+| **Policy Update** | `~/.claude/memory/**/*-policy.md` | `claude-insight/claude-memory-system/policies/` | After major updates |
+| **New Doc** | `~/.claude/memory/docs/*.md` | `claude-insight/claude-memory-system/docs/` | Immediately after creation |
+| **New Script** | `~/.claude/memory/scripts/**/*.py` | `claude-insight/claude-memory-system/scripts/` | Immediately after creation |
+| **Config Update** | `~/.claude/memory/config/*.json` | `claude-insight/claude-memory-system/config/` | After changes |
+| **CLAUDE.md** | `~/.claude/CLAUDE.md` | `claude-insight/claude-memory-system/CLAUDE.md` | After version updates |
+| **MASTER-README** | `~/.claude/memory/MASTER-README.md` | `claude-insight/claude-memory-system/MASTER-README.md` | After updates |
+
+### Auto-Sync Commands:
+
+**After creating/updating any file above, RUN:**
+
+```bash
+# Sync single skill
+cp -r ~/.claude/skills/{skill-name} /c/Users/techd/Documents/workspace-spring-tool-suite-4-4.27.0-new/claude-insight/claude-memory-system/skills/
+
+# Sync single agent
+cp -r ~/.claude/agents/{agent-name} /c/Users/techd/Documents/workspace-spring-tool-suite-4-4.27.0-new/claude-insight/claude-memory-system/agents/
+
+# Sync all policies (after policy changes)
+cp -r ~/.claude/memory/01-sync-system ~/.claude/memory/02-standards-system ~/.claude/memory/03-execution-system ~/.claude/memory/testing /c/Users/techd/Documents/workspace-spring-tool-suite-4-4.27.0-new/claude-insight/claude-memory-system/policies/
+
+# Sync all docs (after doc changes)
+cp -r ~/.claude/memory/docs/* /c/Users/techd/Documents/workspace-spring-tool-suite-4-4.27.0-new/claude-insight/claude-memory-system/docs/
+
+# Sync all scripts (after script changes)
+cp -r ~/.claude/memory/scripts/* /c/Users/techd/Documents/workspace-spring-tool-suite-4-4.27.0-new/claude-insight/claude-memory-system/scripts/
+
+# Sync config files (after config changes)
+cp ~/.claude/memory/config/*.json /c/Users/techd/Documents/workspace-spring-tool-suite-4-4.27.0-new/claude-insight/claude-memory-system/config/
+
+# Sync main files
+cp ~/.claude/CLAUDE.md /c/Users/techd/Documents/workspace-spring-tool-suite-4-4.27.0-new/claude-insight/claude-memory-system/
+cp ~/.claude/memory/MASTER-README.md /c/Users/techd/Documents/workspace-spring-tool-suite-4-4.27.0-new/claude-insight/claude-memory-system/
+```
+
+### Why This Matters:
+
+**Claude Insight is a PUBLIC PACKAGE** that users download from GitHub. When you create:
+- ✅ A new skill → Users should get it
+- ✅ A new agent → Users should get it
+- ✅ A new policy → Users should get it
+- ✅ Updated docs → Users should get them
+- ✅ New scripts → Users should get them
+
+**If you don't sync → Users miss out on new features!**
+
+### Sync Reminder:
+
+**I MUST proactively remind you to sync after:**
+1. Creating a new skill (use /skill-builder or manual creation)
+2. Creating a new agent (use agent builder or manual creation)
+3. Creating/updating a policy file
+4. Adding new documentation
+5. Adding new automation scripts
+6. Updating CLAUDE.md version
+7. Updating MASTER-README.md
+
+**I will say:** "🔄 New {skill/agent/policy} created! Running auto-sync to Claude Insight..."
+
+Then I will execute the appropriate copy command above.
+
+### Verification:
+
+After syncing, verify:
+```bash
+# Check if file exists in claude-insight
+ls /c/Users/techd/Documents/workspace-spring-tool-suite-4-4.27.0-new/claude-insight/claude-memory-system/skills/{skill-name}
+ls /c/Users/techd/Documents/workspace-spring-tool-suite-4-4.27.0-new/claude-insight/claude-memory-system/agents/{agent-name}
+```
+
+**✅ If file exists → Sync successful!**
+**❌ If not found → Retry sync command**
 
 ---
 
