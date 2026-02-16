@@ -593,15 +593,15 @@ bash ~/.claude/memory/scripts/plan-detector.sh --json
 
 | Type | Source | Destination | When |
 |------|--------|-------------|------|
-| **New Skill** | `~/.claude/skills/{skill-name}/` | `claude-insight/claude-memory-system/skills/{skill-name}/` | Immediately after creation |
-| **New Agent** | `~/.claude/agents/{agent-name}/` | `claude-insight/claude-memory-system/agents/{agent-name}/` | Immediately after creation |
-| **New Policy** | `~/.claude/memory/**/*-policy.md` | `claude-insight/claude-memory-system/policies/` | Immediately after creation |
-| **Policy Update** | `~/.claude/memory/**/*-policy.md` | `claude-insight/claude-memory-system/policies/` | After major updates |
-| **New Doc** | `~/.claude/memory/docs/*.md` | `claude-insight/claude-memory-system/docs/` | Immediately after creation |
-| **New Script** | `~/.claude/memory/scripts/**/*.py` | `claude-insight/claude-memory-system/scripts/` | Immediately after creation |
-| **Config Update** | `~/.claude/memory/config/*.json` | `claude-insight/claude-memory-system/config/` | After changes |
-| **CLAUDE.md** | `~/.claude/CLAUDE.md` | `claude-insight/claude-memory-system/CLAUDE.md` | After version updates |
-| **MASTER-README** | `~/.claude/memory/MASTER-README.md` | `claude-insight/claude-memory-system/MASTER-README.md` | After updates |
+| **New Skill** | `~/.claude/skills/{skill-name}/` | `claude-insight/skills/{skill-name}/` | Immediately after creation |
+| **New Agent** | `~/.claude/agents/{agent-name}/` | `claude-insight/agents/{agent-name}/` | Immediately after creation |
+| **New Policy** | `~/.claude/memory/**/*-policy.md` | `claude-insight/policies/` | Immediately after creation |
+| **Policy Update** | `~/.claude/memory/**/*-policy.md` | `claude-insight/policies/` | After major updates |
+| **New Doc** | `~/.claude/memory/docs/*.md` | `claude-insight/docs/` | Immediately after creation |
+| **New Script** | `~/.claude/memory/scripts/**/*.py` | `claude-insight/scripts/` | Immediately after creation |
+| **Config Update** | `~/.claude/memory/config/*.json` | `claude-insight/config/` | After changes |
+| **CLAUDE.md** | `~/.claude/CLAUDE.md` | `claude-insight/CLAUDE.md` | After version updates |
+| **MASTER-README** | `~/.claude/memory/MASTER-README.md` | `claude-insight/MASTER-README.md` | After updates |
 
 ### Auto-Sync Commands:
 
@@ -609,26 +609,26 @@ bash ~/.claude/memory/scripts/plan-detector.sh --json
 
 ```bash
 # Sync single skill
-cp -r ~/.claude/skills/{skill-name} /c/Users/techd/Documents/workspace-spring-tool-suite-4-4.27.0-new/claude-insight/claude-memory-system/skills/
+cp -r ~/.claude/skills/{skill-name} /c/Users/techd/Documents/workspace-spring-tool-suite-4-4.27.0-new/claude-insight/skills/
 
 # Sync single agent
-cp -r ~/.claude/agents/{agent-name} /c/Users/techd/Documents/workspace-spring-tool-suite-4-4.27.0-new/claude-insight/claude-memory-system/agents/
+cp -r ~/.claude/agents/{agent-name} /c/Users/techd/Documents/workspace-spring-tool-suite-4-4.27.0-new/claude-insight/agents/
 
 # Sync all policies (after policy changes)
-cp -r ~/.claude/memory/01-sync-system ~/.claude/memory/02-standards-system ~/.claude/memory/03-execution-system ~/.claude/memory/testing /c/Users/techd/Documents/workspace-spring-tool-suite-4-4.27.0-new/claude-insight/claude-memory-system/policies/
+cp -r ~/.claude/memory/01-sync-system ~/.claude/memory/02-standards-system ~/.claude/memory/03-execution-system ~/.claude/memory/testing /c/Users/techd/Documents/workspace-spring-tool-suite-4-4.27.0-new/claude-insight/policies/
 
 # Sync all docs (after doc changes)
-cp -r ~/.claude/memory/docs/* /c/Users/techd/Documents/workspace-spring-tool-suite-4-4.27.0-new/claude-insight/claude-memory-system/docs/
+cp -r ~/.claude/memory/docs/* /c/Users/techd/Documents/workspace-spring-tool-suite-4-4.27.0-new/claude-insight/docs/
 
 # Sync all scripts (after script changes)
-cp -r ~/.claude/memory/scripts/* /c/Users/techd/Documents/workspace-spring-tool-suite-4-4.27.0-new/claude-insight/claude-memory-system/scripts/
+cp -r ~/.claude/memory/scripts/* /c/Users/techd/Documents/workspace-spring-tool-suite-4-4.27.0-new/claude-insight/scripts/
 
 # Sync config files (after config changes)
-cp ~/.claude/memory/config/*.json /c/Users/techd/Documents/workspace-spring-tool-suite-4-4.27.0-new/claude-insight/claude-memory-system/config/
+cp ~/.claude/memory/config/*.json /c/Users/techd/Documents/workspace-spring-tool-suite-4-4.27.0-new/claude-insight/config/
 
 # Sync main files
-cp ~/.claude/CLAUDE.md /c/Users/techd/Documents/workspace-spring-tool-suite-4-4.27.0-new/claude-insight/claude-memory-system/
-cp ~/.claude/memory/MASTER-README.md /c/Users/techd/Documents/workspace-spring-tool-suite-4-4.27.0-new/claude-insight/claude-memory-system/
+cp ~/.claude/CLAUDE.md /c/Users/techd/Documents/workspace-spring-tool-suite-4-4.27.0-new/claude-insight/
+cp ~/.claude/memory/MASTER-README.md /c/Users/techd/Documents/workspace-spring-tool-suite-4-4.27.0-new/claude-insight/
 ```
 
 ### Why This Matters:
@@ -662,8 +662,10 @@ Then I will execute the appropriate copy command above.
 After syncing, verify:
 ```bash
 # Check if file exists in claude-insight
-ls /c/Users/techd/Documents/workspace-spring-tool-suite-4-4.27.0-new/claude-insight/claude-memory-system/skills/{skill-name}
-ls /c/Users/techd/Documents/workspace-spring-tool-suite-4-4.27.0-new/claude-insight/claude-memory-system/agents/{agent-name}
+ls /c/Users/techd/Documents/workspace-spring-tool-suite-4-4.27.0-new/claude-insight/skills/{skill-name}
+ls /c/Users/techd/Documents/workspace-spring-tool-suite-4-4.27.0-new/claude-insight/agents/{agent-name}
+ls /c/Users/techd/Documents/workspace-spring-tool-suite-4-4.27.0-new/claude-insight/scripts/
+ls /c/Users/techd/Documents/workspace-spring-tool-suite-4-4.27.0-new/claude-insight/policies/
 ```
 
 **✅ If file exists → Sync successful!**
@@ -744,6 +746,7 @@ ls /c/Users/techd/Documents/workspace-spring-tool-suite-4-4.27.0-new/claude-insi
 - **intelligent-model-selection-policy.md** (🤖 STEP 4 - SMART MODEL CHOICE)
 - **auto-skill-agent-selection-policy.md** (🤖 STEP 5 - AUTO SKILL/AGENT)
 - **tool-usage-optimization-policy.md** (⚡ STEP 6 - TOKEN OPTIMIZED TOOLS)
+- **parallel-execution-policy.md** (🚀 STEP 8 - PARALLEL EXECUTION)
 - core-skills-mandate.md
 - task-progress-tracking-policy.md (🤖 AUTO-TRACKING)
 - common-failures-prevention.md
@@ -1229,6 +1232,36 @@ secret-manager:
    → pre-execution-checker.py --tool {TOOL}
    → Apply auto-fixes
 
+8. 🚀 Parallel Execution Analysis (MANDATORY - NEW!) 🚀
+   → auto-parallel-detector.py --tasks-file "{TASKS_JSON}"
+
+   📊 ANALYZE TASKS FOR PARALLELIZATION:
+   → Check for independent tasks (no blockedBy deps)
+   → Calculate estimated speedup
+   → Determine if parallel execution worth it
+
+   🎯 DECISION RULES:
+   → 3+ independent tasks? → Use parallel execution
+   → Estimated speedup >= 1.5x? → Use parallel execution
+   → All tasks have dependencies? → Use sequential
+
+   ⚡ IF PARALLEL EXECUTION:
+   → Group tasks by dependency waves
+   → Create/check temporary skills/agents if needed
+   → Launch all tasks in parallel (Task tool with subagents)
+   → Monitor progress across all parallel tasks
+   → Collect results from all executions
+   → Intelligently merge results
+   → Cleanup temporary resources (keep useful, delete unused)
+
+   📈 BENEFITS:
+   → 3-10x faster execution
+   → Auto-create temporary skills/agents as needed
+   → Smart result merging
+   → Automatic cleanup
+
+   📄 Output: Parallel execution plan OR sequential continuation
+
 9. Execute Tasks (AUTOMATIC TRACKING)
    → 🤖 Auto-tracker monitors every tool call
    → Read → Update progress +10%
@@ -1239,6 +1272,7 @@ secret-manager:
    → 100% progress → Auto-complete task
    → Task complete → Unlock dependent tasks
    → Phase complete → Unlock next phase
+   → **Parallel tasks tracked independently then merged**
 
 10. Session Save (ON MILESTONES)
    → Auto-triggered by daemon
