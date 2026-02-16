@@ -57,457 +57,72 @@
 
         body {
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            background: #f8fafc;
+            background: var(--body-bg);
             min-height: 100vh;
             color: var(--text-primary);
             transition: background 0.3s ease, color 0.3s ease;
-            margin: 0;
-            display: flex;
-            flex-direction: column;
-        }
-
-        [data-theme="dark"] body {
-            background: #0f172a;
-        }
-
-        /* Admin Dashboard Layout */
-        .admin-wrapper {
-            display: flex;
-            min-height: 100vh;
-        }
-
-        /* Sidebar Styles */
-        .admin-sidebar {
-            width: 260px;
-            background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
-            color: #cbd5e1;
-            position: fixed;
-            left: 0;
-            top: 0;
-            bottom: 0;
-            overflow-y: auto;
-            transition: transform 0.3s ease;
-            z-index: 1000;
-            box-shadow: 2px 0 10px rgba(0,0,0,0.1);
-        }
-
-        .admin-sidebar.collapsed {
-            transform: translateX(-260px);
-        }
-
-        .sidebar-brand {
-            padding: 1.5rem 1rem;
-            border-bottom: 1px solid rgba(255,255,255,0.1);
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-        }
-
-        .sidebar-brand i {
-            font-size: 1.75rem;
-            color: #6366f1;
-        }
-
-        .sidebar-brand-text {
-            font-size: 1.25rem;
-            font-weight: 700;
-            color: #fff;
-        }
-
-        .sidebar-menu {
-            padding: 1rem 0;
-        }
-
-        .sidebar-menu-item {
-            margin: 0.25rem 0.5rem;
-        }
-
-        .sidebar-menu-link {
-            display: flex;
-            align-items: center;
-            padding: 0.75rem 1rem;
-            color: #94a3b8;
-            text-decoration: none;
-            border-radius: 8px;
-            transition: all 0.2s ease;
-            gap: 0.75rem;
-        }
-
-        .sidebar-menu-link:hover {
-            background: rgba(99, 102, 241, 0.1);
-            color: #6366f1;
-        }
-
-        .sidebar-menu-link.active {
-            background: linear-gradient(135deg, #6366f1, #8b5cf6);
-            color: #fff;
-        }
-
-        .sidebar-menu-link i {
-            width: 20px;
-            text-align: center;
-        }
-
-        .sidebar-submenu {
-            max-height: 0;
-            overflow: hidden;
-            transition: max-height 0.3s ease;
-        }
-
-        .sidebar-submenu.show {
-            max-height: 500px;
-        }
-
-        .sidebar-submenu-link {
-            display: block;
-            padding: 0.5rem 1rem 0.5rem 3rem;
-            color: #94a3b8;
-            text-decoration: none;
-            font-size: 0.9rem;
-            transition: all 0.2s ease;
-        }
-
-        .sidebar-submenu-link:hover {
-            color: #6366f1;
-            padding-left: 3.25rem;
-        }
-
-        /* Top Header */
-        .admin-header {
-            position: fixed;
-            top: 0;
-            left: 260px;
-            right: 0;
-            height: 70px;
-            background: #fff;
-            border-bottom: 1px solid #e5e7eb;
-            display: flex;
-            align-items: center;
-            padding: 0 2rem;
-            z-index: 999;
-            transition: left 0.3s ease;
-        }
-
-        [data-theme="dark"] .admin-header {
-            background: #1e293b;
-            border-bottom-color: #334155;
-        }
-
-        .admin-header.sidebar-collapsed {
-            left: 0;
-        }
-
-        .header-left {
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-        }
-
-        .sidebar-toggle {
-            background: none;
-            border: none;
-            font-size: 1.25rem;
-            color: var(--text-primary);
-            cursor: pointer;
-            padding: 0.5rem;
-            border-radius: 8px;
-            transition: background 0.2s ease;
-        }
-
-        .sidebar-toggle:hover {
-            background: rgba(99, 102, 241, 0.1);
-            color: #6366f1;
-        }
-
-        .header-search {
-            position: relative;
-        }
-
-        .header-search input {
-            width: 300px;
-            padding: 0.5rem 1rem 0.5rem 2.5rem;
-            border: 1px solid #e5e7eb;
-            border-radius: 8px;
-            font-size: 0.9rem;
-            transition: all 0.2s ease;
-        }
-
-        [data-theme="dark"] .header-search input {
-            background: #334155;
-            border-color: #475569;
-            color: #f1f5f9;
-        }
-
-        .header-search input:focus {
-            outline: none;
-            border-color: #6366f1;
-            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
-        }
-
-        .header-search i {
-            position: absolute;
-            left: 0.75rem;
-            top: 50%;
-            transform: translateY(-50%);
-            color: #94a3b8;
-        }
-
-        .header-right {
-            margin-left: auto;
-            display: flex;
-            align-items: center;
-            gap: 1.5rem;
-        }
-
-        .header-icon {
-            position: relative;
-            background: none;
-            border: none;
-            font-size: 1.25rem;
-            color: var(--text-secondary);
-            cursor: pointer;
-            padding: 0.5rem;
-            border-radius: 8px;
-            transition: all 0.2s ease;
-        }
-
-        .header-icon:hover {
-            background: rgba(99, 102, 241, 0.1);
-            color: #6366f1;
-        }
-
-        .header-badge {
-            position: absolute;
-            top: 0.25rem;
-            right: 0.25rem;
-            background: #ef4444;
-            color: white;
-            font-size: 0.7rem;
-            padding: 0.15rem 0.4rem;
-            border-radius: 10px;
-            font-weight: 600;
-        }
-
-        .user-menu {
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-            padding: 0.5rem 1rem;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: background 0.2s ease;
-        }
-
-        .user-menu:hover {
-            background: rgba(99, 102, 241, 0.1);
-        }
-
-        .user-avatar {
-            width: 36px;
-            height: 36px;
-            border-radius: 50%;
-            background: linear-gradient(135deg, #6366f1, #8b5cf6);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-weight: 600;
-        }
-
-        .user-info {
-            display: flex;
-            flex-direction: column;
-        }
-
-        .user-name {
-            font-size: 0.9rem;
-            font-weight: 600;
-            color: var(--text-primary);
-        }
-
-        .user-role {
-            font-size: 0.75rem;
-            color: var(--text-secondary);
-        }
-
-        /* Main Content */
-        .admin-content {
-            margin-left: 260px;
-            margin-top: 70px;
-            padding: 2rem;
-            transition: margin-left 0.3s ease;
-            flex: 1;
-        }
-
-        .admin-content.sidebar-collapsed {
-            margin-left: 0;
         }
 
         .navbar {
-            background: #ffffff;
+            background: var(--navbar-bg);
             backdrop-filter: blur(10px);
-            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-            padding: 0.75rem 0;
+            box-shadow: 0 4px 6px var(--shadow-color);
+            padding: 1rem 0;
             transition: background 0.3s ease;
-            border-bottom: 1px solid #e5e7eb;
-        }
-
-        [data-theme="dark"] .navbar {
-            background: #1e293b;
-            border-bottom-color: #334155;
         }
 
         .navbar-brand {
             font-weight: 700;
-            font-size: 1.4rem;
-            color: #1e293b !important;
+            font-size: 1.5rem;
+            color: var(--primary-color) !important;
             display: flex;
             align-items: center;
             gap: 0.5rem;
         }
 
-        [data-theme="dark"] .navbar-brand {
-            color: #f1f5f9 !important;
-        }
-
         .navbar-brand i {
-            font-size: 1.75rem;
-            color: #6366f1;
-        }
-
-        .navbar-brand small {
-            font-size: 0.55em;
-            opacity: 0.6;
-            font-weight: 500;
+            font-size: 2rem;
         }
 
         .nav-link {
-            color: #64748b !important;
+            color: var(--text-secondary) !important;
             font-weight: 500;
-            transition: all 0.2s ease;
-            padding: 0.6rem 1rem !important;
+            transition: all 0.3s ease;
+            padding: 0.5rem 1rem !important;
             border-radius: 8px;
-            font-size: 0.95rem;
         }
 
-        [data-theme="dark"] .nav-link {
-            color: #94a3b8 !important;
-        }
-
-        .nav-link:hover {
-            color: #6366f1 !important;
-            background: rgba(99, 102, 241, 0.08);
-            transform: translateY(-1px);
-        }
-
-        .nav-link.active {
-            color: #6366f1 !important;
-            background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(139, 92, 246, 0.1));
-            font-weight: 600;
-        }
-
-        .nav-link i {
-            margin-right: 0.5rem;
-            width: 18px;
-            text-align: center;
-        }
-
-        .dropdown-menu {
-            border: none;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
-            border-radius: 12px;
-            padding: 0.5rem;
-            margin-top: 0.5rem;
-        }
-
-        [data-theme="dark"] .dropdown-menu {
-            background: #1e293b;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.3);
-        }
-
-        .dropdown-item {
-            border-radius: 8px;
-            padding: 0.65rem 1rem;
-            transition: all 0.2s ease;
-            color: #64748b;
-        }
-
-        [data-theme="dark"] .dropdown-item {
-            color: #94a3b8;
-        }
-
-        .dropdown-item:hover {
+        .nav-link:hover, .nav-link.active {
+            color: var(--primary-color) !important;
             background: rgba(99, 102, 241, 0.1);
-            color: #6366f1;
-            padding-left: 1.25rem;
-        }
-
-        .dropdown-item i {
-            width: 20px;
-        }
-
-        .dropdown-divider {
-            margin: 0.5rem 0;
-            opacity: 0.1;
         }
 
         .main-content {
-            padding: 2rem;
+            padding: 2rem 0;
             min-height: calc(100vh - 80px);
-            background: #f8fafc;
-        }
-
-        [data-theme="dark"] .main-content {
-            background: #0f172a;
-        }
-
-        .main-content .container {
-            max-width: 1400px;
         }
 
         .card {
-            border: 1px solid #e5e7eb;
-            border-radius: 12px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-            transition: all 0.3s ease;
-            background: #ffffff;
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            box-shadow: 0 10px 30px var(--shadow-color);
+            transition: transform 0.3s ease, box-shadow 0.3s ease, background 0.3s ease;
+            background: var(--card-bg);
             color: var(--text-primary);
-            margin-bottom: 1.5rem;
-        }
-
-        [data-theme="dark"] .card {
-            background: #1e293b;
-            border-color: #334155;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
         }
 
         .card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 16px rgba(0,0,0,0.1);
-        }
-
-        [data-theme="dark"] .card:hover {
-            box-shadow: 0 8px 16px rgba(0,0,0,0.3);
+            transform: translateY(-5px);
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.15);
         }
 
         .card-header {
-            background: #f8fafc;
-            color: #1e293b;
-            border-bottom: 1px solid #e5e7eb;
-            border-radius: 12px 12px 0 0 !important;
-            padding: 1rem 1.5rem;
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            color: white;
+            border: none;
+            border-radius: 16px 16px 0 0 !important;
+            padding: 1.25rem 1.5rem;
             font-weight: 600;
-            font-size: 1.1rem;
-        }
-
-        [data-theme="dark"] .card-header {
-            background: #0f172a;
-            color: #f1f5f9;
-            border-bottom-color: #334155;
-        }
-
-        .card-body {
-            padding: 1.5rem;
         }
 
         .metric-card {
