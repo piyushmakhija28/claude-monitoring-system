@@ -52,6 +52,7 @@ from flasgger import Swagger, swag_from
 
 # Import session search routes
 from routes.session_search import session_search_bp
+from routes.claude_credentials import claude_creds_bp
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
 from reportlab.lib import colors
@@ -65,6 +66,7 @@ app.secret_key = 'claude-insight-secret-key-2026'
 
 # Register blueprints
 app.register_blueprint(session_search_bp)
+app.register_blueprint(claude_creds_bp)
 
 # Initialize SocketIO for real-time updates
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
