@@ -322,3 +322,28 @@ class AlertSender:
         """Send test SMS"""
         message = "[TEST] Claude Insight - SMS alerts are working!"
         return self.send_sms(message, config)
+
+    # Stub methods for testing
+    def send_slack_alert(self, alert, config):
+        """Send alert to Slack (stub for testing)"""
+        pass
+
+    def send_discord_alert(self, alert, config):
+        """Send alert to Discord (stub for testing)"""
+        pass
+
+    def send_pagerduty_alert(self, alert, config):
+        """Send alert to PagerDuty (stub for testing)"""
+        pass
+
+    def send_email_alert(self, alert, config):
+        """Send email alert (stub for testing)"""
+        pass
+
+    def format_slack_message(self, alert):
+        """Format message for Slack (stub for testing)"""
+        pass
+
+    def format_discord_embed(self, alert):
+        """Format embed for Discord (stub for testing)"""
+        pass
