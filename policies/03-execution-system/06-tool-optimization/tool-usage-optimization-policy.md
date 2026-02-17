@@ -276,39 +276,47 @@ def optimize_write_output(file_path: str, content: str) -> str:
 - Batch operations
 - Brief output
 
-**NEW: Tree Pattern for Structure Understanding** 🌳
+**NEW: Structure Understanding Pattern** 🌳
 
 **Problem:** Not knowing where files are located wastes tokens on searches
 
-**Solution:** Use `tree` command first to understand structure
+**Solution:** Use `find` command first to understand structure (tree not available in Git Bash)
 
 ```bash
 # BEFORE searching for files, understand structure:
 
-# Show project structure (2 levels)
-tree -L 2 backend/
+# Show project structure (2 levels) - WORKS IN GIT BASH
+find backend/ -maxdepth 2 -type d ! -path "*/\.*" | sort
 
-# Show specific service structure
-tree backend/product-service/src/main/java/
+# Show specific service structure (3 levels)
+find backend/product-service/src/main/java/ -maxdepth 3 -type d ! -path "*/\.*" | sort
 
-# Show only directories
-tree -d -L 3 backend/
+# Show only directories (3 levels)
+find backend/ -maxdepth 3 -type d ! -path "*/\.*" | sort
 
 # Show Java files only
-tree -P "*.java" backend/product-service/
+find backend/product-service/ -name "*.java" -type f ! -path "*/\.*" | sort
+
+# Alternative: Quick directory listing
+ls -R backend/product-service/src/main/java/ | grep ":$" | sed 's/:$//'
 ```
+
+**⚠️ CRITICAL: NEVER use `tree` command - it's not available in Git Bash!**
+- ❌ `tree -L 2` → Error: command not found
+- ✅ `find . -maxdepth 2 -type d` → Works everywhere
 
 **Benefits:**
 - ✅ Know where files are before searching
 - ✅ Understand directory structure
 - ✅ Avoid unnecessary Glob/Grep searches
 - ✅ Save 80-90% tokens on file location searches
+- ✅ Works in Git Bash (tree doesn't!)
 
 **Usage Pattern:**
 ```python
-# Step 1: First time in a service - use tree
+# Step 1: First time in a service - use find
 if not context.get('structure_known'):
-    Bash("tree -L 3 backend/product-service/")
+    Bash("find backend/product-service/ -maxdepth 3 -type d ! -path '*/\\.*' | sort")
     # Now we know: controller/, services/, entity/, etc.
     context['structure_known'] = True
 
@@ -448,9 +456,9 @@ def pre_tool_execution_check(tool_name: str, tool_params: Dict, context: Dict) -
 **Before EVERY tool call, verify:**
 
 - [ ] **🌳 Structure Understanding (FIRST TIME):**
-  - [ ] First time in service/directory? → Use `tree` first!
-  - [ ] Don't know file locations? → `tree -L 2` to understand
-  - [ ] Looking for file type distribution? → `tree -P "*.java"`
+  - [ ] First time in service/directory? → Use `find` first!
+  - [ ] Don't know file locations? → `find . -maxdepth 2 -type d` to understand
+  - [ ] Looking for file type distribution? → `find . -name "*.java" -type f`
 
 - [ ] **Read Tool:**
   - [ ] File >500 lines? → offset/limit added?
@@ -507,10 +515,10 @@ Edit(file_path="...", old_string="...", new_string="...")
 Total: 100K tokens ❌
 ```
 
-### **After (Optimized with Tree Pattern):**
+### **After (Optimized with Find Pattern):**
 ```python
 # 🌳 FIRST: Understand structure (first time only)
-Bash("tree -L 3 backend/product-service/")
+Bash("find backend/product-service/ -maxdepth 3 -type d ! -path '*/\\.*' | sort")
 # Returns: Directory structure (0.5K tokens)
 # Now we know: src/main/java/controller/, services/, entity/
 
@@ -562,15 +570,14 @@ Read("path/discovered/ProductController.java")
 Total: 40K tokens, 3 tool calls
 ```
 
-**✅ With Tree:**
+**✅ With Find:**
 ```bash
 # 🌳 Understand structure first
-tree -L 4 backend/product-service/src/main/java/
+find backend/product-service/src/main/java/ -maxdepth 4 -type f -name "*.java" | sort
 # Output shows:
-#   controller/
-#     - ProductController.java  ← Found it!
-#   services/
-#   entity/
+#   backend/product-service/src/main/java/controller/ProductController.java  ← Found it!
+#   backend/product-service/src/main/java/services/ProductService.java
+#   backend/product-service/src/main/java/entity/Product.java
 # 0.3K tokens
 
 # Direct access

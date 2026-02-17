@@ -1446,7 +1446,7 @@ Grep "public User register" -A 20 UserService.java
 - Keep only current active task
 
 ### 11. Smart Tool Selection (50-70%)
-- tree -L 2 (NOT ls -R)
+- find . -maxdepth 2 -type d (NOT ls -R, tree not available in Git Bash)
 - Glob "**/*ClassName*.java" (NOT Grep)
 - Read offset=0 limit=20 (NOT full file)
 
