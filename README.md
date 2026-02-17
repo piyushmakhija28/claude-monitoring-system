@@ -1,23 +1,25 @@
 # 🤖 Claude Insight v2.7.0
 
-**Professional Real-time Analytics Dashboard with Complete Claude Memory System v2.5.0 Integration**
-**🆕 Now with Enhanced Daemon Management System (10 Daemons)**
+**Professional Real-time Analytics Dashboard with Complete Claude Memory System v3.2.0 Integration**
+**🆕 Now with 3-Level Architecture & Enhanced Daemon Management (10 Daemons)**
 
 [![GitHub](https://img.shields.io/badge/GitHub-claude--monitoring--system-blue?logo=github)](https://github.com/piyushmakhija28/claude-insight)
 [![Python](https://img.shields.io/badge/Python-3.7+-blue?logo=python)](https://www.python.org/)
 [![Flask](https://img.shields.io/badge/Flask-3.0-green?logo=flask)](https://flask.palletsprojects.com/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-A comprehensive, real-time monitoring and analytics dashboard for the Claude Memory System v2.2.0. Track system health, analyze costs, monitor policies, and optimize performance - all from one beautiful interface with AI-powered anomaly detection, predictive forecasting, and custom alert routing.
+A comprehensive, real-time monitoring and analytics dashboard for the Claude Memory System v3.2.0 (3-Level Architecture). Track system health, analyze costs, monitor policies, and optimize performance - all from one beautiful interface with AI-powered anomaly detection, predictive forecasting, and custom alert routing.
 
-**🎁 COMPLETE PACKAGE**: This repo includes **everything you need** - the monitoring dashboard + **complete Claude Memory System v2.5.0 files**:
-- ✅ **139 files** - All automation scripts, policies, and documentation
-- ✅ **10 daemons** - Complete daemon management system with auto-restart (v2.7.0 🆕)
+**🎁 COMPLETE PACKAGE**: This repo includes **everything you need** - the monitoring dashboard + **complete Claude Memory System v3.2.0 files**:
+- ✅ **3-Level Architecture** - Sync System → Rules/Standards → Execution System
+- ✅ **12-Step Execution Flow** - Prompt Generation → Task Breakdown → Model Selection → Execution
+- ✅ **10 daemons** - Complete daemon management system with auto-restart & health monitoring
+- ✅ **150+ files** - All automation scripts, policies, and documentation
 - ✅ **81 automation scripts** - Python & Shell scripts for all features
-- ✅ **50 policy files** - All 14 policies + complete documentation
-- ✅ **CLAUDE.md** - Global configuration v2.2.0
+- ✅ **50 policy files** - All policies + complete documentation
+- ✅ **Project-specific CLAUDE.md** - Dashboard-focused configuration v2.7.0
 - ✅ **Real-time integration** - Live monitoring of all components
-- ✅ **Daemon utilities** - daemon-manager.py, health-monitor-daemon.py, and more (v2.7.0 🆕)
+- ✅ **Daemon utilities** - daemon-manager.py, health-monitor-daemon.py, and more
 
 **Developed by [TechDeveloper](https://www.techdeveloper.in)** 💻
 
