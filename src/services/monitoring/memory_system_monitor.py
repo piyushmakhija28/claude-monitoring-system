@@ -1,6 +1,6 @@
 """
 Memory System Integration Monitor
-Monitors all Claude Memory System v2.2.0 components, policies, and automation
+Monitors all Claude Memory System v3.2.0 (3-Level Architecture) components, policies, and automation
 """
 import json
 import os
@@ -15,27 +15,29 @@ from collections import defaultdict
 
 
 class MemorySystemMonitor:
-    """Monitor Claude Memory System v2.2.0 health, policies, and automation"""
+    """Monitor Claude Memory System v3.2.0 (3-Level Architecture) health, policies, and automation"""
 
     def __init__(self):
         self.memory_dir = get_data_dir()
         self.logs_dir = self.memory_dir / 'logs'
         self.sessions_dir = self.memory_dir / 'sessions'
 
-        # Daemon tracking
+        # Daemon tracking (10 core daemons)
         self.daemons = [
             'context-daemon',
             'session-auto-save-daemon',
-            'preference-tracker-daemon',
-            'skill-suggester-daemon',
-            'git-auto-commit-daemon',
+            'preference-auto-tracker',  # Fixed: was preference-tracker-daemon
+            'skill-auto-suggester',     # Fixed: was skill-suggester-daemon
+            'commit-daemon',             # Fixed: was git-auto-commit-daemon
             'session-pruning-daemon',
             'pattern-detection-daemon',
-            'failure-prevention-daemon'
+            'failure-prevention-daemon',
+            'token-optimization-daemon', # NEW: Added
+            'health-monitor-daemon'      # NEW: Added
         ]
 
     def get_daemon_status(self):
-        """Get status of all 8 memory system daemons"""
+        """Get status of all 10 memory system daemons"""
         pids_dir = self.memory_dir / '.pids'
         statuses = []
 

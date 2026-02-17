@@ -20,8 +20,9 @@ class PolicyChecker:
         from services.monitoring.memory_system_monitor import MemorySystemMonitor
         self.memory_monitor = MemorySystemMonitor()
 
-        # 3-Level Architecture Policies (v3.2.0) - Auto-generated
+        # 3-Level Architecture Policies (v3.2.0)
         self.policies = [
+            # LEVEL -1: Auto-Fix Enforcement (BLOCKING)
             {
                 'id': 'auto-fix-enforcement',
                 'name': 'Auto-Fix Enforcement',
@@ -30,14 +31,8 @@ class PolicyChecker:
                 'phase': -1,
                 'level': 'LEVEL -1'
             },
-            {
-                'id': 'prompt-generation',
-                'name': 'Prompt Generation',
-                'description': 'Anti-hallucination verified prompt generation (Step 0)',
-                'files': ['03-execution-system/00-prompt-generation/prompt-generator.py'],
-                'phase': 0,
-                'level': 'LEVEL 3'
-            },
+
+            # LEVEL 1: Sync System (Foundation)
             {
                 'id': 'context-management',
                 'name': 'Context Management',
@@ -54,6 +49,26 @@ class PolicyChecker:
                 'phase': 1,
                 'level': 'LEVEL 1'
             },
+
+            # LEVEL 2: Rules/Standards System (Middle Layer)
+            {
+                'id': 'standards-loader',
+                'name': 'Standards Loader',
+                'description': '13 coding standards with 77+ rules enforcement',
+                'files': ['02-standards-system/standards-loader.py'],
+                'phase': 2,
+                'level': 'LEVEL 2'
+            },
+
+            # LEVEL 3: Execution System (12-Step Implementation)
+            {
+                'id': 'prompt-generation',
+                'name': 'Prompt Generation',
+                'description': 'Anti-hallucination verified prompt generation (Step 0)',
+                'files': ['03-execution-system/00-prompt-generation/prompt-generator.py'],
+                'phase': 0,
+                'level': 'LEVEL 3'
+            },
             {
                 'id': 'task-breakdown',
                 'name': 'Task Breakdown',
@@ -63,28 +78,12 @@ class PolicyChecker:
                 'level': 'LEVEL 3'
             },
             {
-                'id': 'standards-loader',
-                'name': 'Standards Loader',
-                'description': '13 coding standards with 77+ rules enforcement',
-                'files': ['02-standards-system/standards-loader.py'],
-                'phase': 2,
-                'level': 'LEVEL 2'
-            },
-            {
                 'id': 'plan-mode-suggestion',
                 'name': 'Plan Mode Suggestion',
                 'description': 'Auto plan mode detection based on complexity (Step 2)',
                 'files': ['03-execution-system/02-plan-mode/auto-plan-mode-suggester.py'],
                 'phase': 2,
                 'level': 'LEVEL 3'
-            },
-            {
-                'id': 'daemon-infrastructure',
-                'name': 'Daemon Infrastructure',
-                'description': 'Cross-platform daemon management (10 core daemons)',
-                'files': ['utilities/daemon-manager.py', 'utilities/pid-tracker.py'],
-                'phase': 2,
-                'level': 'Infrastructure'
             },
             {
                 'id': 'model-selection',
@@ -133,6 +132,16 @@ class PolicyChecker:
                 'files': ['03-execution-system/09-git-commit/auto-commit-enforcer.py'],
                 'phase': 11,
                 'level': 'LEVEL 3'
+            },
+
+            # Infrastructure
+            {
+                'id': 'daemon-infrastructure',
+                'name': 'Daemon Infrastructure',
+                'description': 'Cross-platform daemon management (10 core daemons)',
+                'files': ['utilities/daemon-manager.py', 'utilities/pid-tracker.py'],
+                'phase': 2,
+                'level': 'Infrastructure'
             }
         ]
 

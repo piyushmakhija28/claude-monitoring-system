@@ -17,30 +17,31 @@ from datetime import datetime, timedelta
 class MetricsCollector:
     def __init__(self):
         self.memory_dir = get_data_dir()
+        # Import MemorySystemMonitor for direct access
+        from services.monitoring.memory_system_monitor import MemorySystemMonitor
+        self.memory_monitor = MemorySystemMonitor()
 
     def get_system_health(self):
         """Get overall system health"""
         try:
-            result = subprocess.run(
-                ['python', str(self.memory_dir / 'pid-tracker.py'), '--health'],
-                capture_output=True,
-                text=True,
-                timeout=10,
-                cwd=str(self.memory_dir)
-            )
+            # Use MemorySystemMonitor directly instead of subprocess
+            daemon_status = self.memory_monitor.get_daemon_status()
+            running_count = len([d for d in daemon_status if d.get('status') == 'running'])
+            total_count = len(daemon_status)
 
-            if result.returncode == 0 and result.stdout.strip():
-                health_data = json.loads(result.stdout)
-                return {
-                    'status': 'healthy' if health_data.get('health_score', 0) >= 90 else 'degraded',
-                    'health_score': health_data.get('health_score', 0),
-                    'score': health_data.get('health_score', 0),
-                    'running_daemons': health_data.get('running', 0),
-                    'total_daemons': health_data.get('total_daemons', 8),
-                    'context_usage': 45,  # Default until we get from context script
-                    'memory_usage': 60,   # Default
-                    'uptime': 'Active'
-                }
+            # Calculate health score: (running/total) * 100
+            health_score = int((running_count / total_count) * 100) if total_count > 0 else 0
+
+            return {
+                'status': 'healthy' if health_score >= 90 else 'degraded',
+                'health_score': health_score,
+                'score': health_score,
+                'running_daemons': running_count,
+                'total_daemons': total_count,
+                'context_usage': 45,  # Default until we get from context script
+                'memory_usage': 60,   # Default
+                'uptime': 'Active'
+            }
         except Exception as e:
             print(f"Error getting system health: {e}")
             import traceback
@@ -51,7 +52,7 @@ class MetricsCollector:
             'health_score': 0,
             'score': 0,
             'running_daemons': 0,
-            'total_daemons': 8,
+            'total_daemons': 10,
             'context_usage': 0,
             'memory_usage': 0
         }
@@ -59,30 +60,8 @@ class MetricsCollector:
     def get_daemon_status(self):
         """Get status of all daemons"""
         try:
-            # Use pid-tracker since it gives us daemon status
-            result = subprocess.run(
-                ['python', str(self.memory_dir / 'pid-tracker.py'), '--health'],
-                capture_output=True,
-                text=True,
-                timeout=10,
-                cwd=str(self.memory_dir)
-            )
-
-            if result.returncode == 0 and result.stdout.strip():
-                health_data = json.loads(result.stdout)
-                daemons_dict = health_data.get('daemons', {})
-
-                # Convert dict to list of daemon objects
-                daemon_list = []
-                for name, data in daemons_dict.items():
-                    daemon_list.append({
-                        'name': name,
-                        'status': 'running' if data.get('is_running') else 'stopped',
-                        'pid': data.get('pid', 'N/A'),
-                        'uptime': 'Active' if data.get('is_running') else 'Stopped'
-                    })
-
-                return daemon_list
+            # Use MemorySystemMonitor directly
+            return self.memory_monitor.get_daemon_status()
         except Exception as e:
             print(f"Error getting daemon status: {e}")
             import traceback

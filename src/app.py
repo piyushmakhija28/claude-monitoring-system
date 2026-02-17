@@ -977,7 +977,7 @@ def api_metrics():
 
         # daemon_status is a list from get_daemon_status
         daemons_running = len([d for d in daemon_status if isinstance(d, dict) and d.get('status') == 'running'])
-        daemons_total = len(daemon_status) if daemon_status else 8
+        daemons_total = len(daemon_status) if daemon_status else 10  # 10 core daemons
 
         health_score = system_health.get('health_score', system_health.get('score', 0))
 
