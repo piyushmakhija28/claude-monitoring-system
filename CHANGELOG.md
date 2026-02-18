@@ -9,6 +9,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [3.4.0] - 2026-02-18
+
+### Added
+- **`scripts/3-level-flow.py`** v3.0.0: Complete 3-level architecture hook script with full JSON trace
+  - All 17 steps logged A-to-Z (Level -1, Level 1, Level 2, Level 3 with 12 execution steps)
+  - **4-layer dynamic skill/agent selection** at Step 3.5:
+    - L1: Task-type exact match (`TASK_TYPE_TO_AGENT` registry — covers 30+ task types)
+    - L2: Prompt keyword scoring — dynamic analysis of raw user message (no API calls)
+    - L3: Tech stack file detection (reads `pom.xml`, `package.json`, `Dockerfile`, etc.)
+    - L4: `adaptive-skill-intelligence` — creates new skill on-the-fly if nothing matches
+  - Orchestrator escalation guard: L1 task-type matches never overridden by escalation
+  - Review checkpoint (`CLAUDE_MUST`) output before coding starts
+  - Windows-safe encoding (ASCII only, cp1252 compatible)
+  - Install: `cp scripts/3-level-flow.py ~/.claude/memory/current/`
+
+### Fixed
+- **Orchestrator escalation threshold**: Raised from `task_count > 3` to `task_count > 8`;
+  L1-matched task types (e.g. Dashboard, UI/UX) are now protected from being overridden
+  by the orchestrator escalation rule
+
+---
+
 ## [3.3.6] - 2026-02-18
 
 ### Fixed
