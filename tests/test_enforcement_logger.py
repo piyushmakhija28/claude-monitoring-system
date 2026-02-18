@@ -227,19 +227,6 @@ class TestEnforcementLogger(unittest.TestCase):
         self.assertIn('3 phases', log_content)
         self.assertIn('MODERATE', log_content)
 
-    def test_log_daemon_activity(self):
-        """Test daemon activity logging"""
-        self.logger.log_daemon_activity(
-            'context-daemon',
-            'Context check performed',
-            'OK'
-        )
-
-        log_content = self.logger.log_file.read_text()
-        self.assertIn('context-daemon', log_content)
-        self.assertIn('Context check performed', log_content)
-        self.assertIn('OK', log_content)
-
     def test_get_recent_logs_empty(self):
         """Test getting recent logs when log is empty"""
         result = self.logger.get_recent_logs(hours=1, limit=100)

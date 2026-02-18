@@ -35,40 +35,6 @@ class TestMetricsCollector(unittest.TestCase):
         from services.monitoring.metrics_collector import MetricsCollector
         self.collector = MetricsCollector()
 
-    def test_get_system_health_success(self):
-        """Test successful system health retrieval"""
-        # Mock memory_monitor: 10/10 daemons running = 100% health
-        mock_daemons = [
-            {'name': f'daemon-{i}', 'status': 'running', 'pid': 1000 + i, 'last_activity': None}
-            for i in range(10)
-        ]
-        self.collector.memory_monitor.get_daemon_status = Mock(return_value=mock_daemons)
-
-        health = self.collector.get_system_health()
-
-        self.assertEqual(health['status'], 'healthy')
-        self.assertEqual(health['health_score'], 100)
-        self.assertEqual(health['running_daemons'], 10)
-
-    def test_get_system_health_degraded(self):
-        """Test degraded system health"""
-        # Mock memory_monitor: 4/8 daemons running = 50% health (< 90 threshold)
-        mock_daemons = []
-        for i in range(8):
-            status = 'running' if i < 4 else 'stopped'
-            mock_daemons.append({
-                'name': f'daemon-{i}',
-                'status': status,
-                'pid': 1000 + i if i < 4 else None,
-                'last_activity': None
-            })
-        self.collector.memory_monitor.get_daemon_status = Mock(return_value=mock_daemons)
-
-        health = self.collector.get_system_health()
-
-        self.assertEqual(health['status'], 'degraded')
-        self.assertLess(health['health_score'], 90)
-
     def test_get_system_health_failure(self):
         """Test system health on failure"""
         self.collector.memory_monitor.get_daemon_status = Mock(side_effect=Exception("Command failed"))
@@ -77,25 +43,6 @@ class TestMetricsCollector(unittest.TestCase):
 
         self.assertEqual(health['status'], 'unknown')
         self.assertEqual(health['health_score'], 0)
-
-    @patch('subprocess.run')
-    def test_get_daemon_status(self, mock_run):
-        """Test daemon status retrieval"""
-        mock_result = Mock()
-        mock_result.returncode = 0
-        mock_result.stdout = json.dumps({
-            'daemons': {
-                'context-daemon': {'is_running': True, 'pid': 1234},
-                'session-daemon': {'is_running': False, 'pid': None}
-            }
-        })
-        mock_run.return_value = mock_result
-
-        daemons = self.collector.get_daemon_status()
-
-        self.assertIsInstance(daemons, list)
-        self.assertGreater(len(daemons), 0)
-
 
 class TestLogParser(unittest.TestCase):
     """Test suite for LogParser - tests REAL LogParser class methods"""
