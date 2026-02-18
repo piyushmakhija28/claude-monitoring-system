@@ -1278,16 +1278,6 @@ def live_metrics():
 
     return jsonify(live_data)
 
-@app.route('/api/daemon/restart/<daemon_name>', methods=['POST'])
-@login_required
-def restart_daemon(daemon_name):
-    """API endpoint to restart daemon"""
-    try:
-        result = metrics.restart_daemon(daemon_name)
-        return jsonify({'success': True, 'message': f'Daemon {daemon_name} restarted successfully'})
-    except Exception as e:
-        return jsonify({'success': False, 'message': str(e)}), 500
-
 @app.route('/api/model-usage')
 @login_required
 def api_model_usage():
@@ -5111,28 +5101,6 @@ def api_debug_logs_stream():
 
     return Response(generate(), mimetype='text/event-stream')
 
-@app.route('/api/debug/daemons/health')
-@login_required
-def api_debug_daemons_health():
-    """Get detailed daemon health diagnostics"""
-    try:
-        daemon_status = memory_system_monitor.check_daemons()
-
-        # Add detailed diagnostics
-        for daemon_name, status in daemon_status.items():
-            status['cpu_usage'] = '2.5%'  # Simulated
-            status['memory_usage'] = '45 MB'  # Simulated
-            status['uptime'] = '2d 5h 30m'  # Simulated
-
-        return jsonify({
-            'success': True,
-            'daemons': daemon_status,
-            'total': len(daemon_status),
-            'running': sum(1 for d in daemon_status.values() if d.get('status') == 'running')
-        })
-    except Exception as e:
-        return jsonify({'success': False, 'message': str(e)}), 500
-
 @app.route('/api/debug/performance/profile')
 @login_required
 def api_debug_performance_profile():
@@ -5260,19 +5228,6 @@ def automation_session_start():
         return jsonify({
             'success': True,
             'data': recommendations
-        })
-    except Exception as e:
-        return jsonify({'success': False, 'message': str(e)}), 500
-
-@app.route('/api/automation/daemon-9-status')
-@login_required
-def automation_daemon_9():
-    """Get 9th daemon (auto-recommendation) status"""
-    try:
-        status = automation_tracker.get_9th_daemon_status()
-        return jsonify({
-            'success': True,
-            'data': status
         })
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
