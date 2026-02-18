@@ -984,6 +984,9 @@ def api_metrics():
         # Get policy hits for today
         policy_hits_today = metrics.get_policy_hits_today()
 
+        # Get historical data for Live Metrics chart (last 7 days)
+        chart_data = history_tracker.get_chart_data(days=7)
+
         return jsonify({
             'success': True,
             'health_score': health_score,
@@ -992,11 +995,15 @@ def api_metrics():
             'active_policies': policy_status.get('active_policies', 0),
             'total_policies': policy_status.get('total_policies', 0),
             'policy_hits': policy_hits_today,
+            'policy_hits_today': policy_hits_today,  # Add this for compatibility
             'context_usage': system_health.get('context_usage', 0),
             'memory_usage': system_health.get('memory_usage', 0),
-            'labels': ['Now'],
-            'health_scores': [health_score],
-            'policy_hits_data': [policy_hits_today]
+            # Historical data for Live Metrics chart
+            'metrics_history': {
+                'labels': chart_data.get('dates', []),  # Use 'dates' from history_tracker
+                'health_scores': chart_data.get('health_scores', []),
+                'policy_hits': chart_data.get('policy_hits', [])
+            }
         })
     except Exception as e:
         print(f"Error in api_metrics: {e}")
