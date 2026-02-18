@@ -116,13 +116,13 @@ let installedPlugins = [];
 let marketplacePlugins = [];
 
 document.addEventListener('DOMContentLoaded', function() {
-    loadInstalledPlugins();
-    loadMarketplacePlugins();
+    // Load installed plugins first, then marketplace so isInstalled check is accurate
+    loadInstalledPlugins().then(() => loadMarketplacePlugins());
 });
 
 // Load installed plugins
 function loadInstalledPlugins() {
-    fetch('/api/plugins/installed')
+    return fetch('/api/plugins/installed')
         .then(response => response.json())
         .then(data => {
             installedPlugins = data.plugins || [];
@@ -255,8 +255,14 @@ function installPlugin(pluginId) {
         .then(data => {
             if (data.success) {
                 showAlert('success', 'Plugin installed successfully!');
-                loadInstalledPlugins();
-                loadMarketplacePlugins();
+                // Add to local installed list and re-render so isInstalled check is correct
+                const plugin = marketplacePlugins.find(p => p.id === pluginId);
+                if (plugin && !installedPlugins.some(p => p.id === pluginId)) {
+                    installedPlugins.push(plugin);
+                    document.getElementById('installedCount').textContent = installedPlugins.length;
+                    renderInstalledPlugins();
+                }
+                renderMarketplacePlugins();
             } else {
                 showAlert('danger', data.message || 'Installation failed');
             }
@@ -272,8 +278,10 @@ function uninstallPlugin(pluginId) {
         .then(data => {
             if (data.success) {
                 showAlert('success', 'Plugin uninstalled successfully!');
-                loadInstalledPlugins();
-                loadMarketplacePlugins();
+                installedPlugins = installedPlugins.filter(p => p.id !== pluginId);
+                document.getElementById('installedCount').textContent = installedPlugins.length;
+                renderInstalledPlugins();
+                renderMarketplacePlugins();
             }
         });
 }
