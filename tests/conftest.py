@@ -7,6 +7,11 @@ import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+# Set env vars at module level so SecurityConfig() doesn't fail during collection
+os.environ.setdefault('SECRET_KEY', 'test-secret-key-for-testing-only-12345678901234567890')
+os.environ.setdefault('DEVELOPMENT_MODE', 'True')
+os.environ.setdefault('TESTING', 'True')
+
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
 
