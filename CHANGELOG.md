@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [3.3.6] - 2026-02-18
+
+### Fixed
+- **`scripts/session-start.sh`**: Step 3 was calling `daemon-manager.py --status-all` which
+  no longer exists (daemons removed in v3.3.0). Replaced with hooks status check that
+  verifies 3 hook scripts (`3-level-flow.py`, `clear-session-handler.py`, `stop-notifier.py`)
+  are present in `current/` directory
+- **`src/services/monitoring/automation_tracker.py`**: Removed `daemon_9` key from
+  `get_comprehensive_automation_stats()` return dict (the 9th daemon was removed in v3.3.0)
+
+---
+
 ## [3.3.5] - 2026-02-18
 
 ### Fixed
