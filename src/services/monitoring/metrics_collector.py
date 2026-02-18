@@ -83,7 +83,7 @@ class MetricsCollector:
         """Get current context usage estimate"""
         try:
             result = subprocess.run(
-                ['python', str(self.memory_dir / 'context-monitor-v2.py'), '--current-status'],
+                ['python', str(self.memory_dir / 'current' / 'context-monitor-v2.py'), '--current-status'],
                 capture_output=True,
                 text=True,
                 timeout=10
@@ -538,38 +538,6 @@ class MetricsCollector:
         except Exception as e:
             print(f"Error counting policy hits today: {e}")
             return 0
-
-    def restart_daemon(self, daemon_name):
-        """Restart a specific daemon"""
-        try:
-            result = subprocess.run(
-                ['python', str(self.memory_dir / 'daemon-manager.py'), '--restart', daemon_name],
-                capture_output=True,
-                text=True,
-                timeout=30
-            )
-
-            return result.returncode == 0
-        except Exception as e:
-            print(f"Error restarting daemon: {e}")
-            return False
-
-    def get_failure_kb_stats(self):
-        """Get failure knowledge base statistics"""
-        try:
-            result = subprocess.run(
-                ['python', str(self.memory_dir / 'pre-execution-checker.py'), '--stats'],
-                capture_output=True,
-                text=True,
-                timeout=10
-            )
-
-            if result.returncode == 0:
-                return json.loads(result.stdout)
-        except Exception as e:
-            print(f"Error getting KB stats: {e}")
-
-        return {'total_patterns': 0, 'high_confidence': 0, 'by_tool': {}}
 
     def get_model_usage_stats(self):
         """Get model usage distribution"""

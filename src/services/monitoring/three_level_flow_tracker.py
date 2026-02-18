@@ -342,8 +342,8 @@ class ThreeLevelFlowTracker:
             data['model_reason'] = fd.get('model_reason')
 
             # Enrich level_3 from final_decision (more accurate than .log regex)
-            if fd.get('model'):
-                data['level_3']['model'] = fd['model']
+            if fd.get('model_selected'):
+                data['level_3']['model'] = fd['model_selected']
             if fd.get('complexity') is not None:
                 data['level_3']['complexity'] = fd['complexity']
             if fd.get('task_type'):

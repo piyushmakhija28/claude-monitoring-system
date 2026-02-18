@@ -174,7 +174,7 @@ class MemorySystemMonitor:
 
     def get_failure_prevention_stats(self):
         """Get failure prevention statistics"""
-        failures_file = self.memory_dir / 'failures.log'
+        failures_file = self.logs_dir / 'failures.log'
         kb_file = self.memory_dir / 'failure-kb.json'
 
         stats = {
@@ -265,17 +265,19 @@ class MemorySystemMonitor:
             'total_size_mb': 0
         }
 
-        if self.sessions_dir.exists():
+        # Session log dirs are under logs/sessions/ (contain flow-trace.json)
+        log_sessions_dir = self.logs_dir / 'sessions'
+        if log_sessions_dir.exists():
             try:
-                session_dirs = [d for d in self.sessions_dir.iterdir() if d.is_dir()]
+                session_dirs = [d for d in log_sessions_dir.iterdir() if d.is_dir()]
                 stats['total_sessions'] = len(session_dirs)
 
                 total_size = 0
                 for session_dir in session_dirs:
-                    # Check if session is active (modified in last 7 days)
-                    summary_file = session_dir / 'project-summary.md'
-                    if summary_file.exists():
-                        mtime = datetime.fromtimestamp(summary_file.stat().st_mtime)
+                    # Check if session is active (flow-trace.json modified in last 7 days)
+                    trace_file = session_dir / 'flow-trace.json'
+                    if trace_file.exists():
+                        mtime = datetime.fromtimestamp(trace_file.stat().st_mtime)
                         if datetime.now() - mtime < timedelta(days=7):
                             stats['active_sessions'] += 1
 
@@ -388,21 +390,41 @@ class MemorySystemMonitor:
         }
 
     def get_policy_status(self):
-        """Get status of all 10 policies"""
+        """Get status of all policies from the actual policy directory structure"""
+        # Paths relative to memory_dir matching actual 3-level layout
         policies = [
-            {'name': 'Core Skills Mandate', 'file': 'core-skills-mandate.md', 'status': 'active'},
-            {'name': 'Model Selection', 'file': 'model-selection-enforcement.md', 'status': 'active'},
-            {'name': 'Proactive Consultation', 'file': 'proactive-consultation-policy.md', 'status': 'active'},
-            {'name': 'Session Memory', 'file': 'session-memory-policy.md', 'status': 'active'},
-            {'name': 'Failure Prevention', 'file': 'common-failures-prevention.md', 'status': 'active'},
-            {'name': 'File Management', 'file': 'file-management-policy.md', 'status': 'active'},
-            {'name': 'Git Auto-Commit', 'file': 'git-auto-commit-policy.md', 'status': 'active'},
-            {'name': 'User Preferences', 'file': 'user-preferences-policy.md', 'status': 'active'},
-            {'name': 'Session Pruning', 'file': 'session-pruning-policy.md', 'status': 'active'},
-            {'name': 'Context Integration', 'file': 'CONTEXT-SESSION-INTEGRATION.md', 'status': 'active'}
+            {'name': 'Core Skills Mandate',
+             'file': '03-execution-system/05-skill-agent-selection/core-skills-mandate.md',
+             'status': 'active'},
+            {'name': 'Model Selection',
+             'file': '03-execution-system/04-model-selection/model-selection-enforcement.md',
+             'status': 'active'},
+            {'name': 'Auto Plan Mode',
+             'file': '03-execution-system/02-plan-mode/auto-plan-mode-suggestion-policy.md',
+             'status': 'active'},
+            {'name': 'Session Memory',
+             'file': '01-sync-system/session-management/session-memory-policy.md',
+             'status': 'active'},
+            {'name': 'Task Breakdown',
+             'file': '03-execution-system/01-task-breakdown/automatic-task-breakdown-policy.md',
+             'status': 'active'},
+            {'name': 'Tool Optimization',
+             'file': '03-execution-system/06-tool-optimization/tool-usage-optimization-policy.md',
+             'status': 'active'},
+            {'name': 'Prompt Generation',
+             'file': '03-execution-system/00-prompt-generation/prompt-generation-policy.md',
+             'status': 'active'},
+            {'name': 'User Preferences',
+             'file': '01-sync-system/user-preferences/user-preferences-policy.md',
+             'status': 'active'},
+            {'name': 'Session Pruning',
+             'file': '01-sync-system/session-management/session-pruning-policy.md',
+             'status': 'active'},
+            {'name': 'Coding Standards',
+             'file': '02-standards-system/coding-standards-enforcement-policy.md',
+             'status': 'active'},
         ]
 
-        # Check if policy files exist
         for policy in policies:
             policy_file = self.memory_dir / policy['file']
             policy['exists'] = policy_file.exists()
