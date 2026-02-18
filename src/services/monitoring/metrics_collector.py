@@ -540,40 +540,80 @@ class MetricsCollector:
             return 0
 
     def get_model_usage_stats(self):
-        """Get model usage distribution"""
+        """Get model usage distribution from log file"""
         try:
-            result = subprocess.run(
-                ['python', str(self.memory_dir / 'model-selection-monitor.py'), '--distribution', '--days', '7'],
-                capture_output=True,
-                text=True,
-                timeout=10
-            )
+            model_log = self.memory_dir / 'logs' / 'model-usage.log'
+            if not model_log.exists():
+                return {'total_requests': 0, 'counts': {}, 'percentages': {}}
 
-            if result.returncode == 0:
-                return json.loads(result.stdout)
+            lines = model_log.read_text(encoding='utf-8', errors='ignore').splitlines()
+            counts = {'haiku': 0, 'sonnet': 0, 'opus': 0}
+
+            for line in lines:
+                lower = line.lower()
+                if 'haiku' in lower:
+                    counts['haiku'] += 1
+                elif 'sonnet' in lower:
+                    counts['sonnet'] += 1
+                elif 'opus' in lower:
+                    counts['opus'] += 1
+
+            total = len(lines)
+            percentages = {}
+            if total > 0:
+                for model, count in counts.items():
+                    percentages[model] = round((count / total) * 100, 1)
+
+            return {'total_requests': total, 'counts': counts, 'percentages': percentages}
         except Exception as e:
             print(f"Error getting model stats: {e}")
 
         return {'total_requests': 0, 'counts': {}, 'percentages': {}}
 
     def get_model_usage_trend(self, days=7):
-        """Get model usage trend over time (daily breakdown)"""
+        """Get model usage trend over time (daily breakdown) from log file"""
         try:
-            # Call the actual script with trend flag
-            result = subprocess.run(
-                ['python', str(self.memory_dir / 'model-selection-monitor.py'), '--trend', '--days', str(days)],
-                capture_output=True,
-                text=True,
-                timeout=10
-            )
+            from datetime import datetime, timedelta
+            model_log = self.memory_dir / 'logs' / 'model-usage.log'
+            if not model_log.exists():
+                raise FileNotFoundError("model-usage.log not found")
 
-            if result.returncode == 0:
-                trend_data = json.loads(result.stdout)
-                return trend_data
+            lines = model_log.read_text(encoding='utf-8', errors='ignore').splitlines()
+            today = datetime.now()
+            day_data = {}
+
+            for i in range(days - 1, -1, -1):
+                day = today - timedelta(days=i)
+                label = day.strftime('%m/%d')
+                day_data[label] = {'haiku': 0, 'sonnet': 0, 'opus': 0}
+
+            for line in lines:
+                try:
+                    # Parse timestamp from line (expects [YYYY-MM-DD] prefix)
+                    if '[' in line and ']' in line:
+                        ts_str = line.split('[')[1].split(']')[0][:10]
+                        ts = datetime.strptime(ts_str, '%Y-%m-%d')
+                        label = ts.strftime('%m/%d')
+                        if label in day_data:
+                            lower = line.lower()
+                            if 'haiku' in lower:
+                                day_data[label]['haiku'] += 1
+                            elif 'sonnet' in lower:
+                                day_data[label]['sonnet'] += 1
+                            elif 'opus' in lower:
+                                day_data[label]['opus'] += 1
+                except Exception:
+                    continue
+
+            labels = list(day_data.keys())
+            return {
+                'labels': labels,
+                'haiku_data': [day_data[l]['haiku'] for l in labels],
+                'sonnet_data': [day_data[l]['sonnet'] for l in labels],
+                'opus_data': [day_data[l]['opus'] for l in labels]
+            }
         except Exception as e:
             print(f"Error getting model usage trend: {e}")
-            import traceback
-            traceback.print_exc()
 
         # Return empty data if error
         from datetime import datetime, timedelta

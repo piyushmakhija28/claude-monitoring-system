@@ -65,3 +65,11 @@ flask_session/
 security-scan.json
 bandit-report.json
 safety-report.json
+
+# Test coverage reports (auto-generated)
+tests/htmlcov/
+.coverage
+htmlcov/
+
+# Windows null device (created accidentally by some shells)
+nul
