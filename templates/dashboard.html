@@ -100,10 +100,18 @@
     <div class="col-lg-8 mb-4 mb-lg-0">
         <div class="card h-100">
             <div class="card-header">
-                <h5>
-                    <i class="fas fa-chart-line"></i>
-                    Live Metrics
-                </h5>
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h5 class="mb-0">
+                            <i class="fas fa-chart-line text-success"></i>
+                            Live Metrics
+                        </h5>
+                        <small class="text-muted">Real-time policy executions (Last 2 hours)</small>
+                    </div>
+                    <span class="badge bg-success">
+                        <i class="fas fa-sync-alt fa-spin"></i> LIVE
+                    </span>
+                </div>
             </div>
             <div class="card-body">
                 <div class="chart-container" style="position: relative; height: 400px; max-height: 400px;">
@@ -878,19 +886,15 @@ function initializeChart() {
         data: {
             labels: [],
             datasets: [{
-                label: 'Health Score',
+                label: 'Policy Executions (Live)',
                 data: [],
-                borderColor: 'rgb(102, 126, 234)',
-                backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                borderColor: 'rgb(16, 185, 129)',
+                backgroundColor: 'rgba(16, 185, 129, 0.1)',
                 tension: 0.4,
-                fill: true
-            }, {
-                label: 'Policy Hits',
-                data: [],
-                borderColor: 'rgb(118, 75, 162)',
-                backgroundColor: 'rgba(118, 75, 162, 0.1)',
-                tension: 0.4,
-                fill: true
+                fill: true,
+                borderWidth: 2,
+                pointRadius: 4,
+                pointHoverRadius: 6
             }]
         },
         options: {
@@ -899,13 +903,37 @@ function initializeChart() {
             plugins: {
                 legend: {
                     display: true,
-                    position: 'top'
+                    position: 'top',
+                    labels: {
+                        font: {
+                            size: 12
+                        }
+                    }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return 'Executions: ' + context.parsed.y;
+                        }
+                    }
                 }
             },
             scales: {
                 y: {
                     beginAtZero: true,
-                    max: 100
+                    ticks: {
+                        stepSize: 100
+                    },
+                    title: {
+                        display: true,
+                        text: 'Number of Executions'
+                    }
+                },
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Time (Hourly)'
+                    }
                 }
             }
         }
@@ -915,9 +943,9 @@ function initializeChart() {
 function updateChart(data) {
     if (!metricsChart || !data) return;
 
+    // Update with real-time policy execution data
     metricsChart.data.labels = data.labels || [];
-    metricsChart.data.datasets[0].data = data.health_scores || [];
-    metricsChart.data.datasets[1].data = data.policy_hits || [];
+    metricsChart.data.datasets[0].data = data.policy_executions || [];
     metricsChart.update();
 }
 

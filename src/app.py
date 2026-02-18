@@ -984,8 +984,9 @@ def api_metrics():
         # Get policy hits for today
         policy_hits_today = metrics.get_policy_hits_today()
 
-        # Get historical data for Live Metrics chart (last 7 days)
-        chart_data = history_tracker.get_chart_data(days=7)
+        # Get LIVE/RECENT data for Live Metrics chart (last 2 hours, not historical days!)
+        live_timeline = policy_execution_tracker.get_execution_timeline(hours=2)
+        live_stats = policy_execution_tracker.get_execution_stats(hours=2)
 
         return jsonify({
             'success': True,
@@ -998,11 +999,13 @@ def api_metrics():
             'policy_hits_today': policy_hits_today,  # Add this for compatibility
             'context_usage': system_health.get('context_usage', 0),
             'memory_usage': system_health.get('memory_usage', 0),
-            # Historical data for Live Metrics chart
+            # LIVE/RECENT data for Live Metrics chart (last 2 hours)
             'metrics_history': {
-                'labels': chart_data.get('dates', []),  # Use 'dates' from history_tracker
-                'health_scores': chart_data.get('health_scores', []),
-                'policy_hits': chart_data.get('policy_hits', [])
+                'labels': live_timeline.get('labels', []),  # Hourly timestamps
+                'policy_executions': live_timeline.get('data', []),  # Execution counts per hour
+                'execution_rate': live_stats.get('execution_rate_per_hour', 0),
+                'total_recent': live_stats.get('total_executions', 0),
+                'by_category': live_stats.get('by_category', {})
             }
         })
     except Exception as e:
