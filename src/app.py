@@ -5419,7 +5419,70 @@ def handle_collaboration_chat(data):
         print(f"Error in collaboration:chat: {e}")
         emit('error', {'message': str(e)})
 
-# Background thread for real-time updates
+# Background thread for real-time policy execution streaming
+def policy_log_streamer():
+    """Stream policy executions in REAL-TIME by tailing the log file"""
+    from pathlib import Path
+
+    log_file = Path.home() / '.claude' / 'memory' / 'logs' / 'policy-hits.log'
+
+    # Keep track of last read position
+    last_position = 0
+
+    # If file exists, seek to end to only read new entries
+    if log_file.exists():
+        with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
+            f.seek(0, 2)  # Seek to end
+            last_position = f.tell()
+
+    print(f"[LIVE] Started real-time policy log streaming from {log_file}")
+
+    while True:
+        try:
+            if log_file.exists():
+                with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
+                    # Seek to last read position
+                    f.seek(last_position)
+
+                    # Read new lines
+                    new_lines = f.readlines()
+                    last_position = f.tell()
+
+                    # Process and emit new policy executions
+                    for line in new_lines:
+                        line = line.strip()
+                        if not line or line.startswith('#'):
+                            continue
+
+                        # Parse log line: [timestamp] policy | action | context
+                        try:
+                            if '[' in line and ']' in line:
+                                timestamp_end = line.index(']')
+                                timestamp_str = line[1:timestamp_end]
+                                rest = line[timestamp_end + 1:].strip()
+                                parts = rest.split('|')
+
+                                if len(parts) >= 2:
+                                    policy_name = parts[0].strip()
+                                    action = parts[1].strip()
+
+                                    # Emit real-time policy execution event
+                                    socketio.emit('policy_execution', {
+                                        'timestamp': timestamp_str,
+                                        'policy': policy_name,
+                                        'action': action,
+                                        'time_ago': 'just now'
+                                    }, namespace='/')
+                        except Exception as parse_error:
+                            continue
+
+            # Check for new entries every 0.5 seconds (true real-time!)
+            time.sleep(0.5)
+        except Exception as e:
+            print(f"Error in policy log streamer: {e}")
+            time.sleep(1)
+
+# Background thread for periodic metrics updates
 def background_thread():
     """Background thread to emit real-time updates every 10 seconds"""
     while True:
@@ -5445,9 +5508,13 @@ def background_thread():
         except Exception as e:
             print(f"Error in background thread: {e}")
 
-# Start background thread
-thread = threading.Thread(target=background_thread, daemon=True)
-thread.start()
+# Start background threads
+metrics_thread = threading.Thread(target=background_thread, daemon=True)
+metrics_thread.start()
+
+# Start REAL-TIME policy log streaming thread
+log_streamer_thread = threading.Thread(target=policy_log_streamer, daemon=True)
+log_streamer_thread.start()
 
 if __name__ == '__main__':
     print(f"""

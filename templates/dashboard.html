@@ -106,10 +106,10 @@
                             <i class="fas fa-chart-line text-success"></i>
                             Live Metrics
                         </h5>
-                        <small class="text-muted">Real-time policy executions (Last 2 hours)</small>
+                        <small class="text-muted">Real-time policy executions as they happen</small>
                     </div>
                     <span class="badge bg-success">
-                        <i class="fas fa-sync-alt fa-spin"></i> LIVE
+                        <i class="fas fa-bolt"></i> LIVE
                     </span>
                 </div>
             </div>
@@ -1713,6 +1713,12 @@ function initializeWebSocket() {
         updateDashboardWithWebSocketData(data);
     });
 
+    // Receive LIVE policy executions (real-time event streaming!)
+    socket.on('policy_execution', function(data) {
+        console.log('⚡ LIVE Policy Execution:', data);
+        addPolicyExecutionToChart(data);
+    });
+
     // Connection response
     socket.on('connection_response', function(data) {
         console.log('Connection response:', data);
@@ -1722,6 +1728,31 @@ function initializeWebSocket() {
     socket.on('error', function(error) {
         console.error('WebSocket error:', error);
     });
+}
+
+// Global counter for real-time executions
+let executionCounter = 0;
+const MAX_LIVE_DATAPOINTS = 30; // Show last 30 executions
+
+function addPolicyExecutionToChart(execution) {
+    if (!metricsChart) return;
+
+    // Increment counter
+    executionCounter++;
+
+    // Add new data point
+    const timeLabel = execution.time_ago || 'now';
+    metricsChart.data.labels.push(timeLabel);
+    metricsChart.data.datasets[0].data.push(executionCounter);
+
+    // Keep only last N data points (rolling window)
+    if (metricsChart.data.labels.length > MAX_LIVE_DATAPOINTS) {
+        metricsChart.data.labels.shift();
+        metricsChart.data.datasets[0].data.shift();
+    }
+
+    // Update chart
+    metricsChart.update('none'); // 'none' for no animation = faster updates
 }
 
 function updateConnectionStatus(connected) {
