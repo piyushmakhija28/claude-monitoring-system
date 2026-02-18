@@ -611,30 +611,87 @@ function loadPolicyStatus() {
                 return;
             }
 
-            container.innerHTML = data.policies.map(policy => `
-                <div class="col-md-4 mb-3">
-                    <div class="card border-0 bg-light h-100">
-                        <div class="card-body">
-                            <div class="d-flex justify-content-between align-items-start mb-2">
-                                <h6 class="mb-0">${policy.name}</h6>
-                                <span class="badge bg-${policy.status === 'active' ? 'success' : 'secondary'}">
-                                    ${policy.status}
-                                </span>
-                            </div>
-                            <p class="small text-muted mb-2">${policy.description || 'No description'}</p>
-                            <div class="d-flex justify-content-between align-items-center">
-                                <small class="text-muted">
-                                    <i class="fas fa-check-circle me-1"></i>
-                                    ${policy.hits || 0} hits
-                                </small>
-                                <small class="text-muted">
-                                    Phase ${policy.phase || 'N/A'}
-                                </small>
+            // Group policies by level
+            const groupedPolicies = {};
+            data.policies.forEach(policy => {
+                const level = policy.level || 'Other';
+                if (!groupedPolicies[level]) {
+                    groupedPolicies[level] = [];
+                }
+                groupedPolicies[level].push(policy);
+            });
+
+            // Sort policies within each level by phase
+            Object.keys(groupedPolicies).forEach(level => {
+                groupedPolicies[level].sort((a, b) => a.phase_num - b.phase_num);
+            });
+
+            // Define level order and styling
+            const levelOrder = ['LEVEL -1', 'LEVEL 1', 'LEVEL 2', 'LEVEL 3', 'Infrastructure'];
+            const levelInfo = {
+                'LEVEL -1': { icon: 'fa-shield-alt', color: 'danger', title: 'Auto-Fix Enforcement' },
+                'LEVEL 1': { icon: 'fa-sync-alt', color: 'primary', title: 'Sync System (Foundation)' },
+                'LEVEL 2': { icon: 'fa-book', color: 'info', title: 'Standards System' },
+                'LEVEL 3': { icon: 'fa-cogs', color: 'success', title: 'Execution System' },
+                'Infrastructure': { icon: 'fa-server', color: 'secondary', title: 'Infrastructure' }
+            };
+
+            let html = '';
+
+            levelOrder.forEach(level => {
+                if (groupedPolicies[level]) {
+                    const info = levelInfo[level];
+                    const policies = groupedPolicies[level];
+
+                    html += `
+                        <div class="col-12 mb-3">
+                            <div class="d-flex align-items-center mb-3">
+                                <div class="me-3">
+                                    <div class="bg-${info.color} text-white rounded-circle d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
+                                        <i class="fas ${info.icon}"></i>
+                                    </div>
+                                </div>
+                                <div>
+                                    <h5 class="mb-0 text-${info.color}">${level}</h5>
+                                    <small class="text-muted">${info.title}</small>
+                                </div>
+                                <div class="ms-auto">
+                                    <span class="badge bg-${info.color}">${policies.length} ${policies.length === 1 ? 'policy' : 'policies'}</span>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                </div>
-            `).join('');
+                    `;
+
+                    policies.forEach(policy => {
+                        html += `
+                            <div class="col-md-4 mb-3">
+                                <div class="card border-start border-${info.color} border-3 h-100 shadow-sm">
+                                    <div class="card-body">
+                                        <div class="d-flex justify-content-between align-items-start mb-2">
+                                            <h6 class="mb-0">${policy.name}</h6>
+                                            <span class="badge bg-${policy.status === 'active' ? 'success' : (policy.status === 'warning' ? 'warning' : 'secondary')}">
+                                                ${policy.status}
+                                            </span>
+                                        </div>
+                                        <p class="small text-muted mb-2">${policy.description || 'No description'}</p>
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <small class="text-muted">
+                                                <i class="fas fa-chart-line me-1"></i>
+                                                ${policy.hits || 0} hits
+                                            </small>
+                                            <small class="badge bg-light text-dark">
+                                                ${policy.phase || 'N/A'}
+                                            </small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    });
+                }
+            });
+
+            container.innerHTML = html;
         })
         .catch(error => {
             console.error('Error loading policies:', error);

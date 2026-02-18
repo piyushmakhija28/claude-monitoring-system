@@ -283,6 +283,8 @@ class PolicyChecker:
                 'name': policy['name'],
                 'description': policy['description'],
                 'phase': f"Phase {policy['phase']}",
+                'phase_num': policy['phase'],  # Add numeric phase for sorting
+                'level': policy['level'],  # Add level for grouping
                 'status': status['status'],
                 'details': status['details'],
                 'files': policy['files'],
