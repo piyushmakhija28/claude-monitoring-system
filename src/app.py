@@ -34,6 +34,7 @@ from services.monitoring.automation_tracker import AutomationTracker
 from services.monitoring.skill_agent_tracker import SkillAgentTracker
 from services.monitoring.optimization_tracker import OptimizationTracker
 from services.monitoring.policy_execution_tracker import PolicyExecutionTracker
+from services.monitoring.three_level_flow_tracker import ThreeLevelFlowTracker
 
 # Import AI services
 from services.ai.anomaly_detector import AnomalyDetector
@@ -147,6 +148,7 @@ automation_tracker = AutomationTracker()
 skill_agent_tracker = SkillAgentTracker()
 optimization_tracker = OptimizationTracker()
 policy_execution_tracker = PolicyExecutionTracker()
+three_level_flow_tracker = ThreeLevelFlowTracker()
 
 # User database (in production, use a proper database)
 # Password: 'admin' (hashed with bcrypt)
@@ -850,7 +852,7 @@ def dashboard():
     # Get time range from query parameter (default: 7 days)
     days = request.args.get('days', 7, type=int)
     # Validate days parameter
-    if days not in [7, 30, 60, 90]:
+    if days not in [1, 7, 30, 60, 90]:
         days = 7
 
     # Get widget preferences from session (default: all enabled)
@@ -893,6 +895,14 @@ def dashboard():
     chart_data = history_tracker.get_chart_data(days=days)
     summary_stats = history_tracker.get_summary_stats(days=days)
 
+    # Get 3-level flow latest execution for dashboard widget
+    try:
+        flow_latest = three_level_flow_tracker.get_latest_execution()
+        flow_stats = three_level_flow_tracker.get_flow_stats(limit=20)
+    except Exception:
+        flow_latest = None
+        flow_stats = {}
+
     return render_template('dashboard.html',
                          system_health=system_health,
                          daemon_status=daemon_status,
@@ -901,18 +911,28 @@ def dashboard():
                          chart_data=chart_data,
                          summary_stats=summary_stats,
                          selected_days=days,
-                         widget_preferences=widget_prefs)
+                         widget_preferences=widget_prefs,
+                         flow_latest=flow_latest,
+                         flow_stats=flow_stats)
 
 @app.route('/comparison')
 @login_required
 def comparison():
     """Before/After comparison page"""
-    comparison_data = metrics.get_cost_comparison()
-    optimization_impact = metrics.get_optimization_impact()
+    # Get days parameter from query string (default: 30)
+    days = request.args.get('days', 30, type=int)
+
+    # Validate days parameter
+    if days not in [1, 7, 30, 60, 90]:
+        days = 30
+
+    comparison_data = metrics.get_cost_comparison(days=days)
+    optimization_impact = metrics.get_optimization_impact(days=days)
 
     return render_template('comparison.html',
                          comparison=comparison_data,
-                         impact=optimization_impact)
+                         impact=optimization_impact,
+                         selected_days=days)
 
 @app.route('/policies')
 @login_required
@@ -1048,6 +1068,103 @@ def api_policies():
         traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
 
+@app.route('/api/policy-history')
+@login_required
+def api_policy_history():
+    """API endpoint for policy execution history"""
+    try:
+        from datetime import datetime, timedelta, timezone
+        from pathlib import Path
+        import re
+
+        # Get days parameter (default 7)
+        days = request.args.get('days', 7, type=int)
+
+        # Read policy-hits.log
+        logs_dir = Path.home() / '.claude' / 'memory' / 'logs'
+        policy_log = logs_dir / 'policy-hits.log'
+
+        executions = []
+        chart_data_dict = {}
+
+        if policy_log.exists():
+            try:
+                with open(policy_log, 'r', encoding='utf-8') as f:
+                    lines = f.readlines()
+
+                cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
+
+                for line in lines[-200:]:  # Last 200 lines
+                    line = line.strip()
+                    if not line:
+                        continue
+
+                    # Parse log line format: [timestamp] POLICY: action - context
+                    match = re.match(r'\[(.*?)\]\s+([A-Z_]+):\s+(.*)', line)
+                    if match:
+                        timestamp_str = match.group(1)
+                        policy_name = match.group(2)
+                        rest = match.group(3)
+
+                        try:
+                            timestamp = datetime.strptime(timestamp_str, '%Y-%m-%d %H:%M:%S').replace(tzinfo=timezone.utc)
+                            if timestamp < cutoff_date:
+                                continue
+
+                            # Extract action and context
+                            action_context = rest.split(' - ', 1)
+                            action = action_context[0] if len(action_context) > 0 else 'Unknown'
+                            context = action_context[1] if len(action_context) > 1 else ''
+
+                            # Determine status (assume success unless error mentioned)
+                            status = 'failure' if 'error' in line.lower() or 'fail' in line.lower() else 'success'
+
+                            executions.append({
+                                'timestamp': timestamp_str,
+                                'policy': policy_name.replace('_', ' ').title(),
+                                'action': action,
+                                'context': context,
+                                'status': status
+                            })
+
+                            # Track for chart
+                            date_key = timestamp.strftime('%Y-%m-%d')
+                            chart_data_dict[date_key] = chart_data_dict.get(date_key, 0) + 1
+
+                        except Exception as e:
+                            print(f"Error parsing line: {e}")
+                            continue
+
+            except Exception as e:
+                print(f"Error reading policy history: {e}")
+
+        # Sort executions by timestamp (newest first)
+        executions.sort(key=lambda x: x['timestamp'], reverse=True)
+
+        # Prepare chart data (sorted by date)
+        sorted_dates = sorted(chart_data_dict.keys())
+        chart_data = {
+            'labels': sorted_dates,
+            'values': [chart_data_dict[date] for date in sorted_dates]
+        }
+
+        return jsonify({
+            'success': True,
+            'executions': executions[:50],  # Return latest 50
+            'chart_data': chart_data
+        })
+
+    except Exception as e:
+        print(f"Error in api_policy_history: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'executions': [],
+            'chart_data': {'labels': [], 'values': []}
+        }), 500
+
 @app.route('/api/system-info')
 @login_required
 def api_system_info():
@@ -1118,15 +1235,28 @@ def api_recent_errors():
 @app.route('/api/comparison')
 @login_required
 def api_comparison():
-    """API endpoint for comparison data"""
+    """API endpoint for comparison data
+
+    Query params:
+        days: Number of days to analyze (default: 30)
+              Options: 7, 30, 60, 90
+    """
     try:
-        comparison_data = metrics.get_cost_comparison()
-        optimization_impact = metrics.get_optimization_impact()
+        # Get days parameter from query string (default: 30)
+        days = request.args.get('days', 30, type=int)
+
+        # Validate days parameter
+        if days not in [1, 7, 30, 60, 90]:
+            days = 30  # Default to 30 if invalid
+
+        comparison_data = metrics.get_cost_comparison(days=days)
+        optimization_impact = metrics.get_optimization_impact(days=days)
 
         return jsonify({
             'success': True,
             'comparison': comparison_data,
-            'impact': optimization_impact
+            'impact': optimization_impact,
+            'days': days  # Return selected days for frontend
         })
     except Exception as e:
         print(f"Error in api_comparison: {e}")
@@ -1289,6 +1419,114 @@ def api_policy_timeline():
             'timeline': {'labels': [], 'data': []},
             'recent_executions': []
         }), 500
+
+@app.route('/api/3level-flow/latest')
+@login_required
+def api_3level_flow_latest():
+    """Return the latest 3-level architecture flow execution"""
+    try:
+        latest = three_level_flow_tracker.get_latest_execution()
+        if not latest:
+            return jsonify({
+                'success': True,
+                'available': False,
+                'message': 'No 3-level flow sessions found'
+            })
+        return jsonify({
+            'success': True,
+            'available': True,
+            'session': latest
+        })
+    except Exception as e:
+        print(f"Error in api_3level_flow_latest: {e}")
+        return jsonify({'success': False, 'available': False, 'error': str(e)}), 500
+
+
+@app.route('/api/3level-flow/sessions')
+@login_required
+def api_3level_flow_sessions():
+    """Return recent 3-level flow execution sessions"""
+    try:
+        limit = request.args.get('limit', 10, type=int)
+        sessions_list = three_level_flow_tracker.get_recent_sessions(limit=limit)
+        return jsonify({
+            'success': True,
+            'sessions': sessions_list,
+            'total': len(sessions_list)
+        })
+    except Exception as e:
+        print(f"Error in api_3level_flow_sessions: {e}")
+        return jsonify({'success': False, 'sessions': [], 'total': 0, 'error': str(e)}), 500
+
+
+@app.route('/api/3level-flow/stats')
+@login_required
+def api_3level_flow_stats():
+    """Return aggregated stats for recent 3-level flow executions"""
+    try:
+        limit = request.args.get('limit', 50, type=int)
+        stats = three_level_flow_tracker.get_flow_stats(limit=limit)
+        policy_hits = three_level_flow_tracker.get_policy_hits_today(hours=24)
+        return jsonify({
+            'success': True,
+            'stats': stats,
+            'policy_hits_today': policy_hits
+        })
+    except Exception as e:
+        print(f"Error in api_3level_flow_stats: {e}")
+        return jsonify({'success': False, 'stats': {}, 'error': str(e)}), 500
+
+
+@app.route('/api/3level-flow/log-files')
+@login_required
+def api_3level_flow_log_files():
+    """Return list of 3-level flow session log directories"""
+    try:
+        sessions_list = log_parser.list_3level_sessions(limit=20)
+        return jsonify({
+            'success': True,
+            'sessions': sessions_list
+        })
+    except Exception as e:
+        print(f"Error in api_3level_flow_log_files: {e}")
+        return jsonify({'success': False, 'sessions': [], 'error': str(e)}), 500
+
+
+@app.route('/api/3level-flow/daemon-activity')
+@login_required
+def api_3level_flow_daemon_activity():
+    """Return daemon activity summary from policy-hits.log"""
+    try:
+        hours = request.args.get('hours', 24, type=int)
+        summary = log_parser.get_daemon_activity_summary(hours=hours)
+        return jsonify({
+            'success': True,
+            'summary': summary
+        })
+    except Exception as e:
+        print(f"Error in api_3level_flow_daemon_activity: {e}")
+        return jsonify({'success': False, 'summary': {}, 'error': str(e)}), 500
+
+
+@app.route('/api/3level-flow/pipeline/<session_id>')
+@login_required
+def api_3level_flow_pipeline(session_id):
+    """Return full pipeline trace for a session (from flow-trace.json, v3.0.0+)"""
+    try:
+        import json as _json
+        from pathlib import Path
+        trace_file = (
+            Path.home() / '.claude' / 'memory' / 'logs' / 'sessions' / session_id / 'flow-trace.json'
+        )
+        if not trace_file.exists():
+            return jsonify({'success': False, 'available': False, 'message': 'No flow-trace.json for this session'})
+        with open(trace_file, 'r', encoding='utf-8', errors='ignore') as f:
+            trace = _json.load(f)
+        return jsonify({'success': True, 'available': True, 'trace': trace})
+    except Exception as e:
+        print(f"Error in api_3level_flow_pipeline: {e}")
+        return jsonify({'success': False, 'available': False, 'error': str(e)}), 500
+
 
 @app.route('/sessions')
 @login_required
@@ -2483,7 +2721,7 @@ def analytics():
     """
     # Get time range
     days = request.args.get('days', 30, type=int)
-    if days not in [7, 30, 60, 90]:
+    if days not in [1, 7, 30, 60, 90]:
         days = 30
 
     # Get comprehensive analytics data
@@ -5533,26 +5771,26 @@ if __name__ == '__main__':
     Username: admin
     Password: admin
 
-    🧠 Memory System v3.2.0 (3-Level Architecture):
-    ✓ 10 Daemon health monitoring (all core daemons + health monitor)
-    ✓ 3-Level Architecture (Sync → Rules → Execution)
-    ✓ 12-Step Execution System (Prompt → Task → Model → Tools)
-    ✓ Context optimization metrics (cache hits, token savings)
-    ✓ Failure prevention stats (auto-fixes, patterns learned)
-    ✓ Model selection distribution (haiku/sonnet/opus usage)
-    ✓ Session memory tracking (active sessions, pruning)
-    ✓ Git auto-commit activity monitoring
-    ✓ Overall system health score calculation
+    [MEMORY] Memory System v3.2.0 (3-Level Architecture):
+    [OK] 10 Daemon health monitoring (all core daemons + health monitor)
+    [OK] 3-Level Architecture (Sync -> Rules -> Execution)
+    [OK] 12-Step Execution System (Prompt -> Task -> Model -> Tools)
+    [OK] Context optimization metrics (cache hits, token savings)
+    [OK] Failure prevention stats (auto-fixes, patterns learned)
+    [OK] Model selection distribution (haiku/sonnet/opus usage)
+    [OK] Session memory tracking (active sessions, pruning)
+    [OK] Git auto-commit activity monitoring
+    [OK] Overall system health score calculation
 
-    🚀 Advanced Features:
-    ✓ Custom alert routing & escalation policies
-    ✓ Multi-level escalation chains (up to 3 levels)
-    ✓ Predictive analytics & forecasting (5 algorithms)
-    ✓ AI-powered anomaly detection (6 ML algorithms)
-    ✓ Community widget marketplace with sharing
-    ✓ Email & SMS alerts for critical issues
-    ✓ Custom dashboard themes (6 themes)
-    ✓ Real-time WebSocket updates (10s interval)
+    [FEATURES] Advanced Features:
+    [OK] Custom alert routing & escalation policies
+    [OK] Multi-level escalation chains (up to 3 levels)
+    [OK] Predictive analytics & forecasting (5 algorithms)
+    [OK] AI-powered anomaly detection (6 ML algorithms)
+    [OK] Community widget marketplace with sharing
+    [OK] Email & SMS alerts for critical issues
+    [OK] Custom dashboard themes (6 themes)
+    [OK] Real-time WebSocket updates (10s interval)
 
     Starting server...
     ============================================================

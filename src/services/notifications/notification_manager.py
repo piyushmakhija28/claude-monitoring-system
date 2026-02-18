@@ -3,7 +3,7 @@ Notification Manager
 Handles browser push notifications and notification history
 """
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 import sys
 
@@ -107,7 +107,7 @@ class NotificationManager:
 
         # Filter by date range
         from datetime import timedelta
-        cutoff_date = datetime.now() - timedelta(days=days)
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
 
         filtered = [n for n in notifications if datetime.fromisoformat(n['timestamp']) > cutoff_date]
 
@@ -151,3 +151,93 @@ class NotificationManager:
         self.save_notifications(history)
 
         return len(history['notifications']) - len(filtered)  # Number deleted
+
+    # -------------------------------------------------------------------------
+    # 3-Level Flow Notifications
+    # -------------------------------------------------------------------------
+
+    def check_and_notify_3level_flow(self):
+        """Check latest 3-level flow execution and generate notifications if needed.
+        Call this on dashboard load or API poll to surface issues."""
+        try:
+            from services.monitoring.three_level_flow_tracker import ThreeLevelFlowTracker
+            tracker = ThreeLevelFlowTracker()
+            latest = tracker.get_latest_execution()
+            if not latest:
+                return
+
+            session_id = latest.get('session_id', 'unknown')
+
+            # Notify on Level -1 failure
+            l1 = latest.get('level_minus_1', {})
+            if l1.get('status') == 'FAIL':
+                self._notify_once(
+                    f'3lf_l1_fail_{session_id}',
+                    '3level_flow_level_minus_1_fail',
+                    'Level -1 Failure: Auto-Fix Enforcement',
+                    f'Session {session_id}: System checks failed. {l1.get("message", "")}',
+                    severity='critical'
+                )
+
+            # Notify on Level 3 failure
+            l3 = latest.get('level_3', {})
+            if l3.get('status') not in ('OK', 'ok', None, 'unknown') and l3.get('status') == 'FAIL':
+                self._notify_once(
+                    f'3lf_l3_fail_{session_id}',
+                    '3level_flow_level_3_fail',
+                    'Level 3 Failure: Execution System',
+                    f'Session {session_id}: Execution step failed.',
+                    severity='error'
+                )
+
+            # Notify on high context usage
+            l1_sync = latest.get('level_1', {})
+            ctx = l1_sync.get('context_pct')
+            if ctx is not None and ctx >= 85:
+                self._notify_once(
+                    f'3lf_ctx_high_{session_id}',
+                    '3level_flow_high_context',
+                    'High Context Usage Detected',
+                    f'Session {session_id}: Context at {ctx}%. Aggressive optimization recommended.',
+                    severity='warning'
+                )
+
+        except Exception as e:
+            print(f"Error in check_and_notify_3level_flow: {e}")
+
+    def _notify_once(self, dedup_key, notification_type, title, message, severity='info'):
+        """Add notification only if one with the same dedup_key was not recently added (last 1h)."""
+        from datetime import timedelta
+        history = self.load_notifications()
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=1)
+
+        for notif in history['notifications']:
+            if notif.get('data', {}).get('dedup_key') == dedup_key:
+                try:
+                    ts_str = notif['timestamp']
+                    ts = datetime.fromisoformat(ts_str)
+                    # Make timezone-aware if naive
+                    if ts.tzinfo is None:
+                        ts = ts.replace(tzinfo=timezone.utc)
+                    if ts > cutoff:
+                        return  # Already notified recently
+                except Exception:
+                    pass
+
+        self.add_notification(
+            notification_type=notification_type,
+            title=title,
+            message=message,
+            severity=severity,
+            data={'dedup_key': dedup_key}
+        )
+
+    def notify_3level_flow_success(self, session_id, model, complexity, task_type):
+        """Add a success notification for a completed 3-level flow execution."""
+        self._notify_once(
+            f'3lf_success_{session_id}',
+            '3level_flow_success',
+            '3-Level Flow Completed',
+            f'Session {session_id}: {task_type} task (complexity {complexity}) executed with {model}.',
+            severity='info'
+        )

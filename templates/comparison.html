@@ -5,56 +5,87 @@
 {% block content %}
 <div class="row mb-4">
     <div class="col-12">
-        <h2 class="mb-0">
-            <i class="fas fa-chart-bar me-2"></i>Cost Comparison Analysis
-        </h2>
-        <p class="text-muted mt-2">Compare system performance before and after optimization</p>
+        <div class="d-flex justify-content-between align-items-center flex-wrap">
+            <div>
+                <h2 class="mb-0">
+                    <i class="fas fa-chart-bar me-2"></i>Cost Comparison Analysis
+                </h2>
+                <p class="text-muted mt-2">Compare system performance before and after optimization</p>
+            </div>
+            <div>
+                <!-- Time Range Filter -->
+                <div class="btn-group" role="group" aria-label="Time range filter">
+                    <a href="?days=1" class="btn btn-sm btn-outline-primary {{ 'active' if selected_days == 1 else '' }}">
+                        Today
+                    </a>
+                    <a href="?days=7" class="btn btn-sm btn-outline-primary {{ 'active' if selected_days == 7 else '' }}">
+                        7 Days
+                    </a>
+                    <a href="?days=30" class="btn btn-sm btn-outline-primary {{ 'active' if selected_days == 30 else '' }}">
+                        30 Days
+                    </a>
+                    <a href="?days=60" class="btn btn-sm btn-outline-primary {{ 'active' if selected_days == 60 else '' }}">
+                        60 Days
+                    </a>
+                    <a href="?days=90" class="btn btn-sm btn-outline-primary {{ 'active' if selected_days == 90 else '' }}">
+                        90 Days
+                    </a>
+                </div>
+                <span class="badge bg-info ms-2">
+                    <i class="fas fa-calendar-alt me-1"></i>Last {{ selected_days }} Days
+                </span>
+            </div>
+        </div>
     </div>
 </div>
 
 <!-- Summary Cards -->
 <div class="row mb-4">
     <div class="col-md-3">
-        <div class="card border-0 shadow-sm h-100 bg-gradient text-white" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
-            <div class="card-body text-center">
-                <h6 class="card-title text-white-50 mb-3">Total Savings</h6>
-                <div class="display-5 fw-bold" id="totalSavings">
+        <div class="card stat-card h-100">
+            <div class="card-body text-center position-relative">
+                <i class="fas fa-dollar-sign stat-icon text-success"></i>
+                <div class="stat-value text-success" id="totalSavings">
                     <i class="fas fa-spinner fa-spin"></i>
                 </div>
-                <small class="text-white-50">per month</small>
+                <div class="stat-label">Total Savings</div>
+                <small class="text-muted mt-2 d-block">per month</small>
             </div>
         </div>
     </div>
     <div class="col-md-3">
-        <div class="card border-0 shadow-sm h-100">
-            <div class="card-body text-center">
-                <h6 class="card-title text-muted mb-3">Token Reduction</h6>
-                <div class="display-5 fw-bold text-success" id="tokenReduction">
+        <div class="card stat-card h-100">
+            <div class="card-body text-center position-relative">
+                <i class="fas fa-percentage stat-icon text-primary"></i>
+                <div class="stat-value text-primary" id="tokenReduction">
                     <i class="fas fa-spinner fa-spin"></i>
                 </div>
-                <small class="text-muted">average per request</small>
+                <div class="stat-label">Token Reduction</div>
+                <small class="text-muted mt-2 d-block">average per request</small>
             </div>
         </div>
     </div>
     <div class="col-md-3">
-        <div class="card border-0 shadow-sm h-100">
-            <div class="card-body text-center">
-                <h6 class="card-title text-muted mb-3">Response Time</h6>
-                <div class="display-5 fw-bold text-info" id="responseTime">
+        <div class="card stat-card h-100">
+            <div class="card-body text-center position-relative">
+                <i class="fas fa-rocket stat-icon text-info"></i>
+                <div class="stat-value text-info" id="responseTime">
                     <i class="fas fa-spinner fa-spin"></i>
                 </div>
-                <small class="text-muted">improvement</small>
+                <div class="stat-label">Total Optimizations</div>
+                <small class="text-muted mt-2 d-block">applied count</small>
             </div>
         </div>
     </div>
     <div class="col-md-3">
-        <div class="card border-0 shadow-sm h-100">
-            <div class="card-body text-center">
-                <h6 class="card-title text-muted mb-3">Efficiency Score</h6>
-                <div class="display-5 fw-bold text-warning" id="efficiencyScore">
+        <div class="card stat-card h-100">
+            <div class="card-body text-center position-relative">
+                <i class="fas fa-star stat-icon text-warning"></i>
+                <div class="stat-value text-warning" id="efficiencyScore">
                     <i class="fas fa-spinner fa-spin"></i>
                 </div>
-                <small class="text-muted">overall improvement</small>
+                <div class="stat-label">Efficiency Score</div>
+                <small class="text-muted mt-2 d-block">overall improvement</small>
             </div>
         </div>
     </div>
@@ -62,18 +93,20 @@
 
 <!-- Before vs After Comparison -->
 <div class="row mb-4">
-    <div class="col-md-6">
-        <div class="card border-0 shadow-sm h-100">
-            <div class="card-header bg-white border-0 pt-4 pb-3">
-                <h5 class="mb-0">
-                    <i class="fas fa-history me-2 text-danger"></i>Before Optimization
-                </h5>
-            </div>
+    <div class="col-md-6 mb-4">
+        <div class="card border h-100">
             <div class="card-body">
-                <div class="mb-4">
-                    <canvas id="beforeChart"></canvas>
+                <div class="text-center mb-3">
+                    <h6 class="mb-1">
+                        <i class="fas fa-history text-danger me-2"></i>
+                        Before Optimization
+                    </h6>
+                    <small class="text-muted">
+                        Token usage before implementing optimizations
+                    </small>
                 </div>
-                <div class="list-group list-group-flush" id="beforeMetrics">
+                <canvas id="beforeChart" height="200"></canvas>
+                <div class="list-group list-group-flush mt-3" id="beforeMetrics">
                     <div class="text-center text-muted py-4">
                         <i class="fas fa-spinner fa-spin fa-2x mb-3"></i>
                         <p>Loading metrics...</p>
@@ -82,18 +115,20 @@
             </div>
         </div>
     </div>
-    <div class="col-md-6">
-        <div class="card border-0 shadow-sm h-100">
-            <div class="card-header bg-white border-0 pt-4 pb-3">
-                <h5 class="mb-0">
-                    <i class="fas fa-rocket me-2 text-success"></i>After Optimization
-                </h5>
-            </div>
+    <div class="col-md-6 mb-4">
+        <div class="card border h-100">
             <div class="card-body">
-                <div class="mb-4">
-                    <canvas id="afterChart"></canvas>
+                <div class="text-center mb-3">
+                    <h6 class="mb-1">
+                        <i class="fas fa-rocket text-success me-2"></i>
+                        After Optimization
+                    </h6>
+                    <small class="text-muted">
+                        Token usage after implementing optimizations
+                    </small>
                 </div>
-                <div class="list-group list-group-flush" id="afterMetrics">
+                <canvas id="afterChart" height="200"></canvas>
+                <div class="list-group list-group-flush mt-3" id="afterMetrics">
                     <div class="text-center text-muted py-4">
                         <i class="fas fa-spinner fa-spin fa-2x mb-3"></i>
                         <p>Loading metrics...</p>
@@ -107,14 +142,17 @@
 <!-- Cost Savings Visualization -->
 <div class="row mb-4">
     <div class="col-12">
-        <div class="card border-0 shadow-sm">
-            <div class="card-header bg-white border-0 pt-4 pb-3">
-                <h5 class="mb-0">
-                    <i class="fas fa-chart-line me-2"></i>Cost Savings Over Time
+        <div class="card">
+            <div class="card-header">
+                <h5>
+                    <i class="fas fa-chart-line"></i>
+                    Cost Savings Over Time
                 </h5>
             </div>
             <div class="card-body">
-                <canvas id="savingsChart" height="100"></canvas>
+                <div class="chart-container" style="position: relative; height: 400px; max-height: 400px;">
+                    <canvas id="savingsChart"></canvas>
+                </div>
             </div>
         </div>
     </div>
@@ -122,26 +160,34 @@
 
 <!-- Token Usage Breakdown -->
 <div class="row mb-4">
-    <div class="col-md-6">
-        <div class="card border-0 shadow-sm h-100">
-            <div class="card-header bg-white border-0 pt-4 pb-3">
-                <h5 class="mb-0">
-                    <i class="fas fa-coins me-2"></i>Token Usage Breakdown
-                </h5>
-            </div>
+    <div class="col-md-6 mb-4">
+        <div class="card border h-100">
             <div class="card-body">
-                <canvas id="tokenBreakdownChart"></canvas>
+                <div class="text-center mb-3">
+                    <h6 class="mb-1">
+                        <i class="fas fa-coins text-warning me-2"></i>
+                        Token Usage Breakdown
+                    </h6>
+                    <small class="text-muted">
+                        Comparison of token usage before and after
+                    </small>
+                </div>
+                <canvas id="tokenBreakdownChart" height="250"></canvas>
             </div>
         </div>
     </div>
-    <div class="col-md-6">
-        <div class="card border-0 shadow-sm h-100">
-            <div class="card-header bg-white border-0 pt-4 pb-3">
-                <h5 class="mb-0">
-                    <i class="fas fa-tasks me-2"></i>Optimization Impact
-                </h5>
-            </div>
+    <div class="col-md-6 mb-4">
+        <div class="card border h-100">
             <div class="card-body">
+                <div class="text-center mb-3">
+                    <h6 class="mb-1">
+                        <i class="fas fa-tasks text-primary me-2"></i>
+                        Optimization Impact
+                    </h6>
+                    <small class="text-muted">
+                        Performance improvement by optimization type
+                    </small>
+                </div>
                 <div id="optimizationImpact">
                     <div class="text-center text-muted py-4">
                         <i class="fas fa-spinner fa-spin fa-2x mb-3"></i>
@@ -156,10 +202,11 @@
 <!-- Detailed Comparison Table -->
 <div class="row">
     <div class="col-12">
-        <div class="card border-0 shadow-sm">
-            <div class="card-header bg-white border-0 pt-4 pb-3">
-                <h5 class="mb-0">
-                    <i class="fas fa-table me-2"></i>Detailed Metrics Comparison
+        <div class="card">
+            <div class="card-header">
+                <h5>
+                    <i class="fas fa-table"></i>
+                    Detailed Metrics Comparison
                 </h5>
             </div>
             <div class="card-body">
@@ -193,47 +240,28 @@
 <script>
 let beforeChart, afterChart, savingsChart, tokenBreakdownChart;
 
+// Use server-side data (no AJAX needed - page reloads on filter change)
 document.addEventListener('DOMContentLoaded', function() {
-    loadComparisonData();
+    // Server provides comparison and impact data
+    const serverComparison = {{ comparison | tojson }};
+    const serverImpact = {{ impact | tojson }};
+
+    // Combine data for update functions
+    const combinedData = {
+        ...serverComparison,
+        ...serverImpact,
+        comparison: serverComparison,
+        impact: serverImpact
+    };
+
+    // Initialize all charts and cards with server data
+    updateSummaryCards(combinedData);
+    updateBeforeAfterCharts(combinedData);
+    updateSavingsChart(combinedData);
+    updateTokenBreakdown(combinedData);
+    updateOptimizationImpact(combinedData);
+    updateComparisonTable(combinedData);
 });
-
-function loadComparisonData() {
-    fetch('/api/comparison')
-        .then(response => {
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            return response.json();
-        })
-        .then(data => {
-            if (!data.success) {
-                throw new Error(data.error || 'Failed to load comparison data');
-            }
-
-            // Extract comparison and impact data
-            const comparison = data.comparison || {};
-            const impact = data.impact || {};
-
-            // Combine into single object for easier access
-            const combinedData = {
-                ...comparison,
-                ...impact,
-                comparison: comparison,
-                impact: impact
-            };
-
-            updateSummaryCards(combinedData);
-            updateBeforeAfterCharts(combinedData);
-            updateSavingsChart(combinedData);
-            updateTokenBreakdown(combinedData);
-            updateOptimizationImpact(combinedData);
-            updateComparisonTable(combinedData);
-        })
-        .catch(error => {
-            console.error('Error loading comparison data:', error);
-            showError('Failed to load comparison data: ' + error.message);
-        });
-}
 
 function updateSummaryCards(data) {
     try {
@@ -261,9 +289,15 @@ function updateSummaryCards(data) {
             responseEl.innerHTML = `${totalOpts}`;
         }
 
-    // Efficiency Score
-    const efficiency = data.efficiency_score || 0;
-    document.getElementById('efficiencyScore').innerHTML = `${efficiency.toFixed(0)}/100`;
+        // Efficiency Score
+        const efficiency = data.comparison.efficiency_score || data.efficiency_score || 0;
+        const efficiencyEl = document.getElementById('efficiencyScore');
+        if (efficiencyEl) {
+            efficiencyEl.innerHTML = `${efficiency.toFixed(0)}/100`;
+        }
+    } catch (error) {
+        console.error('Error updating summary cards:', error);
+    }
 }
 
 function updateBeforeAfterCharts(data) {
@@ -272,6 +306,9 @@ function updateBeforeAfterCharts(data) {
 
     // Before Chart
     const beforeCtx = document.getElementById('beforeChart').getContext('2d');
+    if (beforeChart) {
+        beforeChart.destroy();
+    }
     beforeChart = new Chart(beforeCtx, {
         type: 'doughnut',
         data: {
@@ -303,6 +340,9 @@ function updateBeforeAfterCharts(data) {
 
     // After Chart
     const afterCtx = document.getElementById('afterChart').getContext('2d');
+    if (afterChart) {
+        afterChart.destroy();
+    }
     afterChart = new Chart(afterCtx, {
         type: 'doughnut',
         data: {
@@ -367,6 +407,9 @@ function updateSavingsChart(data) {
     const savingsHistory = data.savings_history || [];
     const ctx = document.getElementById('savingsChart').getContext('2d');
 
+    if (savingsChart) {
+        savingsChart.destroy();
+    }
     savingsChart = new Chart(ctx, {
         type: 'line',
         data: {
@@ -421,6 +464,9 @@ function updateTokenBreakdown(data) {
     const breakdown = data.token_breakdown || {};
     const ctx = document.getElementById('tokenBreakdownChart').getContext('2d');
 
+    if (tokenBreakdownChart) {
+        tokenBreakdownChart.destroy();
+    }
     tokenBreakdownChart = new Chart(ctx, {
         type: 'bar',
         data: {

@@ -156,6 +156,9 @@
 
                     <!-- Time Range Filter -->
                     <div class="btn-group" role="group" aria-label="Time range filter">
+                        <a href="?days=1" class="btn btn-sm btn-outline-primary {{ 'active' if selected_days == 1 else '' }}">
+                            Today
+                        </a>
                         <a href="?days=7" class="btn btn-sm btn-outline-primary {{ 'active' if selected_days == 7 else '' }}">
                             7 Days
                         </a>
@@ -434,6 +437,259 @@
     </div>
 </div>
 
+<!-- 3-Level Architecture Flow Status -->
+<div class="row mb-4" id="threeLevelFlowWidget">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="fas fa-layer-group text-primary me-2"></i>
+                        3-Level Architecture Flow
+                    </h5>
+                    <div class="d-flex gap-2 align-items-center">
+                        <span class="badge bg-info">Latest Execution</span>
+                        <button class="btn btn-sm btn-outline-primary" onclick="refresh3LevelFlow()">
+                            <i class="fas fa-sync-alt me-1"></i>Refresh
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="card-body" id="threeLevelFlowBody">
+                {% if flow_latest and flow_latest.overall_status %}
+                <!-- Server-side rendered for initial load -->
+                <div class="row g-3">
+                    <!-- Level -1 -->
+                    <div class="col-md-3">
+                        <div class="card border-{{ 'success' if flow_latest.level_minus_1.status == 'PASS' else 'danger' }} h-100">
+                            <div class="card-body text-center p-3">
+                                <div class="fs-4 mb-1">
+                                    <i class="fas fa-{{ 'check-circle text-success' if flow_latest.level_minus_1.status == 'PASS' else 'times-circle text-danger' }}"></i>
+                                </div>
+                                <div class="fw-bold small">LEVEL -1</div>
+                                <div class="text-muted small">Auto-Fix Enforcement</div>
+                                <div class="badge bg-{{ 'success' if flow_latest.level_minus_1.status == 'PASS' else 'danger' }} mt-1">
+                                    {{ flow_latest.level_minus_1.status }}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Level 1 -->
+                    <div class="col-md-3">
+                        <div class="card border-primary h-100">
+                            <div class="card-body text-center p-3">
+                                <div class="fs-4 mb-1">
+                                    <i class="fas fa-sync-alt text-primary"></i>
+                                </div>
+                                <div class="fw-bold small">LEVEL 1</div>
+                                <div class="text-muted small">Sync System</div>
+                                {% if flow_latest.level_1.context_pct is not none %}
+                                <div class="badge bg-{{ 'success' if flow_latest.level_1.context_pct < 70 else ('warning' if flow_latest.level_1.context_pct < 85 else 'danger') }} mt-1">
+                                    Context: {{ flow_latest.level_1.context_pct }}%
+                                </div>
+                                {% else %}
+                                <div class="badge bg-secondary mt-1">OK</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Level 2 -->
+                    <div class="col-md-3">
+                        <div class="card border-warning h-100">
+                            <div class="card-body text-center p-3">
+                                <div class="fs-4 mb-1">
+                                    <i class="fas fa-book text-warning"></i>
+                                </div>
+                                <div class="fw-bold small">LEVEL 2</div>
+                                <div class="text-muted small">Standards System</div>
+                                {% if flow_latest.level_2.standards %}
+                                <div class="badge bg-warning text-dark mt-1">
+                                    {{ flow_latest.level_2.standards }} standards, {{ flow_latest.level_2.rules }} rules
+                                </div>
+                                {% else %}
+                                <div class="badge bg-secondary mt-1">Loaded</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Level 3 -->
+                    <div class="col-md-3">
+                        <div class="card border-{{ 'success' if flow_latest.level_3.status in ('OK', 'ok') else 'secondary' }} h-100">
+                            <div class="card-body text-center p-3">
+                                <div class="fs-4 mb-1">
+                                    <i class="fas fa-cogs text-{{ 'success' if flow_latest.level_3.status in ('OK', 'ok') else 'secondary' }}"></i>
+                                </div>
+                                <div class="fw-bold small">LEVEL 3</div>
+                                <div class="text-muted small">Execution (12 steps)</div>
+                                <div class="badge bg-{{ 'success' if flow_latest.level_3.status in ('OK', 'ok') else 'secondary' }} mt-1">
+                                    {{ flow_latest.level_3.model or 'N/A' }}
+                                    {% if flow_latest.level_3.complexity %} | C={{ flow_latest.level_3.complexity }}{% endif %}
+                                </div>
+                                {% if flow_latest.execution_mode %}
+                                <div class="badge bg-{{ 'info' if flow_latest.execution_mode == 'parallel' else 'light text-dark' }} mt-1">
+                                    <i class="fas fa-{{ 'project-diagram' if flow_latest.execution_mode == 'parallel' else 'stream' }}"></i>
+                                    {{ flow_latest.execution_mode | capitalize }}
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Execution Details Row -->
+                <div class="row mt-3">
+                    <div class="col-md-8">
+                        <div class="bg-light rounded p-3">
+                            <div class="row g-2 text-center">
+                                <div class="col-3">
+                                    <div class="text-muted small">Session</div>
+                                    <div class="fw-bold small text-truncate" title="{{ flow_latest.session_id }}">
+                                        {{ flow_latest.session_id[-12:] if flow_latest.session_id else 'N/A' }}
+                                    </div>
+                                </div>
+                                <div class="col-3">
+                                    <div class="text-muted small">Task Type</div>
+                                    <div class="fw-bold small">{{ flow_latest.level_3.task_type or 'N/A' }}</div>
+                                </div>
+                                <div class="col-3">
+                                    <div class="text-muted small">Tasks</div>
+                                    <div class="fw-bold small">{{ flow_latest.level_3.tasks or 'N/A' }}</div>
+                                </div>
+                                <div class="col-3">
+                                    <div class="text-muted small">Duration</div>
+                                    <div class="fw-bold small">
+                                        {{ '%.1fs' % flow_latest.duration if flow_latest.duration else 'N/A' }}
+                                    </div>
+                                </div>
+                            </div>
+                            {% if flow_latest.tech_stack or flow_latest.agent_type %}
+                            <div class="row g-2 text-center mt-1 pt-1 border-top">
+                                <div class="col-4">
+                                    <div class="text-muted small">Tech Stack</div>
+                                    <div class="small">
+                                        {% if flow_latest.tech_stack %}
+                                            {% for tech in flow_latest.tech_stack[:3] %}
+                                            <span class="badge bg-secondary">{{ tech }}</span>
+                                            {% endfor %}
+                                        {% else %}
+                                            <span class="text-muted">N/A</span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                <div class="col-4">
+                                    <div class="text-muted small">Agent/Skill</div>
+                                    <div class="fw-bold small">
+                                        {% if flow_latest.agent_type %}
+                                        <span class="badge bg-{{ 'primary' if flow_latest.agent_type == 'agent' else 'secondary' }}">{{ flow_latest.agent_type }}</span>
+                                        {% endif %}
+                                        <span class="small text-truncate d-block" title="{{ flow_latest.level_3.skill_agent }}">
+                                            {{ (flow_latest.level_3.skill_agent or 'N/A')[:20] }}
+                                        </span>
+                                    </div>
+                                </div>
+                                <div class="col-4">
+                                    <div class="text-muted small">Extras</div>
+                                    <div class="small">
+                                        {% if flow_latest.supplementary_skills %}
+                                            {% for sk in flow_latest.supplementary_skills[:2] %}
+                                            <span class="badge bg-light text-dark">{{ sk }}</span>
+                                            {% endfor %}
+                                        {% else %}
+                                            <span class="text-muted">None</span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="bg-light rounded p-3 text-center">
+                            <div class="text-muted small mb-1">Last Prompt</div>
+                            <div class="small text-truncate" title="{{ flow_latest.user_prompt }}">
+                                {{ flow_latest.user_prompt[:60] + '...' if flow_latest.user_prompt and flow_latest.user_prompt|length > 60 else (flow_latest.user_prompt or 'N/A') }}
+                            </div>
+                            <div class="text-muted x-small mt-1">{{ flow_latest.started or 'N/A' }}</div>
+                            {% if flow_latest.model_reason %}
+                            <div class="text-muted x-small mt-1" title="{{ flow_latest.model_reason }}">
+                                <i class="fas fa-info-circle"></i> {{ flow_latest.model_reason[:50] }}{% if flow_latest.model_reason|length > 50 %}...{% endif %}
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% else %}
+                <!-- Loading state -->
+                <div class="text-center text-muted py-4" id="flowLoadingState">
+                    <i class="fas fa-spinner fa-spin fa-2x mb-3"></i>
+                    <p>Loading 3-level flow data...</p>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Stats footer -->
+            {% if flow_stats %}
+            <div class="card-footer bg-transparent">
+                <div class="row text-center g-2">
+                    <div class="col">
+                        <div class="text-muted small">Total Sessions</div>
+                        <div class="fw-bold">{{ flow_stats.total_sessions }}</div>
+                    </div>
+                    <div class="col">
+                        <div class="text-muted small">Success Rate</div>
+                        <div class="fw-bold text-success">{{ flow_stats.success_rate }}%</div>
+                    </div>
+                    <div class="col">
+                        <div class="text-muted small">Avg Complexity</div>
+                        <div class="fw-bold">{{ flow_stats.avg_complexity }}</div>
+                    </div>
+                    <div class="col">
+                        <div class="text-muted small">Plan Mode Rate</div>
+                        <div class="fw-bold">{{ flow_stats.plan_mode_rate }}%</div>
+                    </div>
+                    <div class="col">
+                        <div class="text-muted small">Avg Context</div>
+                        <div class="fw-bold">{{ flow_stats.avg_context_usage }}%</div>
+                    </div>
+                    {% if flow_stats.model_distribution %}
+                    <div class="col">
+                        <div class="text-muted small">Top Model</div>
+                        <div class="fw-bold">
+                            {% set top_model = flow_stats.model_distribution | dictsort(by='value', reverse=True) | first %}
+                            {{ top_model[0] if top_model else 'N/A' }}
+                        </div>
+                    </div>
+                    {% endif %}
+                    {% if flow_stats.tech_stack_distribution %}
+                    <div class="col">
+                        <div class="text-muted small">Top Stack</div>
+                        <div class="fw-bold">
+                            {% set top_tech = flow_stats.tech_stack_distribution | dictsort(by='value', reverse=True) | first %}
+                            {{ top_tech[0] if top_tech else 'N/A' }}
+                        </div>
+                    </div>
+                    {% endif %}
+                    {% if flow_stats.execution_mode_distribution %}
+                    <div class="col">
+                        <div class="text-muted small">Exec Mode</div>
+                        <div class="fw-bold">
+                            {% set parallel_count = flow_stats.execution_mode_distribution.get('parallel', 0) %}
+                            {% set seq_count = flow_stats.execution_mode_distribution.get('sequential', 0) %}
+                            {% if parallel_count > seq_count %}
+                            <span class="text-info">Parallel</span>
+                            {% else %}
+                            <span class="text-secondary">Sequential</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
 <!-- System Information -->
 <div class="row">
     <div class="col-lg-6 mb-4 mb-lg-0">
@@ -596,6 +852,7 @@ function initializeDashboard() {
     loadSystemInfo();
     loadRecentErrors();
     initializeChart();
+    load3LevelFlow();
 }
 
 function loadMetrics() {
@@ -955,10 +1212,122 @@ function refreshDashboard() {
     icon.classList.add('fa-spin');
 
     initializeDashboard();
+    load3LevelFlow();
 
     setTimeout(() => {
         icon.classList.remove('fa-spin');
     }, 1000);
+}
+
+// 3-Level Flow Widget Functions
+function refresh3LevelFlow() {
+    const btn = event.target.closest('button');
+    const icon = btn ? btn.querySelector('i') : null;
+    if (icon) icon.classList.add('fa-spin');
+    load3LevelFlow();
+    setTimeout(() => {
+        if (icon) icon.classList.remove('fa-spin');
+    }, 1000);
+}
+
+function load3LevelFlow() {
+    fetch('/api/3level-flow/latest')
+        .then(r => r.json())
+        .then(data => {
+            if (!data.success || !data.available) return;
+            render3LevelFlow(data.session);
+        })
+        .catch(err => console.warn('3-level flow fetch error:', err));
+}
+
+function render3LevelFlow(s) {
+    const body = document.getElementById('threeLevelFlowBody');
+    if (!body || !s) return;
+
+    const l1Status = s.level_minus_1 && s.level_minus_1.status === 'PASS';
+    const l3ok = s.level_3 && (s.level_3.status === 'OK' || s.level_3.status === 'ok');
+    const ctxPct = s.level_1 && s.level_1.context_pct != null ? s.level_1.context_pct : null;
+    const ctxBadge = ctxPct == null ? 'secondary' : (ctxPct < 70 ? 'success' : (ctxPct < 85 ? 'warning' : 'danger'));
+
+    body.innerHTML = `
+    <div class="row g-3">
+        <div class="col-md-3">
+            <div class="card border-${l1Status ? 'success' : 'danger'} h-100">
+                <div class="card-body text-center p-3">
+                    <div class="fs-4 mb-1"><i class="fas fa-${l1Status ? 'check-circle text-success' : 'times-circle text-danger'}"></i></div>
+                    <div class="fw-bold small">LEVEL -1</div>
+                    <div class="text-muted small">Auto-Fix Enforcement</div>
+                    <div class="badge bg-${l1Status ? 'success' : 'danger'} mt-1">${s.level_minus_1 ? s.level_minus_1.status : 'unknown'}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-primary h-100">
+                <div class="card-body text-center p-3">
+                    <div class="fs-4 mb-1"><i class="fas fa-sync-alt text-primary"></i></div>
+                    <div class="fw-bold small">LEVEL 1</div>
+                    <div class="text-muted small">Sync System</div>
+                    <div class="badge bg-${ctxBadge} mt-1">${ctxPct != null ? 'Context: ' + ctxPct + '%' : 'OK'}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-warning h-100">
+                <div class="card-body text-center p-3">
+                    <div class="fs-4 mb-1"><i class="fas fa-book text-warning"></i></div>
+                    <div class="fw-bold small">LEVEL 2</div>
+                    <div class="text-muted small">Standards System</div>
+                    <div class="badge bg-warning text-dark mt-1">
+                        ${s.level_2 && s.level_2.standards ? s.level_2.standards + ' std, ' + s.level_2.rules + ' rules' : 'Loaded'}
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-${l3ok ? 'success' : 'secondary'} h-100">
+                <div class="card-body text-center p-3">
+                    <div class="fs-4 mb-1"><i class="fas fa-cogs text-${l3ok ? 'success' : 'secondary'}"></i></div>
+                    <div class="fw-bold small">LEVEL 3</div>
+                    <div class="text-muted small">Execution (12 steps)</div>
+                    <div class="badge bg-${l3ok ? 'success' : 'secondary'} mt-1">
+                        ${s.level_3 && s.level_3.model ? s.level_3.model : 'N/A'}
+                        ${s.level_3 && s.level_3.complexity ? ' | C=' + s.level_3.complexity : ''}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="row mt-3">
+        <div class="col-md-8">
+            <div class="bg-light rounded p-3">
+                <div class="row g-2 text-center">
+                    <div class="col-3">
+                        <div class="text-muted small">Session</div>
+                        <div class="fw-bold small text-truncate" title="${s.session_id || ''}">${s.session_id ? s.session_id.slice(-12) : 'N/A'}</div>
+                    </div>
+                    <div class="col-3">
+                        <div class="text-muted small">Task Type</div>
+                        <div class="fw-bold small">${s.level_3 && s.level_3.task_type || 'N/A'}</div>
+                    </div>
+                    <div class="col-3">
+                        <div class="text-muted small">Tasks</div>
+                        <div class="fw-bold small">${s.level_3 && s.level_3.tasks != null ? s.level_3.tasks : 'N/A'}</div>
+                    </div>
+                    <div class="col-3">
+                        <div class="text-muted small">Duration</div>
+                        <div class="fw-bold small">${s.duration != null ? s.duration.toFixed(1) + 's' : 'N/A'}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="bg-light rounded p-3 text-center">
+                <div class="text-muted small mb-1">Last Prompt</div>
+                <div class="small text-truncate" title="${s.user_prompt || ''}">${s.user_prompt ? (s.user_prompt.length > 60 ? s.user_prompt.slice(0, 60) + '...' : s.user_prompt) : 'N/A'}</div>
+                <div class="text-muted" style="font-size:0.7rem;">${s.started || ''}</div>
+            </div>
+        </div>
+    </div>`;
 }
 
 function startAutoRefresh() {

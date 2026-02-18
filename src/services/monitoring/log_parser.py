@@ -1,6 +1,7 @@
 """
 Log Parser
-Parses and analyzes log files from Claude Memory System
+Parses and analyzes log files from Claude Memory System.
+Supports policy-hits.log, daemon logs, and 3-level flow session logs.
 """
 
 import os
@@ -10,7 +11,7 @@ import sys
 # Add path resolver for portable paths
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from utils.path_resolver import get_data_dir, get_logs_dir
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import re
 
 class LogParser:
@@ -44,6 +45,25 @@ class LogParser:
             size /= 1024.0
         return f"{size:.1f} TB"
 
+    def _map_action_to_type(self, action):
+        """Map action to activity type for dashboard display"""
+        action_upper = action.upper()
+
+        # Error types
+        if any(keyword in action_upper for keyword in ['ERROR', 'FAILED', 'FAIL']):
+            return 'error'
+
+        # Warning types
+        if any(keyword in action_upper for keyword in ['WARNING', 'WARN']):
+            return 'warning'
+
+        # Success types
+        if any(keyword in action_upper for keyword in ['SUCCESS', 'COMPLETE', 'OK', 'PASSED']):
+            return 'success'
+
+        # Info types (default)
+        return 'info'
+
     def get_recent_activity(self, limit=10):
         """Get recent activity from policy hits log"""
         activities = []
@@ -59,20 +79,31 @@ class LogParser:
                 for line in lines[-limit:]:
                     line = line.strip()
                     if line:
-                        # Parse log line: [timestamp] POLICY | action | context
-                        match = re.match(r'\[(.*?)\]\s+(\w+)\s+\|\s+(.*?)\s+\|\s+(.*)', line)
+                        # Parse log line: [timestamp] daemon-name | action | context
+                        # Updated regex to match hyphens in daemon names
+                        match = re.match(r'\[(.*?)\]\s+([\w-]+)\s+\|\s+(.*?)\s+\|\s+(.*)', line)
                         if match:
                             timestamp, policy, action, context = match.groups()
+
+                            # Map to format expected by dashboard JavaScript
+                            # type = action type (for color/icon), message = formatted message
+                            activity_type = self._map_action_to_type(action)
+                            message = f"{policy}: {action} - {context[:80]}"
+
                             activities.append({
                                 'timestamp': timestamp,
+                                'type': activity_type,
+                                'message': message,
                                 'policy': policy,
                                 'action': action,
-                                'context': context[:100]  # Limit context length
+                                'context': context[:100]
                             })
                         else:
                             # Fallback parsing
                             activities.append({
                                 'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                                'type': 'info',
+                                'message': line[:80],
                                 'policy': 'SYSTEM',
                                 'action': 'Activity',
                                 'context': line[:100]
@@ -234,7 +265,7 @@ class LogParser:
                 with open(policy_log, 'r', encoding='utf-8') as f:
                     lines = f.readlines()
 
-                cutoff_date = datetime.now() - timedelta(days=days)
+                cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
 
                 for line in lines:
                     line = line.strip()
@@ -245,7 +276,7 @@ class LogParser:
                     match = re.match(r'\[(.*?)\]', line)
                     if match:
                         try:
-                            timestamp = datetime.strptime(match.group(1), '%Y-%m-%d %H:%M:%S')
+                            timestamp = datetime.strptime(match.group(1), '%Y-%m-%d %H:%M:%S').replace(tzinfo=timezone.utc)
                             if timestamp < cutoff_date:
                                 continue
                         except:
@@ -269,4 +300,118 @@ class LogParser:
             'failure_prevention': len(history['failure_prevention']),
             'model_selection': len(history['model_selection']),
             'consultation': len(history['consultation'])
+        }
+
+    # -------------------------------------------------------------------------
+    # 3-Level Flow Session Log Parsing
+    # -------------------------------------------------------------------------
+
+    def get_3level_sessions_dir(self):
+        """Return path to 3-level flow session log directory"""
+        return Path.home() / '.claude' / 'memory' / 'logs' / 'sessions'
+
+    def list_3level_sessions(self, limit=20):
+        """List available session log directories (most recent first)"""
+        sessions_dir = self.get_3level_sessions_dir()
+        if not sessions_dir.exists():
+            return []
+        dirs = [d for d in sessions_dir.iterdir() if d.is_dir()]
+        dirs.sort(key=lambda d: d.stat().st_mtime, reverse=True)
+        result = []
+        for d in dirs[:limit]:
+            result.append({
+                'session_id': d.name,
+                'path': str(d),
+                'modified': datetime.fromtimestamp(d.stat().st_mtime).strftime('%Y-%m-%d %H:%M:%S'),
+                'files': [f.name for f in sorted(d.glob('*.log'))]
+            })
+        return result
+
+    def get_3level_session_log(self, session_id, log_name):
+        """Read contents of a specific 3-level session log file"""
+        sessions_dir = self.get_3level_sessions_dir()
+        log_file = sessions_dir / session_id / log_name
+        if not log_file.exists():
+            return None
+        try:
+            return log_file.read_text(encoding='utf-8', errors='ignore')
+        except Exception as e:
+            print(f"Error reading session log {log_file}: {e}")
+            return None
+
+    def get_auto_enforcement_log(self, tail_lines=100):
+        """Read last N lines from auto-enforcement.log"""
+        log_file = Path.home() / '.claude' / 'memory' / 'logs' / 'auto-enforcement.log'
+        if not log_file.exists():
+            return []
+        try:
+            with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
+                lines = f.readlines()
+            return [line.rstrip() for line in lines[-tail_lines:]]
+        except Exception as e:
+            print(f"Error reading auto-enforcement log: {e}")
+            return []
+
+    def get_3level_flow_summary(self):
+        """Return a quick summary of the 3-level flow from the latest session"""
+        from services.monitoring.three_level_flow_tracker import ThreeLevelFlowTracker
+        tracker = ThreeLevelFlowTracker()
+        latest = tracker.get_latest_execution()
+        if not latest:
+            return {
+                'available': False,
+                'message': 'No 3-level flow sessions found'
+            }
+        return {
+            'available': True,
+            'session_id': latest['session_id'],
+            'started': latest.get('started'),
+            'user_prompt': latest.get('user_prompt'),
+            'overall_status': latest.get('overall_status', 'unknown'),
+            'level_minus_1_status': latest['level_minus_1'].get('status', 'unknown'),
+            'context_pct': latest['level_1'].get('context_pct'),
+            'standards': latest['level_2'].get('standards'),
+            'rules': latest['level_2'].get('rules'),
+            'complexity': latest['level_3'].get('complexity'),
+            'task_type': latest['level_3'].get('task_type'),
+            'model': latest['level_3'].get('model'),
+            'tasks': latest['level_3'].get('tasks'),
+            'duration': latest.get('duration')
+        }
+
+    def get_daemon_activity_summary(self, hours=24):
+        """Summarize daemon activity from policy-hits.log"""
+        policy_log = self.logs_dir / 'policy-hits.log'
+        if not policy_log.exists():
+            return {}
+
+        cutoff = datetime.now() - timedelta(hours=hours)
+        daemon_counts = {}
+        action_counts = {}
+
+        try:
+            with open(policy_log, 'r', encoding='utf-8', errors='ignore') as f:
+                for line in f:
+                    line = line.strip()
+                    if not line or line.startswith('#'):
+                        continue
+                    m = re.match(r'\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]\s+([\w-]+)\s+\|\s+(\w+)\s+\|', line)
+                    if m:
+                        try:
+                            ts = datetime.strptime(m.group(1), '%Y-%m-%d %H:%M:%S')
+                            if ts < cutoff:
+                                continue
+                        except Exception:
+                            pass
+                        daemon = m.group(2)
+                        action = m.group(3)
+                        daemon_counts[daemon] = daemon_counts.get(daemon, 0) + 1
+                        action_counts[action] = action_counts.get(action, 0) + 1
+        except Exception as e:
+            print(f"Error summarizing daemon activity: {e}")
+
+        return {
+            'daemon_counts': daemon_counts,
+            'action_counts': action_counts,
+            'total_entries': sum(daemon_counts.values())
         }
