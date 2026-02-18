@@ -1064,14 +1064,40 @@ function loadSystemInfo() {
             const statusBadgeColor = data.status === 'Operational' ? 'success' :
                                     (data.status === 'Healthy' ? 'info' : 'warning');
 
+            const ctx = data.context_usage || 0;
+            const ctxColor = ctx >= 90 ? 'danger' : (ctx >= 70 ? 'warning' : 'success');
+            const memUsage = data.memory_usage || 0;
+
             container.innerHTML = `
                 <tr>
                     <td class="text-muted">Status:</td>
                     <td><span class="badge bg-${statusBadgeColor}">${data.status || 'Unknown'}</span></td>
                 </tr>
                 <tr>
+                    <td class="text-muted">Context Usage:</td>
+                    <td>
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="badge bg-${ctxColor}">${ctx}%</span>
+                            <div class="progress flex-grow-1" style="height:6px; border-radius:10px;">
+                                <div class="progress-bar bg-${ctxColor}" style="width:${ctx}%; border-radius:10px;"></div>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                <tr>
+                    <td class="text-muted">Memory Usage:</td>
+                    <td>
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="text-muted small">${memUsage}%</span>
+                            <div class="progress flex-grow-1" style="height:6px; border-radius:10px;">
+                                <div class="progress-bar bg-info" style="width:${memUsage}%; border-radius:10px;"></div>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                <tr>
                     <td class="text-muted">Memory Path:</td>
-                    <td><code>${data.memory_path || 'N/A'}</code></td>
+                    <td><code style="font-size:0.78rem;">${data.memory_path || 'N/A'}</code></td>
                 </tr>
                 <tr>
                     <td class="text-muted">Last Update:</td>

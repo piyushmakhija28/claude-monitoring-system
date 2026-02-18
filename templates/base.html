@@ -1398,6 +1398,7 @@
                     </a>
                     <div class="sidebar-submenu" id="aiSubmenu">
                         <a href="{{ url_for('automation_dashboard') }}" class="sidebar-submenu-link">Automation</a>
+                        <a href="{{ url_for('three_level_flow_history') }}" class="sidebar-submenu-link">Flow History</a>
                         <a href="{{ url_for('anomaly_detection') }}" class="sidebar-submenu-link">AI Detection</a>
                         <a href="{{ url_for('ml_training') }}" class="sidebar-submenu-link">ML Training</a>
                     </div>
@@ -1494,6 +1495,12 @@
             </div>
 
             <div class="header-right">
+                <!-- Context Usage Live Indicator -->
+                <div id="contextBadgeWrap" title="Context window usage (Level 1: Sync System)" style="display:flex; align-items:center; gap:0.4rem; cursor:default;">
+                    <i class="fas fa-compress-arrows-alt" style="font-size:0.85rem; color:#64748b;"></i>
+                    <span id="contextBadge" class="badge bg-secondary" style="font-size:0.75rem; min-width:52px;">CTX --</span>
+                </div>
+
                 <button class="header-icon" onclick="toggleTheme()" title="Toggle Theme">
                     <i class="fas fa-moon" id="theme-icon"></i>
                 </button>
@@ -1601,7 +1608,29 @@
             if (sidebarCollapsed) {
                 toggleSidebar();
             }
+            updateContextBadge();
+            setInterval(updateContextBadge, 30000);
         });
+
+        function updateContextBadge() {
+            fetch('/api/metrics')
+                .then(r => r.json())
+                .then(data => {
+                    const ctx = data.context_usage || 0;
+                    const badge = document.getElementById('contextBadge');
+                    if (!badge) return;
+                    badge.textContent = 'CTX ' + ctx + '%';
+                    badge.className = 'badge';
+                    if (ctx >= 90) {
+                        badge.classList.add('bg-danger');
+                    } else if (ctx >= 70) {
+                        badge.classList.add('bg-warning', 'text-dark');
+                    } else {
+                        badge.classList.add('bg-success');
+                    }
+                })
+                .catch(() => {});
+        }
     </script>
     {% else %}
     <!-- Login Page (No Admin Layout) -->

@@ -2753,6 +2753,13 @@ def analytics():
                          summary_stats=summary_stats,
                          analytics_data=analytics_data)
 
+@app.route('/3level-flow-history')
+@login_required
+def three_level_flow_history():
+    """3-Level Flow History page - browse all session executions"""
+    return render_template('3level-flow-history.html')
+
+
 @app.route('/automation-dashboard')
 @login_required
 def automation_dashboard():
