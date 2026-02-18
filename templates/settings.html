@@ -617,8 +617,8 @@
                             <label class="form-check-label" for="alertTypeHealth">Health Score Drops</label>
                         </div>
                         <div class="form-check">
-                            <input class="form-check-input alert-type" type="checkbox" value="daemon_down" id="alertTypeDaemon" checked>
-                            <label class="form-check-label" for="alertTypeDaemon">Daemon Down</label>
+                            <input class="form-check-input alert-type" type="checkbox" value="hook_failure" id="alertTypeHook" checked>
+                            <label class="form-check-label" for="alertTypeHook">Hook Failure</label>
                         </div>
                         <div class="form-check">
                             <input class="form-check-input alert-type" type="checkbox" value="error_threshold" id="alertTypeError" checked>
@@ -874,13 +874,13 @@
                     </small>
                 </div>
 
-                <!-- Daemon Down Alert -->
+                <!-- Hook Failure Alert -->
                 <div class="form-check form-switch mb-4">
-                    <input class="form-check-input" type="checkbox" id="daemonDownAlert"
-                           {{ 'checked' if alert_thresholds.daemon_down else '' }}>
-                    <label class="form-check-label" for="daemonDownAlert">
-                        <strong><i class="fas fa-server me-2 text-primary"></i>Alert on Daemon Down</strong>
-                        <small class="d-block text-muted">Get notified when any daemon stops running</small>
+                    <input class="form-check-input" type="checkbox" id="hookFailureAlert"
+                           {{ 'checked' if alert_thresholds.get('hook_failure', False) else '' }}>
+                    <label class="form-check-label" for="hookFailureAlert">
+                        <strong><i class="fas fa-plug me-2 text-primary"></i>Alert on Hook Failure</strong>
+                        <small class="d-block text-muted">Get notified when enforcement hooks fail</small>
                     </label>
                 </div>
 
@@ -1198,7 +1198,7 @@ function saveAlertThresholds() {
         health_score: parseInt(document.getElementById('healthScoreThreshold').value),
         error_count: parseInt(document.getElementById('errorCountThreshold').value),
         context_usage: parseInt(document.getElementById('contextUsageThreshold').value),
-        daemon_down: document.getElementById('daemonDownAlert').checked
+        hook_failure: document.getElementById('hookFailureAlert').checked
     };
 
     fetch('/api/alert-thresholds', {

@@ -9,6 +9,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [3.3.5] - 2026-02-18
+
+### Fixed
+- **Removed all daemon references from HTML templates (10 files)**
+  - `dashboard.html`: "Daemons Running" stat card -> "Hooks Active" (shows 2 active hooks);
+    daemon JS update logic -> static hooks display; widget IDs renamed `daemon_status` -> `hooks_status`;
+    tooltip text updated; informational text updated
+  - `debugging-tools.html`: removed "Daemons" dropdown option; removed entire `daemonsSection` div
+    (Daemon Health Diagnostics); replaced "Restart All Daemons" button with "View Hooks Status";
+    replaced `restartDaemons()` JS with `viewHooksStatus()` that shows settings.json path; removed
+    daemon CSS classes (`.daemon-card`, `.daemon-stats`, `.daemon-actions`)
+  - `analytics.html`: "Daemon Uptime" metric -> "Hooks Active" (static value 2)
+  - `advanced-search.html`: removed "Daemons" search filter option; updated placeholder text
+  - `settings.html`: "Daemon Down" alert condition -> "Hook Failure" (3 occurrences)
+  - `widget-builder.html`: removed `/api/daemon-status` data source option
+  - `notification-channels.html`: "Daemon Down" trigger -> "Hook Failure"
+  - `dashboard-builder.html`: "Daemon Status"/"Daemon Health" widget types -> "Hooks Active"/"Policy Status"
+  - `500.html`: daemon troubleshooting tip -> hooks troubleshooting tip
+  - `integrations.html`: `daemon_status` metric -> `hooks_active`; "daemons" -> "hooks"
+
+---
+
 ## [3.3.1] - 2026-02-18
 
 ### Fixed

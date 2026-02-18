@@ -38,7 +38,7 @@
                     <h6>Available Metrics:</h6>
                     <ul class="list-group" id="prometheusMetricsList">
                         <li class="list-group-item"><code>context_usage_percent</code> - Context usage percentage</li>
-                        <li class="list-group-item"><code>daemon_status</code> - Daemon health status (0=down, 1=up)</li>
+                        <li class="list-group-item"><code>hooks_active</code> - Enforcement hooks status (2 = both active)</li>
                         <li class="list-group-item"><code>policy_hits_total</code> - Total policy hits counter</li>
                         <li class="list-group-item"><code>error_count_total</code> - Total errors counter</li>
                         <li class="list-group-item"><code>session_count_total</code> - Total sessions</li>
@@ -63,7 +63,7 @@
                     <div class="card">
                         <div class="card-body text-center">
                             <h6>System Overview</h6>
-                            <p class="small text-muted">Context, daemons, policies</p>
+                            <p class="small text-muted">Context, hooks, policies</p>
                             <button class="btn btn-sm btn-primary" onclick="downloadGrafanaDashboard('system')">
                                 <i class="fas fa-download"></i> Download JSON
                             </button>

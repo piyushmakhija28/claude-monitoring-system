@@ -76,7 +76,6 @@
                             <div class="col-md-3">
                                 <select class="form-select form-select-sm" id="logSource">
                                     <option value="all">All Sources</option>
-                                    <option value="daemon">Daemons</option>
                                     <option value="api">API</option>
                                     <option value="database">Database</option>
                                     <option value="system">System</option>
@@ -105,33 +104,6 @@
                             <span class="me-3 text-warning">Warnings: <strong id="logWarnings">0</strong></span>
                             <span class="text-info">Info: <strong id="logInfo">0</strong></span>
                         </small>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Daemon Health Diagnostics -->
-        <div class="debug-section" id="daemonsSection" style="display: none;">
-            <div class="card border-0 shadow-sm mb-4">
-                <div class="card-header bg-white border-0 pt-4 pb-3">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <h5 class="mb-0">
-                            <i class="fas fa-heartbeat me-2"></i>Daemon Health Diagnostics
-                        </h5>
-                        <button class="btn btn-sm btn-primary" onclick="refreshDaemonHealth()">
-                            <i class="fas fa-sync me-1"></i>Refresh
-                        </button>
-                    </div>
-                </div>
-                <div class="card-body p-4">
-                    <div id="daemonHealthGrid" class="row g-3">
-                        <!-- Dynamic daemon cards will be inserted here -->
-                        <div class="text-center py-5">
-                            <div class="spinner-border text-primary" role="status">
-                                <span class="visually-hidden">Loading...</span>
-                            </div>
-                            <p class="text-muted mt-2">Loading daemon health...</p>
-                        </div>
                     </div>
                 </div>
             </div>
@@ -312,8 +284,8 @@
                     <button class="btn btn-sm btn-outline-primary" onclick="runHealthCheck()">
                         <i class="fas fa-heartbeat me-1"></i>Run Health Check
                     </button>
-                    <button class="btn btn-sm btn-outline-success" onclick="restartDaemons()">
-                        <i class="fas fa-sync me-1"></i>Restart All Daemons
+                    <button class="btn btn-sm btn-outline-success" onclick="viewHooksStatus()">
+                        <i class="fas fa-plug me-1"></i>View Hooks Status
                     </button>
                     <button class="btn btn-sm btn-outline-warning" onclick="clearCache()">
                         <i class="fas fa-eraser me-1"></i>Clear Cache
@@ -599,10 +571,8 @@ function runHealthCheck() {
     alert('Running comprehensive health check...');
 }
 
-function restartDaemons() {
-    if (confirm('Restart all daemons? This may cause temporary service interruption.')) {
-        alert('Restarting all daemons...');
-    }
+function viewHooksStatus() {
+    alert('Hooks are enforced via Claude Code settings.json. Check ~/.claude/settings.json for UserPromptSubmit and Stop hooks.');
 }
 
 function clearCache() {
@@ -696,30 +666,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
 .log-entry.log-debug {
     color: #888;
-}
-
-/* Daemon Cards */
-.daemon-card {
-    background: white;
-    border: 1px solid #dee2e6;
-    border-radius: 8px;
-    padding: 1rem;
-    transition: all 0.3s;
-}
-
-.daemon-card:hover {
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-}
-
-.daemon-stats {
-    background: #f8f9fa;
-    border-radius: 6px;
-    padding: 0.5rem;
-}
-
-.daemon-actions {
-    display: flex;
-    gap: 0.5rem;
 }
 
 /* Memory Cards */

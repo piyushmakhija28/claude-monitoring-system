@@ -59,12 +59,12 @@
     <div class="col-xl-3 col-lg-6 col-md-6 mb-4">
         <div class="card stat-card h-100">
             <div class="card-body position-relative">
-                <i class="fas fa-server stat-icon text-primary"></i>
-                <div class="stat-value text-primary" id="daemonsRunning">
-                    <i class="fas fa-spinner fa-spin"></i>
+                <i class="fas fa-plug stat-icon text-primary"></i>
+                <div class="stat-value text-primary" id="hooksActive">
+                    <span class="text-success">2</span>
                 </div>
-                <div class="stat-label">Daemons Running</div>
-                <small class="text-muted mt-2 d-block" id="daemonStatus">Checking...</small>
+                <div class="stat-label">Hooks Active</div>
+                <small class="text-muted mt-2 d-block" id="hooksStatus">UserPromptSubmit + Stop</small>
             </div>
         </div>
     </div>
@@ -353,7 +353,7 @@
                 <div class="mt-3">
                     <small class="text-muted">
                         <i class="fas fa-info-circle me-1"></i>
-                        Shows when automation policies are actually executed (not just running daemons)
+                        Shows when automation policies are actually executed (via hooks enforcement)
                     </small>
                 </div>
             </div>
@@ -756,7 +756,7 @@
                         <div>
                             <i class="fas fa-heartbeat text-success me-2"></i>
                             <strong>System Health</strong>
-                            <br><small class="text-muted">Health score, daemons, context usage</small>
+                            <br><small class="text-muted">Health score, hooks, context usage</small>
                         </div>
                         <div class="form-check form-switch">
                             <input class="form-check-input" type="checkbox" id="widget_system_health" checked>
@@ -765,12 +765,12 @@
 
                     <div class="list-group-item d-flex justify-content-between align-items-center">
                         <div>
-                            <i class="fas fa-server text-primary me-2"></i>
-                            <strong>Daemon Status</strong>
-                            <br><small class="text-muted">Status of all running daemons</small>
+                            <i class="fas fa-plug text-primary me-2"></i>
+                            <strong>Hooks Status</strong>
+                            <br><small class="text-muted">Status of 3-level enforcement hooks</small>
                         </div>
                         <div class="form-check form-switch">
-                            <input class="form-check-input" type="checkbox" id="widget_daemon_status" checked>
+                            <input class="form-check-input" type="checkbox" id="widget_hooks_status" checked>
                         </div>
                     </div>
 
@@ -867,13 +867,11 @@ function loadMetrics() {
             document.getElementById('healthScoreBar').style.width = healthScore + '%';
             document.getElementById('healthScoreBar').className = `progress-bar bg-${getHealthColor(healthScore)} bg-gradient`;
 
-            // Update daemons
-            const daemonsRunning = data.daemons_running || 0;
-            const totalDaemons = data.daemons_total || 0;
-            document.getElementById('daemonsRunning').innerHTML = `
-                <span class="text-${daemonsRunning === totalDaemons ? 'success' : 'warning'}">${daemonsRunning}/${totalDaemons}</span>
-            `;
-            document.getElementById('daemonStatus').textContent = daemonsRunning === totalDaemons ? 'All systems operational' : 'Some daemons offline';
+            // Hooks are always active (configured in settings.json)
+            const hooksEl = document.getElementById('hooksActive');
+            if (hooksEl) hooksEl.innerHTML = '<span class="text-success">2</span>';
+            const hooksStatusEl = document.getElementById('hooksStatus');
+            if (hooksStatusEl) hooksStatusEl.textContent = 'UserPromptSubmit + Stop';
 
             // Update active policies
             const activePolicies = data.active_policies || 0;
@@ -1959,7 +1957,7 @@ function loadWidgetPreferences() {
 
                 // Update checkboxes in modal
                 document.getElementById('widget_system_health').checked = prefs.system_health !== false;
-                document.getElementById('widget_daemon_status').checked = prefs.daemon_status !== false;
+                document.getElementById('widget_hooks_status').checked = prefs.hooks_status !== false;
                 document.getElementById('widget_policy_status').checked = prefs.policy_status !== false;
                 document.getElementById('widget_historical_charts').checked = prefs.historical_charts !== false;
                 document.getElementById('widget_recent_activity').checked = prefs.recent_activity !== false;
@@ -1974,7 +1972,7 @@ function loadWidgetPreferences() {
 function saveWidgetPreferences() {
     const preferences = {
         system_health: document.getElementById('widget_system_health').checked,
-        daemon_status: document.getElementById('widget_daemon_status').checked,
+        hooks_status: document.getElementById('widget_hooks_status').checked,
         policy_status: document.getElementById('widget_policy_status').checked,
         historical_charts: document.getElementById('widget_historical_charts').checked,
         recent_activity: document.getElementById('widget_recent_activity').checked,
@@ -2180,20 +2178,9 @@ function updateDashboardWithWebSocketData(data) {
             healthScoreBar.className = `progress-bar bg-gradient bg-${getHealthColor(data.health_score)}`;
         }
 
-        // Update daemons
-        const daemonsEl = document.getElementById('daemonsRunning');
-        if (daemonsEl) {
-            daemonsEl.innerHTML = `
-                <div class="text-${data.daemons_running === data.daemons_total ? 'success' : 'warning'}">
-                    ${data.daemons_running}/${data.daemons_total}
-                </div>
-            `;
-        }
-
-        const daemonStatusEl = document.getElementById('daemonStatus');
-        if (daemonStatusEl) {
-            daemonStatusEl.textContent = data.daemons_running === data.daemons_total ? 'All Running' : 'Some Stopped';
-        }
+        // Hooks active (static - configured in settings.json)
+        const hooksActiveEl = document.getElementById('hooksActive');
+        if (hooksActiveEl) hooksActiveEl.innerHTML = '<span class="text-success">2</span>';
 
         // Update active policies
         const policiesEl = document.getElementById('activePolicies');
