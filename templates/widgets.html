@@ -70,7 +70,7 @@
                         <i class="fas fa-star text-warning me-1"></i>4.8
                     </span>
                 </div>
-                <button class="btn btn-primary btn-sm w-100" onclick="installWidget('health-score-meter')">
+                <button class="btn btn-primary btn-sm w-100" id="btn-health-score-meter" onclick="installWidget('health-score-meter')">
                     <i class="fas fa-download me-2"></i>Install Widget
                 </button>
             </div>
@@ -97,7 +97,7 @@
                         <i class="fas fa-star text-warning me-1"></i>4.6
                     </span>
                 </div>
-                <button class="btn btn-primary btn-sm w-100" onclick="installWidget('error-trends-chart')">
+                <button class="btn btn-primary btn-sm w-100" id="btn-error-trends-chart" onclick="installWidget('error-trends-chart')">
                     <i class="fas fa-download me-2"></i>Install Widget
                 </button>
             </div>
@@ -123,7 +123,7 @@
                         <i class="fas fa-star text-warning me-1"></i>4.7
                     </span>
                 </div>
-                <button class="btn btn-primary btn-sm w-100" onclick="installWidget('cost-tracker')">
+                <button class="btn btn-primary btn-sm w-100" id="btn-cost-tracker" onclick="installWidget('cost-tracker')">
                     <i class="fas fa-download me-2"></i>Install Widget
                 </button>
             </div>
@@ -150,7 +150,7 @@
                         <i class="fas fa-star text-warning me-1"></i>4.9
                     </span>
                 </div>
-                <button class="btn btn-primary btn-sm w-100" onclick="installWidget('policy-monitor')">
+                <button class="btn btn-primary btn-sm w-100" id="btn-policy-monitor" onclick="installWidget('policy-monitor')">
                     <i class="fas fa-download me-2"></i>Install Widget
                 </button>
             </div>
@@ -176,7 +176,7 @@
                         <i class="fas fa-star text-warning me-1"></i>4.5
                     </span>
                 </div>
-                <button class="btn btn-primary btn-sm w-100" onclick="installWidget('alert-feed')">
+                <button class="btn btn-primary btn-sm w-100" id="btn-alert-feed" onclick="installWidget('alert-feed')">
                     <i class="fas fa-download me-2"></i>Install Widget
                 </button>
             </div>
@@ -203,7 +203,7 @@
                         <i class="fas fa-star text-warning me-1"></i>4.7
                     </span>
                 </div>
-                <button class="btn btn-primary btn-sm w-100" onclick="installWidget('context-monitor')">
+                <button class="btn btn-primary btn-sm w-100" id="btn-context-monitor" onclick="installWidget('context-monitor')">
                     <i class="fas fa-download me-2"></i>Install Widget
                 </button>
             </div>
@@ -229,7 +229,7 @@
                         <i class="fas fa-star text-warning me-1"></i>4.4
                     </span>
                 </div>
-                <button class="btn btn-primary btn-sm w-100" onclick="installWidget('session-timeline')">
+                <button class="btn btn-primary btn-sm w-100" id="btn-session-timeline" onclick="installWidget('session-timeline')">
                     <i class="fas fa-download me-2"></i>Install Widget
                 </button>
             </div>
@@ -255,7 +255,7 @@
                         <i class="fas fa-star text-warning me-1"></i>4.6
                     </span>
                 </div>
-                <button class="btn btn-primary btn-sm w-100" onclick="installWidget('model-distribution')">
+                <button class="btn btn-primary btn-sm w-100" id="btn-model-distribution" onclick="installWidget('model-distribution')">
                     <i class="fas fa-download me-2"></i>Install Widget
                 </button>
             </div>
@@ -281,7 +281,7 @@
                         <i class="fas fa-star text-warning me-1"></i>4.3
                     </span>
                 </div>
-                <button class="btn btn-primary btn-sm w-100" onclick="installWidget('quick-actions')">
+                <button class="btn btn-primary btn-sm w-100" id="btn-quick-actions" onclick="installWidget('quick-actions')">
                     <i class="fas fa-download me-2"></i>Install Widget
                 </button>
             </div>
@@ -368,6 +368,32 @@
 </div>
 
 <script>
+// Mark a widget button as installed
+function markInstalled(widgetId) {
+    const btn = document.getElementById('btn-' + widgetId);
+    if (btn) {
+        btn.classList.remove('btn-primary');
+        btn.classList.add('btn-secondary');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-check me-2"></i>Already Installed';
+        btn.onclick = null;
+    }
+}
+
+// Load installed status on page load
+document.addEventListener('DOMContentLoaded', function() {
+    fetch('/api/widgets/installed')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success && data.widgets) {
+                data.widgets.forEach(function(widget) {
+                    markInstalled(widget.id);
+                });
+            }
+        })
+        .catch(error => console.error('Error loading installed widgets:', error));
+});
+
 // Filter widgets by category
 function filterWidgets(category) {
     const items = document.querySelectorAll('.widget-item');
@@ -399,6 +425,7 @@ function installWidget(widgetId) {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
+            markInstalled(widgetId);
             alert('Widget installed successfully! Go to Dashboard to see it.');
         } else {
             alert('Failed to install widget: ' + data.message);
