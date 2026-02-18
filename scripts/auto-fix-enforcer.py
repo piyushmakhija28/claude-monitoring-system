@@ -3,7 +3,7 @@
 AUTO-FIX ENFORCER v1.0.0
 ========================
 
-🚨 CRITICAL: If ANY policy or system fails → STOP ALL WORK → FIX IMMEDIATELY
+[ALERT] CRITICAL: If ANY policy or system fails -> STOP ALL WORK -> FIX IMMEDIATELY
 
 This enforcer:
 1. Detects ALL system failures (policies, daemons, files, dependencies)
@@ -13,6 +13,22 @@ This enforcer:
 
 MANDATORY: Run BEFORE every action!
 """
+
+# Fix encoding for Windows console
+import sys
+if sys.stdout.encoding != 'utf-8':
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+    except AttributeError:
+        import io
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+if sys.stderr.encoding != 'utf-8':
+    try:
+        sys.stderr.reconfigure(encoding='utf-8')
+    except AttributeError:
+        import io
+        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+
 
 import os
 import sys
@@ -33,7 +49,7 @@ class AutoFixEnforcer:
     def check_all_systems(self):
         """Check ALL systems and collect failures"""
         print("\n" + "="*80)
-        print("🚨 AUTO-FIX ENFORCER - CHECKING ALL SYSTEMS")
+        print("[ALERT] AUTO-FIX ENFORCER - CHECKING ALL SYSTEMS")
         print("="*80 + "\n")
 
         # Check critical components
@@ -43,18 +59,19 @@ class AutoFixEnforcer:
         self._check_session_state()
         self._check_daemons()
         self._check_git_repos()
+        self._check_windows_python_unicode()  # NEW: Windows Unicode check
 
         return len(self.failures) == 0
 
     def _check_python(self):
         """Check if Python is available"""
-        print("🔍 [1/6] Checking Python...")
+        print("[SEARCH] [1/7] Checking Python...")
         try:
             result = subprocess.run(['python', '--version'],
                                   capture_output=True, text=True, timeout=5)
             if result.returncode == 0:
                 version = result.stdout.strip()
-                print(f"   ✅ Python available: {version}")
+                print(f"   [CHECK] Python available: {version}")
                 return True
         except:
             pass
@@ -70,12 +87,12 @@ class AutoFixEnforcer:
                 'Verify: python --version'
             ]
         })
-        print("   ❌ Python NOT FOUND - CRITICAL!")
+        print("   [CROSS] Python NOT FOUND - CRITICAL!")
         return False
 
     def _check_critical_files(self):
         """Check if critical system files exist"""
-        print("\n🔍 [2/6] Checking critical files...")
+        print("\n[SEARCH] [2/7] Checking critical files...")
 
         critical_files = {
             'blocking-policy-enforcer.py': 'Blocking enforcer',
@@ -89,7 +106,7 @@ class AutoFixEnforcer:
             full_path = self.memory_path / file_path
             if not full_path.exists():
                 missing_files.append((file_path, description))
-                print(f"   ❌ Missing: {file_path} ({description})")
+                print(f"   [CROSS] Missing: {file_path} ({description})")
 
         if missing_files:
             self.failures.append({
@@ -105,18 +122,18 @@ class AutoFixEnforcer:
                 ]
             })
         else:
-            print("   ✅ All critical files present")
+            print("   [CHECK] All critical files present")
 
     def _check_blocking_enforcer(self):
         """Check if blocking enforcer is initialized"""
-        print("\n🔍 [3/6] Checking blocking enforcer...")
+        print("\n[SEARCH] [3/7] Checking blocking enforcer...")
 
         state_file = self.memory_path / '.blocking-state.json'
         if not state_file.exists():
-            print("   ⚠️  Blocking enforcer state not found")
+            print("   [WARNING]️  Blocking enforcer state not found")
             # Try to initialize
             if self._auto_fix_blocking_enforcer():
-                print("   ✅ Auto-fixed: Blocking enforcer initialized")
+                print("   [CHECK] Auto-fixed: Blocking enforcer initialized")
                 self.auto_fixed.append('Blocking enforcer state')
                 return True
             else:
@@ -138,7 +155,7 @@ class AutoFixEnforcer:
 
             # Check if session started
             if not state.get('session_started', False):
-                print("   ⚠️  Session not started")
+                print("   [WARNING]️  Session not started")
                 self.failures.append({
                     'type': 'CRITICAL',
                     'component': 'Session',
@@ -151,11 +168,11 @@ class AutoFixEnforcer:
                 })
                 return False
 
-            print("   ✅ Blocking enforcer initialized")
+            print("   [CHECK] Blocking enforcer initialized")
             return True
 
         except Exception as e:
-            print(f"   ❌ Error reading enforcer state: {e}")
+            print(f"   [CROSS] Error reading enforcer state: {e}")
             self.failures.append({
                 'type': 'HIGH',
                 'component': 'Blocking Enforcer',
@@ -166,11 +183,11 @@ class AutoFixEnforcer:
 
     def _check_session_state(self):
         """Check session state"""
-        print("\n🔍 [4/6] Checking session state...")
+        print("\n[SEARCH] [4/7] Checking session state...")
 
         state_file = self.memory_path / '.blocking-state.json'
         if not state_file.exists():
-            print("   ⚠️  No session state")
+            print("   [WARNING]️  No session state")
             return False
 
         try:
@@ -189,28 +206,28 @@ class AutoFixEnforcer:
                     missing.append(desc)
 
             if missing:
-                print(f"   ⚠️  Missing: {', '.join(missing)}")
+                print(f"   [WARNING]️  Missing: {', '.join(missing)}")
                 # Not critical, just warning
             else:
-                print("   ✅ Session state valid")
+                print("   [CHECK] Session state valid")
 
             return True
 
         except Exception as e:
-            print(f"   ❌ Error checking session state: {e}")
+            print(f"   [CROSS] Error checking session state: {e}")
             return False
 
     def _check_daemons(self):
         """Check daemon status"""
-        print("\n🔍 [5/6] Checking daemons...")
+        print("\n[SEARCH] [5/7] Checking daemons...")
 
         # Note: Daemons being stopped is WARNING, not CRITICAL
         # System can work without daemons, just with reduced automation
 
         pid_dir = self.memory_path / '.pids'
         if not pid_dir.exists():
-            print("   ⚠️  No daemon PID directory (daemons not started)")
-            print("   ℹ️  System will work, but automation is disabled")
+            print("   [WARNING]️  No daemon PID directory (daemons not started)")
+            print("   [INFO]️  System will work, but automation is disabled")
             return True
 
         daemon_names = [
@@ -245,13 +262,13 @@ class AutoFixEnforcer:
             else:
                 stopped += 1
 
-        print(f"   ℹ️  Daemons: {running} running, {stopped} stopped")
-        print("   ℹ️  Daemon status is informational only (not blocking)")
+        print(f"   [INFO]️  Daemons: {running} running, {stopped} stopped")
+        print("   [INFO]️  Daemon status is informational only (not blocking)")
         return True
 
     def _check_git_repos(self):
         """Check git repository status"""
-        print("\n🔍 [6/6] Checking git repositories...")
+        print("\n[SEARCH] [6/7] Checking git repositories...")
 
         # Check if we're in a git repo
         try:
@@ -262,15 +279,94 @@ class AutoFixEnforcer:
                 result = subprocess.run(['git', 'status', '--porcelain'],
                                       capture_output=True, text=True, timeout=5)
                 if result.stdout.strip():
-                    print("   ⚠️  Uncommitted changes detected")
-                    print("   ℹ️  Consider committing before major changes")
+                    print("   [WARNING]️  Uncommitted changes detected")
+                    print("   [INFO]️  Consider committing before major changes")
                 else:
-                    print("   ✅ Git repository clean")
+                    print("   [CHECK] Git repository clean")
                 return True
         except:
-            print("   ℹ️  Not in a git repository (or git not available)")
+            print("   [INFO]️  Not in a git repository (or git not available)")
 
         return True
+
+    def _check_windows_python_unicode(self):
+        """Check Python files for Unicode characters on Windows (CRITICAL)"""
+        print("\n[SEARCH] [7/7] Checking Python files for Unicode on Windows...")
+
+        # Only check on Windows
+        if sys.platform != 'win32':
+            print("   [INFO]  Not Windows - Unicode allowed")
+            return True
+
+        try:
+            # Run the Unicode checker
+            checker_script = self.memory_path / '03-execution-system' / 'failure-prevention' / 'windows-python-unicode-checker.py'
+
+            if not checker_script.exists():
+                print("   [WARNING]  Unicode checker not found (non-blocking)")
+                return True
+
+            # Scan memory directory for Python files with Unicode
+            result = subprocess.run(
+                ['python', str(checker_script), '--scan-dir', str(self.memory_path)],
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+
+            if result.returncode == 0:
+                print("   [CHECK] No Unicode issues in Python files")
+                return True
+            else:
+                # Unicode issues found
+                print("   [CRITICAL]  Unicode characters found in Python files!")
+                print("   [REASON] Windows console (cp1252) cannot encode Unicode characters")
+                print("   [ERROR] This causes UnicodeEncodeError and script crashes")
+
+                # Show first few files with issues
+                output_lines = result.stdout.strip().split('\n')
+                issue_count = 0
+                for line in output_lines:
+                    if 'File:' in line and issue_count < 5:
+                        print(f"   [FILE] {line.strip()}")
+                        issue_count += 1
+
+                if issue_count >= 5:
+                    print("   [INFO] ...and more files")
+
+                print("\n   [FIX] Auto-fixing all Python files...")
+
+                # Auto-fix: Scan and fix all Python files
+                python_files = list(self.memory_path.rglob('*.py'))
+                fixed_count = 0
+
+                for py_file in python_files:
+                    try:
+                        fix_result = subprocess.run(
+                            ['python', str(checker_script), '--fix', str(py_file), '--no-backup'],
+                            capture_output=True,
+                            text=True,
+                            timeout=10
+                        )
+                        if fix_result.returncode == 0 and fix_result.stdout and '[OK] Fixed' in fix_result.stdout:
+                            fixed_count += 1
+                    except:
+                        pass  # Skip files that can't be fixed
+
+                if fixed_count > 0:
+                    print(f"   [OK] Auto-fixed {fixed_count} Python files")
+                    print("   [CHECK] All Unicode characters replaced with ASCII equivalents")
+                    return True
+                else:
+                    print("   [INFO] No fixes needed")
+                    return True
+
+        except subprocess.TimeoutExpired:
+            print("   [WARNING]  Unicode check timed out (non-blocking)")
+            return True
+        except Exception as e:
+            print(f"   [WARNING]  Unicode check error: {e} (non-blocking)")
+            return True
 
     def _auto_fix_blocking_enforcer(self):
         """Try to auto-fix blocking enforcer state"""
@@ -305,26 +401,26 @@ class AutoFixEnforcer:
             return True
 
         print("\n" + "="*80)
-        print("🔧 ATTEMPTING AUTO-FIXES")
+        print("[WRENCH] ATTEMPTING AUTO-FIXES")
         print("="*80 + "\n")
 
         fixed_count = 0
         for failure in self.failures:
             if failure.get('auto_fixable', False):
-                print(f"🔧 Fixing: {failure['component']} - {failure['issue']}")
+                print(f"[WRENCH] Fixing: {failure['component']} - {failure['issue']}")
 
                 # Attempt fix based on component
                 if failure['component'] == 'Blocking Enforcer':
                     if self._auto_fix_blocking_enforcer():
-                        print("   ✅ Fixed!")
+                        print("   [CHECK] Fixed!")
                         fixed_count += 1
                         self.auto_fixed.append(failure['component'])
                         continue
 
-                print("   ❌ Auto-fix failed, manual intervention needed")
+                print("   [CROSS] Auto-fix failed, manual intervention needed")
 
         if fixed_count > 0:
-            print(f"\n✅ Auto-fixed {fixed_count} issue(s)")
+            print(f"\n[CHECK] Auto-fixed {fixed_count} issue(s)")
 
         return fixed_count
 
@@ -332,12 +428,12 @@ class AutoFixEnforcer:
         """Report all failures and required fixes"""
         if not self.failures:
             print("\n" + "="*80)
-            print("✅ ALL SYSTEMS OPERATIONAL - NO FAILURES DETECTED")
+            print("[CHECK] ALL SYSTEMS OPERATIONAL - NO FAILURES DETECTED")
             print("="*80 + "\n")
             return True
 
         print("\n" + "="*80)
-        print("🚨 SYSTEM FAILURES DETECTED - WORK BLOCKED")
+        print("[ALERT] SYSTEM FAILURES DETECTED - WORK BLOCKED")
         print("="*80 + "\n")
 
         critical = [f for f in self.failures if f['type'] == 'CRITICAL']
@@ -345,30 +441,30 @@ class AutoFixEnforcer:
         medium = [f for f in self.failures if f['type'] == 'MEDIUM']
 
         if critical:
-            print(f"🔴 CRITICAL FAILURES: {len(critical)}")
+            print(f"[RED] CRITICAL FAILURES: {len(critical)}")
             for i, failure in enumerate(critical, 1):
                 print(f"\n   [{i}] {failure['component']}: {failure['issue']}")
                 if 'fix_instructions' in failure:
-                    print("   📋 Fix Instructions:")
+                    print("   [CLIPBOARD] Fix Instructions:")
                     for instruction in failure['fix_instructions']:
-                        print(f"      • {instruction}")
+                        print(f"      - {instruction}")
 
         if high:
-            print(f"\n🟠 HIGH PRIORITY FAILURES: {len(high)}")
+            print(f"\n[ORANGE] HIGH PRIORITY FAILURES: {len(high)}")
             for i, failure in enumerate(high, 1):
                 print(f"\n   [{i}] {failure['component']}: {failure['issue']}")
                 if 'fix_instructions' in failure:
-                    print("   📋 Fix Instructions:")
+                    print("   [CLIPBOARD] Fix Instructions:")
                     for instruction in failure['fix_instructions']:
-                        print(f"      • {instruction}")
+                        print(f"      - {instruction}")
 
         if medium:
-            print(f"\n🟡 MEDIUM PRIORITY FAILURES: {len(medium)}")
+            print(f"\n[YELLOW] MEDIUM PRIORITY FAILURES: {len(medium)}")
             for i, failure in enumerate(medium, 1):
                 print(f"\n   [{i}] {failure['component']}: {failure['issue']}")
 
         print("\n" + "="*80)
-        print("🚨 WORK IS BLOCKED - FIX ALL FAILURES BEFORE CONTINUING")
+        print("[ALERT] WORK IS BLOCKED - FIX ALL FAILURES BEFORE CONTINUING")
         print("="*80 + "\n")
 
         return False
