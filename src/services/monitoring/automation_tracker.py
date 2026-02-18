@@ -62,52 +62,6 @@ class AutomationTracker:
                 'message': 'Failed to read recommendations'
             }
 
-    def get_9th_daemon_status(self):
-        """
-        Get status of 9th daemon (auto-recommendation-daemon)
-        """
-        pid_file = self.memory_dir / '.pids' / 'auto-recommendation-daemon.pid'
-        log_file = self.logs_dir / 'daemons' / 'auto-recommendation-daemon.log'
-
-        status = {
-            'name': 'auto-recommendation-daemon',
-            'description': 'Generates recommendations every 5 seconds',
-            'status': 'not_started',
-            'pid': None,
-            'last_activity': None,
-            'recommendations_generated': 0
-        }
-
-        # Check PID
-        if pid_file.exists():
-            try:
-                pid = int(pid_file.read_text().strip())
-                if self._is_process_running(pid):
-                    status['status'] = 'running'
-                    status['pid'] = pid
-                else:
-                    status['status'] = 'stopped'
-            except Exception:
-                status['status'] = 'error'
-
-        # Check log for activity
-        if log_file.exists():
-            try:
-                lines = log_file.read_text().splitlines()
-                if lines:
-                    # Get last log timestamp
-                    last_line = lines[-1]
-                    if '[' in last_line:
-                        timestamp_str = last_line.split('[')[1].split(']')[0]
-                        status['last_activity'] = timestamp_str
-
-                    # Count recommendations
-                    status['recommendations_generated'] = sum(1 for line in lines if 'recommendation' in line.lower())
-            except Exception:
-                pass
-
-        return status
-
     def _is_process_running(self, pid):
         """Check if process is running"""
         try:
