@@ -391,13 +391,9 @@ class PerformanceProfiler:
 
     def analyze_trends(self, days: int = 7) -> Dict[str, Any]:
         """
-        Analyze performance trends over time
-
-        Args:
-            days: Number of days to analyze
-
-        Returns:
-            Dictionary with trend data
+        Analyze performance trends over time.
+        Primary: reads operations_YYYY-MM-DD.json files.
+        Fallback: groups flow-trace.json data by date when no operation files exist.
         """
         trend_data = {
             'labels': [],
@@ -406,8 +402,9 @@ class PerformanceProfiler:
             'slow_op_counts': []
         }
 
-        # Load data for each day
-        for i in range(days):
+        # Try primary source first (operations files per day)
+        found_any = False
+        for i in range(days - 1, -1, -1):  # oldest to newest
             date = datetime.now() - timedelta(days=i)
             date_str = date.strftime('%Y-%m-%d')
             file_path = self.storage_dir / f"operations_{date_str}.json"
@@ -422,12 +419,88 @@ class PerformanceProfiler:
                             durations = [op['duration_ms'] for op in operations]
                             slow_count = sum(1 for d in durations if d >= self.SLOW_THRESHOLD)
 
-                            trend_data['labels'].insert(0, date_str)
-                            trend_data['avg_durations'].insert(0, statistics.mean(durations))
-                            trend_data['operation_counts'].insert(0, len(operations))
-                            trend_data['slow_op_counts'].insert(0, slow_count)
+                            trend_data['labels'].append(date_str)
+                            trend_data['avg_durations'].append(round(statistics.mean(durations), 1))
+                            trend_data['operation_counts'].append(len(operations))
+                            trend_data['slow_op_counts'].append(slow_count)
+                            found_any = True
                 except Exception as e:
                     print(f"Error loading data for {date_str}: {e}")
+
+        if found_any:
+            return trend_data
+
+        # Fallback: build daily trend from flow-trace.json files
+        return self._analyze_trends_from_flow_traces(days)
+
+    def _analyze_trends_from_flow_traces(self, days: int = 7) -> Dict[str, Any]:
+        """
+        Build daily trend data by grouping flow-trace.json pipeline steps by date.
+        Each session trace contributes its step durations to the day it occurred.
+        """
+        from collections import defaultdict
+        import os
+
+        trend_data = {
+            'labels': [],
+            'avg_durations': [],
+            'operation_counts': [],
+            'slow_op_counts': []
+        }
+
+        # Group operations by date
+        daily: Dict[str, list] = defaultdict(list)
+
+        try:
+            home = Path(os.path.expanduser('~'))
+            sessions_dir = home / '.claude' / 'memory' / 'logs' / 'sessions'
+            if not sessions_dir.exists():
+                return trend_data
+
+            cutoff = datetime.now() - timedelta(days=days)
+
+            for trace_file in sessions_dir.glob('*/flow-trace.json'):
+                try:
+                    with open(trace_file, 'r', encoding='utf-8', errors='replace') as f:
+                        trace = json.load(f)
+
+                    flow_start = trace.get('meta', {}).get('flow_start', '')
+                    if not flow_start:
+                        continue
+
+                    # Parse date from flow_start ISO string
+                    try:
+                        dt = datetime.fromisoformat(flow_start[:19])
+                    except Exception:
+                        continue
+
+                    if dt < cutoff:
+                        continue
+
+                    date_str = dt.strftime('%Y-%m-%d')
+
+                    for step in trace.get('pipeline', []):
+                        dur = step.get('duration_ms', 0)
+                        if dur > 0:
+                            daily[date_str].append(dur)
+
+                except Exception:
+                    continue
+
+        except Exception as e:
+            print(f"Error in trend fallback: {e}")
+            return trend_data
+
+        # Build ordered labels (last N days with data)
+        all_days = sorted(daily.keys())[-days:]
+        for date_str in all_days:
+            durations = daily[date_str]
+            if durations:
+                slow = sum(1 for d in durations if d >= self.SLOW_THRESHOLD)
+                trend_data['labels'].append(date_str)
+                trend_data['avg_durations'].append(round(statistics.mean(durations), 1))
+                trend_data['operation_counts'].append(len(durations))
+                trend_data['slow_op_counts'].append(slow)
 
         return trend_data
 
