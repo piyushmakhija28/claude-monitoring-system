@@ -39,7 +39,11 @@ class PerformanceProfiler:
         self._load_recent_operations()
 
     def _load_recent_operations(self):
-        """Load recent operations from today's file"""
+        """
+        Load recent operations.
+        Primary: today's operations_YYYY-MM-DD.json (from track_operation calls)
+        Fallback: parse flow-trace.json files from session logs (always available)
+        """
         today_file = self.storage_dir / f"operations_{datetime.now().strftime('%Y-%m-%d')}.json"
 
         if today_file.exists():
@@ -47,16 +51,73 @@ class PerformanceProfiler:
                 with open(today_file, 'r') as f:
                     data = json.load(f)
                     operations = data.get('operations', [])
-
-                    # Load into recent operations buffer
-                    for op in operations[-1000:]:  # Last 1000 only
+                    for op in operations[-1000:]:
                         self.recent_operations.append(op)
-
-                        # Add to slow operations if applicable
                         if op.get('duration_ms', 0) >= self.SLOW_THRESHOLD:
                             self.slow_operations.append(op)
+                if self.recent_operations:
+                    return  # Primary source had data, done
             except Exception as e:
                 print(f"Error loading recent operations: {e}")
+
+        # Fallback: read from flow-trace.json session logs
+        # 3-level-flow.py writes these for every request with real duration_ms per step
+        self._load_from_flow_traces()
+
+    def _load_from_flow_traces(self):
+        """
+        Parse flow-trace.json files from ~/.claude/memory/logs/sessions/
+        Each pipeline step becomes a tracked operation with real timing data.
+        """
+        try:
+            import os
+            home = Path(os.path.expanduser('~'))
+            sessions_dir = home / '.claude' / 'memory' / 'logs' / 'sessions'
+
+            if not sessions_dir.exists():
+                return
+
+            # Collect all flow-trace files, sorted by modification time (newest first)
+            trace_files = sorted(
+                sessions_dir.glob('*/flow-trace.json'),
+                key=lambda p: p.stat().st_mtime,
+                reverse=True
+            )[:50]  # Last 50 sessions max
+
+            seen_count = 0
+            for trace_file in trace_files:
+                try:
+                    with open(trace_file, 'r', encoding='utf-8', errors='replace') as f:
+                        trace = json.load(f)
+
+                    session_id = trace.get('meta', {}).get('session_id', 'unknown')
+                    pipeline = trace.get('pipeline', [])
+
+                    for step in pipeline:
+                        duration_ms = step.get('duration_ms', 0)
+                        if duration_ms <= 0:
+                            continue  # skip steps with no timing
+
+                        op = {
+                            'tool': step.get('step', 'unknown'),
+                            'target': step.get('name', ''),
+                            'duration_ms': duration_ms,
+                            'timestamp': step.get('timestamp', trace.get('meta', {}).get('flow_start', '')),
+                            'success': True,
+                            'optimization_applied': False,
+                            'session_id': session_id,
+                            'level': step.get('level', -1)
+                        }
+                        self.recent_operations.append(op)
+                        if duration_ms >= self.SLOW_THRESHOLD:
+                            self.slow_operations.append(op)
+                        seen_count += 1
+
+                except Exception:
+                    continue
+
+        except Exception as e:
+            print(f"Error loading flow traces: {e}")
 
     def track_operation(self, tool: str, target: str, duration_ms: float,
                        metadata: Optional[Dict[str, Any]] = None,
