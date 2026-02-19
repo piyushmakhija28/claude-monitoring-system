@@ -22,24 +22,50 @@ class MetricsCollector:
         self.memory_monitor = MemorySystemMonitor()
 
     def get_system_health(self):
-        """Get overall system health"""
+        """
+        Get overall system health based on hooks status (v3.3.0+).
+        Daemons were removed in v3.3.0 - enforcement is now via Claude Code hooks.
+        Health score = hooks present (60pts) + policy files (20pts) + session log (20pts)
+        """
         try:
-            # Use MemorySystemMonitor directly instead of subprocess
-            daemon_status = self.memory_monitor.get_daemon_status()
-            running_count = len([d for d in daemon_status if d.get('status') == 'running'])
-            total_count = len(daemon_status)
+            score = 0
+            hooks_present = 0
+            hooks_total = 3
 
-            # Calculate health score: (running/total) * 100
-            health_score = int((running_count / total_count) * 100) if total_count > 0 else 0
+            # Check 1: Hook scripts present in current/ (60 points - most important)
+            current_dir = self.memory_dir / 'current'
+            hook_scripts = ['3-level-flow.py', 'clear-session-handler.py', 'stop-notifier.py']
+            for script in hook_scripts:
+                if (current_dir / script).exists():
+                    hooks_present += 1
+            score += int((hooks_present / hooks_total) * 60)
+
+            # Check 2: Policy files present (20 points)
+            policy_checks = [
+                current_dir / 'auto-fix-enforcer.py',
+                current_dir / 'context-monitor-v2.py',
+                current_dir / 'blocking-policy-enforcer.py',
+            ]
+            policy_ok = sum(1 for p in policy_checks if p.exists())
+            score += int((policy_ok / len(policy_checks)) * 20)
+
+            # Check 3: Active session log exists (20 points)
+            logs_dir = self.memory_dir / 'logs'
+            if logs_dir.exists() and any(logs_dir.iterdir()):
+                score += 20
+
+            status = 'healthy' if score >= 80 else ('degraded' if score >= 50 else 'critical')
 
             return {
-                'status': 'healthy' if health_score >= 90 else 'degraded',
-                'health_score': health_score,
-                'score': health_score,
-                'running_daemons': running_count,
-                'total_daemons': total_count,
-                'context_usage': 45,  # Default until we get from context script
-                'memory_usage': 60,   # Default
+                'status': status,
+                'health_score': score,
+                'score': score,
+                'hooks_active': hooks_present,
+                'hooks_total': hooks_total,
+                'running_daemons': hooks_present,   # backwards compat for dashboard widgets
+                'total_daemons': hooks_total,
+                'context_usage': 45,
+                'memory_usage': 60,
                 'uptime': 'Active'
             }
         except Exception as e:
@@ -51,8 +77,10 @@ class MetricsCollector:
             'status': 'unknown',
             'health_score': 0,
             'score': 0,
+            'hooks_active': 0,
+            'hooks_total': 3,
             'running_daemons': 0,
-            'total_daemons': 10,
+            'total_daemons': 3,
             'context_usage': 0,
             'memory_usage': 0
         }
