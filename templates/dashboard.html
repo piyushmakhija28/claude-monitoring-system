@@ -867,11 +867,8 @@ function loadMetrics() {
             document.getElementById('healthScoreBar').style.width = healthScore + '%';
             document.getElementById('healthScoreBar').className = `progress-bar bg-${getHealthColor(healthScore)} bg-gradient`;
 
-            // Hooks are always active (configured in settings.json)
-            const hooksEl = document.getElementById('hooksActive');
-            if (hooksEl) hooksEl.innerHTML = '<span class="text-success">2</span>';
-            const hooksStatusEl = document.getElementById('hooksStatus');
-            if (hooksStatusEl) hooksStatusEl.textContent = 'UserPromptSubmit + Stop';
+            // Load hook health from real API
+            loadHookHealth();
 
             // Update active policies
             const activePolicies = data.active_policies || 0;
@@ -2178,9 +2175,7 @@ function updateDashboardWithWebSocketData(data) {
             healthScoreBar.className = `progress-bar bg-gradient bg-${getHealthColor(data.health_score)}`;
         }
 
-        // Hooks active (static - configured in settings.json)
-        const hooksActiveEl = document.getElementById('hooksActive');
-        if (hooksActiveEl) hooksActiveEl.innerHTML = '<span class="text-success">2</span>';
+        // Hook health loaded separately via loadHookHealth()
 
         // Update active policies
         const policiesEl = document.getElementById('activePolicies');
@@ -2296,6 +2291,54 @@ function resetWidgetOrder() {
         location.reload();
     }
 }
+
+// ----------------------------------------
+// HOOK HEALTH - real data from /api/hook-health
+// ----------------------------------------
+function loadHookHealth() {
+    fetch('/api/hook-health')
+        .then(r => r.json())
+        .then(data => {
+            const hooksEl = document.getElementById('hooksActive');
+            const hooksStatusEl = document.getElementById('hooksStatus');
+
+            if (!data.success || !data.settings_found) {
+                if (hooksEl) hooksEl.innerHTML = '<span class="text-warning">?</span>';
+                if (hooksStatusEl) hooksStatusEl.textContent = 'settings.json not found';
+                return;
+            }
+
+            const summary = data.summary || {};
+            const active = summary.active || 0;
+            const total = summary.total || 0;
+            const missing = summary.missing || 0;
+
+            const color = missing === 0 ? 'success' : (active > 0 ? 'warning' : 'danger');
+            if (hooksEl) hooksEl.innerHTML = `<span class="text-${color}">${active}/${total}</span>`;
+
+            if (hooksStatusEl) {
+                if (missing === 0) {
+                    const events = [...new Set(data.hooks.map(h => h.event))].join(', ');
+                    hooksStatusEl.textContent = events || 'All hooks active';
+                } else {
+                    const missingNames = data.hooks
+                        .filter(h => h.status !== 'active')
+                        .map(h => h.script || h.event)
+                        .join(', ');
+                    hooksStatusEl.textContent = `Missing: ${missingNames}`;
+                }
+            }
+        })
+        .catch(() => {
+            const hooksEl = document.getElementById('hooksActive');
+            if (hooksEl) hooksEl.innerHTML = '<span class="text-muted">-</span>';
+        });
+}
+
+// Load hook health on page ready
+document.addEventListener('DOMContentLoaded', function() {
+    loadHookHealth();
+});
 </script>
 
 <style>

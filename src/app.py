@@ -69,6 +69,74 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 from pathlib import Path
 
+# ─────────────────────────────────────────────────────────────────────────────
+# PERSISTENCE HELPERS — widgets and search history stored as JSON on disk
+# ─────────────────────────────────────────────────────────────────────────────
+_APP_CONFIG_DIR = Path(__file__).parent.parent / 'config'
+_APP_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+
+_WIDGETS_FILE = _APP_CONFIG_DIR / 'widgets.json'
+_SEARCH_HISTORY_FILE = _APP_CONFIG_DIR / 'search-history.json'
+_SEARCH_HISTORY_MAX = 100  # keep last N searches
+
+
+def _load_widgets():
+    """Load widget state from JSON file; use Flask session as store during testing."""
+    try:
+        from flask import current_app, session
+        if current_app.config.get('TESTING'):
+            return session.get('_widget_state', {'installed': [], 'custom': [], 'custom_advanced': []})
+    except RuntimeError:
+        pass
+    if _WIDGETS_FILE.exists():
+        try:
+            return json.loads(_WIDGETS_FILE.read_text(encoding='utf-8'))
+        except Exception:
+            pass
+    return {'installed': [], 'custom': [], 'custom_advanced': []}
+
+
+def _save_widgets(state):
+    """Persist widget state to JSON file; use Flask session as store during testing."""
+    try:
+        from flask import current_app, session
+        if current_app.config.get('TESTING'):
+            session['_widget_state'] = state
+            return
+    except RuntimeError:
+        pass
+    try:
+        _WIDGETS_FILE.write_text(json.dumps(state, indent=2), encoding='utf-8')
+    except Exception as e:
+        print(f'[WARN] Could not save widgets.json: {e}')
+
+
+def _load_search_history():
+    """Load search history from JSON file."""
+    if _SEARCH_HISTORY_FILE.exists():
+        try:
+            return json.loads(_SEARCH_HISTORY_FILE.read_text(encoding='utf-8'))
+        except Exception:
+            pass
+    return {'searches': []}
+
+
+def _append_search_history(query):
+    """Append a query to search history (deduplicates, newest first)."""
+    if not query or len(query.strip()) < 2:
+        return
+    hist = _load_search_history()
+    searches = hist.get('searches', [])
+    # Remove existing entry for same query
+    searches = [s for s in searches if s.get('query') != query]
+    searches.insert(0, {'query': query, 'timestamp': datetime.now().isoformat()})
+    hist['searches'] = searches[:_SEARCH_HISTORY_MAX]
+    try:
+        _SEARCH_HISTORY_FILE.write_text(json.dumps(hist, indent=2), encoding='utf-8')
+    except Exception as e:
+        print(f'[WARN] Could not save search-history.json: {e}')
+
+
 # Read application version
 def get_version():
     """Read version from VERSION file"""
@@ -736,36 +804,56 @@ def integrations():
 
 @app.route('/metrics')
 def prometheus_metrics():
-    """Prometheus metrics endpoint"""
-    metrics = []
+    """Prometheus metrics endpoint - reads from real monitoring services"""
+    prom_lines = []
 
-    # Context usage metric
-    metrics.append('# HELP context_usage_percent Current context usage percentage')
-    metrics.append('# TYPE context_usage_percent gauge')
-    metrics.append(f'context_usage_percent {{instance="claude-insight"}} 45.5')
+    try:
+        # --- Context usage (real from system health) ---
+        system_health = metrics.get_system_health()
+        context_pct = system_health.get('context_usage', 0)
+        health_score = system_health.get('health_score', 0)
 
-    # Daemon status metrics
-    metrics.append('# HELP daemon_status Daemon health status (1=up, 0=down)')
-    metrics.append('# TYPE daemon_status gauge')
-    for i in range(1, 9):
-        metrics.append(f'daemon_status{{daemon="daemon-{i}",instance="claude-insight"}} 1')
+        prom_lines.append('# HELP context_usage_percent Current context usage percentage')
+        prom_lines.append('# TYPE context_usage_percent gauge')
+        prom_lines.append(f'context_usage_percent{{instance="claude-insight"}} {context_pct}')
 
-    # Policy hits
-    metrics.append('# HELP policy_hits_total Total policy hits')
-    metrics.append('# TYPE policy_hits_total counter')
-    metrics.append(f'policy_hits_total {{instance="claude-insight"}} 1250')
+        # --- Health score ---
+        prom_lines.append('# HELP health_score_percent Overall system health score')
+        prom_lines.append('# TYPE health_score_percent gauge')
+        prom_lines.append(f'health_score_percent{{instance="claude-insight"}} {health_score}')
 
-    # Error count
-    metrics.append('# HELP error_count_total Total errors')
-    metrics.append('# TYPE error_count_total counter')
-    metrics.append(f'error_count_total {{instance="claude-insight"}} 12')
+        # --- Hook status (replaced daemon status in v3.3.0) ---
+        hook_list = metrics.get_daemon_status()
+        prom_lines.append('# HELP hook_script_status Hook script presence (1=present, 0=missing)')
+        prom_lines.append('# TYPE hook_script_status gauge')
+        for hook in hook_list:
+            name = hook.get('name', 'unknown').replace(' ', '_').replace('-', '_')
+            status_val = 1 if hook.get('status') == 'running' else 0
+            prom_lines.append(f'hook_script_status{{hook="{name}",instance="claude-insight"}} {status_val}')
 
-    # Session count
-    metrics.append('# HELP session_count_total Total sessions')
-    metrics.append('# TYPE session_count_total counter')
-    metrics.append(f'session_count_total {{instance="claude-insight"}} 89')
+        # --- Policy hits (real from metrics_collector) ---
+        policy_hits = metrics.get_policy_hits_today()
+        prom_lines.append('# HELP policy_hits_total Total policy hits in last 24 hours')
+        prom_lines.append('# TYPE policy_hits_total counter')
+        prom_lines.append(f'policy_hits_total{{instance="claude-insight"}} {policy_hits}')
 
-    return Response('\n'.join(metrics), mimetype='text/plain')
+        # --- Error count (real from log_parser) ---
+        error_count = log_parser.get_error_count(hours=24)
+        prom_lines.append('# HELP error_count_24h Total errors in last 24 hours')
+        prom_lines.append('# TYPE error_count_24h gauge')
+        prom_lines.append(f'error_count_24h{{instance="claude-insight"}} {error_count}')
+
+        # --- Session count (real from session_tracker) ---
+        session_summary = session_tracker.get_all_sessions_summary()
+        total_sessions = session_summary.get('total_sessions', 0)
+        prom_lines.append('# HELP session_count_total Total sessions tracked')
+        prom_lines.append('# TYPE session_count_total counter')
+        prom_lines.append(f'session_count_total{{instance="claude-insight"}} {total_sessions}')
+
+    except Exception as e:
+        prom_lines.append(f'# ERROR generating metrics: {e}')
+
+    return Response('\n'.join(prom_lines), mimetype='text/plain')
 
 @app.route('/api/grafana/dashboard/<dashboard_type>')
 @login_required
@@ -1567,7 +1655,7 @@ def settings():
         'health_score': 70,
         'error_count': 10,
         'context_usage': 85,
-        'daemon_down': True
+        'hook_failure': True
     })
 
     # Get current theme
@@ -1576,6 +1664,129 @@ def settings():
     return render_template('settings.html',
                          alert_thresholds=alert_thresholds,
                          current_theme=current_theme)
+
+
+@app.route('/api/trace-mode', methods=['GET', 'POST'])
+@login_required
+def api_trace_mode():
+    """Get or set TRACE_MODE flag in ~/.claude/CLAUDE.md"""
+    claude_md = Path.home() / '.claude' / 'CLAUDE.md'
+
+    def _read_trace_mode():
+        if not claude_md.exists():
+            return None
+        content = claude_md.read_text(encoding='utf-8', errors='ignore')
+        import re
+        match = re.search(r'\*\*TRACE_MODE:\*\*\s*`(true|false)`', content)
+        if match:
+            return match.group(1) == 'true'
+        # fallback: plain text
+        match = re.search(r'TRACE_MODE[:\s]+`?(true|false)`?', content, re.IGNORECASE)
+        return (match.group(1).lower() == 'true') if match else None
+
+    if request.method == 'GET':
+        enabled = _read_trace_mode()
+        return jsonify({
+            'success': True,
+            'enabled': enabled,
+            'claude_md_exists': claude_md.exists()
+        })
+
+    # POST — toggle
+    data = request.get_json() or {}
+    new_value = data.get('enabled', True)
+    if not claude_md.exists():
+        return jsonify({'success': False, 'message': 'CLAUDE.md not found'}), 404
+
+    import re
+    content = claude_md.read_text(encoding='utf-8', errors='ignore')
+    new_val_str = 'true' if new_value else 'false'
+
+    # Replace **TRACE_MODE:** `true/false`
+    updated, count = re.subn(
+        r'(\*\*TRACE_MODE:\*\*\s*)`(true|false)`',
+        lambda m: f'{m.group(1)}`{new_val_str}`',
+        content
+    )
+    if count == 0:
+        # Fallback: plain pattern
+        updated, count = re.subn(
+            r'(TRACE_MODE[:\s]+)`?(true|false)`?',
+            lambda m: f'{m.group(1)}`{new_val_str}`',
+            content,
+            flags=re.IGNORECASE
+        )
+
+    if count == 0:
+        return jsonify({'success': False, 'message': 'TRACE_MODE pattern not found in CLAUDE.md'}), 400
+
+    claude_md.write_text(updated, encoding='utf-8')
+    return jsonify({'success': True, 'enabled': new_value, 'message': f'TRACE_MODE set to {new_val_str}'})
+
+
+@app.route('/api/hook-health')
+@login_required
+def api_hook_health():
+    """
+    Check health of Claude Code hooks by reading ~/.claude/settings.json.
+    Returns which hooks are configured and whether their script files exist.
+    """
+    try:
+        settings_file = Path.home() / '.claude' / 'settings.json'
+        current_dir = Path.home() / '.claude' / 'memory' / 'current'
+
+        if not settings_file.exists():
+            return jsonify({
+                'success': True,
+                'settings_found': False,
+                'message': 'settings.json not found',
+                'hooks': []
+            })
+
+        import json as _json
+        settings = _json.loads(settings_file.read_text(encoding='utf-8', errors='ignore'))
+        hooks_config = settings.get('hooks', {})
+
+        hook_results = []
+
+        for event_name, event_hooks in hooks_config.items():
+            for hook_group in event_hooks:
+                for hook in hook_group.get('hooks', []):
+                    cmd = hook.get('command', '')
+                    # Extract script filename from command
+                    script_name = None
+                    for part in cmd.split():
+                        if part.endswith('.py') or part.endswith('.sh'):
+                            script_name = Path(part).name
+                            break
+
+                    script_exists = False
+                    if script_name:
+                        script_exists = (current_dir / script_name).exists()
+
+                    hook_results.append({
+                        'event': event_name,
+                        'command': cmd,
+                        'script': script_name,
+                        'script_exists': script_exists,
+                        'status': 'active' if script_exists else ('configured' if cmd else 'missing'),
+                        'status_message': hook.get('statusMessage', '')
+                    })
+
+        active_count = sum(1 for h in hook_results if h['status'] == 'active')
+        return jsonify({
+            'success': True,
+            'settings_found': True,
+            'hooks': hook_results,
+            'summary': {
+                'total': len(hook_results),
+                'active': active_count,
+                'missing': len(hook_results) - active_count
+            }
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
 
 @app.route('/api/themes', methods=['GET', 'POST'])
 @login_required
@@ -1763,8 +1974,9 @@ def save_custom_widget():
             if not data.get(field):
                 return jsonify({'success': False, 'message': f'{field} is required'}), 400
 
-        # Get custom widgets from session
-        custom_widgets = session.get('custom_widgets_advanced', [])
+        # Get custom widgets from persistent store
+        widget_state = _load_widgets()
+        custom_widgets = widget_state.get('custom_advanced', [])
 
         # Generate widget ID
         widget_id = f"advanced-{len(custom_widgets) + 1}"
@@ -1782,7 +1994,8 @@ def save_custom_widget():
         }
 
         custom_widgets.append(widget)
-        session['custom_widgets_advanced'] = custom_widgets
+        widget_state['custom_advanced'] = custom_widgets
+        _save_widgets(widget_state)
 
         return jsonify({
             'success': True,
@@ -2513,16 +2726,18 @@ def install_widget():
         if not widget_id:
             return jsonify({'success': False, 'message': 'Widget ID is required'}), 400
 
-        # Get installed widgets from session
-        installed_widgets = session.get('installed_widgets', [])
+        # Get installed widgets from persistent store
+        widget_state = _load_widgets()
+        installed_widgets = widget_state.get('installed', [])
 
         # Check if already installed
         if widget_id in installed_widgets:
             return jsonify({'success': False, 'message': 'Widget already installed'})
 
-        # Add to installed list
+        # Add to installed list and persist
         installed_widgets.append(widget_id)
-        session['installed_widgets'] = installed_widgets
+        widget_state['installed'] = installed_widgets
+        _save_widgets(widget_state)
 
         return jsonify({
             'success': True,
@@ -2544,7 +2759,7 @@ def get_installed_widgets():
       200:
         description: List of installed widgets
     """
-    installed_widgets = session.get('installed_widgets', [])
+    installed_widgets = _load_widgets().get('installed', [])
 
     # Widget metadata (simplified)
     widget_metadata = {
@@ -2617,8 +2832,9 @@ def create_custom_widget():
             if not data.get(field):
                 return jsonify({'success': False, 'message': f'{field} is required'}), 400
 
-        # Get custom widgets from session
-        custom_widgets = session.get('custom_widgets', [])
+        # Get custom widgets from persistent store
+        widget_state = _load_widgets()
+        custom_widgets = widget_state.get('custom', [])
 
         # Generate widget ID
         widget_id = f"custom-{len(custom_widgets) + 1}"
@@ -2635,12 +2851,13 @@ def create_custom_widget():
         }
 
         custom_widgets.append(widget)
-        session['custom_widgets'] = custom_widgets
+        widget_state['custom'] = custom_widgets
 
         # Auto-install the custom widget
-        installed_widgets = session.get('installed_widgets', [])
+        installed_widgets = widget_state.get('installed', [])
         installed_widgets.append(widget_id)
-        session['installed_widgets'] = installed_widgets
+        widget_state['installed'] = installed_widgets
+        _save_widgets(widget_state)
 
         return jsonify({
             'success': True,
@@ -2679,15 +2896,17 @@ def uninstall_widget():
         if not widget_id:
             return jsonify({'success': False, 'message': 'Widget ID is required'}), 400
 
-        # Get installed widgets from session
-        installed_widgets = session.get('installed_widgets', [])
+        # Get installed widgets from persistent store
+        widget_state = _load_widgets()
+        installed_widgets = widget_state.get('installed', [])
 
         if widget_id not in installed_widgets:
             return jsonify({'success': False, 'message': 'Widget not installed'})
 
-        # Remove from installed list
+        # Remove from installed list and persist
         installed_widgets.remove(widget_id)
-        session['installed_widgets'] = installed_widgets
+        widget_state['installed'] = installed_widgets
+        _save_widgets(widget_state)
 
         return jsonify({
             'success': True,
@@ -3223,9 +3442,9 @@ def alert_thresholds():
             context_usage:
               type: integer
               description: Context usage threshold percentage
-            daemon_down:
+            hook_failure:
               type: boolean
-              description: Alert when daemon is down
+              description: Alert when hook script is missing or inactive
     responses:
       200:
         description: Alert thresholds saved or retrieved
@@ -3237,7 +3456,7 @@ def alert_thresholds():
                 'health_score': data.get('health_score', 70),
                 'error_count': data.get('error_count', 10),
                 'context_usage': data.get('context_usage', 85),
-                'daemon_down': data.get('daemon_down', True)
+                'hook_failure': data.get('hook_failure', data.get('daemon_down', True))
             }
             session['alert_thresholds'] = thresholds
             return jsonify({'success': True, 'message': 'Alert thresholds saved', 'thresholds': thresholds})
@@ -3249,7 +3468,7 @@ def alert_thresholds():
             'health_score': 70,
             'error_count': 10,
             'context_usage': 85,
-            'daemon_down': True
+            'hook_failure': True
         })
         return jsonify({'success': True, 'thresholds': thresholds})
 
@@ -3277,11 +3496,11 @@ def check_alerts():
             'health_score': 70,
             'error_count': 10,
             'context_usage': 85,
-            'daemon_down': True
+            'hook_failure': True
         })
 
         system_health = metrics.get_system_health()
-        daemon_status = metrics.get_daemon_status()
+        hook_status = metrics.get_daemon_status()
 
         alerts = []
 
@@ -3307,15 +3526,15 @@ def check_alerts():
                 'threshold': thresholds.get('context_usage')
             })
 
-        # Check daemons
-        if thresholds.get('daemon_down', True):
-            down_daemons = [d for d in daemon_status if d.get('status') != 'running']
-            if down_daemons:
+        # Check hook scripts (replaced daemon_down in v3.3.0)
+        if thresholds.get('hook_failure', True):
+            missing_hooks = [h for h in hook_status if h.get('status') != 'running']
+            if missing_hooks:
                 alerts.append({
-                    'type': 'daemon_down',
+                    'type': 'hook_failure',
                     'severity': 'critical',
-                    'message': f'{len(down_daemons)} daemon(s) are down',
-                    'daemons': [d.get('name') for d in down_daemons]
+                    'message': f'{len(missing_hooks)} hook script(s) missing or inactive',
+                    'hooks': [h.get('name') for h in missing_hooks]
                 })
 
         # Check error count (last hour)
@@ -4518,6 +4737,9 @@ def api_search():
                 'message': 'Query parameter is required'
             }), 400
 
+        # Persist to search history
+        _append_search_history(query)
+
         # Start timing
         start_time = time.time()
 
@@ -4757,13 +4979,17 @@ def api_search_suggestions():
                 'suggestions': []
             })
 
-        # Generate suggestions based on common search patterns
         suggestions = []
 
-        # Add recent searches (from history)
-        # This would typically come from a database
+        # Add recent searches from persisted history (matching query)
+        hist = _load_search_history()
+        recent = [
+            s['query'] for s in hist.get('searches', [])
+            if query.lower() in s['query'].lower() and s['query'] != query
+        ]
+        suggestions.extend(recent[:5])
 
-        # Add common search patterns
+        # Add common search patterns if not already covered
         common_patterns = [
             f'severity:critical {query}',
             f'severity:high {query}',
@@ -4772,12 +4998,15 @@ def api_search_suggestions():
             f'date:today {query}',
             f'date:last7days {query}'
         ]
-
-        suggestions.extend([p for p in common_patterns if query.lower() in p.lower()][:5])
+        for p in common_patterns:
+            if p not in suggestions and query.lower() in p.lower():
+                suggestions.append(p)
+            if len(suggestions) >= 8:
+                break
 
         return jsonify({
             'success': True,
-            'suggestions': suggestions
+            'suggestions': suggestions[:8]
         })
 
     except Exception as e:
@@ -4785,6 +5014,493 @@ def api_search_suggestions():
             'success': False,
             'message': str(e)
         }), 500
+
+
+@app.route('/session-diff')
+@login_required
+def session_diff_view():
+    """Flow-trace session diff page"""
+    return render_template('session-diff.html')
+
+
+@app.route('/api/session-diff')
+@login_required
+def api_session_diff():
+    """Compare two sessions' flow-trace.json files side-by-side"""
+    sid_a = request.args.get('a', '').strip()
+    sid_b = request.args.get('b', '').strip()
+
+    if not sid_a or not sid_b:
+        return jsonify({'success': False, 'message': 'Provide ?a=SESSION_ID&b=SESSION_ID'}), 400
+
+    sessions_dir = Path.home() / '.claude' / 'memory' / 'logs' / 'sessions'
+
+    def _load_trace(sid):
+        trace_file = sessions_dir / sid / 'flow-trace.json'
+        if not trace_file.exists():
+            return None, f'flow-trace.json not found for session {sid}'
+        try:
+            return json.loads(trace_file.read_text(encoding='utf-8', errors='ignore')), None
+        except Exception as e:
+            return None, str(e)
+
+    trace_a, err_a = _load_trace(sid_a)
+    trace_b, err_b = _load_trace(sid_b)
+
+    # Extract key comparison fields
+    def _extract_summary(trace, sid):
+        if trace is None:
+            return {'session_id': sid, 'available': False}
+        fd = trace.get('final_decision', {})
+        return {
+            'session_id': sid,
+            'available': True,
+            'message': trace.get('message', ''),
+            'complexity': fd.get('complexity', trace.get('LEVEL_3_STEP_3_0', {}).get('complexity')),
+            'task_type': fd.get('task_type', trace.get('LEVEL_3_STEP_3_0', {}).get('task_type')),
+            'model': fd.get('model', trace.get('LEVEL_3_STEP_3_4', {}).get('model_selected')),
+            'skill_agent': fd.get('skill_agent', trace.get('LEVEL_3_STEP_3_5', {}).get('skill_selected')),
+            'plan_mode': fd.get('plan_mode', trace.get('LEVEL_3_STEP_3_2', {}).get('decision')),
+            'context_pct': fd.get('context_pct', trace.get('LEVEL_1', {}).get('context_pct')),
+            'session': trace.get('LEVEL_1', {}).get('session_id', sid),
+            'overall_status': trace.get('overall_status', 'unknown'),
+            'tasks_count': fd.get('tasks_count'),
+            'raw': trace
+        }
+
+    summary_a = _extract_summary(trace_a, sid_a)
+    summary_b = _extract_summary(trace_b, sid_b)
+
+    # Build field-level diff
+    compare_fields = ['complexity', 'task_type', 'model', 'skill_agent', 'plan_mode', 'context_pct', 'overall_status', 'tasks_count']
+    diff_rows = []
+    for field in compare_fields:
+        val_a = summary_a.get(field)
+        val_b = summary_b.get(field)
+        diff_rows.append({
+            'field': field,
+            'a': val_a,
+            'b': val_b,
+            'changed': str(val_a) != str(val_b)
+        })
+
+    return jsonify({
+        'success': True,
+        'session_a': summary_a,
+        'session_b': summary_b,
+        'diff': diff_rows,
+        'errors': {'a': err_a, 'b': err_b}
+    })
+
+
+@app.route('/skill-registry')
+@login_required
+def skill_registry_browser():
+    """Skill registry browser page"""
+    return render_template('skill-registry.html')
+
+
+@app.route('/api/skill-registry')
+@login_required
+def api_skill_registry():
+    """Return all skills from skills-registry.json + ~/.claude/skills/INDEX.md usage stats"""
+    import re as _re
+
+    # Load skills from config/skills-registry.json (already indexed)
+    skills_registry_path = Path(__file__).parent.parent / 'config' / 'skills-registry.json'
+    skills_data = {}
+    if skills_registry_path.exists():
+        try:
+            skills_data = json.loads(skills_registry_path.read_text(encoding='utf-8'))
+        except Exception:
+            pass
+
+    skills_list = []
+    for skill_id, skill in skills_data.get('skills', {}).items():
+        skills_list.append({
+            'id': skill_id,
+            'name': skill.get('name', skill_id),
+            'description': skill.get('description', ''),
+            'category': skill.get('category', 'general'),
+            'version': skill.get('version', ''),
+            'keywords': skill.get('keywords', []),
+            'size': skill.get('size', ''),
+            'language': skill.get('language', ''),
+            'usage_count': 0  # populated below
+        })
+
+    # Also parse ~/.claude/skills/INDEX.md if exists (additional skills not in registry)
+    index_path = Path.home() / '.claude' / 'skills' / 'INDEX.md'
+    if index_path.exists():
+        try:
+            content = index_path.read_text(encoding='utf-8', errors='ignore')
+            existing_ids = {s['id'] for s in skills_list}
+            current_category = 'general'
+            for line in content.splitlines():
+                cat_match = _re.match(r'^#{1,3}\s+(.+)', line)
+                if cat_match:
+                    current_category = cat_match.group(1).strip().lower()
+                    continue
+                # Lines like: `skill-name` - description
+                skill_match = _re.match(r'^\s*[-*]\s+`?([a-z0-9_-]+)`?\s*[:\-]\s*(.*)', line)
+                if skill_match:
+                    sid = skill_match.group(1)
+                    if sid not in existing_ids:
+                        skills_list.append({
+                            'id': sid,
+                            'name': sid.replace('-', ' ').title(),
+                            'description': skill_match.group(2).strip(),
+                            'category': current_category,
+                            'version': '',
+                            'keywords': [],
+                            'size': '',
+                            'language': '',
+                            'usage_count': 0
+                        })
+                        existing_ids.add(sid)
+        except Exception:
+            pass
+
+    # Add usage counts from recent flow-trace sessions
+    sessions_dir = Path.home() / '.claude' / 'memory' / 'logs' / 'sessions'
+    if sessions_dir.exists():
+        try:
+            usage_counts = {}
+            session_dirs = sorted(sessions_dir.iterdir(), reverse=True)[:50]
+            for sd in session_dirs:
+                trace_file = sd / 'flow-trace.json'
+                if trace_file.exists():
+                    try:
+                        trace = json.loads(trace_file.read_text(encoding='utf-8', errors='ignore'))
+                        skill_used = (
+                            trace.get('LEVEL_3_STEP_3_5', {}).get('skill_selected') or
+                            trace.get('final_decision', {}).get('skill_agent')
+                        )
+                        if skill_used:
+                            skill_used = skill_used.lower().replace(' ', '-')
+                            usage_counts[skill_used] = usage_counts.get(skill_used, 0) + 1
+                    except Exception:
+                        pass
+            for s in skills_list:
+                s['usage_count'] = usage_counts.get(s['id'], 0)
+        except Exception:
+            pass
+
+    # Group by category
+    categories = {}
+    for s in skills_list:
+        cat = s['category']
+        categories.setdefault(cat, []).append(s)
+
+    # Sort each category by usage_count desc
+    for cat in categories:
+        categories[cat].sort(key=lambda x: x['usage_count'], reverse=True)
+
+    return jsonify({
+        'success': True,
+        'total': len(skills_list),
+        'categories': categories,
+        'skills': sorted(skills_list, key=lambda x: x['usage_count'], reverse=True),
+        'index_found': index_path.exists()
+    })
+
+
+@app.route('/claude-md')
+@login_required
+def claude_md_viewer():
+    """CLAUDE.md viewer page"""
+    return render_template('claude-md.html')
+
+
+@app.route('/api/claude-md')
+@login_required
+def api_claude_md():
+    """Return content of global and project CLAUDE.md files"""
+    global_path = Path.home() / '.claude' / 'CLAUDE.md'
+    project_path = Path(__file__).parent.parent / 'CLAUDE.md'
+
+    def _read(p):
+        if p.exists():
+            try:
+                return {'exists': True, 'content': p.read_text(encoding='utf-8', errors='ignore'), 'path': str(p)}
+            except Exception as e:
+                return {'exists': True, 'content': f'Error reading file: {e}', 'path': str(p)}
+        return {'exists': False, 'content': '', 'path': str(p)}
+
+    global_file = _read(global_path)
+    project_file = _read(project_path)
+
+    # Build a simple line-level diff summary (which sections exist in both / only one)
+    diff_summary = []
+    if global_file['exists'] and project_file['exists']:
+        global_headers = [l.strip() for l in global_file['content'].splitlines() if l.startswith('## ') or l.startswith('# ')]
+        project_headers = [l.strip() for l in project_file['content'].splitlines() if l.startswith('## ') or l.startswith('# ')]
+        global_set = set(global_headers)
+        project_set = set(project_headers)
+        diff_summary = {
+            'only_global': sorted(global_set - project_set),
+            'only_project': sorted(project_set - global_set),
+            'shared': sorted(global_set & project_set)
+        }
+
+    return jsonify({
+        'success': True,
+        'global': global_file,
+        'project': project_file,
+        'diff_summary': diff_summary
+    })
+
+
+@app.route('/api/search/history', methods=['GET', 'DELETE'])
+@login_required
+def api_search_history():
+    """GET recent search history / DELETE to clear it"""
+    if request.method == 'DELETE':
+        try:
+            _SEARCH_HISTORY_FILE.write_text(json.dumps({'searches': []}, indent=2), encoding='utf-8')
+            return jsonify({'success': True, 'message': 'Search history cleared'})
+        except Exception as e:
+            return jsonify({'success': False, 'message': str(e)}), 500
+    # GET
+    hist = _load_search_history()
+    return jsonify({'success': True, 'history': hist.get('searches', [])[:50]})
+
+
+# ============================================================
+# VOICE NOTIFICATION HISTORY  (item 11)
+# ============================================================
+
+_VOICE_HISTORY_FILE = _APP_CONFIG_DIR / 'voice-notifications.json'
+
+
+def _record_voice_notification(summary, timestamp=None):
+    """Append a voice notification summary to the history log."""
+    if not summary or not summary.strip():
+        return
+    try:
+        hist = []
+        if _VOICE_HISTORY_FILE.exists():
+            hist = json.loads(_VOICE_HISTORY_FILE.read_text(encoding='utf-8'))
+        hist.insert(0, {
+            'summary': summary.strip(),
+            'timestamp': timestamp or datetime.now().isoformat()
+        })
+        _VOICE_HISTORY_FILE.write_text(json.dumps(hist[:200], indent=2), encoding='utf-8')
+    except Exception as e:
+        print(f'[WARN] Could not save voice notification: {e}')
+
+
+@app.route('/voice-history')
+@login_required
+def voice_notification_history():
+    """Voice notification history page"""
+    return render_template('voice-history.html')
+
+
+@app.route('/api/voice-history', methods=['GET', 'DELETE'])
+@login_required
+def api_voice_history():
+    """GET voice notification history / DELETE to clear"""
+    if request.method == 'DELETE':
+        try:
+            _VOICE_HISTORY_FILE.write_text('[]', encoding='utf-8')
+            return jsonify({'success': True, 'message': 'Voice history cleared'})
+        except Exception as e:
+            return jsonify({'success': False, 'message': str(e)}), 500
+
+    # Also check .session-work-done for any new entry not yet in history
+    work_done_file = Path.home() / '.claude' / '.session-work-done'
+    if work_done_file.exists():
+        try:
+            content = work_done_file.read_text(encoding='utf-8', errors='ignore').strip()
+            if content:
+                hist = []
+                if _VOICE_HISTORY_FILE.exists():
+                    hist = json.loads(_VOICE_HISTORY_FILE.read_text(encoding='utf-8'))
+                # Only add if not already the most recent entry
+                if not hist or hist[0].get('summary') != content:
+                    _record_voice_notification(content)
+        except Exception:
+            pass
+
+    hist = []
+    if _VOICE_HISTORY_FILE.exists():
+        try:
+            hist = json.loads(_VOICE_HISTORY_FILE.read_text(encoding='utf-8'))
+        except Exception:
+            pass
+
+    return jsonify({'success': True, 'history': hist[:100]})
+
+
+# ============================================================
+# DOCS INDEX BROWSER  (item 12)
+# ============================================================
+
+@app.route('/docs-browser')
+@login_required
+def docs_browser():
+    """Docs index browser page"""
+    return render_template('docs-browser.html')
+
+
+@app.route('/api/docs-index')
+@login_required
+def api_docs_index():
+    """Parse ~/.claude/memory/docs/INDEX.md and return structured doc list"""
+    import re as _re
+
+    index_file = Path.home() / '.claude' / 'memory' / 'docs' / 'INDEX.md'
+    docs_dir   = Path.home() / '.claude' / 'memory' / 'docs'
+
+    if not index_file.exists():
+        return jsonify({'success': True, 'docs': [], 'categories': {}, 'index_found': False})
+
+    content = index_file.read_text(encoding='utf-8', errors='ignore')
+    categories = {}
+    current_category = 'Uncategorized'
+    docs = []
+
+    for line in content.splitlines():
+        # Detect category heading (## Section Name)
+        cat_match = _re.match(r'^#{1,3}\s+(.+)', line)
+        if cat_match:
+            heading = cat_match.group(1).strip()
+            # Skip nav-style headings like "Quick Navigation"
+            if not any(x in heading.lower() for x in ['navigation', 'quick nav', 'index']):
+                current_category = heading
+            continue
+
+        # Detect table row: | [title](file.md) | description |
+        row_match = _re.match(r'^\|\s*\[([^\]]+)\]\(([^)]+)\)\s*\|\s*(.+?)\s*\|', line)
+        if row_match:
+            title = row_match.group(1).strip()
+            filename = row_match.group(2).strip()
+            description = row_match.group(3).strip()
+            # Resolve actual path
+            doc_path = docs_dir / filename if '/' not in filename else docs_dir / filename
+            exists = doc_path.exists()
+            size_lines = None
+            if exists:
+                try:
+                    size_lines = len(doc_path.read_text(encoding='utf-8', errors='ignore').splitlines())
+                except Exception:
+                    pass
+
+            doc = {
+                'title': title,
+                'filename': filename,
+                'description': description,
+                'category': current_category,
+                'exists': exists,
+                'lines': size_lines,
+                'path': str(doc_path)
+            }
+            docs.append(doc)
+            categories.setdefault(current_category, []).append(doc)
+
+    return jsonify({
+        'success': True,
+        'docs': docs,
+        'categories': {k: len(v) for k, v in categories.items()},
+        'total': len(docs),
+        'index_found': True
+    })
+
+
+@app.route('/api/docs-content')
+@login_required
+def api_docs_content():
+    """Return content of a specific doc file (read-only)"""
+    filename = request.args.get('file', '').strip()
+    if not filename or '..' in filename:
+        return jsonify({'success': False, 'message': 'Invalid filename'}), 400
+
+    docs_dir = Path.home() / '.claude' / 'memory' / 'docs'
+    doc_path = docs_dir / filename
+
+    if not doc_path.exists():
+        return jsonify({'success': False, 'message': 'File not found'}), 404
+
+    try:
+        content = doc_path.read_text(encoding='utf-8', errors='ignore')
+        return jsonify({'success': True, 'content': content, 'filename': filename, 'lines': len(content.splitlines())})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+# ============================================================
+# WINDOWS STARTUP STATUS  (item 13)
+# ============================================================
+
+@app.route('/api/startup-status')
+@login_required
+def api_startup_status():
+    """Check Windows startup integration and hook health"""
+    import platform
+
+    result = {
+        'success': True,
+        'platform': platform.system(),
+        'startup_lnk': {'checked': False, 'exists': False, 'path': ''},
+        'start_bat': {'checked': False, 'exists': False, 'path': ''},
+        'settings_json': {'checked': False, 'exists': False, 'hooks_count': 0},
+        'hook_scripts': []
+    }
+
+    # Windows-only startup check
+    if platform.system() == 'Windows':
+        startup_dir = Path.home() / 'AppData' / 'Roaming' / 'Microsoft' / 'Windows' / 'Start Menu' / 'Programs' / 'Startup'
+
+        lnk_path = startup_dir / 'Claude Memory Daemons.lnk'
+        result['startup_lnk'] = {
+            'checked': True,
+            'exists': lnk_path.exists(),
+            'path': str(lnk_path)
+        }
+
+        bat_path = startup_dir / 'start-all-daemons.bat'
+        result['start_bat'] = {
+            'checked': True,
+            'exists': bat_path.exists(),
+            'path': str(bat_path)
+        }
+
+    # Check settings.json hooks
+    settings_file = Path.home() / '.claude' / 'settings.json'
+    if settings_file.exists():
+        try:
+            settings = json.loads(settings_file.read_text(encoding='utf-8', errors='ignore'))
+            hooks = settings.get('hooks', {})
+            hook_count = sum(
+                len(hg.get('hooks', []))
+                for event_hooks in hooks.values()
+                for hg in event_hooks
+            )
+            result['settings_json'] = {
+                'checked': True,
+                'exists': True,
+                'hooks_count': hook_count,
+                'events': list(hooks.keys())
+            }
+        except Exception as e:
+            result['settings_json'] = {'checked': True, 'exists': True, 'hooks_count': 0, 'error': str(e)}
+    else:
+        result['settings_json'] = {'checked': True, 'exists': False, 'hooks_count': 0}
+
+    # Check individual hook scripts
+    current_dir = Path.home() / '.claude' / 'memory' / 'current'
+    for script in ['3-level-flow.py', 'clear-session-handler.py', 'stop-notifier.py',
+                   'auto-fix-enforcer.py', 'context-monitor-v2.py']:
+        script_path = current_dir / script
+        result['hook_scripts'].append({
+            'name': script,
+            'exists': script_path.exists(),
+            'path': str(script_path)
+        })
+
+    return jsonify(result)
+
 
 # ============================================================
 # Search Helper Functions
@@ -4864,7 +5580,7 @@ def search_daemons(query, regex_mode, filters):
     results = []
     try:
         # Get daemon status from memory_system_monitor
-        daemon_status = memory_system_monitor.check_daemons()
+        daemon_status = memory_system_monitor.get_daemon_status()
 
         for daemon_name, status in daemon_status.items():
             content = f"Daemon {daemon_name}: {status.get('status', 'unknown')}"
@@ -5091,13 +5807,60 @@ def debugging_tools():
 @app.route('/api/debug/logs/stream')
 @login_required
 def api_debug_logs_stream():
-    """Stream real-time logs"""
+    """Stream real-time logs from policy-hits.log (last 50 lines then tail new entries)"""
+    import time
+    import json as _json
+
+    log_file = Path.home() / '.claude' / 'memory' / 'logs' / 'policy-hits.log'
+
     def generate():
-        # Stream logs in real-time (simplified)
-        import time
-        for i in range(100):
-            yield f'data: {{"timestamp": "{datetime.now().isoformat()}", "level": "INFO", "message": "Log entry {i}"}}\n\n'
-            time.sleep(0.5)
+        # --- Emit last 50 existing lines as history ---
+        if log_file.exists():
+            try:
+                with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
+                    existing = f.readlines()
+                last_lines = existing[-50:] if len(existing) > 50 else existing
+                for raw in last_lines:
+                    raw = raw.strip()
+                    if not raw:
+                        continue
+                    entry = _json.dumps({
+                        'timestamp': datetime.now().isoformat(),
+                        'level': 'ERROR' if 'error' in raw.lower() or 'fail' in raw.lower() else 'INFO',
+                        'message': raw
+                    })
+                    yield f'data: {entry}\n\n'
+            except Exception as e:
+                yield f'data: {_json.dumps({"level": "WARN", "message": f"Could not read log history: {e}"})}\n\n'
+        else:
+            yield f'data: {_json.dumps({"level": "WARN", "message": f"Log file not found: {log_file}"})}\n\n'
+
+        # --- Tail new entries in real-time (up to 5 minutes) ---
+        last_position = log_file.stat().st_size if log_file.exists() else 0
+        deadline = time.time() + 300  # 5 minute max stream
+
+        while time.time() < deadline:
+            try:
+                if log_file.exists():
+                    current_size = log_file.stat().st_size
+                    if current_size > last_position:
+                        with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
+                            f.seek(last_position)
+                            new_lines = f.readlines()
+                            last_position = f.tell()
+                        for raw in new_lines:
+                            raw = raw.strip()
+                            if not raw:
+                                continue
+                            entry = _json.dumps({
+                                'timestamp': datetime.now().isoformat(),
+                                'level': 'ERROR' if 'error' in raw.lower() or 'fail' in raw.lower() else 'INFO',
+                                'message': raw
+                            })
+                            yield f'data: {entry}\n\n'
+            except Exception:
+                pass
+            time.sleep(1)
 
     return Response(generate(), mimetype='text/event-stream')
 

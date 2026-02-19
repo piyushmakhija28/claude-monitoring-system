@@ -95,6 +95,51 @@
             </div>
         </div>
 
+        <!-- Claude Memory System Settings -->
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header bg-white border-0 pt-4 pb-3">
+                <h5 class="mb-0">
+                    <i class="fas fa-brain me-2"></i>Claude Memory System
+                </h5>
+            </div>
+            <div class="card-body p-4">
+                <!-- TRACE_MODE Toggle -->
+                <div class="d-flex align-items-center justify-content-between mb-3">
+                    <div>
+                        <strong><i class="fas fa-route me-2 text-primary"></i>TRACE_MODE</strong>
+                        <small class="d-block text-muted mt-1">
+                            Show the full 3-level architecture flow trace before every response.
+                            Writes to <code>~/.claude/CLAUDE.md</code>.
+                        </small>
+                    </div>
+                    <div class="form-check form-switch ms-4">
+                        <input class="form-check-input" type="checkbox" role="switch"
+                               id="traceModeToggle" style="transform: scale(1.4);"
+                               onchange="setTraceMode(this.checked)">
+                    </div>
+                </div>
+                <div id="traceModeStatus" class="small text-muted mb-2"></div>
+
+                <hr class="my-3">
+
+                <!-- Windows Startup & Hook Status -->
+                <div class="d-flex align-items-start justify-content-between mb-2">
+                    <div>
+                        <strong><i class="fas fa-rocket me-2 text-warning"></i>Startup &amp; Hook Status</strong>
+                        <small class="d-block text-muted mt-1">
+                            Windows auto-start shortcut and <code>~/.claude/settings.json</code> hook health.
+                        </small>
+                    </div>
+                    <button class="btn btn-sm btn-outline-secondary ms-4 flex-shrink-0" onclick="loadStartupStatus()">
+                        <i class="fas fa-sync-alt"></i>
+                    </button>
+                </div>
+                <div id="startupStatusBody" class="mt-2">
+                    <div class="text-muted small"><i class="fas fa-spinner fa-spin me-1"></i>Checking...</div>
+                </div>
+            </div>
+        </div>
+
         <!-- Custom Dashboard Themes -->
         <div class="card border-0 shadow-sm mb-4">
             <div class="card-header bg-white border-0 pt-4 pb-3">
@@ -1878,6 +1923,130 @@ function applyCustomThemeToPage(theme) {
 // ========================================
 // END CUSTOM THEME BUILDER FUNCTIONS
 // ========================================
+
+// ========================================
+// TRACE_MODE TOGGLE
+// ========================================
+function loadTraceMode() {
+    fetch('/api/trace-mode')
+        .then(r => r.json())
+        .then(data => {
+            const toggle = document.getElementById('traceModeToggle');
+            const status = document.getElementById('traceModeStatus');
+            if (!toggle) return;
+
+            if (!data.claude_md_exists) {
+                status.textContent = 'CLAUDE.md not found - memory system may not be installed.';
+                toggle.disabled = true;
+            } else if (data.enabled === null) {
+                status.textContent = 'TRACE_MODE flag not found in CLAUDE.md.';
+                toggle.disabled = true;
+            } else {
+                toggle.checked = data.enabled;
+                status.textContent = data.enabled
+                    ? 'Currently ON - 3-level flow trace is shown before every response.'
+                    : 'Currently OFF - policies run silently in the background.';
+            }
+        })
+        .catch(() => {
+            const status = document.getElementById('traceModeStatus');
+            if (status) status.textContent = 'Could not load TRACE_MODE status.';
+        });
+}
+
+function setTraceMode(enabled) {
+    const status = document.getElementById('traceModeStatus');
+    if (status) status.textContent = 'Saving...';
+
+    fetch('/api/trace-mode', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({enabled: enabled})
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (status) {
+            status.textContent = data.success
+                ? (enabled ? 'Saved. TRACE_MODE is now ON.' : 'Saved. TRACE_MODE is now OFF.')
+                : ('Error: ' + data.message);
+            status.className = 'small ' + (data.success ? 'text-success' : 'text-danger') + ' mb-2';
+        }
+    })
+    .catch(e => {
+        if (status) { status.textContent = 'Request failed: ' + e; status.className = 'small text-danger mb-2'; }
+    });
+}
+
+// ========================================
+// STARTUP & HOOK STATUS
+// ========================================
+function loadStartupStatus() {
+    const body = document.getElementById('startupStatusBody');
+    if (!body) return;
+    body.innerHTML = '<div class="text-muted small"><i class="fas fa-spinner fa-spin me-1"></i>Checking...</div>';
+
+    fetch('/api/startup-status')
+        .then(r => r.json())
+        .then(data => {
+            if (!data.success) {
+                body.innerHTML = '<div class="text-danger small">Error loading status.</div>';
+                return;
+            }
+
+            let html = '<div class="row g-2 small">';
+
+            // Platform
+            html += `<div class="col-12 text-muted mb-1">Platform: <strong>${data.platform}</strong></div>`;
+
+            // Windows startup .lnk
+            if (data.startup_lnk.checked) {
+                const ok = data.startup_lnk.exists;
+                html += `<div class="col-md-6">
+                    <span class="badge ${ok ? 'bg-success' : 'bg-warning text-dark'}">
+                        <i class="fas ${ok ? 'fa-check' : 'fa-exclamation-triangle'} me-1"></i>
+                        Startup Shortcut
+                    </span>
+                    <small class="d-block text-muted mt-1">${ok ? 'Found' : 'Not found — daemons may not auto-start'}</small>
+                </div>`;
+            }
+
+            // settings.json hooks
+            const sh = data.settings_json;
+            if (sh.checked) {
+                const ok = sh.exists && sh.hooks_count > 0;
+                html += `<div class="col-md-6">
+                    <span class="badge ${ok ? 'bg-success' : 'bg-warning text-dark'}">
+                        <i class="fas ${ok ? 'fa-check' : 'fa-exclamation-triangle'} me-1"></i>
+                        Hooks (${sh.hooks_count})
+                    </span>
+                    <small class="d-block text-muted mt-1">${ok ? sh.hooks_count + ' hook(s) installed' : 'settings.json missing or no hooks'}</small>
+                </div>`;
+            }
+
+            // Hook scripts
+            if (data.hook_scripts && data.hook_scripts.length > 0) {
+                html += '<div class="col-12 mt-2"><strong class="text-muted">Hook Scripts:</strong></div>';
+                data.hook_scripts.forEach(s => {
+                    html += `<div class="col-md-6">
+                        <span class="badge ${s.exists ? 'bg-success' : 'bg-danger'} me-1">
+                            <i class="fas ${s.exists ? 'fa-check' : 'fa-times'} me-1"></i>${s.name}
+                        </span>
+                    </div>`;
+                });
+            }
+
+            html += '</div>';
+            body.innerHTML = html;
+        })
+        .catch(() => {
+            body.innerHTML = '<div class="text-danger small">Failed to load startup status.</div>';
+        });
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    loadTraceMode();
+    loadStartupStatus();
+});
 </script>
 
 <style>

@@ -49,7 +49,7 @@ class AlertSender:
                 'alert_rules': {
                     'critical_only': True,
                     'include_warnings': False,
-                    'alert_types': ['health_score', 'daemon_down', 'error_threshold'],
+                    'alert_types': ['health_score', 'hook_failure', 'error_threshold'],
                     'quiet_hours': {
                         'enabled': False,
                         'start': '22:00',
