@@ -37,44 +37,36 @@ class MemorySystemMonitor:
         ]
 
     def get_daemon_status(self):
-        """Get status of all 10 memory system daemons"""
-        pids_dir = self.memory_dir / '.pids'
-        statuses = []
+        """
+        Get status of memory system hooks (daemons removed in v3.3.0).
+        Now reports on the 3 Claude Code hook scripts instead of daemon PIDs.
+        """
+        current_dir = self.memory_dir / 'current'
 
-        for daemon in self.daemons:
-            pid_file = pids_dir / f'{daemon}.pid'
+        # Map hook scripts to friendly names (replaces daemon list)
+        hook_scripts = [
+            ('3-level-flow.py', '3-level-flow', 'UserPromptSubmit hook - runs 3-level architecture'),
+            ('clear-session-handler.py', 'clear-session-handler', 'UserPromptSubmit hook - session state management'),
+            ('stop-notifier.py', 'stop-notifier', 'Stop hook - session summary and voice notification'),
+        ]
+
+        statuses = []
+        for script_file, name, description in hook_scripts:
+            script_path = current_dir / script_file
+            exists = script_path.exists()
             status = {
-                'name': daemon,
-                'status': 'unknown',
+                'name': name,
+                'status': 'running' if exists else 'not_started',
                 'pid': None,
-                'last_activity': None
+                'last_activity': None,
+                'description': description,
+                'type': 'hook'
             }
 
-            if pid_file.exists():
+            if exists:
                 try:
-                    pid = int(pid_file.read_text().strip())
-                    # Check if process is actually running
-                    if self._is_process_running(pid):
-                        status['status'] = 'running'
-                        status['pid'] = pid
-                    else:
-                        status['status'] = 'stopped'
-                except Exception:
-                    status['status'] = 'error'
-            else:
-                status['status'] = 'not_started'
-
-            # Check last activity from logs
-            log_file = self.logs_dir / f'{daemon}.log'
-            if log_file.exists():
-                try:
-                    lines = log_file.read_text().splitlines()
-                    if lines:
-                        # Get last log line timestamp
-                        last_line = lines[-1]
-                        if '[' in last_line:
-                            timestamp_str = last_line.split('[')[1].split(']')[0]
-                            status['last_activity'] = timestamp_str
+                    mtime = datetime.fromtimestamp(script_path.stat().st_mtime)
+                    status['last_activity'] = mtime.strftime('%Y-%m-%d %H:%M:%S')
                 except Exception:
                     pass
 
@@ -221,9 +213,10 @@ class MemorySystemMonitor:
         return stats
 
     def get_model_selection_distribution(self):
-        """Get model selection distribution stats"""
-        model_log = self.logs_dir / 'model-usage.log'
-
+        """
+        Get model selection distribution stats.
+        Reads from flow-trace.json final_decision.model_selected.
+        """
         stats = {
             'total_requests': 0,
             'haiku': 0,
@@ -234,25 +227,41 @@ class MemorySystemMonitor:
             'opus_percent': 0
         }
 
-        if model_log.exists():
-            try:
-                lines = model_log.read_text().splitlines()
-                stats['total_requests'] = len(lines)
+        sessions_dir = self.logs_dir / 'sessions'
+        if not sessions_dir.exists():
+            return stats
 
-                for line in lines:
-                    if 'haiku' in line.lower():
+        try:
+            trace_files = sorted(
+                sessions_dir.glob('*/flow-trace.json'),
+                key=lambda p: p.stat().st_mtime,
+                reverse=True
+            )[:200]
+
+            for tf in trace_files:
+                try:
+                    data = json.loads(tf.read_text(encoding='utf-8', errors='ignore'))
+                    fd = data.get('final_decision', {})
+                    model = fd.get('model_selected', '').lower()
+                    if not model:
+                        continue
+                    stats['total_requests'] += 1
+                    if 'haiku' in model:
                         stats['haiku'] += 1
-                    elif 'sonnet' in line.lower():
+                    elif 'sonnet' in model:
                         stats['sonnet'] += 1
-                    elif 'opus' in line.lower():
+                    elif 'opus' in model:
                         stats['opus'] += 1
+                except Exception:
+                    continue
 
-                if stats['total_requests'] > 0:
-                    stats['haiku_percent'] = (stats['haiku'] / stats['total_requests']) * 100
-                    stats['sonnet_percent'] = (stats['sonnet'] / stats['total_requests']) * 100
-                    stats['opus_percent'] = (stats['opus'] / stats['total_requests']) * 100
-            except Exception as e:
-                print(f"Error reading model usage: {e}")
+            if stats['total_requests'] > 0:
+                stats['haiku_percent'] = round((stats['haiku'] / stats['total_requests']) * 100, 1)
+                stats['sonnet_percent'] = round((stats['sonnet'] / stats['total_requests']) * 100, 1)
+                stats['opus_percent'] = round((stats['opus'] / stats['total_requests']) * 100, 1)
+
+        except Exception as e:
+            print(f"Error reading model distribution: {e}")
 
         return stats
 
@@ -344,34 +353,45 @@ class MemorySystemMonitor:
         return stats
 
     def get_system_health_score(self):
-        """Calculate overall memory system health score"""
-        daemon_statuses = self.get_daemon_status()
-        running_daemons = len([d for d in daemon_statuses if d['status'] == 'running'])
+        """
+        Calculate overall memory system health score.
+        Hooks-based scoring (daemons removed in v3.3.0):
+        - 60pts: Hook scripts present in current/ directory
+        - 20pts: Core policy scripts present
+        - 20pts: Session logs exist (system is active)
+        """
+        current_dir = self.memory_dir / 'current'
 
-        # Components scoring
-        daemon_score = (running_daemons / len(self.daemons)) * 40  # 40% weight
+        # 60pts: Hook scripts (3 scripts, 20pts each)
+        hook_scripts = ['3-level-flow.py', 'clear-session-handler.py', 'stop-notifier.py']
+        hooks_present = sum(1 for s in hook_scripts if (current_dir / s).exists())
+        hooks_score = int((hooks_present / len(hook_scripts)) * 60)
 
-        # Check if critical daemons are running
-        critical_daemons = ['context-daemon', 'failure-prevention-daemon']
-        critical_running = len([d for d in daemon_statuses if d['name'] in critical_daemons and d['status'] == 'running'])
-        critical_score = (critical_running / len(critical_daemons)) * 30  # 30% weight
+        # 20pts: Core policy scripts present
+        policy_scripts = ['auto-fix-enforcer.py', 'context-monitor-v2.py', 'blocking-policy-enforcer.py']
+        policies_present = sum(1 for s in policy_scripts if (current_dir / s).exists())
+        policy_score = int((policies_present / len(policy_scripts)) * 20)
 
-        # Check policy enforcement (if active in last hour)
-        policy_stats = self.get_policy_enforcement_stats()
-        policy_score = 20 if policy_stats['total_enforcements'] > 0 else 0  # 20% weight
+        # 20pts: Session logs exist and are recent
+        sessions_dir = self.logs_dir / 'sessions'
+        session_score = 0
+        if sessions_dir.exists():
+            recent_traces = list(sessions_dir.glob('*/flow-trace.json'))
+            if recent_traces:
+                # Check if any session is in last 24h
+                cutoff = datetime.now() - timedelta(hours=24)
+                recent = [t for t in recent_traces if datetime.fromtimestamp(t.stat().st_mtime) > cutoff]
+                session_score = 20 if recent else 10  # 10 if traces exist but not recent
 
-        # Check cache effectiveness
-        cache_stats = self.get_context_optimization_stats()
-        cache_score = 10 if cache_stats['cached_files'] > 0 else 0  # 10% weight
-
-        total_score = daemon_score + critical_score + policy_score + cache_score
+        total_score = hooks_score + policy_score + session_score
 
         return {
             'overall_score': round(total_score, 1),
-            'daemon_health': round(daemon_score, 1),
-            'critical_health': round(critical_score, 1),
-            'policy_activity': round(policy_score, 1),
-            'cache_efficiency': round(cache_score, 1),
+            'hooks_health': round(hooks_score, 1),
+            'policy_health': round(policy_score, 1),
+            'session_activity': round(session_score, 1),
+            'hooks_present': hooks_present,
+            'hooks_total': len(hook_scripts),
             'status': 'healthy' if total_score >= 80 else 'degraded' if total_score >= 60 else 'critical'
         }
 

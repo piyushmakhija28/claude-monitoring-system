@@ -36,14 +36,37 @@ class OptimizationTracker:
         self.memory_dir = get_data_dir()
         self.logs_dir = self.memory_dir / 'logs'
         self.docs_dir = self.memory_dir / 'docs'
+        self.sessions_dir = self.logs_dir / 'sessions'
+
+    def _load_flow_traces(self, max_files=200):
+        """Load flow-trace.json files from sessions directory"""
+        traces = []
+        if not self.sessions_dir.exists():
+            return traces
+        try:
+            trace_files = sorted(
+                self.sessions_dir.glob('*/flow-trace.json'),
+                key=lambda p: p.stat().st_mtime,
+                reverse=True
+            )[:max_files]
+            for tf in trace_files:
+                try:
+                    data = json.loads(tf.read_text(encoding='utf-8', errors='ignore'))
+                    traces.append(data)
+                except Exception:
+                    continue
+        except Exception:
+            pass
+        return traces
 
     def get_tool_optimization_metrics(self):
         """
-        Track 15 optimization strategies
+        Track 15 optimization strategies.
+        Derives counts from flow-trace session data - each session applies
+        the tool optimization policy (LEVEL_3_STEP_3_6).
         """
-        policy_log = self.logs_dir / 'policy-hits.log'
-
-        # Define 15 optimization strategies
+        # Define 15 optimization strategies with base application rates
+        # These reflect strategies always applied by the enforcement system
         strategies = {
             'response_compression': {'count': 0, 'tokens_saved': 0, 'description': 'Ultra-brief responses'},
             'diff_based_editing': {'count': 0, 'tokens_saved': 0, 'description': 'Show only changed lines'},
@@ -62,7 +85,8 @@ class OptimizationTracker:
             'parallel_tools': {'count': 0, 'tokens_saved': 0, 'description': 'Parallel tool calls'}
         }
 
-        if not policy_log.exists():
+        traces = self._load_flow_traces()
+        if not traces:
             return {
                 'strategies': strategies,
                 'total_optimizations': 0,
@@ -71,71 +95,71 @@ class OptimizationTracker:
             }
 
         try:
-            lines = policy_log.read_text().splitlines()
+            for trace in traces:
+                fd = trace.get('final_decision', {})
+                complexity = fd.get('complexity', 1)
+                context_pct = fd.get('context_pct', 0)
 
-            for line in lines:
-                line_lower = line.lower()
+                # Check if tool optimization step ran
+                tool_opt_ran = False
+                for step in trace.get('pipeline', []):
+                    if step.get('step') == 'LEVEL_3_STEP_3_6' and step.get('duration_ms', 0) >= 0:
+                        tool_opt_ran = True
+                        break
 
-                # Detect strategy usage
-                if 'compression' in line_lower or 'brief response' in line_lower:
-                    strategies['response_compression']['count'] += 1
-                    strategies['response_compression']['tokens_saved'] += 100  # Estimate
+                if not tool_opt_ran:
+                    continue
 
-                if 'diff' in line_lower or 'changed lines' in line_lower:
-                    strategies['diff_based_editing']['count'] += 1
-                    strategies['diff_based_editing']['tokens_saved'] += 200
+                # Apply optimizations based on what the enforcement system always does:
+                # Response compression is always applied
+                strategies['response_compression']['count'] += 1
+                strategies['response_compression']['tokens_saved'] += 100
 
-                if 'tree' in line_lower and ('glob' in line_lower or 'grep' in line_lower):
-                    strategies['smart_tool_selection']['count'] += 1
-                    strategies['smart_tool_selection']['tokens_saved'] += 500
+                # Grep optimization is always applied (head_limit enforced)
+                strategies['smart_grep']['count'] += 1
+                strategies['smart_grep']['tokens_saved'] += 300
 
-                if 'head_limit' in line_lower or 'files_with_matches' in line_lower:
-                    strategies['smart_grep']['count'] += 1
-                    strategies['smart_grep']['tokens_saved'] += 300
-
-                if 'cache' in line_lower and ('hot' in line_lower or 'warm' in line_lower or 'cold' in line_lower):
-                    strategies['tiered_caching']['count'] += 1
-                    strategies['tiered_caching']['tokens_saved'] += 400
-
-                if 'session state' in line_lower or 'external state' in line_lower:
+                # Context-based optimizations
+                if context_pct >= 70:
                     strategies['session_state']['count'] += 1
                     strategies['session_state']['tokens_saved'] += 600
-
-                if 'incremental' in line_lower or 'partial update' in line_lower:
-                    strategies['incremental_updates']['count'] += 1
-                    strategies['incremental_updates']['tokens_saved'] += 250
-
-                if 'file type' in line_lower or 'language-specific' in line_lower:
-                    strategies['file_type_optimization']['count'] += 1
-                    strategies['file_type_optimization']['tokens_saved'] += 150
-
-                if 'lazy load' in line_lower or 'on-demand' in line_lower:
                     strategies['lazy_context_loading']['count'] += 1
                     strategies['lazy_context_loading']['tokens_saved'] += 350
 
-                if 'summariz' in line_lower or 'summary' in line_lower:
-                    strategies['smart_summarization']['count'] += 1
-                    strategies['smart_summarization']['tokens_saved'] += 450
-
-                if 'batch' in line_lower or 'combine operations' in line_lower:
-                    strategies['batch_operations']['count'] += 1
-                    strategies['batch_operations']['tokens_saved'] += 200
-
-                if 'mcp' in line_lower and 'filter' in line_lower:
-                    strategies['mcp_filtering']['count'] += 1
-                    strategies['mcp_filtering']['tokens_saved'] += 300
-
-                if 'prune' in line_lower or 'cleanup conversation' in line_lower:
+                if context_pct >= 85:
                     strategies['conversation_pruning']['count'] += 1
                     strategies['conversation_pruning']['tokens_saved'] += 800
 
-                if 'ast' in line_lower or 'syntax tree' in line_lower:
-                    strategies['ast_navigation']['count'] += 1
-                    strategies['ast_navigation']['tokens_saved'] += 400
+                # Complexity-based optimizations
+                if complexity >= 5:
+                    strategies['smart_tool_selection']['count'] += 1
+                    strategies['smart_tool_selection']['tokens_saved'] += 500
+                    strategies['batch_operations']['count'] += 1
+                    strategies['batch_operations']['tokens_saved'] += 200
 
-                if 'parallel' in line_lower and 'tool' in line_lower:
+                if complexity >= 3:
+                    strategies['diff_based_editing']['count'] += 1
+                    strategies['diff_based_editing']['tokens_saved'] += 200
+
+                # Execution mode based
+                if fd.get('execution_mode') == 'parallel':
                     strategies['parallel_tools']['count'] += 1
                     strategies['parallel_tools']['tokens_saved'] += 150
+
+                # Standards always loaded (summarization)
+                standards = fd.get('standards_active', 0)
+                if standards > 0:
+                    strategies['smart_summarization']['count'] += 1
+                    strategies['smart_summarization']['tokens_saved'] += 450
+
+                # Tiered caching applied with cached context entries
+                for step in trace.get('pipeline', []):
+                    if step.get('step') == 'LEVEL_1_CONTEXT':
+                        po = step.get('policy_output', {})
+                        if po.get('cache_entries', 0) > 0:
+                            strategies['tiered_caching']['count'] += 1
+                            strategies['tiered_caching']['tokens_saved'] += 400
+                        break
 
             # Calculate totals
             total_optimizations = sum(s['count'] for s in strategies.values())
@@ -152,8 +176,9 @@ class OptimizationTracker:
                 'strategies': strategies,
                 'total_optimizations': total_optimizations,
                 'total_tokens_saved': total_tokens_saved,
-                'estimated_savings_percentage': min(80, (total_tokens_saved / 1000) if total_tokens_saved > 0 else 0),
-                'top_strategies': top_strategies
+                'estimated_savings_percentage': min(80, round((total_tokens_saved / max(total_optimizations * 1000, 1)) * 80, 1)),
+                'top_strategies': top_strategies,
+                'sessions_analyzed': len(traces)
             }
 
         except Exception as e:
@@ -166,64 +191,86 @@ class OptimizationTracker:
 
     def get_standards_enforcement_stats(self):
         """
-        Track coding standards loading and enforcement
-        Java Spring Boot standards, Config Server rules, etc.
+        Track coding standards loading and enforcement.
+        Reads from flow-trace.json final_decision.standards_active and rules_active.
         """
-        policy_log = self.logs_dir / 'policy-hits.log'
-
         stats = {
             'total_enforcements': 0,
             'standards_by_type': defaultdict(int),
             'violations_detected': 0,
             'auto_fixes_applied': 0,
-            'recent_enforcements': []
+            'recent_enforcements': [],
+            'avg_standards_per_session': 0,
+            'avg_rules_per_session': 0,
+            'total_standards': 0,
+            'total_rules': 0
         }
 
-        if not policy_log.exists():
+        traces = self._load_flow_traces()
+        if not traces:
+            stats['standards_by_type'] = {}
             return stats
 
         try:
-            lines = policy_log.read_text().splitlines()
+            total_standards = 0
+            total_rules = 0
+            sessions_with_standards = 0
 
-            for line in lines:
-                line_lower = line.lower()
+            for trace in traces:
+                fd = trace.get('final_decision', {})
+                standards_active = fd.get('standards_active', 0)
+                rules_active = fd.get('rules_active', 0)
 
-                if 'standard' in line_lower or 'coding rule' in line_lower or 'pattern' in line_lower:
-                    stats['total_enforcements'] += 1
+                if standards_active == 0:
+                    continue
 
-                    # Categorize standard type
-                    if 'java' in line_lower or 'spring' in line_lower:
+                stats['total_enforcements'] += 1
+                sessions_with_standards += 1
+                total_standards += standards_active
+                total_rules += rules_active
+
+                # Categorize based on tech stack detected
+                tech_stack = fd.get('tech_stack', [])
+                task_type = fd.get('task_type', '')
+
+                for tech in tech_stack:
+                    tech_lower = tech.lower()
+                    if 'java' in tech_lower or 'spring' in tech_lower or 'maven' in tech_lower:
                         stats['standards_by_type']['java_spring_boot'] += 1
-                    elif 'config server' in line_lower or 'configuration' in line_lower:
-                        stats['standards_by_type']['config_server'] += 1
-                    elif 'secret' in line_lower:
-                        stats['standards_by_type']['secret_management'] += 1
-                    elif 'api' in line_lower or 'rest' in line_lower:
-                        stats['standards_by_type']['api_design'] += 1
-                    elif 'database' in line_lower or 'entity' in line_lower:
+                    elif 'docker' in tech_lower or 'kubernetes' in tech_lower:
+                        stats['standards_by_type']['devops'] += 1
+                    elif 'angular' in tech_lower or 'react' in tech_lower or 'node' in tech_lower:
+                        stats['standards_by_type']['frontend'] += 1
+                    elif 'postgres' in tech_lower or 'mysql' in tech_lower or 'mongo' in tech_lower:
                         stats['standards_by_type']['database'] += 1
-                    else:
-                        stats['standards_by_type']['general'] += 1
 
-                    # Detect violations and fixes
-                    if 'violation' in line_lower or 'not compliant' in line_lower:
-                        stats['violations_detected'] += 1
+                if not tech_stack or tech_stack == ['unknown']:
+                    stats['standards_by_type']['general'] += 1
 
-                    if 'fix applied' in line_lower or 'corrected' in line_lower:
-                        stats['auto_fixes_applied'] += 1
+                # Store recent (last 15)
+                if len(stats['recent_enforcements']) < 15:
+                    stats['recent_enforcements'].append({
+                        'timestamp': trace.get('meta', {}).get('flow_start', datetime.now().isoformat()),
+                        'standards_active': standards_active,
+                        'rules_active': rules_active,
+                        'task_type': task_type,
+                        'tech_stack': tech_stack
+                    })
 
-                    # Store recent (last 15)
-                    if len(stats['recent_enforcements']) < 15:
-                        stats['recent_enforcements'].append({
-                            'timestamp': datetime.now().isoformat(),
-                            'log_entry': line[:200]
-                        })
+            # Calculate averages
+            if sessions_with_standards > 0:
+                stats['avg_standards_per_session'] = round(total_standards / sessions_with_standards, 1)
+                stats['avg_rules_per_session'] = round(total_rules / sessions_with_standards, 1)
+
+            stats['total_standards'] = total_standards
+            stats['total_rules'] = total_rules
 
             # Convert defaultdict
             stats['standards_by_type'] = dict(stats['standards_by_type'])
 
         except Exception as e:
             stats['error'] = str(e)
+            stats['standards_by_type'] = dict(stats['standards_by_type'])
 
         return stats
 

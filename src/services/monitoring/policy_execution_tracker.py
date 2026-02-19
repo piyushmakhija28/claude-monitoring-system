@@ -38,26 +38,78 @@ class PolicyExecutionTracker:
         self.tracker_cache = get_data_dir() / 'policy_execution_cache.json'
 
     def get_enforcer_state(self):
-        """Get current blocking enforcer state"""
+        """
+        Get current blocking enforcer state.
+        Derives state from most recent flow-trace.json pipeline steps.
+        Falls back to .blocking-enforcer-state.json if it exists.
+        """
+        # Try .blocking-enforcer-state.json first (legacy)
         try:
             if self.enforcer_state.exists():
                 with open(self.enforcer_state, 'r') as f:
                     state = json.load(f)
-                return {
-                    'session_started': state.get('session_started', False),
-                    'standards_loaded': state.get('standards_loaded', False),
-                    'prompt_generated': state.get('prompt_generated', False),
-                    'tasks_created': state.get('tasks_created', False),
-                    'plan_mode_decided': state.get('plan_mode_decided', False),
-                    'model_selected': state.get('model_selected', False),
-                    'skills_agents_checked': state.get('skills_agents_checked', False),
-                    'context_checked': state.get('context_checked', False),
-                    'total_violations': state.get('total_violations', 0),
-                    'last_violation': state.get('last_violation'),
-                    'session_start_time': state.get('session_start_time')
-                }
+                # Only use if it was written recently (< 1 hour)
+                ts = state.get('session_start_time')
+                if ts:
+                    try:
+                        age = datetime.now() - datetime.fromisoformat(ts)
+                        if age.total_seconds() < 3600:
+                            return {
+                                'session_started': state.get('session_started', False),
+                                'standards_loaded': state.get('standards_loaded', False),
+                                'prompt_generated': state.get('prompt_generated', False),
+                                'tasks_created': state.get('tasks_created', False),
+                                'plan_mode_decided': state.get('plan_mode_decided', False),
+                                'model_selected': state.get('model_selected', False),
+                                'skills_agents_checked': state.get('skills_agents_checked', False),
+                                'context_checked': state.get('context_checked', False),
+                                'total_violations': state.get('total_violations', 0),
+                                'last_violation': state.get('last_violation'),
+                                'session_start_time': state.get('session_start_time')
+                            }
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
+        # Derive from most recent flow-trace.json
+        try:
+            sessions_dir = self.memory_dir / 'logs' / 'sessions'
+            if sessions_dir.exists():
+                trace_files = sorted(
+                    sessions_dir.glob('*/flow-trace.json'),
+                    key=lambda p: p.stat().st_mtime,
+                    reverse=True
+                )
+                if trace_files:
+                    data = json.loads(trace_files[0].read_text(encoding='utf-8', errors='ignore'))
+                    pipeline = data.get('pipeline', [])
+                    fd = data.get('final_decision', {})
+                    meta = data.get('meta', {})
+
+                    # Check which steps passed successfully
+                    step_passed = {}
+                    for step in pipeline:
+                        step_name = step.get('step', '')
+                        # A step "passed" if it has duration_ms recorded (ran) and no error
+                        step_passed[step_name] = step.get('duration_ms', -1) >= 0
+
+                    return {
+                        'session_started': step_passed.get('LEVEL_1_SESSION', False),
+                        'standards_loaded': step_passed.get('LEVEL_2_STANDARDS', False),
+                        'prompt_generated': step_passed.get('LEVEL_3_STEP_3_0', False),
+                        'tasks_created': step_passed.get('LEVEL_3_STEP_3_1', False),
+                        'plan_mode_decided': step_passed.get('LEVEL_3_STEP_3_2', False),
+                        'model_selected': step_passed.get('LEVEL_3_STEP_3_4', False),
+                        'skills_agents_checked': step_passed.get('LEVEL_3_STEP_3_5', False),
+                        'context_checked': step_passed.get('LEVEL_1_CONTEXT', False),
+                        'total_violations': 0,
+                        'last_violation': None,
+                        'session_start_time': meta.get('flow_start'),
+                        'session_id': fd.get('session_id')
+                    }
         except Exception as e:
-            print(f"Error loading enforcer state: {e}")
+            print(f"Error deriving enforcer state from flow-trace: {e}")
 
         return {
             'session_started': False,
@@ -74,55 +126,117 @@ class PolicyExecutionTracker:
         }
 
     def parse_policy_log(self, hours=24):
-        """Parse policy-hits.log for recent executions"""
+        """
+        Parse recent policy executions.
+        Primary source: flow-trace.json pipeline steps (always available).
+        Fallback: policy-hits.log (if it exists with matching format).
+        """
         executions = []
+        cutoff_time = datetime.now() - timedelta(hours=hours)
 
-        try:
-            if not self.policy_log.exists():
-                return executions
+        # Step name to policy category mapping
+        step_to_category = {
+            'LEVEL_MINUS_1': 'Auto-Fix Enforcement',
+            'LEVEL_1_CONTEXT': 'Context Management',
+            'LEVEL_1_SESSION': 'Session Management',
+            'LEVEL_2_STANDARDS': 'Standards System',
+            'LEVEL_3_STEP_3_0': 'Prompt Generation',
+            'LEVEL_3_STEP_3_1': 'Task Breakdown',
+            'LEVEL_3_STEP_3_2': 'Plan Mode',
+            'LEVEL_3_STEP_3_3': 'Context Check',
+            'LEVEL_3_STEP_3_4': 'Model Selection',
+            'LEVEL_3_STEP_3_5': 'Skill/Agent',
+            'LEVEL_3_STEP_3_6': 'Tool Optimization',
+            'LEVEL_3_STEP_3_7': 'Failure Prevention',
+            'LEVEL_3_STEP_3_8': 'Parallel Analysis',
+            'LEVEL_3_STEP_3_9': 'Task Execution',
+            'LEVEL_3_STEP_3_10': 'Session Save',
+            'LEVEL_3_STEP_3_11': 'Git Auto-Commit',
+            'LEVEL_3_STEP_3_12': 'Logging'
+        }
 
-            cutoff_time = datetime.now() - timedelta(hours=hours)
+        # Parse flow-trace.json files (primary source)
+        sessions_dir = self.memory_dir / 'logs' / 'sessions'
+        if sessions_dir.exists():
+            try:
+                trace_files = sorted(
+                    sessions_dir.glob('*/flow-trace.json'),
+                    key=lambda p: p.stat().st_mtime,
+                    reverse=True
+                )[:200]
 
-            with open(self.policy_log, 'r', encoding='utf-8', errors='ignore') as f:
-                for line in f:
-                    line = line.strip()
-                    if not line:
-                        continue
-
-                    # Parse line format: [timestamp] daemon | status | message
+                for tf in trace_files:
                     try:
-                        # Extract timestamp
-                        if line.startswith('['):
-                            timestamp_end = line.index(']')
-                            timestamp_str = line[1:timestamp_end]
-                            timestamp = datetime.fromisoformat(timestamp_str)
+                        data = json.loads(tf.read_text(encoding='utf-8', errors='ignore'))
+                        meta = data.get('meta', {})
+                        flow_start = meta.get('flow_start', '')
 
-                            # Skip if too old
-                            if timestamp < cutoff_time:
-                                continue
+                        if not flow_start:
+                            continue
 
-                            # Extract policy name and status
-                            rest = line[timestamp_end + 1:].strip()
-                            parts = rest.split('|')
+                        try:
+                            timestamp = datetime.fromisoformat(flow_start[:19])
+                        except ValueError:
+                            continue
 
-                            if len(parts) >= 3:
-                                policy_name = parts[0].strip()
-                                status = parts[1].strip()
-                                message = parts[2].strip()
+                        if timestamp < cutoff_time:
+                            continue
 
-                                # Categorize by policy type
-                                policy_category = self._categorize_policy(policy_name)
+                        fd = data.get('final_decision', {})
+                        session_id = fd.get('session_id', meta.get('session_id', ''))
 
-                                executions.append({
-                                    'timestamp': timestamp.isoformat(),
-                                    'policy_name': policy_name,
-                                    'policy_category': policy_category,
-                                    'status': status,
-                                    'message': message
-                                })
-                    except (ValueError, IndexError):
+                        for step in data.get('pipeline', []):
+                            step_name = step.get('step', '')
+                            category = step_to_category.get(step_name, 'Other')
+                            duration_ms = step.get('duration_ms', 0)
+                            status = 'SUCCESS' if duration_ms >= 0 else 'SKIPPED'
+
+                            executions.append({
+                                'timestamp': step.get('timestamp', flow_start)[:19],
+                                'policy_name': step.get('name', step_name),
+                                'policy_category': category,
+                                'status': status,
+                                'message': step.get('decision', f'{step_name} executed in {duration_ms}ms'),
+                                'duration_ms': duration_ms,
+                                'session_id': session_id
+                            })
+
+                    except Exception:
                         continue
 
+            except Exception as e:
+                print(f"Error parsing flow-trace files: {e}")
+
+        # Also try policy-hits.log as supplementary source
+        try:
+            if self.policy_log.exists():
+                with open(self.policy_log, 'r', encoding='utf-8', errors='ignore') as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        try:
+                            if line.startswith('['):
+                                timestamp_end = line.index(']')
+                                timestamp_str = line[1:timestamp_end]
+                                timestamp = datetime.fromisoformat(timestamp_str)
+                                if timestamp < cutoff_time:
+                                    continue
+                                rest = line[timestamp_end + 1:].strip()
+                                parts = rest.split('|')
+                                if len(parts) >= 3:
+                                    policy_name = parts[0].strip()
+                                    status = parts[1].strip()
+                                    message = parts[2].strip()
+                                    executions.append({
+                                        'timestamp': timestamp.isoformat(),
+                                        'policy_name': policy_name,
+                                        'policy_category': self._categorize_policy(policy_name),
+                                        'status': status,
+                                        'message': message
+                                    })
+                        except (ValueError, IndexError):
+                            continue
         except Exception as e:
             print(f"Error parsing policy log: {e}")
 

@@ -28,38 +28,81 @@ class AutomationTracker:
 
     def get_session_start_recommendations(self):
         """
-        Get latest session-start recommendations
-        Reads from: ~/.claude/memory/.last-automation-check.json
+        Get latest session-start recommendations.
+        Derives from most recent flow-trace.json final_decision.
         """
-        recommendations_file = self.memory_dir / '.last-automation-check.json'
-
-        if not recommendations_file.exists():
+        sessions_dir = self.logs_dir / 'sessions'
+        if not sessions_dir.exists():
             return {
                 'available': False,
-                'message': 'No recommendations available. Run session-start.sh first.',
+                'message': 'No sessions found. Send a message to Claude Code first.',
                 'recommendations': None
             }
 
         try:
-            with open(recommendations_file, 'r') as f:
-                data = json.load(f)
+            trace_files = sorted(
+                sessions_dir.glob('*/flow-trace.json'),
+                key=lambda p: p.stat().st_mtime,
+                reverse=True
+            )
+
+            if not trace_files:
+                return {
+                    'available': False,
+                    'message': 'No flow-trace sessions found.',
+                    'recommendations': None
+                }
+
+            data = json.loads(trace_files[0].read_text(encoding='utf-8', errors='ignore'))
+            fd = data.get('final_decision', {})
+            meta = data.get('meta', {})
+
+            # Derive context status from LEVEL_1_CONTEXT step
+            context_status = 'UNKNOWN'
+            context_pct = fd.get('context_pct', 0)
+            if context_pct < 70:
+                context_status = 'GREEN'
+            elif context_pct < 80:
+                context_status = 'YELLOW'
+            elif context_pct < 85:
+                context_status = 'ORANGE'
+            else:
+                context_status = 'RED'
+
+            # Derive skill/agent recommendation
+            skill_or_agent = fd.get('skill_or_agent', 'adaptive-skill-intelligence')
+            skills_recommended = fd.get('supplementary_skills', [])
+            agents_recommended = []
+            if 'agent' in skill_or_agent.lower() or skill_or_agent.endswith('-engineer') or skill_or_agent.endswith('-agent'):
+                agents_recommended = [skill_or_agent]
+            else:
+                if skill_or_agent and skill_or_agent != 'adaptive-skill-intelligence':
+                    skills_recommended = [skill_or_agent] + skills_recommended
 
             return {
                 'available': True,
-                'timestamp': data.get('timestamp'),
-                'model_recommendation': data.get('model'),
-                'skills_recommended': data.get('skills', []),
-                'agents_recommended': data.get('agents', []),
-                'context_status': data.get('context_status', 'UNKNOWN'),
-                'context_percentage': data.get('context_percentage', 0),
-                'optimizations_needed': data.get('optimizations', []),
-                'daemons_status': data.get('daemons', {})
+                'timestamp': meta.get('flow_start', datetime.now().isoformat()),
+                'session_id': fd.get('session_id', ''),
+                'model_recommendation': fd.get('model_selected', 'SONNET'),
+                'model_reason': fd.get('model_reason', ''),
+                'skills_recommended': skills_recommended,
+                'agents_recommended': agents_recommended,
+                'context_status': context_status,
+                'context_percentage': context_pct,
+                'standards_active': fd.get('standards_active', 0),
+                'rules_active': fd.get('rules_active', 0),
+                'task_type': fd.get('task_type', ''),
+                'complexity': fd.get('complexity', 0),
+                'tech_stack': fd.get('tech_stack', []),
+                'optimizations_needed': ['offset/limit'] if context_pct >= 70 else [],
+                'source': 'flow-trace'
             }
+
         except Exception as e:
             return {
                 'available': False,
                 'error': str(e),
-                'message': 'Failed to read recommendations'
+                'message': 'Failed to read flow-trace recommendations'
             }
 
     def _is_process_running(self, pid):
@@ -76,53 +119,90 @@ class AutomationTracker:
 
     def get_task_breakdown_stats(self):
         """
-        Track task-phase-enforcer.py executions
-        Reads from policy-hits.log and task breakdown logs
+        Track task breakdown enforcement across sessions.
+        Reads from flow-trace.json final_decision.task_count and complexity.
         """
-        policy_log = self.logs_dir / 'policy-hits.log'
-
         stats = {
             'total_analyses': 0,
             'tasks_required': 0,
             'phases_required': 0,
             'complexity_distribution': defaultdict(int),
-            'recent_breakdowns': []
+            'recent_breakdowns': [],
+            'avg_tasks_per_session': 0,
+            'avg_complexity': 0
         }
 
-        if not policy_log.exists():
+        sessions_dir = self.logs_dir / 'sessions'
+        if not sessions_dir.exists():
+            stats['complexity_distribution'] = {}
             return stats
 
         try:
-            lines = policy_log.read_text().splitlines()
+            trace_files = sorted(
+                sessions_dir.glob('*/flow-trace.json'),
+                key=lambda p: p.stat().st_mtime,
+                reverse=True
+            )[:200]
 
-            for line in lines:
-                if 'task-phase-enforcer' in line or 'task-breakdown' in line:
+            total_tasks = 0
+            total_complexity = 0
+
+            for tf in trace_files:
+                try:
+                    data = json.loads(tf.read_text(encoding='utf-8', errors='ignore'))
+                    fd = data.get('final_decision', {})
+                    complexity = fd.get('complexity', 0)
+                    task_count = fd.get('task_count', 1)
+
+                    if not fd:
+                        continue
+
                     stats['total_analyses'] += 1
+                    total_complexity += complexity
+                    total_tasks += task_count
 
-                    # Parse complexity
-                    if 'complexity:' in line.lower():
-                        try:
-                            complexity = int(line.split('complexity:')[1].strip().split()[0])
-                            if complexity >= 3:
-                                stats['tasks_required'] += 1
-                            if complexity >= 6:
-                                stats['phases_required'] += 1
-                            stats['complexity_distribution'][complexity] += 1
-                        except:
-                            pass
+                    # Track breakdown thresholds
+                    if task_count >= 3:
+                        stats['tasks_required'] += 1
+                    if task_count >= 5 or complexity >= 10:
+                        stats['phases_required'] += 1
 
-                    # Store recent breakdowns (last 10)
+                    # Track complexity distribution (bucket into 0-4, 5-9, 10-14, 15+)
+                    if complexity <= 4:
+                        stats['complexity_distribution']['simple (0-4)'] += 1
+                    elif complexity <= 9:
+                        stats['complexity_distribution']['moderate (5-9)'] += 1
+                    elif complexity <= 14:
+                        stats['complexity_distribution']['complex (10-14)'] += 1
+                    else:
+                        stats['complexity_distribution']['very_complex (15+)'] += 1
+
+                    # Store recent (last 10)
                     if len(stats['recent_breakdowns']) < 10:
                         stats['recent_breakdowns'].append({
-                            'timestamp': datetime.now().isoformat(),
-                            'log_entry': line[:200]
+                            'timestamp': data.get('meta', {}).get('flow_start', datetime.now().isoformat()),
+                            'task_count': task_count,
+                            'complexity': complexity,
+                            'task_type': fd.get('task_type', ''),
+                            'model': fd.get('model_selected', ''),
+                            'plan_mode': fd.get('plan_mode', False),
+                            'session_id': fd.get('session_id', '')
                         })
+
+                except Exception:
+                    continue
+
+            # Calculate averages
+            if stats['total_analyses'] > 0:
+                stats['avg_tasks_per_session'] = round(total_tasks / stats['total_analyses'], 1)
+                stats['avg_complexity'] = round(total_complexity / stats['total_analyses'], 1)
 
             # Convert defaultdict to regular dict
             stats['complexity_distribution'] = dict(stats['complexity_distribution'])
 
         except Exception as e:
             stats['error'] = str(e)
+            stats['complexity_distribution'] = dict(stats['complexity_distribution'])
 
         return stats
 

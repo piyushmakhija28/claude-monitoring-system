@@ -24,14 +24,41 @@ class SkillAgentTracker:
         self.memory_dir = get_data_dir()
         self.logs_dir = self.memory_dir / 'logs'
         self.skills_dir = Path.home() / '.claude' / 'skills'
+        self.sessions_dir = self.logs_dir / 'sessions'
+
+    def _load_flow_traces(self, max_files=100):
+        """Load flow-trace.json files from sessions directory"""
+        traces = []
+        if not self.sessions_dir.exists():
+            return traces
+        try:
+            trace_files = sorted(
+                self.sessions_dir.glob('*/flow-trace.json'),
+                key=lambda p: p.stat().st_mtime,
+                reverse=True
+            )[:max_files]
+            for tf in trace_files:
+                try:
+                    data = json.loads(tf.read_text(encoding='utf-8', errors='ignore'))
+                    traces.append(data)
+                except Exception:
+                    continue
+        except Exception:
+            pass
+        return traces
+
+    def _get_skill_agent_step(self, trace):
+        """Extract LEVEL_3_STEP_3_5 policy_output from a trace"""
+        for step in trace.get('pipeline', []):
+            if step.get('step') == 'LEVEL_3_STEP_3_5':
+                return step.get('policy_output', {})
+        return {}
 
     def get_skill_selection_stats(self):
         """
         Track skill usage and auto-selection
-        Reads from policy-hits.log and skill usage logs
+        Reads from flow-trace.json LEVEL_3_STEP_3_5 policy_output
         """
-        policy_log = self.logs_dir / 'policy-hits.log'
-
         stats = {
             'total_skill_invocations': 0,
             'auto_selected': 0,
@@ -41,36 +68,37 @@ class SkillAgentTracker:
             'top_skills': []
         }
 
-        if not policy_log.exists():
+        traces = self._load_flow_traces()
+        if not traces:
             return stats
 
         try:
-            lines = policy_log.read_text().splitlines()
+            for trace in traces:
+                po = self._get_skill_agent_step(trace)
+                if not po:
+                    continue
 
-            for line in lines:
-                if 'skill' in line.lower() and ('invoked' in line.lower() or 'selected' in line.lower()):
-                    stats['total_skill_invocations'] += 1
+                selected_type = po.get('selected_type', '')
+                selected_name = po.get('selected_name', '')
 
-                    # Detect auto vs manual
-                    if 'auto' in line.lower():
-                        stats['auto_selected'] += 1
-                    else:
-                        stats['manual_invoked'] += 1
+                if selected_type != 'skill' or not selected_name:
+                    continue
 
-                    # Extract skill name
-                    if ':' in line:
-                        try:
-                            skill_name = line.split('skill:')[1].strip().split()[0].strip('",')
-                            stats['skills_by_name'][skill_name] += 1
-                        except:
-                            pass
+                stats['total_skill_invocations'] += 1
+                # All flow-trace selections are auto-selected by the 4-layer system
+                stats['auto_selected'] += 1
+                stats['skills_by_name'][selected_name] += 1
 
-                    # Store recent (last 20)
-                    if len(stats['recent_invocations']) < 20:
-                        stats['recent_invocations'].append({
-                            'timestamp': datetime.now().isoformat(),
-                            'log_entry': line[:200]
-                        })
+                # Store recent (last 20)
+                if len(stats['recent_invocations']) < 20:
+                    fd = trace.get('final_decision', {})
+                    stats['recent_invocations'].append({
+                        'timestamp': trace.get('meta', {}).get('flow_start', datetime.now().isoformat()),
+                        'skill_name': selected_name,
+                        'reason': po.get('reason', ''),
+                        'task_type': fd.get('task_type', ''),
+                        'complexity': fd.get('complexity', 0)
+                    })
 
             # Get top 10 skills
             stats['top_skills'] = sorted(
@@ -89,11 +117,9 @@ class SkillAgentTracker:
 
     def get_agent_usage_stats(self):
         """
-        Track agent invocations (Task tool usage)
-        Reads from agent usage logs
+        Track agent invocations
+        Reads from flow-trace.json LEVEL_3_STEP_3_5 policy_output
         """
-        policy_log = self.logs_dir / 'policy-hits.log'
-
         stats = {
             'total_agent_invocations': 0,
             'agents_by_type': defaultdict(int),
@@ -104,43 +130,53 @@ class SkillAgentTracker:
             'top_agents': []
         }
 
-        if not policy_log.exists():
+        traces = self._load_flow_traces()
+        if not traces:
             return stats
 
         try:
-            lines = policy_log.read_text().splitlines()
+            total_duration = 0
 
-            for line in lines:
-                if 'agent' in line.lower() and ('invoked' in line.lower() or 'task tool' in line.lower()):
-                    stats['total_agent_invocations'] += 1
+            for trace in traces:
+                po = self._get_skill_agent_step(trace)
+                if not po:
+                    continue
 
-                    # Extract agent type
-                    if 'subagent_type' in line.lower() or 'agent:' in line.lower():
-                        try:
-                            # Try different patterns
-                            if 'subagent_type:' in line:
-                                agent_type = line.split('subagent_type:')[1].strip().split()[0].strip('",')
-                            elif 'agent:' in line:
-                                agent_type = line.split('agent:')[1].strip().split()[0].strip('",')
-                            else:
-                                agent_type = 'unknown'
+                selected_type = po.get('selected_type', '')
+                selected_name = po.get('selected_name', '')
 
-                            stats['agents_by_type'][agent_type] += 1
-                        except:
-                            pass
+                if selected_type != 'agent' or not selected_name:
+                    continue
 
-                    # Detect parallel vs sequential
-                    if 'parallel' in line.lower():
-                        stats['parallel_agents'] += 1
-                    else:
-                        stats['sequential_agents'] += 1
+                stats['total_agent_invocations'] += 1
+                stats['agents_by_type'][selected_name] += 1
 
-                    # Store recent (last 15)
-                    if len(stats['recent_invocations']) < 15:
-                        stats['recent_invocations'].append({
-                            'timestamp': datetime.now().isoformat(),
-                            'log_entry': line[:200]
-                        })
+                # Duration from final_decision
+                fd = trace.get('final_decision', {})
+                meta = trace.get('meta', {})
+                duration = meta.get('duration_seconds', 0)
+                total_duration += duration
+
+                # Execution mode
+                if fd.get('execution_mode', '') == 'parallel':
+                    stats['parallel_agents'] += 1
+                else:
+                    stats['sequential_agents'] += 1
+
+                # Store recent (last 15)
+                if len(stats['recent_invocations']) < 15:
+                    stats['recent_invocations'].append({
+                        'timestamp': meta.get('flow_start', datetime.now().isoformat()),
+                        'agent_type': selected_name,
+                        'reason': po.get('reason', ''),
+                        'task_type': fd.get('task_type', ''),
+                        'complexity': fd.get('complexity', 0),
+                        'duration_seconds': round(duration, 1)
+                    })
+
+            # Calculate average duration
+            if stats['total_agent_invocations'] > 0:
+                stats['avg_agent_duration'] = round(total_duration / stats['total_agent_invocations'], 1)
 
             # Get top 10 agents
             stats['top_agents'] = sorted(
@@ -160,10 +196,8 @@ class SkillAgentTracker:
     def get_plan_mode_suggestions(self):
         """
         Track plan mode auto-suggestions
-        Reads from auto-plan-mode logs
+        Reads from flow-trace.json final_decision.plan_mode and complexity
         """
-        policy_log = self.logs_dir / 'policy-hits.log'
-
         stats = {
             'total_suggestions': 0,
             'auto_entered': 0,
@@ -173,47 +207,56 @@ class SkillAgentTracker:
             'recent_suggestions': []
         }
 
-        if not policy_log.exists():
+        traces = self._load_flow_traces()
+        if not traces:
+            stats['avg_complexity'] = 0
             return stats
 
         try:
-            lines = policy_log.read_text().splitlines()
+            for trace in traces:
+                fd = trace.get('final_decision', {})
+                complexity = fd.get('complexity', 0)
 
-            for line in lines:
-                if 'plan mode' in line.lower() or 'enter plan' in line.lower():
-                    stats['total_suggestions'] += 1
+                # Find plan mode step
+                plan_mode_triggered = False
+                for step in trace.get('pipeline', []):
+                    if step.get('step') == 'LEVEL_3_STEP_3_2':
+                        po = step.get('policy_output', {})
+                        plan_mode_val = po.get('plan_mode_required', False)
+                        if plan_mode_val or fd.get('plan_mode', False):
+                            plan_mode_triggered = True
+                        break
 
-                    # Detect outcome
-                    if 'auto-enter' in line.lower() or 'mandatory' in line.lower():
-                        stats['auto_entered'] += 1
-                    elif 'approved' in line.lower() or 'accepted' in line.lower():
-                        stats['user_approved'] += 1
-                    elif 'declined' in line.lower() or 'skipped' in line.lower():
-                        stats['user_declined'] += 1
+                stats['total_suggestions'] += 1
+                stats['complexity_scores'].append(complexity)
 
-                    # Extract complexity score
-                    if 'complexity:' in line.lower() or 'score:' in line.lower():
-                        try:
-                            score = int(line.split('score:' if 'score:' in line.lower() else 'complexity:')[1].strip().split()[0])
-                            stats['complexity_scores'].append(score)
-                        except:
-                            pass
+                # Categorize outcome based on final_decision.plan_mode
+                if fd.get('plan_mode', False):
+                    stats['auto_entered'] += 1
+                else:
+                    stats['user_declined'] += 1
 
-                    # Store recent (last 10)
-                    if len(stats['recent_suggestions']) < 10:
-                        stats['recent_suggestions'].append({
-                            'timestamp': datetime.now().isoformat(),
-                            'log_entry': line[:200]
-                        })
+                # Store recent (last 10)
+                if len(stats['recent_suggestions']) < 10:
+                    stats['recent_suggestions'].append({
+                        'timestamp': trace.get('meta', {}).get('flow_start', datetime.now().isoformat()),
+                        'plan_mode': fd.get('plan_mode', False),
+                        'complexity': complexity,
+                        'task_type': fd.get('task_type', ''),
+                        'model': fd.get('model_selected', '')
+                    })
 
             # Calculate average complexity
             if stats['complexity_scores']:
-                stats['avg_complexity'] = sum(stats['complexity_scores']) / len(stats['complexity_scores'])
+                stats['avg_complexity'] = round(
+                    sum(stats['complexity_scores']) / len(stats['complexity_scores']), 1
+                )
             else:
                 stats['avg_complexity'] = 0
 
         except Exception as e:
             stats['error'] = str(e)
+            stats['avg_complexity'] = 0
 
         return stats
 
