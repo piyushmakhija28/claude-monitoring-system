@@ -196,8 +196,34 @@ In these cases, inform user and skip auto-commit.
 
 ---
 
+## Timing Problem Fix (v1.1.0)
+
+### The Problem
+Stop hook fires after EVERY response — even mid-work. Auto-committing every response = partial commits.
+"Phase complete" is semantic knowledge only Claude has. Hook doesn't know context.
+
+### The Solution: Task-Completion Trigger
+
+```
+WRONG (too aggressive):
+  Stop hook → fires every response → partial/mid-work commits
+
+CORRECT (semantic timing):
+  TaskUpdate(status=completed) on LAST task of phase
+    → Claude knows phase is done
+    → THEN git commit + push
+    → Can't forget (task system tracks it)
+```
+
+**Rule:** Git commit triggers when Claude marks the LAST task of a phase as `completed`.
+This is the only reliable signal that a logical unit of work is done.
+
+**DO NOT commit on every response — only on task/phase completion.**
+
+---
+
 ## Status
 
 **ACTIVE**: This policy is permanent and applies to all sessions.
-**Version**: 1.0.0
-**Last Updated**: 2026-01-23 (Initial creation - Auto git commit/push on phase/todo completion)
+**Version**: 1.1.0
+**Last Updated**: 2026-02-22 (v1.1.0 - Task-completion trigger, fixes Stop hook timing problem)

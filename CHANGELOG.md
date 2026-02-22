@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [3.7.1] - 2026-02-22
+
+### Fixed
+- **Step 3.11 Git Auto-Commit Timing Problem** — Stop hook was too aggressive
+  - Problem: Stop hook fires after EVERY response, causing partial/mid-work commits
+  - Root cause: "Phase complete" is semantic knowledge only Claude has; hook has no context
+  - Fix: Git commit now triggers on `TaskUpdate(status=completed)` on LAST task of phase
+  - Why tasks work: Task completion = perfect timing signal; Claude tracks it, can't forget
+  - Updated: `policies/git-auto-commit-policy.md` (v1.0.0 → v1.1.0)
+  - Updated: `~/.claude/CLAUDE.md` Step 3.11 rule
+  - System version bumped: v3.7.7 → v3.7.8
+
+---
+
 ## [3.7.0] - 2026-02-22
 
 ### Changed
