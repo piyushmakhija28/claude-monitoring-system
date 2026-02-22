@@ -2,8 +2,8 @@
 
 ## Status: 🔴 CRITICAL - ALWAYS ACTIVE
 
-**Version:** 1.0.0  
-**Last Updated:** 2026-02-16  
+**Version:** 2.0.0
+**Last Updated:** 2026-02-22 — Always-Task Policy
 **Enforcement Level:** BLOCKING (Cannot proceed without compliance)
 
 ---
@@ -20,12 +20,16 @@ This is a **BLOCKING REQUIREMENT** - violations prevent execution.
 
 ### Task Breakdown (TaskCreate + TaskUpdate)
 
-**ALWAYS REQUIRED when:**
-- Modifying any files
-- Multi-step work (3+ steps)
-- Non-trivial complexity
-- Will take >2 minutes
-- Creates/updates resources
+**ALWAYS REQUIRED — EVERY REQUEST (v2.0.0):**
+- Complexity dekho mat — har coding/implementation request pe TaskCreate banana
+- Minimum 1 task per request (policy visibility ke liye)
+- 5+ tasks ho jayein = phases mein divide karo
+- Exception: Pure conversational/informational responses only
+
+**REMOVED CONDITIONS (old policy, now invalid):**
+- ~~"Non-trivial complexity"~~ — removed
+- ~~"Multi-step work (3+ steps)"~~ — removed
+- ~~"Will take >2 minutes"~~ — removed
 
 **Usage:**
 ```

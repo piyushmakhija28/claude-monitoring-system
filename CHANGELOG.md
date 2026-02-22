@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [3.7.0] - 2026-02-22
+
+### Changed
+- **Always-Task Policy (v2.0.0)** — Task breakdown no longer complexity-based
+  - Every coding/implementation request now creates minimum 1 TaskCreate
+  - Phase trigger changed: 5+ tasks = use phases (was: complexity >= 10)
+  - Purpose: Policy visibility — user can see policies running every request
+  - Updated: `policies/task-phase-enforcement-policy.md`
+  - Updated: `policies/03-execution-system/01-task-breakdown/automatic-task-breakdown-policy.md`
+  - Updated: `policies/03-execution-system/01-task-breakdown/task-phase-enforcer.py`
+
+---
+
 ## [3.6.0] - 2026-02-22
 
 ### Added

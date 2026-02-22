@@ -1,9 +1,10 @@
 # 🎯 Automatic Task Breakdown & Status Tracking Policy
 
-**VERSION:** 1.0.0
+**VERSION:** 2.0.0
 **CREATED:** 2026-02-16
-**PRIORITY:** 🔴 CRITICAL - STEP 1 (After Prompt Generation)
-**STATUS:** 🟢 ACTIVE
+**UPDATED:** 2026-02-22 — Always-Task Policy (v2.0.0)
+**PRIORITY:** CRITICAL - STEP 1 (After Prompt Generation)
+**STATUS:** ACTIVE
 
 ---
 
@@ -11,11 +12,15 @@
 
 **MANDATORY: After Step 0 (Prompt Generation), automatically:**
 
-1. ✅ **Analyze** structured prompt for complexity
-2. ✅ **Break down** into phases (if complex)
-3. ✅ **Create tasks** for each phase
+1. ✅ **ALWAYS create tasks** — complexity nahi dekhna, EVERY coding request pe TaskCreate
+2. ✅ **Break down** into phases (when 5+ tasks are generated)
+3. ✅ **Minimum 1 task** per request — policy visibility ke liye
 4. ✅ **Auto-track** status as Claude works
 5. ✅ **Auto-update** progress without manual intervention
+
+**v2.0.0 KEY CHANGE:** Task creation is NO LONGER complexity-based.
+Tasks are created on EVERY implementation request regardless of size.
+Purpose: User sees that policies are running on every request.
 
 ---
 
@@ -107,14 +112,16 @@ def get_complexity_level(score: int) -> str:
         return 'VERY_COMPLEX'
 ```
 
-**Complexity Decision Matrix:**
+**Complexity Decision Matrix (v2.0.0 — Always-Task Policy):**
 
 | Score | Level | Phases? | Tasks? | Strategy |
 |-------|-------|---------|--------|----------|
-| 0-4 | SIMPLE | ❌ No | ✅ 1 task | Single task, direct execution |
-| 5-9 | MODERATE | ❌ No | ✅ 3-5 tasks | Multiple tasks, no phases |
-| 10-19 | COMPLEX | ✅ Yes | ✅ 6-12 tasks | 2-3 phases, tasks per phase |
-| 20+ | VERY_COMPLEX | ✅ Yes | ✅ 12+ tasks | 4+ phases, granular tasks |
+| 0-4 | SIMPLE | No | YES (min 1) | 1 task — always create (v2.0.0 change) |
+| 5-9 | MODERATE | No | YES (3-5) | Multiple tasks, no phases |
+| 10-19 | COMPLEX | YES | YES (6-12) | 2-3 phases, tasks per phase |
+| 20+ | VERY_COMPLEX | YES | YES (12+) | 4+ phases, granular tasks |
+
+NOTE (v2.0.0): Tasks column is ALWAYS YES. Phase trigger: 5+ tasks = use phases.
 
 ---
 
