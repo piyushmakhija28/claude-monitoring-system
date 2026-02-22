@@ -104,9 +104,9 @@ Phase 2: [Next milestone]
 
 2. **Check Requirements**
    ```
-   IF file_modifications OR complexity >= 3:
-      → TaskCreate REQUIRED
-   
+   IF coding/implementation request (any complexity):
+      → TaskCreate REQUIRED (v2.0.0: ALWAYS, complexity ignored)
+
    IF size_score >= 6:
       → Phased execution REQUIRED
    ```
@@ -284,13 +284,10 @@ I'll implement the auth system...
 ## Checklist (Run BEFORE Every Request)
 
 ```
-□ Is this modifying files?
-   YES → TaskCreate REQUIRED
+□ Is this a coding/implementation request?
+   YES → TaskCreate REQUIRED (v2.0.0: ALWAYS, regardless of complexity)
 
 □ Is this multi-step work?
-   YES → TaskCreate REQUIRED
-
-□ Complexity score >= 3?
    YES → TaskCreate REQUIRED
 
 □ Size score >= 6?

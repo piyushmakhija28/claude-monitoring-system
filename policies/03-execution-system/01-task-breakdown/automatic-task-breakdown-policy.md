@@ -980,7 +980,8 @@ if __name__ == "__main__":
 
 ---
 
-**VERSION:** 1.0.0
+**VERSION:** 2.0.0
 **CREATED:** 2026-02-16
+**UPDATED:** 2026-02-22 — Always-Task Policy (tasks on every request, complexity ignored)
 **LOCATION:** `~/.claude/memory/automatic-task-breakdown-policy.md`
 **SCRIPT:** `~/.claude/memory/task-auto-breakdown.py`
