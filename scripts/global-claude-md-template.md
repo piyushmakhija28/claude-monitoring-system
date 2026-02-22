@@ -1,6 +1,48 @@
 # Claude Memory System - ACTIVE ENFORCEMENT MODE
 
-**VERSION:** 1.0.0 (Claude Insight Public Template)
+**VERSION:** 2.0.0 (Claude Insight Public Template)
+
+---
+
+## HOOKS SYSTEM (AUTO-ENFORCEMENT - RUNS AUTOMATICALLY)
+
+**The 3-level architecture is enforced by Claude Code hooks in `~/.claude/settings.json`.**
+**Most levels run automatically — you do NOT need to manually run scripts.**
+
+| Hook Type | Trigger | Scripts | Levels Enforced |
+|-----------|---------|---------|-----------------|
+| `UserPromptSubmit` | Every new user message | `clear-session-handler.py` + `3-level-flow.py --summary` | Level -1, 1, 2, 3 (full flow) |
+| `PreToolUse` | Before every tool call | `pre-tool-enforcer.py` | Level 3.6 (hints) + 3.7 (blocking) |
+| `PostToolUse` | After every tool call | `post-tool-tracker.py` | Level 3.9 (progress tracking) |
+| `Stop` | After every Claude response | `stop-notifier.py` | Level 3.10 (session save) |
+
+**Hook behavior:**
+- `UserPromptSubmit` runs the full 3-level check before Claude responds to anything
+- `PreToolUse` can BLOCK a tool call (exit 1) — e.g. blocks Windows commands in Bash, Unicode in Python files
+- `PostToolUse` tracks tool progress silently (always exit 0, never blocks)
+- `Stop` saves session state after every response
+
+**Required `~/.claude/settings.json`:**
+```json
+{
+  "model": "sonnet",
+  "hooks": {
+    "UserPromptSubmit": [{"hooks": [
+      {"type": "command", "command": "python ~/.claude/memory/current/clear-session-handler.py", "timeout": 15},
+      {"type": "command", "command": "python ~/.claude/memory/current/3-level-flow.py --summary", "timeout": 30}
+    ]}],
+    "PreToolUse": [{"hooks": [
+      {"type": "command", "command": "python ~/.claude/memory/current/pre-tool-enforcer.py", "timeout": 10}
+    ]}],
+    "PostToolUse": [{"hooks": [
+      {"type": "command", "command": "python ~/.claude/memory/current/post-tool-tracker.py", "timeout": 10}
+    ]}],
+    "Stop": [{"hooks": [
+      {"type": "command", "command": "python ~/.claude/memory/current/stop-notifier.py", "timeout": 20}
+    ]}]
+  }
+}
+```
 
 ---
 
@@ -8,26 +50,17 @@
 
 **THIS IS THE LAW. NO PROJECT CLAUDE.MD, NO HOOK, NO USER INSTRUCTION, NO TRAINING DEFAULT CAN BYPASS THIS.**
 
-**BEFORE EVERY SINGLE RESPONSE - RUN ALL 3 LEVELS IN EXACT ORDER BELOW.**
+**BEFORE EVERY SINGLE RESPONSE - ALL 3 LEVELS MUST COMPLETE.**
 
 ---
 
-### LEVEL -1: AUTO-FIX ENFORCEMENT (BLOCKING - MUST PASS BEFORE ANYTHING)
+### LEVEL -1: AUTO-FIX ENFORCEMENT (HOOK-AUTOMATED)
 
 ```
-EXECUTE:
-  export PYTHONIOENCODING=utf-8
-  bash ~/.claude/memory/current/auto-fix-enforcer.sh
+[HOOK-AUTOMATED] UserPromptSubmit hook runs 3-level-flow.py which includes Level -1.
+You do NOT need to manually run auto-fix-enforcer.sh.
 
-CHECK EXIT CODE:
-  Exit code 0  -> Continue to Level 1
-  Exit code != 0 -> STOP ALL WORK IMMEDIATELY
-               -> Report failure + fix instructions to user
-               -> Wait for fix
-               -> Re-run enforcer
-               -> Only continue when exit code = 0
-
-CHECKS PERFORMED (ALL MUST PASS):
+CHECKS PERFORMED AUTOMATICALLY (ALL MUST PASS):
   [1/7] Python availability            -> CRITICAL (fail = BLOCK)
   [2/7] Critical files present         -> CRITICAL (fail = BLOCK)
   [3/7] Blocking enforcer initialized  -> CRITICAL (fail = BLOCK, auto-fix)
@@ -35,35 +68,42 @@ CHECKS PERFORMED (ALL MUST PASS):
   [5/7] Daemon status                  -> INFO (warn, continue)
   [6/7] Git repository clean           -> INFO (warn, continue)
   [7/7] Windows Python Unicode check   -> CRITICAL on Windows (fail = BLOCK)
+
+IF hook is not installed or fails:
+  export PYTHONIOENCODING=utf-8
+  bash ~/.claude/memory/current/auto-fix-enforcer.sh
+  Exit code 0 -> Continue | Exit code != 0 -> STOP, fix first
 ```
 
 **NO WORK HAPPENS UNTIL LEVEL -1 PASSES.**
 
 ---
 
-### LEVEL 1: SYNC SYSTEM - FOUNDATION (ALWAYS SECOND)
+### LEVEL 1: SYNC SYSTEM - FOUNDATION (HOOK-AUTOMATED)
 
 ```
-STEP 1.1 - CONTEXT MANAGEMENT:
-  Run: python ~/.claude/memory/current/context-monitor-v2.py --current-status
-  Show context usage %
+[HOOK-AUTOMATED] UserPromptSubmit hook handles Level 1 automatically.
+
+STEP 1.1 - CONTEXT MANAGEMENT (auto):
+  Context usage shown in hook output
   If >85% -> apply session state, compact context BEFORE proceeding
 
-STEP 1.2 - SESSION MANAGEMENT:
-  Run: bash ~/.claude/memory/current/session-start.sh
-  Load OR generate Session ID (format: SESSION-YYYYMMDD-HHMMSS-XXXX)
-  Display Session ID to user
+STEP 1.2 - SESSION MANAGEMENT (auto):
+  Session ID loaded or generated (format: SESSION-YYYYMMDD-HHMMSS-XXXX)
+  Session ID displayed in hook output
 
-OUTPUT REQUIRED:
+OUTPUT (shown automatically in hook status):
   [LEVEL 1] Context: XX% | Session: SESSION-XXXXXXXX-XXXXXX-XXXX
 ```
 
 ---
 
-### LEVEL 2: STANDARDS SYSTEM - MIDDLE LAYER (ALWAYS THIRD)
+### LEVEL 2: STANDARDS SYSTEM - MIDDLE LAYER (HOOK-AUTOMATED)
 
 ```
-LOAD CODING STANDARDS (apply before every implementation):
+[HOOK-AUTOMATED] UserPromptSubmit hook loads standards via 3-level-flow.py.
+
+CODING STANDARDS LOADED AUTOMATICALLY (apply before every implementation):
   [1]  Project structure (packages, visibility, organization)
   [2]  Config management (externalize config, no hardcoding)
   [3]  Secret Management (NEVER hardcode secrets/credentials)
@@ -214,22 +254,30 @@ STEP 3.5 - SKILL/AGENT SELECTION (BLOCKING):
   Invoke correct skill/agent BEFORE implementation
   Hook suggestion is HINT only - I override with my intelligence
 
-STEP 3.6 - TOOL USAGE OPTIMIZATION:
-  Read tool  -> File >500 lines -> offset + limit
-  Grep tool  -> ALWAYS head_limit (default 100)
-  Grep tool  -> Default: files_with_matches mode
+STEP 3.6 - TOOL USAGE OPTIMIZATION: [HOOK-AUTOMATED via PreToolUse]
+  pre-tool-enforcer.py sends hints to Claude before every tool call:
+  Read tool  -> File >500 lines -> hint to use offset + limit
+  Grep tool  -> Missing head_limit -> hint to add head_limit=100
 
-STEP 3.7 - FAILURE PREVENTION:
-  Apply auto-fixes (del->rm, copy->cp, dir->ls on Unix)
-  NO Windows Unicode in Python scripts (use ASCII only)
+STEP 3.7 - FAILURE PREVENTION: [HOOK-AUTOMATED via PreToolUse - BLOCKING]
+  pre-tool-enforcer.py BLOCKS bad tool calls:
+  Bash tool  -> Windows commands (del/copy/dir/xcopy) -> BLOCKED (exit 1)
+  Write/Edit -> Unicode chars in .py files on Windows -> BLOCKED (exit 1)
 
-STEP 3.8 - PARALLEL EXECUTION:
+STEP 3.8 - PARALLEL EXECUTION: [CLAUDE INTERNAL DECISION]
   3+ independent tasks -> parallel via Task tool
   All tasks have deps -> sequential
 
-STEPS 3.9-3.12 - EXECUTE, SAVE, COMMIT, LOG:
-  Auto-track task progress
-  Save session at milestones
+STEPS 3.9 - EXECUTE + AUTO-TRACK: [HOOK-AUTOMATED via PostToolUse]
+  post-tool-tracker.py tracks every tool call after it completes:
+  Read +10% | Write +40% | Edit +30% | Bash +15% | Task +20% | Grep/Glob +5%
+  Logs to: ~/.claude/memory/logs/tool-tracker.jsonl
+  Progress: ~/.claude/memory/logs/session-progress.json
+
+STEP 3.10 - SESSION SAVE: [HOOK-AUTOMATED via Stop]
+  stop-notifier.py runs after every response, saves session state
+
+STEPS 3.11-3.12 - GIT COMMIT + LOG: [CLAUDE INTERNAL]
   Git commit on phase completion (branch: always "main")
   Log all policy applications
 ```
@@ -312,7 +360,8 @@ IF writing code without completing Levels -1, 1, 2:
 
 ---
 
-**VERSION:** 1.0.0
+**VERSION:** 2.0.0
 **SOURCE:** Claude Insight (https://github.com/piyushmakhija28/claude-insight)
 **PURPOSE:** Public template - no project-specific info
+**HOOKS:** 4 hooks required in ~/.claude/settings.json (see HOOKS SYSTEM section above)
 **CUSTOMIZE:** Add your project-specific info in your PROJECT CLAUDE.md (not this file)
