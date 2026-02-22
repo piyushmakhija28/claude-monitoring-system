@@ -222,8 +222,32 @@ This is the only reliable signal that a logical unit of work is done.
 
 ---
 
+## Mandatory Claude Insight Sync Checklist (v1.2.0)
+
+### Why This Was Added
+Root cause analysis: Claude updated CLAUDE.md (Step 3.11 fix) but forgot to sync Claude Insight.
+The auto-sync rule existed in CLAUDE.md but had no hard enforcement — Claude could "forget".
+
+### Fix: Sync is PART OF the task (not an afterthought)
+
+Before calling `TaskUpdate(status=completed)` on ANY task, Claude MUST check:
+
+```
+□ Did I edit CLAUDE.md?          → YES: sync Claude Insight FIRST
+□ Did I add/change a policy?     → YES: sync Claude Insight FIRST
+□ Did I change any Step 3.x?     → YES: sync Claude Insight FIRST
+□ Did I change standards?        → YES: sync Claude Insight FIRST
+
+ONLY THEN → TaskUpdate(completed)
+```
+
+**Violation:** Marking task complete WITHOUT syncing = incomplete task.
+**Remedy:** Re-open task, sync Claude Insight, then mark complete.
+
+---
+
 ## Status
 
 **ACTIVE**: This policy is permanent and applies to all sessions.
-**Version**: 1.1.0
-**Last Updated**: 2026-02-22 (v1.1.0 - Task-completion trigger, fixes Stop hook timing problem)
+**Version**: 1.2.0
+**Last Updated**: 2026-02-22 (v1.2.0 - Added mandatory sync checklist, root cause fix)

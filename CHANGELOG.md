@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [3.7.2] - 2026-02-22
+
+### Fixed
+- **Root cause: Claude Insight sync was not enforced as part of task completion**
+  - Problem: CLAUDE.md had auto-sync rule but no hard enforcement — Claude could skip it
+  - Root cause: Sync was treated as "afterthought", not part of the task itself
+  - Fix: Added mandatory sync checklist to `git-auto-commit-policy.md` (v1.1.0 → v1.2.0)
+  - Fix: Added same checklist to `~/.claude/CLAUDE.md` Step 3.11
+  - New rule: Before `TaskUpdate(completed)` → MUST check if Claude Insight needs sync
+  - Violation = incomplete task = re-open and sync first
+
+---
+
 ## [3.7.1] - 2026-02-22
 
 ### Fixed
