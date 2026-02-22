@@ -2,7 +2,7 @@
 
 **Project:** Claude Insight
 **Type:** Python Flask Monitoring Dashboard
-**Version:** 3.3.0
+**Version:** 3.6.0
 **Status:** Active Development
 
 ---
@@ -68,7 +68,15 @@ chmod +x scripts/setup-global-claude.sh
    cp scripts/stop-notifier.py ~/.claude/memory/current/
    ```
 
-3. **Install global CLAUDE.md:**
+3. **Copy all hook scripts:**
+   ```bash
+   cp scripts/clear-session-handler.py ~/.claude/memory/current/
+   cp scripts/stop-notifier.py ~/.claude/memory/current/
+   cp scripts/pre-tool-enforcer.py ~/.claude/memory/current/
+   cp scripts/post-tool-tracker.py ~/.claude/memory/current/
+   ```
+
+4. **Install global CLAUDE.md:**
    ```bash
    cp scripts/global-claude-md-template.md ~/.claude/CLAUDE.md
    ```
@@ -76,40 +84,64 @@ chmod +x scripts/setup-global-claude.sh
    3-level architecture section from the template into your existing file.
    Do NOT replace personal configurations - just prepend the 3-level section.
 
-4. **Install hooks in `~/.claude/settings.json`:**
+5. **Install hooks in `~/.claude/settings.json`** (all 4 hook types):
    ```json
    {
      "model": "sonnet",
      "hooks": {
-       "Stop": [{
-         "hooks": [{
-           "type": "command",
-           "command": "python ~/.claude/memory/current/stop-notifier.py",
-           "timeout": 20,
-           "statusMessage": "Session summary check..."
-         }]
-       }],
        "UserPromptSubmit": [{
          "hooks": [
            {
              "type": "command",
              "command": "python ~/.claude/memory/current/clear-session-handler.py",
              "timeout": 15,
-             "statusMessage": "Checking session state..."
+             "statusMessage": "Level 1: Checking session state..."
            },
            {
              "type": "command",
              "command": "python ~/.claude/memory/current/3-level-flow.py --summary",
              "timeout": 30,
-             "statusMessage": "Running 3-level architecture check..."
+             "statusMessage": "Level -1/1/2/3: Running 3-level architecture check..."
            }
          ]
+       }],
+       "PreToolUse": [{
+         "hooks": [{
+           "type": "command",
+           "command": "python ~/.claude/memory/current/pre-tool-enforcer.py",
+           "timeout": 10,
+           "statusMessage": "Level 3.6/3.7: Tool optimization + failure prevention..."
+         }]
+       }],
+       "PostToolUse": [{
+         "hooks": [{
+           "type": "command",
+           "command": "python ~/.claude/memory/current/post-tool-tracker.py",
+           "timeout": 10,
+           "statusMessage": "Level 3.9: Tracking task progress..."
+         }]
+       }],
+       "Stop": [{
+         "hooks": [{
+           "type": "command",
+           "command": "python ~/.claude/memory/current/stop-notifier.py",
+           "timeout": 20,
+           "statusMessage": "Level 3.10: Session save + voice notification..."
+         }]
        }]
      }
    }
    ```
 
-5. **Restart Claude Code** - hooks activate on next launch.
+   **Hook type summary:**
+   | Hook | Trigger | What It Enforces |
+   |------|---------|------------------|
+   | `UserPromptSubmit` | Every new message | Level -1, 1, 2, 3 (full 3-level flow) |
+   | `PreToolUse` | Before every tool | Level 3.6 hints + 3.7 blocking |
+   | `PostToolUse` | After every tool | Level 3.9 progress tracking |
+   | `Stop` | After every response | Level 3.10 session save |
+
+6. **Restart Claude Code** - hooks activate on next launch.
 
 ### After Setup - What You Will See
 
@@ -253,6 +285,6 @@ python scripts/bump-version.py --patch
 
 ---
 
-**Version:** 3.3.0
+**Version:** 3.6.0
 **Last Updated:** 2026-02-18
 **Source:** https://github.com/piyushmakhija28/claude-insight

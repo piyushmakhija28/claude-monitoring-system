@@ -65,6 +65,10 @@ SCRIPTS_TO_COPY=(
     "session-id-generator.sh"
     "session-logger.py"
     "detect-sync-eligibility.py"
+    "clear-session-handler.py"
+    "stop-notifier.py"
+    "pre-tool-enforcer.py"
+    "post-tool-tracker.py"
 )
 
 COPIED=0
@@ -147,23 +151,11 @@ if [ -f "$SETTINGS_FILE" ]; then
         echo "  [INFO] Please manually add hooks - see scripts/hooks-config.json for reference"
     fi
 else
-    # Create new settings.json with hooks
+    # Create new settings.json with all 4 hook types
     cat > "$SETTINGS_FILE" << EOF
 {
   "model": "sonnet",
   "hooks": {
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python $MEMORY_CURRENT/stop-notifier.py",
-            "timeout": 20,
-            "statusMessage": "Checking if session summary needed..."
-          }
-        ]
-      }
-    ],
     "UserPromptSubmit": [
       {
         "hooks": [
@@ -171,13 +163,49 @@ else
             "type": "command",
             "command": "python $MEMORY_CURRENT/clear-session-handler.py",
             "timeout": 15,
-            "statusMessage": "Checking session state..."
+            "statusMessage": "Level 1: Checking session state..."
           },
           {
             "type": "command",
             "command": "python $MEMORY_CURRENT/3-level-flow.py --summary",
             "timeout": 30,
-            "statusMessage": "Running 3-level architecture check..."
+            "statusMessage": "Level -1/1/2/3: Running 3-level architecture check..."
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python $MEMORY_CURRENT/pre-tool-enforcer.py",
+            "timeout": 10,
+            "statusMessage": "Level 3.6/3.7: Tool optimization + failure prevention..."
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python $MEMORY_CURRENT/post-tool-tracker.py",
+            "timeout": 10,
+            "statusMessage": "Level 3.9: Tracking task progress..."
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python $MEMORY_CURRENT/stop-notifier.py",
+            "timeout": 20,
+            "statusMessage": "Level 3.10: Session save + voice notification..."
           }
         ]
       }
@@ -185,7 +213,7 @@ else
   }
 }
 EOF
-    echo "  [OK] settings.json created with hooks"
+    echo "  [OK] settings.json created with all 4 hooks (UserPromptSubmit + PreToolUse + PostToolUse + Stop)"
 fi
 
 # Step 5: Create VERSION file

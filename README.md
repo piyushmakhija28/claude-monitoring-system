@@ -1,4 +1,4 @@
-# Claude Insight v3.3.0
+# Claude Insight v3.6.0
 
 **Real-time Monitoring Dashboard for the Claude Memory System (3-Level Architecture)**
 
@@ -6,7 +6,7 @@
 [![Python](https://img.shields.io/badge/Python-3.8+-blue?logo=python)](https://www.python.org/)
 [![Flask](https://img.shields.io/badge/Flask-3.0-green?logo=flask)](https://flask.palletsprojects.com/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-3.3.0-brightgreen)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-3.6.0-brightgreen)](CHANGELOG.md)
 
 Claude Insight is a Python Flask dashboard that monitors how Claude Code follows the
 **3-Level Architecture enforcement policies** in real-time. Track policy execution,
@@ -295,32 +295,91 @@ Standards loaded:
 
 ## How the Hooks Work
 
-The hooks are configured in `~/.claude/settings.json` and run automatically:
+The hooks are configured in `~/.claude/settings.json` and run automatically.
+There are **4 hook types**, each enforcing different levels of the architecture:
+
+| Hook Type | Trigger | Scripts | Levels Enforced |
+|-----------|---------|---------|-----------------|
+| `UserPromptSubmit` | Every new user message | `clear-session-handler.py` + `3-level-flow.py` | Level -1, 1, 2, 3 |
+| `PreToolUse` | Before every tool call | `pre-tool-enforcer.py` | Level 3.6 (optimization hints) + 3.7 (blocking) |
+| `PostToolUse` | After every tool call | `post-tool-tracker.py` | Level 3.9 (progress tracking) |
+| `Stop` | After every Claude response | `stop-notifier.py` | Level 3.10 (session save + voice notification) |
+
+**Complete `~/.claude/settings.json`:**
 
 ```json
 {
+  "model": "sonnet",
   "hooks": {
     "UserPromptSubmit": [{
       "hooks": [
         {
+          "type": "command",
           "command": "python ~/.claude/memory/current/clear-session-handler.py",
-          "timeout": 15
+          "timeout": 15,
+          "statusMessage": "Level 1: Checking session state..."
         },
         {
+          "type": "command",
           "command": "python ~/.claude/memory/current/3-level-flow.py --summary",
-          "timeout": 30
+          "timeout": 30,
+          "statusMessage": "Level -1/1/2/3: Running 3-level architecture check..."
         }
       ]
     }],
+    "PreToolUse": [{
+      "hooks": [{
+        "type": "command",
+        "command": "python ~/.claude/memory/current/pre-tool-enforcer.py",
+        "timeout": 10,
+        "statusMessage": "Level 3.6/3.7: Tool optimization + failure prevention..."
+      }]
+    }],
+    "PostToolUse": [{
+      "hooks": [{
+        "type": "command",
+        "command": "python ~/.claude/memory/current/post-tool-tracker.py",
+        "timeout": 10,
+        "statusMessage": "Level 3.9: Tracking task progress..."
+      }]
+    }],
     "Stop": [{
       "hooks": [{
+        "type": "command",
         "command": "python ~/.claude/memory/current/stop-notifier.py",
-        "timeout": 20
+        "timeout": 20,
+        "statusMessage": "Level 3.10: Session save + voice notification..."
       }]
     }]
   }
 }
 ```
+
+### What Each Hook Does
+
+**`UserPromptSubmit` → `clear-session-handler.py` + `3-level-flow.py`**
+- Detects `/clear` command and saves old session, starts new one
+- Runs the full 3-level architecture check (Level -1 through Level 3 all 12 steps)
+- Writes `flow-trace.json` to the session log folder
+- Claude Insight reads this file for all its monitoring data
+
+**`PreToolUse` → `pre-tool-enforcer.py`**
+- Runs BEFORE every tool call (Read, Write, Edit, Bash, Grep, etc.)
+- Exit 0 = allow tool (may print optimization hints to stdout for Claude to see)
+- Exit 1 = BLOCK tool (prints reason to stderr, tool call is cancelled)
+- **Level 3.6 hints (non-blocking):** Grep without `head_limit`, Read without `offset+limit`
+- **Level 3.7 blocks (blocking):** Windows commands in Bash (del, copy, dir, xcopy...), Unicode characters in Python files on Windows
+
+**`PostToolUse` → `post-tool-tracker.py`**
+- Runs AFTER every tool call (always exits 0, never blocks)
+- Logs to `~/.claude/memory/logs/tool-tracker.jsonl`
+- Updates `~/.claude/memory/logs/session-progress.json`
+- Progress deltas: Read +10%, Write +40%, Edit +30%, Bash +15%, Task +20%, Grep/Glob +5%
+
+**`Stop` → `stop-notifier.py`**
+- Runs after every Claude response completes
+- Saves session state to `~/.claude/memory/logs/`
+- Triggers Hinglish voice notification (if `~/.claude/.session-work-done` flag exists)
 
 **No background daemons.** Everything runs per-request via hooks. When you send
 a message in Claude Code, the hooks fire, run the 3-level flow, write results to

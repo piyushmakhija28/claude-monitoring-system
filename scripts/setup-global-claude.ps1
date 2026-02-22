@@ -58,7 +58,9 @@ $scriptsToCopy = @(
     "detect-sync-eligibility.py",
     "3-level-flow.py",
     "clear-session-handler.py",
-    "stop-notifier.py"
+    "stop-notifier.py",
+    "pre-tool-enforcer.py",
+    "post-tool-tracker.py"
 )
 
 $copied = 0
@@ -114,34 +116,28 @@ if (Test-Path $GlobalClaudeMd) {
 # Step 4: Install hooks in settings.json
 Write-Host "[4/5] Installing hooks in ~/.claude/settings.json..."
 
-$hookCmd3Level = "python " + (Join-Path $MemoryCurrent "3-level-flow.py") + " --summary"
-$hookCmdClear  = "python " + (Join-Path $MemoryCurrent "clear-session-handler.py")
-$hookCmdStop   = "python " + (Join-Path $MemoryCurrent "stop-notifier.py")
+$hookCmd3Level   = "python " + (Join-Path $MemoryCurrent "3-level-flow.py") + " --summary"
+$hookCmdClear    = "python " + (Join-Path $MemoryCurrent "clear-session-handler.py")
+$hookCmdStop     = "python " + (Join-Path $MemoryCurrent "stop-notifier.py")
+$hookCmdPreTool  = "python " + (Join-Path $MemoryCurrent "pre-tool-enforcer.py")
+$hookCmdPostTool = "python " + (Join-Path $MemoryCurrent "post-tool-tracker.py")
 
 if (Test-Path $SettingsFile) {
     $settingsContent = Get-Content $SettingsFile -Raw
     if ($settingsContent -match "3-level-flow") {
         Write-Host "  [OK] Hooks already in settings.json - skipping"
+        if ($settingsContent -notmatch "PreToolUse") {
+            Write-Host "  [WARN] PreToolUse and PostToolUse hooks may be missing"
+            Write-Host "  [INFO] Add pre-tool-enforcer.py and post-tool-tracker.py manually to settings.json"
+        }
     } else {
         Write-Host "  [WARN] settings.json exists but no hooks found"
-        Write-Host "  [INFO] See scripts/hooks-config-reference.json for manual setup"
+        Write-Host "  [INFO] See README.md 'How the Hooks Work' section for manual setup"
     }
 } else {
     $settingsJson = @{
         model = "sonnet"
         hooks = @{
-            Stop = @(
-                @{
-                    hooks = @(
-                        @{
-                            type = "command"
-                            command = $hookCmdStop
-                            timeout = 20
-                            statusMessage = "Checking if session summary needed..."
-                        }
-                    )
-                }
-            )
             UserPromptSubmit = @(
                 @{
                     hooks = @(
@@ -149,13 +145,49 @@ if (Test-Path $SettingsFile) {
                             type = "command"
                             command = $hookCmdClear
                             timeout = 15
-                            statusMessage = "Checking session state..."
+                            statusMessage = "Level 1: Checking session state..."
                         },
                         @{
                             type = "command"
                             command = $hookCmd3Level
                             timeout = 30
-                            statusMessage = "Running 3-level architecture check..."
+                            statusMessage = "Level -1/1/2/3: Running 3-level architecture check..."
+                        }
+                    )
+                }
+            )
+            PreToolUse = @(
+                @{
+                    hooks = @(
+                        @{
+                            type = "command"
+                            command = $hookCmdPreTool
+                            timeout = 10
+                            statusMessage = "Level 3.6/3.7: Tool optimization + failure prevention..."
+                        }
+                    )
+                }
+            )
+            PostToolUse = @(
+                @{
+                    hooks = @(
+                        @{
+                            type = "command"
+                            command = $hookCmdPostTool
+                            timeout = 10
+                            statusMessage = "Level 3.9: Tracking task progress..."
+                        }
+                    )
+                }
+            )
+            Stop = @(
+                @{
+                    hooks = @(
+                        @{
+                            type = "command"
+                            command = $hookCmdStop
+                            timeout = 20
+                            statusMessage = "Level 3.10: Session save + voice notification..."
                         }
                     )
                 }
@@ -163,7 +195,7 @@ if (Test-Path $SettingsFile) {
         }
     }
     $settingsJson | ConvertTo-Json -Depth 10 | Set-Content $SettingsFile -Encoding UTF8
-    Write-Host "  [OK] settings.json created with hooks"
+    Write-Host "  [OK] settings.json created with all 4 hooks (UserPromptSubmit + PreToolUse + PostToolUse + Stop)"
 }
 
 # Step 5: Finalize

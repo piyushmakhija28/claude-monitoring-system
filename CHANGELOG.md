@@ -9,6 +9,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [3.6.0] - 2026-02-22
+
+### Added
+- **PreToolUse hook: `pre-tool-enforcer.py`** (Level 3.6 + 3.7)
+  - Runs BEFORE every tool call in Claude Code
+  - Exit 0 = allow (with optional optimization hints to stdout)
+  - Exit 1 = BLOCK tool call (prints reason to stderr)
+  - Level 3.6 hints (non-blocking): Grep without `head_limit`, Read without `offset+limit`
+  - Level 3.7 blocks: Windows-only commands in Bash (del, copy, dir, xcopy, ren, md, etc.)
+  - Level 3.7 blocks: Unicode characters in Python files on Windows (cp1252 crash prevention)
+
+- **PostToolUse hook: `post-tool-tracker.py`** (Level 3.9)
+  - Runs AFTER every tool call (always exits 0, never blocks)
+  - Logs to `~/.claude/memory/logs/tool-tracker.jsonl`
+  - Updates `~/.claude/memory/logs/session-progress.json`
+  - Progress deltas per tool: Read +10%, Write +40%, Edit +30%, Bash +15%, Task +20%, Grep/Glob +5%
+
+### Updated
+- **README.md** - "How the Hooks Work" section completely rewritten
+  - Now shows all 4 hook types: UserPromptSubmit, PreToolUse, PostToolUse, Stop
+  - Full `~/.claude/settings.json` example with all 4 hooks
+  - Detailed explanation of what each hook does and how blocking works
+- **CLAUDE.md** - Manual setup instructions updated
+  - Added step to copy `pre-tool-enforcer.py` and `post-tool-tracker.py`
+  - Added PreToolUse and PostToolUse to settings.json example
+  - Added hook type summary table
+- **`scripts/setup-global-claude.sh`** - Added 4 missing scripts to SCRIPTS_TO_COPY
+  - Now copies: `clear-session-handler.py`, `stop-notifier.py`, `pre-tool-enforcer.py`, `post-tool-tracker.py`
+  - settings.json creation now includes all 4 hook types
+- **`scripts/setup-global-claude.ps1`** - Added 2 missing scripts to $scriptsToCopy
+  - Now copies: `pre-tool-enforcer.py`, `post-tool-tracker.py`
+  - settings.json creation now includes all 4 hook types
+  - Added warning when existing settings.json is missing PreToolUse hooks
+
+---
+
 ## [3.5.0] - 2026-02-19
 
 ### Fixed
