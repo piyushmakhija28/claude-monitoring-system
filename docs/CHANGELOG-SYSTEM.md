@@ -3,6 +3,9 @@ All notable changes to the Claude Memory System.
 
 ---
 
+- v4.3.1 (2026-03-02): Session updates
+  - Closes: #44
+
 - v4.3.0 (2026-03-02): PR Workflow Chain Fixes + GitHub Labels + Auto Version Bump:
   - FIX: PR workflow chain gaps preventing auto-merge (3 gaps fixed)
     - Gap 1: `.session-work-done` flag now written on session-issue-close (not just TaskUpdate)
