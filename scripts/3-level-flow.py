@@ -90,18 +90,24 @@ def load_policy_rules() -> dict:
 
 
 def checkpoint_flag_path(session_id):
-    """Session-specific checkpoint flag path."""
-    return FLAG_DIR / f'.checkpoint-pending-{session_id}.json'
+    """Session-specific + PID-isolated checkpoint flag path.
+    Pattern: .checkpoint-pending-{SESSION_ID}-{PID}.json
+    Must match pre-tool-enforcer.py find_session_flag() and post-tool-tracker _clear_session_flags()."""
+    return FLAG_DIR / f'.checkpoint-pending-{session_id}-{os.getpid()}.json'
 
 
 def task_breakdown_flag_path(session_id):
-    """Session-specific task breakdown flag path."""
-    return FLAG_DIR / f'.task-breakdown-pending-{session_id}.json'
+    """Session-specific + PID-isolated task breakdown flag path.
+    Pattern: .task-breakdown-pending-{SESSION_ID}-{PID}.json
+    Must match pre-tool-enforcer.py find_session_flag() and post-tool-tracker _clear_session_flags()."""
+    return FLAG_DIR / f'.task-breakdown-pending-{session_id}-{os.getpid()}.json'
 
 
 def skill_selection_flag_path(session_id):
-    """Session-specific skill selection flag path."""
-    return FLAG_DIR / f'.skill-selection-pending-{session_id}.json'
+    """Session-specific + PID-isolated skill selection flag path.
+    Pattern: .skill-selection-pending-{SESSION_ID}-{PID}.json
+    Must match pre-tool-enforcer.py find_session_flag() and post-tool-tracker _clear_session_flags()."""
+    return FLAG_DIR / f'.skill-selection-pending-{session_id}-{os.getpid()}.json'
 
 # Short approval words that clear the checkpoint flag
 # MUST be <= 30 chars total
