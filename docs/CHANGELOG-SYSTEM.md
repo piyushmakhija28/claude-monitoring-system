@@ -3,6 +3,32 @@ All notable changes to the Claude Memory System.
 
 ---
 
+- v4.3.0 (2026-03-02): PR Workflow Chain Fixes + GitHub Labels + Auto Version Bump:
+  - FIX: PR workflow chain gaps preventing auto-merge (3 gaps fixed)
+    - Gap 1: `.session-work-done` flag now written on session-issue-close (not just TaskUpdate)
+    - Gap 2: Added `.pr-workflow-retry` flag for automatic retry on merge failure
+    - Gap 3: Added branch-based PR detection as fallback (Priority 4 in stop-notifier)
+  - FIX: GitHub issue labels not appearing (label name mismatch with repo)
+    - Added `LABEL_DEFINITIONS` with 20+ labels (type, priority, complexity, scope)
+    - Added `_ensure_labels_exist()` - auto-creates missing labels via `gh label create --force`
+    - Added `_detect_scope_labels()` - detects backend/frontend/devops/scripts/policy/config
+    - Fixed type mapping: `bugfix`->`bug`, `feature`->`enhancement`, `docs`->`documentation`
+    - Fixed priority mapping: `priority-critical`->`critical-priority`, etc.
+  - NEW: Auto version bump + CHANGELOG in PR workflow (Step 0.5)
+    - `_bump_version_and_changelog()` in `github_pr_workflow.py`
+    - Auto-increments VERSION (patch) and prepends CHANGELOG entry
+    - Enforces `version-release-policy.md` automatically
+  - FIX: Monitoring dashboard 9 path mismatches (all services reading from correct paths now)
+    - Added `get_scripts_dir()`, `get_policies_dir()`, `get_session_logs_dir()` to path_resolver
+    - Fixed metrics_collector, memory_system_monitor, session_tracker, three_level_flow_tracker
+    - Health score: 0 -> 100, Model stats: 0 -> 243, Policy hits: 0 -> 661
+  - FIX: `github_pr_workflow.run_pr_workflow()` now returns True/False for caller to know success
+  - Updated scripts: stop-notifier.py, post-tool-tracker.py, github_pr_workflow.py,
+    github_issue_manager.py, path_resolver.py, metrics_collector.py, memory_system_monitor.py,
+    session_tracker.py, three_level_flow_tracker.py, policy_execution_tracker.py
+
+- v4.2.0 (2026-03-02): 3-level-flow v3.7.0 with recursive policy loading
+
 - v4.1.0 (2026-02-24): Parallel Mode Optimization + Multi-Window Session Isolation:
   - NEW FEATURE: Parallel Mode Hook Optimization (100% hook overhead reduction when 2+ agents running)
     - `parallel-mode-manager.py` (v1.0.0) - Auto-detects 2+ active Task tool calls

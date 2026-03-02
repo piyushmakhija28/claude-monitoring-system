@@ -1,4 +1,4 @@
-# Claude Insight v4.2.0
+# Claude Insight v4.3.0
 
 **Real-time Monitoring Dashboard for the Claude Memory System (3-Level Architecture)**
 
@@ -6,7 +6,7 @@
 [![Python](https://img.shields.io/badge/Python-3.8+-blue?logo=python)](https://www.python.org/)
 [![Flask](https://img.shields.io/badge/Flask-3.0-green?logo=flask)](https://flask.palletsprojects.com/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-4.2.0-brightgreen)](VERSION)
+[![Version](https://img.shields.io/badge/Version-4.3.0-brightgreen)](VERSION)
 
 Claude Insight is a Python Flask dashboard that monitors how Claude Code follows the
 **3-Level Architecture enforcement policies** in real-time. Track policy execution,
@@ -912,7 +912,7 @@ Ensure all hooks in `~/.claude/settings.json` have `"async": false` (or omit asy
 
 ## Changelog
 
-**Latest - v4.2.0 (2026-03-02):**
+**Latest - v4.3.0 (2026-03-02):**
 - **[FIX]** Safe session-scoped fallback for issue close task ID mismatch (`3cd819c`)
 - **[FIX]** PID-suffix mismatch on enforcement flag filenames in 3-level-flow.py (`52538c7`)
 - **[FEAT]** VERSION file added for IDE update checker compatibility
@@ -944,5 +944,5 @@ MIT License - see [LICENSE](LICENSE) for details.
 ---
 
 **Source:** https://github.com/piyushmakhija28/claude-insight
-**Version:** 4.2.0 | **Python:** 3.8+ | **Flask:** 3.0
+**Version:** 4.3.0 | **Python:** 3.8+ | **Flask:** 3.0
 **Last Updated:** 2026-03-02
