@@ -665,16 +665,27 @@ def main():
     # PRIORITY 3b: PR workflow retry (from previous failed merge attempt)
     if not pr_triggered and (FLAG_DIR / '.pr-workflow-retry').exists():
         try:
-            script_dir = Path(__file__).parent
-            if str(script_dir) not in sys.path:
-                sys.path.insert(0, str(script_dir))
-            import github_pr_workflow
-            pr_merged = github_pr_workflow.run_pr_workflow()
-            if pr_merged:
+            # Check if still on a feature branch - if on main, clean up stale flag
+            _retry_branch = subprocess.run(
+                ['git', 'branch', '--show-current'],
+                capture_output=True, text=True, timeout=5
+            )
+            _retry_current = _retry_branch.stdout.strip() if _retry_branch.returncode == 0 else ''
+            if _retry_current in ('main', 'master', ''):
+                # On main/master - PR was already merged or branch deleted, clean up flag
                 (FLAG_DIR / '.pr-workflow-retry').unlink(missing_ok=True)
-                log_s("[PR-WORKFLOW] Retry succeeded - PR merged")
+                log_s("[PR-WORKFLOW] Retry flag cleaned (on main - nothing to retry)")
             else:
-                log_s("[PR-WORKFLOW] Retry failed - will try again on next Stop")
+                script_dir = Path(__file__).parent
+                if str(script_dir) not in sys.path:
+                    sys.path.insert(0, str(script_dir))
+                import github_pr_workflow
+                pr_merged = github_pr_workflow.run_pr_workflow()
+                if pr_merged:
+                    (FLAG_DIR / '.pr-workflow-retry').unlink(missing_ok=True)
+                    log_s("[PR-WORKFLOW] Retry succeeded - PR merged")
+                else:
+                    log_s("[PR-WORKFLOW] Retry failed - will try again on next Stop")
         except Exception as e:
             log_s(f"[PR-WORKFLOW] Retry error: {e}")
 
