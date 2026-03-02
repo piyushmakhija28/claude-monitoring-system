@@ -868,17 +868,31 @@ def close_github_issue(task_id):
         task_key = str(task_id)
         issue_data = mapping.get('task_to_issue', {}).get(task_key)
 
-        # Fallback: if exact key not found, try 'unknown' key
+        # Fallback 1: if exact key not found, try 'unknown' key
         if not issue_data:
             issue_data = mapping.get('task_to_issue', {}).get('unknown')
-            if issue_data:
-                # Re-key this entry properly so future lookups work
+            if issue_data and issue_data.get('status') == 'open':
                 mapping['task_to_issue'][task_key] = issue_data
                 if 'unknown' in mapping.get('task_to_issue', {}):
                     del mapping['task_to_issue']['unknown']
                 _save_issues_mapping(mapping)
 
-        # NOTE: Removed dangerous "any open issue" fallback - it closed wrong issues
+        # Fallback 2: Find the most recently created OPEN issue in THIS session's mapping.
+        # This is SAFE because each session has its own mapping file (no cross-session risk).
+        # Needed because Claude's task IDs can mismatch between TaskCreate response
+        # (e.g. "Task #1") and TaskUpdate input (e.g. taskId="3") after /clear.
+        if not issue_data:
+            latest_open = None
+            latest_time = ''
+            for key, data in mapping.get('task_to_issue', {}).items():
+                if data.get('status') == 'open':
+                    created = data.get('created_at', '')
+                    if created >= latest_time:
+                        latest_time = created
+                        latest_open = data
+                        task_key = key
+            if latest_open:
+                issue_data = latest_open
 
         if not issue_data:
             return False
