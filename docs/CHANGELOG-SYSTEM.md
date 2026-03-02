@@ -3,6 +3,16 @@ All notable changes to the Claude Memory System.
 
 ---
 
+- v4.4.1 (2026-03-02): Version Bump Guard for Direct-to-Main Pushes:
+  - NEW: PRIORITY 5 in stop-notifier.py - "Version Bump Guard"
+    - Detects un-bumped commits pushed directly to main (bypassing PR workflow)
+    - Auto-bumps VERSION + CHANGELOG, commits "bump: vX.Y.Z -> vX.Y.Z+1", pushes to main
+    - Skips if latest commit is already "bump:" or "Merge pull request" (already handled)
+  - FIX: Previously version bump ONLY happened inside `run_pr_workflow()` (PR path only)
+    - Direct `git push origin main` skipped version bump entirely
+    - Now: PRIORITY 5 catches the gap and auto-bumps on next Stop hook
+  - FIX: Stale .pr-workflow-retry flag cleanup (from previous session)
+
 - v4.4.0 (2026-03-02): Automatic GitHub Issue Close + Version Bump Automation:
   - NEW: 3-source issue number resolution in PR workflow (mapping > branch name > open issues query)
     - `_extract_issue_from_branch()` extracts issue # from branch name (fix/42 -> #42)
