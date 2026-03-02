@@ -3,6 +3,20 @@ All notable changes to the Claude Memory System.
 
 ---
 
+- v4.4.0 (2026-03-02): Automatic GitHub Issue Close + Version Bump Automation:
+  - NEW: 3-source issue number resolution in PR workflow (mapping > branch name > open issues query)
+    - `_extract_issue_from_branch()` extracts issue # from branch name (fix/42 -> #42)
+    - `_query_open_auto_issues()` queries GitHub for open auto-created issues as fallback
+    - `_get_issue_numbers()` now deduplicates from all 3 sources
+  - NEW: `Closes #N` now included in BOTH commit messages AND PR body (double guarantee)
+  - NEW: `[ENFORCE] GITHUB ISSUES AUTO-CLOSE POLICY` block in 3-level-flow.py (5 rules)
+  - FIX: stop-notifier PRIORITY 4 broadened to trigger PR workflow on task completion
+    - Previously only triggered when all session issues were closed
+    - Now also triggers when `tasks_completed >= tasks_created` (covers manual PR creation)
+  - FIX: Version bump now runs automatically via PR workflow (Stop hook PRIORITY 4)
+  - Level 2 split: 2.1 Common Standards (12, 65 rules) + 2.2 Microservices (15, 156 rules, conditional)
+  - Closes: #71, #75, #76, #77
+
 - v4.3.1 (2026-03-02): Session updates
   - Closes: #44
 
