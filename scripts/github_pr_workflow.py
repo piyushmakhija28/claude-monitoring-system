@@ -548,6 +548,7 @@ def run_pr_workflow(session_id=None):
 
     Called from stop-notifier.py when .session-work-done flag exists.
     Non-blocking: all steps wrapped in try/except, never raises.
+    Returns True if PR was merged successfully, False otherwise.
     """
     _log("=== PR Workflow Starting ===")
 
@@ -556,17 +557,17 @@ def run_pr_workflow(session_id=None):
         repo_root = _get_repo_root()
         if not repo_root:
             _log("Not in a git repo - skipping PR workflow")
-            return
+            return False
 
         branch_name = _get_current_branch(repo_root)
         if not branch_name:
             _log("Could not determine current branch - skipping")
-            return
+            return False
 
         # Only proceed if on an issue branch (not main/master)
         if branch_name in ('main', 'master'):
             _log(f"On {branch_name} branch - no PR workflow needed")
-            return
+            return False
 
         _log(f"Branch: {branch_name}")
 
@@ -641,13 +642,16 @@ def run_pr_workflow(session_id=None):
         if merged:
             _log("Step 6: Switching to main...")
             _switch_to_main(repo_root)
+            _log("=== PR Workflow Complete (MERGED) ===")
+            return True
         else:
             _log("Step 6: Skipped (PR not merged, staying on branch)")
-
-        _log("=== PR Workflow Complete ===")
+            _log("=== PR Workflow Complete (NOT MERGED) ===")
+            return False
 
     except Exception as e:
         _log(f"PR Workflow error: {e}")
+        return False
 
 
 if __name__ == '__main__':

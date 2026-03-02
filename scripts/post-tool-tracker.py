@@ -636,6 +636,36 @@ def main():
                                 if closed:
                                     sys.stdout.write('[GH] Issue closed for task ' + str(closed_task_id) + '\n')
                                     sys.stdout.flush()
+
+                            # SESSION-ISSUE-BASED WORK_DONE: Check if ALL session issues are now closed
+                            # This is a secondary trigger that works even when task counts are out of sync
+                            try:
+                                mapping = gim._load_mapping()
+                                task_issues = mapping.get('task_to_issue', {})
+                                branch = mapping.get('branch', '')
+                                if task_issues and branch:
+                                    all_closed = all(
+                                        d.get('status') == 'closed'
+                                        for d in task_issues.values()
+                                    )
+                                    if all_closed:
+                                        work_done_flag = Path.home() / '.claude' / '.session-work-done'
+                                        if not work_done_flag.exists():
+                                            work_done_flag.parent.mkdir(parents=True, exist_ok=True)
+                                            issue_count = len(task_issues)
+                                            work_done_flag.write_text(
+                                                'All ' + str(issue_count) + ' session issues closed on branch ' + branch
+                                                + '. Auto-written by post-tool-tracker (issue-based).',
+                                                encoding='utf-8'
+                                            )
+                                            sys.stdout.write(
+                                                '[AUTO] .session-work-done written (all '
+                                                + str(issue_count) + ' issues closed on ' + branch
+                                                + ') -> PR workflow will trigger on Stop hook\n'
+                                            )
+                                            sys.stdout.flush()
+                            except Exception:
+                                pass  # Never block on work-done check
                     except Exception:
                         pass  # Never block on GitHub failures
 

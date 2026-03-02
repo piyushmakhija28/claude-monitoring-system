@@ -177,6 +177,25 @@ def get_current_session_id():
         return None
 
 
+def _get_session_issues_file():
+    """Get the github-issues.json file for the current session (if it exists)."""
+    try:
+        session_id = get_current_session_id()
+        if not session_id:
+            # Fallback: read from session-progress.json
+            progress_file = MEMORY_BASE / 'logs' / 'session-progress.json'
+            if progress_file.exists():
+                with open(progress_file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                session_id = data.get('session_id', '')
+        if session_id:
+            issues_file = MEMORY_BASE / 'logs' / 'sessions' / session_id / 'github-issues.json'
+            return issues_file
+    except Exception:
+        pass
+    return None
+
+
 def get_session_summary_for_voice():
     """
     Load the comprehensive session summary text for voice output.
@@ -610,14 +629,17 @@ def main():
         )
 
     # PRIORITY 3: All work done - trigger PR workflow first, then voice
+    pr_triggered = False
     if WORK_DONE_FLAG.exists():
         # GitHub PR Workflow: commit, push, PR, review, merge (non-blocking)
+        pr_merged = False
         try:
             script_dir = Path(__file__).parent
             if str(script_dir) not in sys.path:
                 sys.path.insert(0, str(script_dir))
             import github_pr_workflow
-            github_pr_workflow.run_pr_workflow()
+            pr_merged = github_pr_workflow.run_pr_workflow()
+            pr_triggered = True
         except Exception as e:
             log_s(f"[PR-WORKFLOW] Error: {e}")
 
@@ -629,6 +651,68 @@ def main():
             get_work_done_default,
             extra_context=summary_context,
         )
+
+        # If PR workflow failed to merge, write a retry flag so next Stop can retry
+        if pr_triggered and not pr_merged:
+            try:
+                retry_flag = FLAG_DIR / '.pr-workflow-retry'
+                retry_flag.write_text('PR workflow ran but merge failed - retry on next Stop',
+                                      encoding='utf-8')
+                log_s("[PR-WORKFLOW] Merge failed - retry flag written for next Stop")
+            except Exception:
+                pass
+
+    # PRIORITY 3b: PR workflow retry (from previous failed merge attempt)
+    if not pr_triggered and (FLAG_DIR / '.pr-workflow-retry').exists():
+        try:
+            script_dir = Path(__file__).parent
+            if str(script_dir) not in sys.path:
+                sys.path.insert(0, str(script_dir))
+            import github_pr_workflow
+            pr_merged = github_pr_workflow.run_pr_workflow()
+            if pr_merged:
+                (FLAG_DIR / '.pr-workflow-retry').unlink(missing_ok=True)
+                log_s("[PR-WORKFLOW] Retry succeeded - PR merged")
+            else:
+                log_s("[PR-WORKFLOW] Retry failed - will try again on next Stop")
+        except Exception as e:
+            log_s(f"[PR-WORKFLOW] Retry error: {e}")
+
+    # PRIORITY 4: Branch-based PR detection (fallback when work_done flag was never written)
+    # This catches sessions where Claude works without TaskCreate/TaskUpdate
+    if not pr_triggered:
+        try:
+            branch_result = subprocess.run(
+                ['git', 'branch', '--show-current'],
+                capture_output=True, text=True, timeout=5
+            )
+            current_branch = branch_result.stdout.strip() if branch_result.returncode == 0 else ''
+
+            if current_branch and current_branch not in ('main', 'master'):
+                # On a feature branch - check if all session issues are closed
+                session_issues_file = _get_session_issues_file()
+                all_closed = False
+                if session_issues_file and session_issues_file.exists():
+                    try:
+                        mapping = json.loads(session_issues_file.read_text(encoding='utf-8'))
+                        task_issues = mapping.get('task_to_issue', {})
+                        if task_issues:
+                            all_closed = all(
+                                d.get('status') == 'closed'
+                                for d in task_issues.values()
+                            )
+                    except Exception:
+                        pass
+
+                if all_closed:
+                    log_s(f"[PR-WORKFLOW] Branch detection: on {current_branch} with all issues closed - triggering PR workflow")
+                    script_dir = Path(__file__).parent
+                    if str(script_dir) not in sys.path:
+                        sys.path.insert(0, str(script_dir))
+                    import github_pr_workflow
+                    github_pr_workflow.run_pr_workflow()
+        except Exception as e:
+            log_s(f"[PR-WORKFLOW] Branch detection error: {e}")
 
     if not spoke_something:
         log_s("[OK] Stop hook fired | No voice flags found (normal, most stops are silent)")
