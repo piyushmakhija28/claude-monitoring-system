@@ -850,7 +850,7 @@ def main():
     # L3.6: Tool Usage Optimizer (with retry - 3 attempts, 10s timeout each)
     try:
         script_dir = Path(__file__).parent
-        tool_opt_script = script_dir / 'architecture' / '03-execution-system' / '06-tool-optimization' / 'tool-usage-optimizer.py'
+        tool_opt_script = script_dir / 'architecture' / '03-execution-system' / '06-tool-optimization' / 'tool-usage-optimization-policy.py'
         if tool_opt_script.exists():
             import subprocess
             _opt_ok = False

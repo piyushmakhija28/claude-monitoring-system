@@ -326,7 +326,7 @@ def main():
     # (PostToolUse runs per-tool, not session-level).
     try:
         script_dir = Path(__file__).parent
-        progress_script = script_dir / 'architecture' / '03-execution-system' / '08-progress-tracking' / 'check-incomplete-work.py'
+        progress_script = script_dir / 'architecture' / '03-execution-system' / '08-progress-tracking' / 'task-progress-tracking-policy.py'
         if progress_script.exists():
             import subprocess
             _prog_ok = False
