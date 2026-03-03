@@ -708,17 +708,68 @@ def _switch_to_main(repo_root):
         _log(f"Switch to main error: {e}")
 
 
+def _bump_and_push_on_main(repo_root, session_summary, issue_numbers):
+    """
+    Bump VERSION + CHANGELOG on main branch, commit and push.
+    Called AFTER PR merge + switch to main. This ensures version bump
+    is always a separate commit on main, never on a feature branch.
+    """
+    try:
+        version_file = Path(repo_root) / 'VERSION'
+        if not version_file.exists():
+            _log("No VERSION file - skipping version bump")
+            return
+
+        old_ver = version_file.read_text(encoding='utf-8').strip()
+
+        bumped = _bump_version_and_changelog(repo_root, session_summary, issue_numbers)
+        if not bumped:
+            _log("Version bump failed or skipped")
+            return
+
+        new_ver = version_file.read_text(encoding='utf-8').strip()
+
+        # Stage VERSION + CHANGELOG
+        subprocess.run(
+            ['git', 'add', 'VERSION', 'docs/CHANGELOG-SYSTEM.md'],
+            capture_output=True, timeout=10, cwd=repo_root
+        )
+
+        # Commit on main
+        commit_msg = f"bump: v{old_ver} -> v{new_ver}"
+        result = subprocess.run(
+            ['git', 'commit', '-m', commit_msg],
+            capture_output=True, text=True, timeout=15, cwd=repo_root
+        )
+        if result.returncode != 0:
+            _log(f"Bump commit failed: {result.stderr[:200] if result.stderr else 'no error'}")
+            return
+
+        # Push to main
+        result = subprocess.run(
+            ['git', 'push', 'origin', 'HEAD'],
+            capture_output=True, text=True, timeout=30, cwd=repo_root
+        )
+        if result.returncode == 0:
+            _log(f"Version bumped on main: v{old_ver} -> v{new_ver} (pushed)")
+        else:
+            _log(f"Bump push failed: {result.stderr[:200] if result.stderr else 'no error'}")
+
+    except Exception as e:
+        _log(f"Bump on main error: {e}")
+
+
 def run_pr_workflow(session_id=None):
     """
     Main PR workflow orchestrator. Runs the full flow:
       0. Build validation
-      0.5. Version bump + CHANGELOG update (enforces version-release-policy)
-      1. Commit any uncommitted changes (includes version bump)
+      1. Commit any uncommitted changes
       2. Push branch to remote
       3. Create PR with session summary body + Closes #N
       4. Post auto-review comment with session metrics
       5. Merge PR (fallback: leave open)
-      6. Switch back to main
+      6. Switch back to main locally
+      7. Version bump + CHANGELOG on main (after merge, on main branch)
 
     Called from stop-notifier.py when .session-work-done flag exists.
     Non-blocking: all steps wrapped in try/except, never raises.
@@ -786,11 +837,7 @@ def run_pr_workflow(session_id=None):
         except Exception as e:
             _log(f"Build validation error (non-fatal): {e}")
 
-        # Step 0.5: Version bump + CHANGELOG update (enforces version-release-policy)
-        _log("Step 0.5: Version bump + CHANGELOG...")
-        _bump_version_and_changelog(repo_root, session_summary, issue_numbers)
-
-        # Step 1: Commit changes (includes version bump if successful)
+        # Step 1: Commit changes (feature work only, no version bump here)
         # Pass issue_numbers so commit message includes "Closes #N" (auto-close policy)
         _log("Step 1: Committing changes...")
         _commit_session_changes(repo_root, session_summary, issue_numbers)
@@ -821,6 +868,13 @@ def run_pr_workflow(session_id=None):
         if merged:
             _log("Step 6: Switching to main...")
             _switch_to_main(repo_root)
+
+            # Step 7: Version bump on main (AFTER merge, on main branch)
+            # This is the correct place: feature branch work is merged,
+            # we're back on main, now bump version and push.
+            _log("Step 7: Version bump on main...")
+            _bump_and_push_on_main(repo_root, session_summary, issue_numbers)
+
             _log("=== PR Workflow Complete (MERGED) ===")
             return True
         else:
