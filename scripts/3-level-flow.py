@@ -22,7 +22,7 @@ if sys.platform == 'win32':
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
-VERSION = "3.7.0"
+VERSION = "3.7.1"
 SCRIPT_NAME = "3-level-flow.py"
 
 # Use ide_paths for IDE self-contained installations (with fallback for standalone mode)
@@ -1056,17 +1056,22 @@ def main():
             "flow_end": None,
             "duration_seconds": None,
             "session_id": None,
-            "log_dir": None
+            "log_dir": None,
+            "platform": sys.platform,
+            "python_version": sys.version.split()[0],
         },
         "user_input": {
             "prompt": user_message,
+            "prompt_length": len(user_message),
             "received_at": flow_start.isoformat(),
             "source": "UserPromptSubmit hook"
         },
         "pipeline": [],
         "final_decision": {},
         "work_started": False,
-        "status": "RUNNING"
+        "status": "RUNNING",
+        "errors": [],
+        "warnings": [],
     }
 
     print(SEP)
@@ -1342,6 +1347,25 @@ def main():
     session_log_dir.mkdir(parents=True, exist_ok=True)
     trace["meta"]["session_id"] = session_id
     trace["meta"]["log_dir"] = str(session_log_dir)
+
+    # Determine session status and message number (v3.7.1 enrichment)
+    _sess_json_path = MEMORY_BASE / 'sessions' / f'{session_id}.json'
+    _sess_flow_runs = 0
+    _sess_status = "NEW"
+    if _sess_json_path.exists():
+        try:
+            with open(_sess_json_path, 'r', encoding='utf-8') as _sf:
+                _sdata = json.load(_sf)
+            _sess_flow_runs = _sdata.get('flow_runs', 0)
+            _parent = _sdata.get('parent_session', '')
+            if _parent:
+                _sess_status = "CHAINED"
+            elif _sess_flow_runs > 0:
+                _sess_status = "RESUMED"
+        except Exception:
+            pass
+    trace["meta"]["session_status"] = _sess_status
+    trace["meta"]["message_number"] = _sess_flow_runs + 1
 
     # =========================================================================
     # EARLY FLAG WRITING (Loophole #18 fix)
@@ -2503,6 +2527,13 @@ Work to complete: Execute phase {i} of the identified work breakdown.
     flow_end = datetime.now()
     duration_sec = (flow_end - flow_start).total_seconds()
 
+    # Risk level based on complexity
+    _risk_level = "LOW"
+    if adj_complexity >= 15:
+        _risk_level = "HIGH"
+    elif adj_complexity >= 8:
+        _risk_level = "MEDIUM"
+
     final_decision = {
         "timestamp": flow_end.isoformat(),
         "user_prompt": user_message,
@@ -2526,6 +2557,14 @@ Work to complete: Execute phase {i} of the identified work breakdown.
         "microservices_active": microservices_active,
         "session_id": session_id,
         "proceed": True,
+        "risk_level": _risk_level,
+        "prompt_transformation": {
+            "raw_input": user_message[:500],
+            "task_type_detected": task_type,
+            "complexity_assessed": adj_complexity,
+            "model_chosen": selected_model,
+            "skill_chosen": skill_agent_name,
+        },
         "summary": (
             f"Complexity={adj_complexity} {task_type} task -> "
             f"Model={selected_model}, {task_count} tasks, "
