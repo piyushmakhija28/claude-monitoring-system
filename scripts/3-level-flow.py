@@ -1440,9 +1440,9 @@ def main():
     # Loads learned user preferences for decision-making.
     # =========================================================================
     step_start = datetime.now()
-    prefs_script = MEMORY_BASE / '01-sync-system' / 'user-preferences' / 'load-preferences.py'
+    prefs_script = SCRIPT_DIR / 'architecture' / '01-sync-system' / 'user-preferences' / 'user-preferences-policy.py'
     if not prefs_script.exists():
-        prefs_script = SCRIPT_DIR / 'architecture' / '01-sync-system' / 'user-preferences' / 'load-preferences.py'
+        prefs_script = MEMORY_BASE / '01-sync-system' / 'user-preferences' / 'user-preferences-policy.py'
 
     prefs_loaded = 0
     prefs_dur = 0
@@ -1499,9 +1499,9 @@ def main():
     # Maintains durable session state outside Claude's context window.
     # =========================================================================
     step_start = datetime.now()
-    state_script = MEMORY_BASE / '01-sync-system' / 'session-management' / 'session-state.py'
+    state_script = SCRIPT_DIR / 'architecture' / '01-sync-system' / 'session-management' / 'session-memory-policy.py'
     if not state_script.exists():
-        state_script = SCRIPT_DIR / 'architecture' / '01-sync-system' / 'session-management' / 'session-state.py'
+        state_script = MEMORY_BASE / '01-sync-system' / 'session-management' / 'session-memory-policy.py'
 
     state_dur = 0
     state_summary = {}
@@ -1564,7 +1564,7 @@ def main():
     # =========================================================================
     step_start = datetime.now()
     patterns_arch_dir = SCRIPT_DIR / 'architecture' / '01-sync-system' / 'pattern-detection'
-    detect_script = patterns_arch_dir / 'detect-patterns.py'
+    detect_script = patterns_arch_dir / 'cross-project-patterns-policy.py'
     patterns_file = Path.home() / '.claude' / 'memory' / 'cross-project-patterns.json'
 
     patterns_detected = 0
@@ -1656,9 +1656,9 @@ def main():
     # =========================================================================
     print("[LEVEL 2] RULES/STANDARDS SYSTEM (MIDDLE LAYER)")
 
-    standards_script = MEMORY_BASE / '02-standards-system' / 'standards-loader.py'
+    standards_script = SCRIPT_DIR / 'architecture' / '02-standards-system' / 'common-standards-policy.py'
     if not standards_script.exists():
-        standards_script = SCRIPT_DIR / 'architecture' / '02-standards-system' / 'standards-loader.py'
+        standards_script = MEMORY_BASE / '02-standards-system' / 'common-standards-policy.py'
 
     # ------------------------------------------------------------------
     # LEVEL 2.1: COMMON STANDARDS (always active)
@@ -1670,7 +1670,7 @@ def main():
     common_dur = 0
 
     if standards_script.exists():
-        c_out, _, c_rc, common_dur = run_script_with_retry(standards_script, ['--load-common'], timeout=10, step_name='Level-2.1.Common')
+        c_out, _, c_rc, common_dur = run_script_with_retry(standards_script, ['--enforce'], timeout=10, step_name='Level-2.1.Common')
         for line in c_out.splitlines():
             if 'Common Standards:' in line:
                 try:
@@ -1748,8 +1748,13 @@ def main():
         micro_count = 15
         micro_rules = 139
 
-        if standards_script.exists():
-            m_out, _, m_rc, micro_dur = run_script_with_retry(standards_script, ['--load-microservices'], timeout=10, step_name='Level-2.2.Microservices')
+        # Use coding-standards-enforcement-policy.py for microservices standards
+        coding_standards_script = SCRIPT_DIR / 'architecture' / '02-standards-system' / 'coding-standards-enforcement-policy.py'
+        if not coding_standards_script.exists():
+            coding_standards_script = MEMORY_BASE / '02-standards-system' / 'coding-standards-enforcement-policy.py'
+
+        if coding_standards_script.exists():
+            m_out, _, m_rc, micro_dur = run_script_with_retry(coding_standards_script, ['--enforce'], timeout=10, step_name='Level-2.2.Microservices')
             for line in m_out.splitlines():
                 if 'Microservices Standards:' in line:
                     try:
@@ -1872,9 +1877,9 @@ def main():
     step_start = datetime.now()
     complexity = 5
     task_type = 'General'
-    prompt_script = MEMORY_BASE / '03-execution-system' / '00-prompt-generation' / 'prompt-generator.py'
+    prompt_script = SCRIPT_DIR / 'architecture' / '03-execution-system' / '00-prompt-generation' / 'prompt-generation-policy.py'
     if not prompt_script.exists():
-        prompt_script = SCRIPT_DIR / 'architecture' / '03-execution-system' / '00-prompt-generation' / 'prompt-generator.py'
+        prompt_script = MEMORY_BASE / '03-execution-system' / '00-prompt-generation' / 'prompt-generation-policy.py'
     pr_out = ''
     pr_dur = 0
     enhanced_prompt_summary = ''
@@ -1926,9 +1931,9 @@ def main():
     # ------------------------------------------------------------------
     step_start = datetime.now()
     task_count = 2
-    task_script = MEMORY_BASE / '03-execution-system' / '01-task-breakdown' / 'task-auto-analyzer.py'
+    task_script = SCRIPT_DIR / 'architecture' / '03-execution-system' / '01-task-breakdown' / 'automatic-task-breakdown-policy.py'
     if not task_script.exists():
-        task_script = SCRIPT_DIR / 'architecture' / '03-execution-system' / '01-task-breakdown' / 'task-auto-analyzer.py'
+        task_script = MEMORY_BASE / '03-execution-system' / '01-task-breakdown' / 'automatic-task-breakdown-policy.py'
     tk_dur = 0
     if task_script.exists():
         tk_out, _, _, tk_dur = run_script_with_retry(task_script, ['--', user_message], timeout=8, step_name='Step-3.1.Task-Breakdown')
@@ -2022,9 +2027,9 @@ Work to complete: Execute phase {i} of the identified work breakdown.
     step_start = datetime.now()
     plan_required = False
     adj_complexity = complexity
-    plan_script = MEMORY_BASE / '03-execution-system' / '02-plan-mode' / 'auto-plan-mode-suggester.py'
+    plan_script = SCRIPT_DIR / 'architecture' / '03-execution-system' / '02-plan-mode' / 'auto-plan-mode-suggestion-policy.py'
     if not plan_script.exists():
-        plan_script = SCRIPT_DIR / 'architecture' / '03-execution-system' / '02-plan-mode' / 'auto-plan-mode-suggester.py'
+        plan_script = MEMORY_BASE / '03-execution-system' / '02-plan-mode' / 'auto-plan-mode-suggestion-policy.py'
     pl_dur = 0
     plan_score_detail = {}
     if plan_script.exists():
@@ -2291,9 +2296,9 @@ Work to complete: Execute phase {i} of the identified work breakdown.
     # STEP 3.5: PROMPT GENERATION (WITH SKILL CONTEXT)
     # ------------------------------------------------------------------
     step_start = datetime.now()
-    prompt_script = MEMORY_BASE / '03-execution-system' / '00-prompt-generation' / 'prompt-generator.py'
+    prompt_script = SCRIPT_DIR / 'architecture' / '03-execution-system' / '00-prompt-generation' / 'prompt-generation-policy.py'
     if not prompt_script.exists():
-        prompt_script = SCRIPT_DIR / 'architecture' / '03-execution-system' / '00-prompt-generation' / 'prompt-generator.py'
+        prompt_script = MEMORY_BASE / '03-execution-system' / '00-prompt-generation' / 'prompt-generation-policy.py'
     pr_dur_3_5 = 0
     if prompt_script.exists():
         pr_out, _, _, pr_dur_3_5 = run_script_with_retry(prompt_script, ['--', user_message], timeout=8, step_name='Step-3.5.Prompt-Skill-Context')
@@ -2405,9 +2410,9 @@ Work to complete: Execute phase {i} of the identified work breakdown.
     # STEP 3.7: FAILURE PREVENTION
     # ------------------------------------------------------------------
     step_start = datetime.now()
-    fp_script = MEMORY_BASE / '03-execution-system' / 'failure-prevention' / 'pre-execution-checker.py'
+    fp_script = SCRIPT_DIR / 'architecture' / '03-execution-system' / 'failure-prevention' / 'common-failures-prevention.py'
     if not fp_script.exists():
-        fp_script = SCRIPT_DIR / 'architecture' / '03-execution-system' / 'failure-prevention' / 'pre-execution-checker.py'
+        fp_script = MEMORY_BASE / '03-execution-system' / 'failure-prevention' / 'common-failures-prevention.py'
     fp_dur = 0
     fp_checks = {}
     if fp_script.exists():
