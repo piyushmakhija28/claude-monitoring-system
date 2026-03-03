@@ -380,7 +380,11 @@ def create_github_issue(task_id, subject, description):
             return None
 
         # Build issue title and body
-        title = '[TASK-' + str(task_id) + '] ' + subject if task_id else subject
+        # CHANGED v3.0: Use semantic title format (no [TASK-X] prefix)
+        # Format: {type}: {subject}
+        # Example: bugfix: Model selection defaulting to HAIKU
+        issue_type_label = _detect_issue_type(subject, description)
+        title = issue_type_label + ': ' + subject
         # Truncate title to 256 chars (GitHub limit is higher but keep it readable)
         title = title[:256]
 
@@ -393,40 +397,17 @@ def create_github_issue(task_id, subject, description):
         issue_type = _detect_issue_type(subject, description)
         complexity = flow_ctx.get('complexity', 0)
 
-        # Section 1: Story / Narrative
-        body_lines.append('## Story')
+        # CHANGED v3.0: Problem-centric body format (not task-centric)
+        # Section 1: Problem Statement
+        body_lines.append('## Problem Statement')
         body_lines.append('')
-        # Build a comprehensive narrative based on issue type
-        if issue_type == 'fix':
-            body_lines.append('A bug has been identified that needs to be resolved. '
-                              'The issue affects the system behavior described below and '
-                              'requires investigation, root cause analysis, and a targeted fix.')
-        elif issue_type == 'refactor':
-            body_lines.append('The existing code needs restructuring to improve maintainability, '
-                              'readability, or performance. This refactoring should preserve all '
-                              'current functionality while improving the internal design.')
-        elif issue_type == 'docs':
-            body_lines.append('Documentation needs to be created or updated to accurately reflect '
-                              'the current system behavior, API contracts, or setup instructions.')
-        elif issue_type == 'test':
-            body_lines.append('Test coverage needs to be added or improved to ensure system '
-                              'reliability and prevent regressions in the affected components.')
-        elif issue_type == 'enhancement':
-            body_lines.append('An existing feature needs to be enhanced or optimized to '
-                              'better serve the current requirements and improve user experience.')
-        else:
-            body_lines.append('A new feature needs to be implemented as described below. '
-                              'This involves designing the solution, implementing the code, '
-                              'and verifying it works correctly end-to-end.')
+        body_lines.append(description if description else subject)
         body_lines.append('')
 
-        # Add the actual task description as the detailed story
-        if description:
-            body_lines.append('**What needs to be done:**')
-            body_lines.append('')
-            body_lines.append(description)
-        else:
-            body_lines.append('**What needs to be done:** ' + subject)
+        # Section 1b: Context & Background
+        body_lines.append('## Context & Background')
+        body_lines.append('')
+        body_lines.append('Related to: ' + issue_type.capitalize() + ' | Complexity: ' + str(complexity) + '/25')
         body_lines.append('')
 
         # Section 2: Task Overview (metadata table)
@@ -920,20 +901,24 @@ def close_github_issue(task_id):
 def _detect_issue_type(subject, description=''):
     """
     Detect the issue type from subject and description text.
-    Returns one of: 'fix', 'feature', 'refactor', 'docs', 'enhancement', 'test'.
-    Used for both label assignment and branch naming.
+    Returns SEMANTIC label: 'bugfix', 'feature', 'refactor', 'docs', 'enhancement', 'perf', 'test', 'chore'.
+    Used for both GitHub labels and branch naming (e.g., bugfix/42, feature/123).
     """
     combined = (subject + ' ' + (description or '')).lower()
     if any(w in combined for w in ['fix', 'bug', 'error', 'broken', 'crash', 'issue', 'resolve']):
-        return 'fix'
+        return 'bugfix'
     if any(w in combined for w in ['refactor', 'cleanup', 'reorganize', 'simplify', 'restructure']):
         return 'refactor'
     if any(w in combined for w in ['doc', 'readme', 'comment', 'documentation', 'javadoc']):
         return 'docs'
     if any(w in combined for w in ['test', 'spec', 'coverage', 'unit test', 'integration test']):
         return 'test'
-    if any(w in combined for w in ['update', 'enhance', 'improve', 'upgrade', 'optimize']):
+    if any(w in combined for w in ['performance', 'perf', 'optimize', 'speed', 'faster']):
+        return 'perf'
+    if any(w in combined for w in ['update', 'enhance', 'improve', 'upgrade']):
         return 'enhancement'
+    if any(w in combined for w in ['chore', 'maintenance', 'dependency', 'dependencies']):
+        return 'chore'
     return 'feature'
 
 
@@ -1048,47 +1033,45 @@ def _detect_scope_labels(subject, description=''):
 def _build_issue_labels(issue_type, complexity, subject, description=''):
     """
     Build the complete list of labels for a GitHub issue.
+    CHANGED v3.0: Use semantic labels (p0-critical, p1-high, p2-medium, p3-low).
+
     Returns list of label name strings.
     """
     labels = []
 
-    # 1. Auto-management label
-    labels.append('auto-created')
-
-    # 2. Type label (maps issue_type to actual repo label names)
-    type_label_map = {
-        'fix': 'bug',
-        'feature': 'enhancement',
+    # 1. Type label (semantic format - matches branch naming!)
+    # Supported types: bugfix, feature, refactor, docs, enhancement, perf, test, chore
+    # These also match branch naming: bugfix/42, feature/123, etc.
+    type_map = {
+        'bugfix': 'bugfix',
+        'fix': 'bugfix',  # backward compatibility
+        'feature': 'feature',
         'refactor': 'refactor',
-        'docs': 'documentation',
+        'docs': 'docs',
         'enhancement': 'enhancement',
+        'perf': 'perf',
         'test': 'test',
+        'chore': 'chore',
     }
-    labels.append(type_label_map.get(issue_type, 'enhancement'))
+    labels.append(type_map.get(issue_type, 'feature'))
 
-    # 3. Priority label
+    # 2. Priority label (CHANGED v3.0: semantic naming)
+    # p0-critical (>=18), p1-high (12-17), p2-medium (6-11), p3-low (0-5)
     if complexity and isinstance(complexity, (int, float)):
         c = int(complexity)
-        if c >= 15:
-            labels.append('critical-priority')
-        elif c >= 10:
-            labels.append('high-priority')
-        elif c >= 5:
-            labels.append('medium-priority')
+        if c >= 18:
+            labels.append('p0-critical')
+        elif c >= 12:
+            labels.append('p1-high')
+        elif c >= 6:
+            labels.append('p2-medium')
         else:
-            labels.append('low-priority')
+            labels.append('p3-low')
 
-    # 4. Complexity label
-    if complexity and isinstance(complexity, (int, float)):
-        c = int(complexity)
-        if c >= 10:
-            labels.append('complexity-high')
-        elif c >= 4:
-            labels.append('complexity-medium')
-        else:
-            labels.append('complexity-low')
+    # 3. Status label (always in-progress for new issues)
+    labels.append('in-progress')
 
-    # 5. Scope/technology labels
+    # 4. Scope/technology labels (optional - only if relevant)
     labels.extend(_detect_scope_labels(subject, description))
 
     return labels
@@ -1155,6 +1138,9 @@ def create_issue_branch(issue_number, subject, issue_type=None):
     Create and checkout a git branch named {label}/{issueId}.
     Examples: fix/42, feature/123, refactor/99, docs/55, enhancement/78
 
+    IMPORTANT: Must include issue ID for auto-close policy to work!
+    The branch name is used to link issues in github-issues.json and PR workflow.
+
     Only creates if currently on main/master.
     Stores branch name in github-issues.json under 'session_branch'.
 
@@ -1190,6 +1176,7 @@ def create_issue_branch(issue_number, subject, issue_type=None):
             issue_type = _detect_issue_type(subject)
 
         # Build branch name: {label}/{issueId}
+        # KEEP THIS FORMAT - Required by github-branch-pr-policy.md for auto-close!
         branch_name = issue_type + '/' + str(issue_number)
 
         # Create and checkout new branch
