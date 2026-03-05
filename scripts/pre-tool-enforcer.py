@@ -81,6 +81,15 @@ except Exception:
         """No-op fallback when metrics_emitter is unavailable."""
     _METRICS_AVAILABLE = False
 
+# ===================================================================
+# NEW: POLICY TRACKING INTEGRATION
+# ===================================================================
+try:
+    from policy_tracking_helper import record_policy_execution, record_sub_operation
+    HAS_TRACKING = True
+except ImportError:
+    HAS_TRACKING = False
+
 # Track hook start time for total duration
 _HOOK_START = datetime.now()
 
@@ -978,6 +987,11 @@ def main():
     Never raises exceptions; all errors are silently swallowed so a broken
     hook never disrupts the underlying tool call.
     """
+    # ===================================================================
+    # TRACKING: Record start time
+    # ===================================================================
+    _track_start_time = datetime.now()
+
     # CONTEXT CHAIN: Load flow-trace context from 3-level-flow (cached per invocation)
     # This gives pre-tool-enforcer awareness of task type, complexity, skill, model
     flow_ctx = _load_flow_trace_context()
@@ -1163,6 +1177,33 @@ def main():
                                        'blocks': len(all_blocks)})
         except Exception:
             pass
+
+        # ===================================================================
+        # TRACKING: Record blocking event
+        # ===================================================================
+        try:
+            if HAS_TRACKING:
+                _session_id = get_current_session_id() or 'unknown'
+                _duration_ms = int((datetime.now() - _track_start_time).total_seconds() * 1000)
+                record_policy_execution(
+                    session_id=_session_id,
+                    policy_name="pre-tool-enforcer",
+                    policy_script="pre-tool-enforcer.py",
+                    policy_type="Core Hook",
+                    input_params={
+                        "tool": tool_name if 'tool_name' in dir() else "unknown"
+                    },
+                    output_results={
+                        "status": "BLOCKED",
+                        "blocks_count": len(all_blocks) if 'all_blocks' in dir() else 0,
+                        "hints_provided": len(all_hints) if 'all_hints' in dir() else 0
+                    },
+                    decision=f"Tool {tool_name if 'tool_name' in dir() else 'unknown'} blocked by enforcement policy",
+                    duration_ms=_duration_ms
+                )
+        except Exception:
+            pass
+
         sys.exit(1)
 
     try:
@@ -1173,6 +1214,32 @@ def main():
                             extra={'tool': tool_name, 'hints': len(all_hints)})
     except Exception:
         pass
+
+    # ===================================================================
+    # TRACKING: Record overall execution (success path)
+    # ===================================================================
+    try:
+        if HAS_TRACKING:
+            _session_id = get_current_session_id() or 'unknown'
+            _duration_ms = int((datetime.now() - _track_start_time).total_seconds() * 1000)
+            record_policy_execution(
+                session_id=_session_id,
+                policy_name="pre-tool-enforcer",
+                policy_script="pre-tool-enforcer.py",
+                policy_type="Core Hook",
+                input_params={
+                    "tool": tool_name if 'tool_name' in dir() else "unknown"
+                },
+                output_results={
+                    "status": "ALLOWED",
+                    "hints_provided": len(all_hints) if 'all_hints' in dir() else 0
+                },
+                decision=f"Tool {tool_name if 'tool_name' in dir() else 'unknown'} allowed with optimization hints",
+                duration_ms=_duration_ms
+            )
+    except Exception:
+        pass
+
     sys.exit(0)
 
 

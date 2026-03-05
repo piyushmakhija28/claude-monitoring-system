@@ -48,6 +48,16 @@ except Exception:
         """No-op fallback when metrics_emitter is unavailable."""
     _METRICS_AVAILABLE = False
 
+# ===================================================================
+# NEW: POLICY TRACKING INTEGRATION
+# ===================================================================
+try:
+    from policy_tracking_helper import record_policy_execution, record_sub_operation
+    HAS_TRACKING = True
+except ImportError:
+    HAS_TRACKING = False
+    print("[WARN] Policy tracking not available - continuing without tracking")
+
 # Track hook start time
 _HOOK_START = datetime.now()
 
@@ -747,6 +757,12 @@ def main():
       8. Update hook state file for next invocation.
       9. Always exits 0.
     """
+    # ===================================================================
+    # TRACKING: Record start time and sub-operations list
+    # ===================================================================
+    _policy_start_time = datetime.now()
+    _sub_operations = []
+
     # Initialize window isolation (PID-based state files)
     _init_window_isolation()
 
@@ -906,6 +922,34 @@ def main():
         cleanup_window()
     except Exception:
         pass
+
+    # ===================================================================
+    # TRACKING: Record overall policy execution
+    # ===================================================================
+    try:
+        _policy_duration = int((datetime.now() - _policy_start_time).total_seconds() * 1000)
+        _current_session = get_current_session_id()
+
+        if HAS_TRACKING and _current_session:
+            record_policy_execution(
+                session_id=_current_session,
+                policy_name="clear-session-handler",
+                policy_script="clear-session-handler.py",
+                policy_type="Utility Hook",
+                input_params={
+                    "transcript_path": str(transcript_path) if transcript_path else "",
+                    "msg_count": current_msg_count
+                },
+                output_results={
+                    "is_fresh": is_fresh if 'is_fresh' in dir() else False,
+                    "reason": reason if 'reason' in dir() else "unknown"
+                },
+                decision=f"Session handler processed: {reason if 'reason' in dir() else 'ongoing'}",
+                duration_ms=_policy_duration,
+                sub_operations=_sub_operations if _sub_operations else None
+            )
+    except Exception as e:
+        log_event(f"[TRACK-ERROR] Failed to record policy execution: {e}")
 
     try:
         _dur_csh = int((datetime.now() - _HOOK_START).total_seconds() * 1000)

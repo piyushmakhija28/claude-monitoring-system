@@ -52,6 +52,17 @@ if sys.stdout.encoding != 'utf-8':
 if sys.stderr.encoding != 'utf-8':
     sys.stderr.reconfigure(encoding='utf-8')
 
+# ===================================================================
+# NEW: POLICY TRACKING INTEGRATION
+# ===================================================================
+try:
+    sys.path.insert(0, str(Path(__file__).parent))
+    from policy_tracking_helper import record_policy_execution, record_sub_operation
+    HAS_TRACKING = True
+except ImportError:
+    HAS_TRACKING = False
+    print("[WARN] Policy tracking not available - continuing without tracking")
+
 class SessionIDGenerator:
     """Generates and manages Claude Code session IDs and lifecycle state.
 
@@ -122,6 +133,11 @@ class SessionIDGenerator:
             Tuple of ``(session_id, session_data)`` where ``session_data``
             is the full dict written to disk.
         """
+        # ===================================================================
+        # TRACKING: Record start time
+        # ===================================================================
+        _track_start_time = datetime.now()
+
         session_id = self.generate_session_id(session_type)
 
         session_data = {
@@ -136,22 +152,68 @@ class SessionIDGenerator:
             'work_items': []
         }
 
-        # Save session data
-        session_file = self.sessions_dir / f'{session_id}.json'
-        with open(session_file, 'w') as f:
-            json.dump(session_data, f, indent=2)
+        try:
+            # Save session data
+            session_file = self.sessions_dir / f'{session_id}.json'
+            with open(session_file, 'w') as f:
+                json.dump(session_data, f, indent=2)
 
-        # Update current session
-        with open(self.current_session_file, 'w') as f:
-            json.dump({
-                'current_session_id': session_id,
-                'started_at': datetime.now().isoformat()
-            }, f, indent=2)
+            # Update current session
+            with open(self.current_session_file, 'w') as f:
+                json.dump({
+                    'current_session_id': session_id,
+                    'started_at': datetime.now().isoformat()
+                }, f, indent=2)
 
-        # Log session
-        self._log_session(session_id, 'CREATED', description)
+            # Log session
+            self._log_session(session_id, 'CREATED', description)
 
-        return session_id, session_data
+            # ===================================================================
+            # TRACKING: Record execution
+            # ===================================================================
+            if HAS_TRACKING:
+                _duration_ms = int((datetime.now() - _track_start_time).total_seconds() * 1000)
+                record_policy_execution(
+                    session_id=session_id,
+                    policy_name="session-id-generator",
+                    policy_script="session-id-generator.py",
+                    policy_type="Utility Hook",
+                    input_params={
+                        "session_type": session_type,
+                        "description": description,
+                        "metadata": metadata or {}
+                    },
+                    output_results={
+                        "session_id": session_id,
+                        "session_is_new": True,
+                        "status": "ACTIVE"
+                    },
+                    decision=f"Created new session {session_type}",
+                    duration_ms=_duration_ms
+                )
+
+            return session_id, session_data
+
+        except Exception as e:
+            # ===================================================================
+            # TRACKING: Record error
+            # ===================================================================
+            if HAS_TRACKING:
+                _duration_ms = int((datetime.now() - _track_start_time).total_seconds() * 1000)
+                record_policy_execution(
+                    session_id="unknown",
+                    policy_name="session-id-generator",
+                    policy_script="session-id-generator.py",
+                    policy_type="Utility Hook",
+                    input_params={
+                        "session_type": session_type,
+                        "description": description
+                    },
+                    output_results={"status": "ERROR", "error": str(e)},
+                    decision=f"Failed to create session: {e}",
+                    duration_ms=_duration_ms
+                )
+            raise
 
     def get_current_session(self) -> str:
         """Return the ID of the currently active session, or None.
