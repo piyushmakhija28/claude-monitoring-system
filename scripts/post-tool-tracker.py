@@ -696,6 +696,12 @@ def main():
                                 should_clear = False  # wrong skill invoked
                 if should_clear:
                     _clear_session_flags('.skill-selection-pending', sid)
+                    try:
+                        emit_flag_lifecycle('skill_selection', 'clear',
+                                            session_id=sid or '',
+                                            reason='Skill/Task tool invoked')
+                    except Exception:
+                        pass
             except Exception:
                 pass
 

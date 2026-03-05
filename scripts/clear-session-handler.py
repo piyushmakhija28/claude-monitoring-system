@@ -298,14 +298,18 @@ def close_current_session(session_id):
     if session_file.exists():
         try:
             with open(session_file, 'r', encoding='utf-8') as f:
+                _lock_file(f)
                 data = json.load(f)
+                _unlock_file(f)
 
             data['end_time'] = datetime.now().isoformat()
             data['status'] = 'COMPLETED'
             data['closed_reason'] = 'clear_command_detected_by_hook'
 
             with open(session_file, 'w', encoding='utf-8') as f:
+                _lock_file(f)
                 json.dump(data, f, indent=2)
+                _unlock_file(f)
 
             log_event(f"Session closed and saved: {session_id}")
         except Exception as e:
