@@ -34,7 +34,14 @@ VOICE_LOG = MEMORY_BASE / 'logs' / 'voice-notifier.log'
 
 
 def log_voice(msg):
-    """Log voice activity"""
+    """Append a timestamped entry to the voice notifier log file.
+
+    Creates the log directory if it does not already exist. Failures to
+    write are silently ignored so that logging never interrupts TTS.
+
+    Args:
+        msg (str): Message to append to the log.
+    """
     VOICE_LOG.parent.mkdir(parents=True, exist_ok=True)
     from datetime import datetime
     ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -46,7 +53,19 @@ def log_voice(msg):
 
 
 def speak_windows(text):
-    """Windows TTS using pyttsx3"""
+    """Speak text on Windows using the pyttsx3 TTS engine.
+
+    Attempts to select an Indian English voice ('en-in') first; falls back
+    to the first available English voice if none is found. Speech rate is
+    set to 150 WPM. All outcomes are logged to VOICE_LOG.
+
+    Args:
+        text (str): Text to be spoken aloud.
+
+    Returns:
+        bool: True if the text was spoken successfully, False if pyttsx3
+            is not installed or an error occurred.
+    """
     try:
         import pyttsx3
         engine = pyttsx3.init()
@@ -88,7 +107,19 @@ def speak_windows(text):
 
 
 def speak_unix(text):
-    """Unix/Linux TTS using espeak"""
+    """Speak text on Unix/Linux using the espeak command-line TTS tool.
+
+    First attempts synthesis with the Indian English voice ('en-in').
+    Falls back to the default English voice ('en') if the first attempt
+    returns a non-zero exit code. All outcomes are logged to VOICE_LOG.
+
+    Args:
+        text (str): Text to be spoken aloud.
+
+    Returns:
+        bool: True if espeak exited with code 0, False if espeak is not
+            installed, the command timed out, or an error occurred.
+    """
     try:
         # Try espeak with Indian English
         cmd = ['espeak', '-v', 'en-in', '-s', '150', text]
@@ -117,6 +148,13 @@ def speak_unix(text):
 
 
 def main():
+    """Entry point for the voice-notifier CLI.
+
+    Reads the text to speak from command-line arguments (all positional
+    args are joined with spaces). Selects the platform-specific TTS
+    backend (Windows: pyttsx3, Unix: espeak) and exits 0 on both success
+    and silent failure so the calling hook is never interrupted.
+    """
     if len(sys.argv) < 2:
         log_voice("[ERROR] No text provided")
         sys.exit(1)
