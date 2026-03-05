@@ -64,8 +64,12 @@ if sys.platform == 'win32':
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
-VERSION = "3.8.1"  # v3.8.1: File locking for shared JSON state (Loophole #19)
+VERSION = "3.9.0"  # v3.9.0: Flag auto-expiry with 60-minute cleanup (Loophole #10)
 SCRIPT_NAME = "3-level-flow.py"
+
+# Flag auto-expiry configuration (Loophole #10)
+FLAG_EXPIRY_MINUTES = 60   # Auto-delete flags older than 60 minutes
+FLAG_CLEANUP_ON_STARTUP = True
 
 # Use ide_paths for IDE self-contained installations (with fallback for standalone mode)
 try:
@@ -80,6 +84,89 @@ except ImportError:
 
 SCRIPT_DIR = Path(__file__).parent  # For policy-executor integration
 PYTHON = sys.executable
+
+
+# =============================================================================
+# FLAG AUTO-EXPIRY UTILITIES (Loophole #10)
+# =============================================================================
+
+def _cleanup_expired_flags(max_age_minutes=FLAG_EXPIRY_MINUTES):
+    """Remove flag files in FLAG_DIR older than max_age_minutes.
+
+    Scans ~/.claude/ for all .*.json flag files and deletes any whose
+    filesystem modification time exceeds the expiry threshold.  Uses a
+    try/except around every file operation so a single bad file never
+    aborts the cleanup loop.
+
+    Args:
+        max_age_minutes: Maximum allowed flag age in minutes (default 60).
+
+    Returns:
+        int: Number of flag files deleted.
+    """
+    try:
+        from datetime import timedelta
+        cutoff_time = datetime.now() - timedelta(minutes=max_age_minutes)
+        cleaned = 0
+
+        for flag_file in FLAG_DIR.glob('.*.json'):
+            try:
+                if flag_file.stat().st_mtime < cutoff_time.timestamp():
+                    flag_file.unlink(missing_ok=True)
+                    cleaned += 1
+            except Exception:
+                pass
+
+        return cleaned
+    except Exception:
+        return 0
+
+
+def _check_flag_age(flag_path, max_age_minutes=FLAG_EXPIRY_MINUTES):
+    """Check if a flag file is still within its freshness window.
+
+    First checks the file modification time against the cutoff.  If the
+    file also contains a JSON 'created_at' ISO timestamp, that timestamp
+    is used as a second (more accurate) age check.  Stale files are
+    deleted before returning False so they are lazily cleaned on read.
+
+    Args:
+        flag_path: str or Path to the flag JSON file.
+        max_age_minutes: Maximum allowed age in minutes (default 60).
+
+    Returns:
+        bool: True if the flag is fresh and usable; False if expired
+              (file is deleted) or does not exist.
+    """
+    try:
+        from datetime import timedelta
+        path = Path(flag_path)
+        if not path.exists():
+            return False
+
+        # Check file modification time first (fast path)
+        mod_time = datetime.fromtimestamp(path.stat().st_mtime)
+        age_minutes = (datetime.now() - mod_time).total_seconds() / 60
+
+        if age_minutes > max_age_minutes:
+            path.unlink(missing_ok=True)
+            return False
+
+        # Also verify created_at inside JSON when present (authoritative)
+        try:
+            data = json.loads(path.read_text(encoding='utf-8'))
+            if 'created_at' in data:
+                created = datetime.fromisoformat(data['created_at'])
+                json_age = (datetime.now() - created).total_seconds() / 60
+                if json_age > max_age_minutes:
+                    path.unlink(missing_ok=True)
+                    return False
+        except Exception:
+            pass  # Malformed JSON - fall through; mtime check already passed
+
+        return True
+    except Exception:
+        return False
 
 
 def load_policy_rules() -> dict:
