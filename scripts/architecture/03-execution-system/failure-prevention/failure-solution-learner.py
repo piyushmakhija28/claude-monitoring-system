@@ -64,11 +64,23 @@ class FailureSolutionLearner:
             return {}
 
     def save_kb(self, kb):
-        """Save knowledge base"""
+        """Save the knowledge base to disk.
+
+        Args:
+            kb (dict): Knowledge base dictionary to persist.
+        """
         self.kb_file.write_text(json.dumps(kb, indent=2))
 
     def log_learning(self, event_type, details):
-        """Log learning event"""
+        """Log a learning event to the solution learning log.
+
+        Records timestamped events for solution learning activities, including
+        new solutions discovered and confidence updates.
+
+        Args:
+            event_type (str): Type of learning event (e.g., 'SOLUTION_LEARNED').
+            details (str): Descriptive details about the learning event.
+        """
         timestamp = datetime.now().isoformat()
         log_entry = f"[{timestamp}] {event_type} | {details}\n"
 
@@ -76,7 +88,21 @@ class FailureSolutionLearner:
             f.write(log_entry)
 
     def learn_solution(self, tool, failure_type, solution, confidence=0.8):
-        """Learn a solution for a failure type"""
+        """Learn and store a solution for a failure type.
+
+        Records a new solution or updates an existing one with higher confidence.
+        Tracks frequency of solutions to identify most effective recovery strategies.
+
+        Args:
+            tool (str): Name of the tool where failure occurred.
+            failure_type (str): Type/category of the failure.
+            solution (dict or str): The solution or fix for the failure.
+            confidence (float): Confidence level in the solution (0.0-1.0).
+                Default: 0.8.
+
+        Returns:
+            bool: True if solution was learned successfully.
+        """
         kb = self.load_kb()
 
         # Ensure tool exists in KB
