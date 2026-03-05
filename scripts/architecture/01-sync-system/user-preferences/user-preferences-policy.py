@@ -193,7 +193,7 @@ def has_preference(category):
 
 
 def show_all_preferences():
-    """Display all learned preferences."""
+    """Print all learned preferences grouped by category to stdout."""
     prefs = load_preferences()
     if not prefs:
         print("[CROSS] No preferences file found")
@@ -312,7 +312,11 @@ def get_strongest_preference(category_prefs):
 
 
 def load_existing_preferences():
-    """Load existing learned preferences"""
+    """Load the current learned preferences from the preferences file.
+
+    Returns:
+        dict: Parsed preferences dict, or empty dict if missing or unreadable.
+    """
     if not PREFS_FILE.exists():
         return {}
 
