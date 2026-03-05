@@ -64,7 +64,7 @@ if sys.platform == 'win32':
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
-VERSION = "3.8.0"
+VERSION = "3.8.1"  # v3.8.1: File locking for shared JSON state (Loophole #19)
 SCRIPT_NAME = "3-level-flow.py"
 
 # Use ide_paths for IDE self-contained installations (with fallback for standalone mode)
