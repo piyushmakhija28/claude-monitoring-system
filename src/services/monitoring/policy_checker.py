@@ -1,6 +1,12 @@
 """
-Policy Checker
-Checks status of all policies in Claude Memory System
+Policy Checker - Check status of all policies in Claude Memory System.
+
+Verifies the existence and compliance status of all 3-Level Architecture
+policies (Level -1, 1, 2, 3 with 12 steps). Reads policy definition files
+and enforcement scripts to report comprehensive policy health status.
+
+Classes:
+    PolicyChecker: Check status and compliance of all system policies.
 """
 
 import json
@@ -13,6 +19,17 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from utils.path_resolver import get_data_dir
 
 class PolicyChecker:
+    """Check status and compliance of all Claude Memory System policies.
+
+    Verifies the presence and status of policies from all four enforcement
+    levels (Level -1, 1, 2, and 3 with 12 execution steps) by reading
+    policy definition files and checking hook script existence.
+
+    Attributes:
+        memory_dir (Path): Root data directory (~/.claude/memory).
+        policies (list[dict]): List of policy definitions with status info.
+    """
+
     def __init__(self):
         self.memory_dir = get_data_dir()
 

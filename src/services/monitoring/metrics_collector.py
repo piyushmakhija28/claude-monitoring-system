@@ -1,6 +1,27 @@
 """
-Metrics Collector
-Collects metrics from Claude Memory System
+Metrics Collector - Aggregate runtime metrics from the Claude Memory System.
+
+Collects and exposes key health, usage, and cost metrics by reading data
+produced by the hook scripts and session logs. Acts as the primary data
+source for the main dashboard API endpoints.
+
+Reads from:
+  - ~/.claude/memory/logs/session-progress.json (context usage %)
+  - ~/.claude/memory/logs/sessions/*/flow-trace.json (model usage, optimization data)
+  - ~/.claude/memory/logs/policy-hits.log (policy hit counts)
+  - ~/.claude/memory/logs/metrics.jsonl (enforcement events, hook timings, policy steps)
+
+Key responsibilities:
+  - Compute system health score from hook presence and log activity
+  - Provide context usage percentage from the active session
+  - Calculate token-cost savings estimates from optimization activity
+  - Aggregate model usage distribution (haiku/sonnet/opus) over time
+  - Expose enforcement event statistics from metrics.jsonl telemetry
+  - Report per-hook execution performance timing
+  - Provide per-policy-step pass/fail breakdowns
+
+Classes:
+  MetricsCollector: Main metrics aggregation class for the dashboard.
 """
 
 import os
@@ -15,6 +36,17 @@ from utils.path_resolver import get_data_dir, get_logs_dir, get_scripts_dir, get
 from datetime import datetime, timedelta
 
 class MetricsCollector:
+    """Aggregate and expose runtime metrics from the Claude Memory System.
+
+    Reads hook-produced log files and session data to compute health scores,
+    usage statistics, cost comparisons, and telemetry summaries for the
+    dashboard. Delegates memory system status checks to MemorySystemMonitor.
+
+    Attributes:
+        memory_dir (Path): Root data directory (~/.claude/memory).
+        memory_monitor (MemorySystemMonitor): Delegate for hook/daemon status.
+    """
+
     def __init__(self):
         self.memory_dir = get_data_dir()
         # Import MemorySystemMonitor for direct access

@@ -1,6 +1,12 @@
 """
-Session Tracker
-Tracks and manages Claude sessions with unique IDs
+Session Tracker - Tracks and manages Claude Code sessions with unique IDs.
+
+Monitors active sessions by reading session-progress.json (updated by hooks)
+and aggregating metrics from session logs. Provides current session data and
+historical session retrieval for the dashboard.
+
+Classes:
+    SessionTracker: Track and manage Claude Code sessions with metrics.
 """
 
 import os
@@ -15,6 +21,19 @@ from datetime import datetime
 import uuid
 
 class SessionTracker:
+    """Track and manage Claude Code sessions with unique identifiers.
+
+    Reads session progress files (session-progress.json) and session logs
+    to provide current active session state and historical metrics for
+    dashboard display and analysis.
+
+    Attributes:
+        memory_dir (Path): Root data directory (~/.claude/memory).
+        sessions_dir (Path): Directory containing session JSON files (memory/sessions).
+        session_logs_dir (Path): Directory containing per-session logs (memory/logs/sessions).
+        progress_file (Path): Path to the active session progress file.
+    """
+
     def __init__(self):
         self.memory_dir = get_data_dir()
         self.sessions_dir = self.memory_dir / 'sessions'

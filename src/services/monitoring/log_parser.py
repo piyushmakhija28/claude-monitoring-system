@@ -15,7 +15,18 @@ from datetime import datetime, timedelta, timezone
 import re
 
 class LogParser:
+    """Parse and analyze log files from the Claude Memory System.
+
+    Reads policy hits logs, daemon logs, and 3-level flow session logs
+    to extract activities, errors, and metrics for dashboard display.
+
+    Attributes:
+        memory_dir (Path): Root data directory (~/.claude/memory).
+        logs_dir (Path): Directory containing log files (memory_dir/logs).
+    """
+
     def __init__(self):
+        """Initialize LogParser and set up log directory paths."""
         self.memory_dir = get_data_dir()
         self.logs_dir = self.memory_dir / 'logs'
 
