@@ -70,6 +70,7 @@ class SkillManager:
     """CRUD operations for skill registry"""
 
     def __init__(self):
+        """Initialize SkillManager by loading the existing registry from disk."""
         self.registry = self._load_registry()
         self.skills = self.registry.get('skills', {})
         self.categories = self.registry.get('categories', {})

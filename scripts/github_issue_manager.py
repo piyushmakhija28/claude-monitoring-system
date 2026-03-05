@@ -1084,7 +1084,16 @@ def _get_repo_labels(repo_root):
 
 
 def _ensure_labels_exist(labels, repo_root):
-    """Create any labels that don't exist in the repo yet."""
+    """Create any of the given labels that do not already exist in the repository.
+
+    Only creates labels that are defined in LABEL_DEFINITIONS. Uses
+    ``gh label create --force`` so re-creation of an existing label is
+    idempotent. Failures for individual labels are silently ignored.
+
+    Args:
+        labels (list[str]): Label names to ensure exist.
+        repo_root (str): Absolute path to the git repository root.
+    """
     existing = _get_repo_labels(repo_root)
     for label_name in labels:
         if label_name in existing:
