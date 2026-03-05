@@ -1,20 +1,26 @@
 """
-SECURE VERSION OF app.py - FIXES ALL CRITICAL SECURITY ISSUES
+Secure Flask Application for Claude Insight.
 
-This file demonstrates the security fixes needed for app.py.
-Once tested, merge these changes into app.py.
+Hardened version of app.py that addresses all critical security issues
+identified in the base application. Intended to replace app.py once
+fully tested against the existing test suite.
 
-CRITICAL FIXES IMPLEMENTED:
-1. ✅ Removed hardcoded secret key
-2. ✅ Removed hardcoded admin password
-3. ✅ Added CSRF protection
-4. ✅ Added rate limiting
-5. ✅ Added path traversal validation
-6. ✅ Added command injection prevention
-7. ✅ Added security headers
-8. ✅ Session regeneration on login
-9. ✅ Password strength validation
-10. ✅ Account lockout after failed attempts
+Security measures implemented:
+    1. No hardcoded secret key (loaded from env / SecurityConfig).
+    2. No hardcoded admin password (loaded from env / UserManager).
+    3. CSRF protection via Flask-WTF CSRFProtect.
+    4. Rate limiting via Flask-Limiter.
+    5. Path traversal prevention via PathValidator.
+    6. Command injection prevention via CommandValidator.
+    7. Security headers via Flask-Talisman.
+    8. Session ID regeneration on login.
+    9. Password complexity enforcement via PasswordValidator.
+    10. Account lockout after repeated failed login attempts via UserManager.
+
+Environment variables required (see config/security.py):
+    SECRET_KEY          -- Session signing key.
+    ADMIN_PASSWORD      -- Initial admin password on first run.
+    DEVELOPMENT_MODE    -- Set to 'True' to relax some checks (never in production).
 """
 
 # Fix module imports - add src directory to path
@@ -103,7 +109,12 @@ logger = logging.getLogger(__name__)
 
 # Read application version
 def get_version():
-    """Read version from VERSION file"""
+    """Read the application version string from the VERSION file.
+
+    Returns:
+        str: Version string from VERSION file, or '2.5.0' if the file is
+            absent or cannot be read.
+    """
     try:
         version_file = Path(__file__).parent.parent / "VERSION"
         if version_file.exists():
@@ -215,7 +226,17 @@ policy_execution_tracker = PolicyExecutionTracker()
 # ============================================================
 
 def login_required(f):
-    """Decorator to require login"""
+    """Flask route decorator that redirects unauthenticated users to /login.
+
+    Checks for 'logged_in' key in the Flask session. Redirects to the login
+    page if the session value is absent or falsy.
+
+    Args:
+        f: The Flask view function to protect.
+
+    Returns:
+        function: Wrapped function with authentication check.
+    """
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if 'logged_in' not in session or not session.get('logged_in'):
@@ -224,7 +245,18 @@ def login_required(f):
     return decorated_function
 
 def admin_required(f):
-    """Decorator to require admin role"""
+    """Flask route decorator that requires the current user to have the 'admin' role.
+
+    Checks authentication first (redirects to login if not authenticated),
+    then verifies the user role via UserManager. Returns HTTP 403 JSON error
+    if the role is not 'admin'.
+
+    Args:
+        f: The Flask view function to protect.
+
+    Returns:
+        function: Wrapped function with admin role check.
+    """
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if 'logged_in' not in session or not session.get('logged_in'):
@@ -241,14 +273,24 @@ def admin_required(f):
 @app.route('/login', methods=['GET', 'POST'])
 @limiter.limit(os.environ.get('RATELIMIT_LOGIN', '5 per minute'))
 def login():
-    """
-    Secure login endpoint
+    """Handle user login with rate limiting and account lockout protection.
 
-    SECURITY FIXES:
-    - Rate limiting to prevent brute force
-    - Session regeneration to prevent fixation
-    - Account lockout after failed attempts
-    - Secure password validation
+    HTTP Method: GET, POST
+    Route: /login
+
+    GET: Renders the login page.
+    POST: Validates credentials via UserManager, regenerates the session to
+        prevent fixation, sets session keys, and redirects to /dashboard or
+        /change-password if forced password change is required.
+
+    Security features:
+        - Rate limited to 5 requests per minute (configurable via RATELIMIT_LOGIN).
+        - Session regenerated on successful login (prevents session fixation).
+        - Account lockout enforced via UserManager after repeated failures.
+
+    Returns:
+        Response: Rendered login template (GET or failed POST), or 302 redirect
+            to /dashboard or /change-password on success.
     """
     if request.method == 'POST':
         username = request.form.get('username', '').strip()

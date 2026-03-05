@@ -1,6 +1,27 @@
 """
-Claude Insight
-A professional real-time analytics and performance insights dashboard for Claude Memory System
+Claude Insight - Flask Application Entry Point.
+
+Provides a real-time monitoring dashboard for the Claude Memory System
+(3-Level Architecture). Exposes web UI pages and JSON API endpoints for
+sessions, policies, metrics, analytics, notifications, system health,
+and data export (CSV, Excel, PDF).
+
+Key Flask Blueprints registered:
+    session_search_bp   -- Session ID search routes (/session-search).
+    claude_creds_bp     -- Claude credentials management (/claude-credentials).
+
+Core services instantiated at module level:
+    MetricsCollector, LogParser, PolicyChecker, SessionTracker,
+    MemorySystemMonitor, PerformanceProfiler, AutomationTracker,
+    SkillAgentTracker, OptimizationTracker, PolicyExecutionTracker,
+    ThreeLevelFlowTracker, IndividualPolicyTracker, ArchitectureModuleMonitor,
+    PolicyComplianceAnalyzer, AnomalyDetector, PredictiveAnalytics,
+    BottleneckAnalyzer, CommunityWidgetsManager, WidgetVersionManager,
+    WidgetCommentsManager, CollaborationSessionManager, TrendingCalculator,
+    NotificationManager, AlertSender, AlertRoutingEngine, HistoryTracker.
+
+SocketIO is used for real-time dashboard metric broadcasts.
+Flasgger (Swagger) provides API documentation at /apidocs/.
 """
 
 # Fix module imports - add src directory to path
@@ -142,7 +163,12 @@ def _append_search_history(query):
 
 # Read application version
 def get_version():
-    """Read version from VERSION file"""
+    """Read the application version string from the VERSION file.
+
+    Returns:
+        str: Version string from VERSION file, or '2.5.0' if the file is
+            absent or cannot be read.
+    """
     try:
         version_file = Path(__file__).parent.parent / "VERSION"
         if version_file.exists():
@@ -235,14 +261,31 @@ USERS = {
 }
 
 def verify_password(username, password):
-    """Verify username and password"""
+    """Verify a username/password pair against the in-memory USERS dict.
+
+    Args:
+        username (str): Username to look up.
+        password (str): Plain-text password to verify.
+
+    Returns:
+        bool: True if the username exists and the password matches, False otherwise.
+    """
     if username not in USERS:
         return False
     stored_hash = USERS[username]['password_hash'].encode('utf-8')
     return bcrypt.checkpw(password.encode('utf-8'), stored_hash)
 
 def update_password(username, new_password):
-    """Update user password"""
+    """Update the bcrypt password hash for an existing user in USERS.
+
+    Args:
+        username (str): Username to update.
+        new_password (str): New plain-text password to hash and store.
+
+    Returns:
+        bool: True if the user was found and updated, False if the username
+            does not exist.
+    """
     if username not in USERS:
         return False
     USERS[username]['password_hash'] = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
@@ -253,7 +296,23 @@ def update_password(username, new_password):
 # ============================================================
 
 def calculate_trend(values):
-    """Calculate trend percentage change"""
+    """Calculate the percentage trend between the first and second halves of a value list.
+
+    Divides values into two equal halves, computes averages, and determines
+    whether the trend is rising, falling, or stable (threshold: 5%).
+
+    Args:
+        values (list[float]): Numeric time-series values.
+
+    Returns:
+        dict: Trend data with keys:
+            direction (str): 'up', 'down', or 'stable'.
+            percentage (float): Absolute percentage change.
+            current (float): Average of second half.
+            previous (float): Average of first half.
+        Returns {'direction': 'stable', 'percentage': 0} when fewer than
+        2 values are provided or the first half average is zero.
+    """
     if not values or len(values) < 2:
         return {'direction': 'stable', 'percentage': 0}
 
@@ -278,7 +337,17 @@ def calculate_trend(values):
     }
 
 def calculate_policy_effectiveness():
-    """Calculate policy effectiveness metrics"""
+    """Calculate policy effectiveness metrics from the MetricsCollector.
+
+    Returns:
+        dict: Effectiveness data with keys:
+            effectiveness (float): Normalized percentage 0-100.
+            total_interventions (int): Total optimization interventions.
+            context_optimizations (int): Context optimization count.
+            failures_prevented (int): Failures prevented count.
+            model_selections (int): Model selection count.
+        Returns {'effectiveness': 0, 'total_interventions': 0} on error.
+    """
     try:
         optimization_impact = metrics.get_optimization_impact()
         total_opts = optimization_impact.get('total_optimizations', 0)
@@ -297,7 +366,14 @@ def calculate_policy_effectiveness():
         return {'effectiveness': 0, 'total_interventions': 0}
 
 def calculate_daemon_uptime(daemon_status):
-    """Calculate daemon uptime percentage"""
+    """Calculate the percentage of hook scripts currently in 'running' status.
+
+    Args:
+        daemon_status (list[dict]): List of hook status dicts with a 'status' key.
+
+    Returns:
+        float: Percentage of running scripts (0-100). Returns 0 if the list is empty.
+    """
     if not daemon_status:
         return 0
 
@@ -307,7 +383,14 @@ def calculate_daemon_uptime(daemon_status):
     return round((running / total) * 100, 1) if total > 0 else 0
 
 def calculate_peak_hours(historical_data):
-    """Calculate peak usage hours (placeholder)"""
+    """Return placeholder peak usage hour information.
+
+    Args:
+        historical_data: Not currently used. Reserved for future implementation.
+
+    Returns:
+        dict: Peak usage summary with keys peak_hour, peak_day, busiest_period.
+    """
     # This is a simplified version - in production, you'd analyze actual usage patterns
     return {
         'peak_hour': '10:00 AM - 11:00 AM',
@@ -316,7 +399,17 @@ def calculate_peak_hours(historical_data):
     }
 
 def login_required(f):
-    """Decorator to require login"""
+    """Flask route decorator that redirects unauthenticated users to /login.
+
+    Checks for 'logged_in' in the Flask session. If absent, redirects to
+    the login page. Otherwise calls the wrapped route function.
+
+    Args:
+        f: The Flask view function to protect.
+
+    Returns:
+        function: Wrapped function with authentication check.
+    """
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if 'logged_in' not in session:
@@ -326,7 +419,14 @@ def login_required(f):
 
 @app.route('/')
 def index():
-    """Redirect to dashboard or login"""
+    """Redirect to the dashboard if logged in, otherwise to the login page.
+
+    HTTP Method: GET
+    Route: /
+
+    Returns:
+        Response: 302 redirect to /dashboard (authenticated) or /login (not authenticated).
+    """
     if 'logged_in' in session:
         return redirect(url_for('dashboard'))
     return redirect(url_for('login'))
