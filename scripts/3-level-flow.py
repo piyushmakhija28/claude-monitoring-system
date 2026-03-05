@@ -2982,8 +2982,11 @@ Work to complete: Execute phase {i} of the identified work breakdown.
         prompt_script = MEMORY_BASE / '03-execution-system' / '00-prompt-generation' / 'prompt-generation-policy.py'
     pr_dur_3_5 = 0
     if prompt_script.exists():
-        # Prompt script with skill context
-        pr_out, _, _, pr_dur_3_5 = run_script_with_retry(prompt_script, [user_message], timeout=8, step_name='Step-3.5.Prompt-Skill-Context')
+        # Prompt script with skill context - PASS SKILL INFO for enhanced generation
+        # Format: [user_message, skill_name, skill_type, supplementary_skills_csv]
+        supplementary_csv = ','.join(supplementary_skills) if supplementary_skills else ''
+        pr_args = [user_message, skill_agent_name, agent_type, supplementary_csv]
+        pr_out, _, _, pr_dur_3_5 = run_script_with_retry(prompt_script, pr_args, timeout=8, step_name='Step-3.5.Prompt-Skill-Context')
         pr_data = safe_json(pr_out)
         rewritten_prompt_3_5 = pr_data.get('rewritten_prompt', '')
         enhanced_prompt_3_5 = pr_data.get('enhanced_prompt', '')
@@ -2991,18 +2994,24 @@ Work to complete: Execute phase {i} of the identified work breakdown.
         rewritten_prompt_3_5 = rewritten_prompt
         enhanced_prompt_3_5 = enhanced_prompt_summary
 
+    # FINAL EFFECTIVE PROMPT - Use skill-contextualized version for execution
+    final_effective_prompt = (rewritten_prompt_3_5 if rewritten_prompt_3_5 else enhanced_prompt_3_5) if (rewritten_prompt_3_5 or enhanced_prompt_3_5) else user_message
+
     step_3_5_output = {
         "estimated_complexity": complexity,
         "task_type": task_type,
         "rewritten_prompt": rewritten_prompt_3_5 if rewritten_prompt_3_5 else "NOT_GENERATED",
         "enhanced_prompt": enhanced_prompt_3_5 if enhanced_prompt_3_5 else "NOT_GENERATED",
-        "effective_prompt": (rewritten_prompt_3_5 if rewritten_prompt_3_5 else enhanced_prompt_3_5) if (rewritten_prompt_3_5 or enhanced_prompt_3_5) else user_message,
+        "effective_prompt": final_effective_prompt,
         "script_exists": prompt_script.exists(),
         "skill_context_applied": True,
         "skill_or_agent": skill_agent_name,
         "supplementary_skills": supplementary_skills
     }
     step_3_5_decision = f"Enhanced prompt with skill context - using {skill_agent_name} for generation"
+
+    print(f"   [3.5] Prompt Re-enhanced with skill context: {skill_agent_name}")
+    print(f"   [3.5] Final Prompt: {final_effective_prompt[:100]}...")
 
     trace["pipeline"].append({
         "step": "LEVEL_3_STEP_3_5",
