@@ -501,7 +501,9 @@ def _load_tool_stats(session_id):
     try:
         if progress_file.exists():
             with open(progress_file, 'r', encoding='utf-8') as f:
+                _lock_file(f)
                 data = json.load(f)
+                _unlock_file(f)
             # Only use if it matches this session
             if data.get('session_id', '') == session_id:
                 return {
@@ -535,7 +537,9 @@ def _load_tool_tracker_entries(session_id):
     if session_file.exists():
         try:
             with open(session_file, 'r', encoding='utf-8') as f:
+                _lock_file(f)
                 sess = json.load(f)
+                _unlock_file(f)
             start_str = sess.get('start_time', '')
             if start_str:
                 session_start = datetime.fromisoformat(start_str)
@@ -588,25 +592,31 @@ def _load_tool_tracker_entries(session_id):
 
 
 def _load_flow_trace(session_id):
-    """Load flow-trace.json for pipeline decision data"""
+    """Load flow-trace.json for pipeline decision data (with file locking - Loophole #19)"""
     flow_trace = session_log_dir(session_id) / 'flow-trace.json'
     if not flow_trace.exists():
         return {}
     try:
         with open(flow_trace, 'r', encoding='utf-8') as f:
-            return json.load(f)
+            _lock_file(f)
+            data = json.load(f)
+            _unlock_file(f)
+        return data
     except Exception:
         return {}
 
 
 def _load_session_json(session_id):
-    """Load session metadata JSON"""
+    """Load session metadata JSON (with file locking - Loophole #19)"""
     session_file = SESSIONS_DIR / f'{session_id}.json'
     if not session_file.exists():
         return {}
     try:
         with open(session_file, 'r', encoding='utf-8') as f:
-            return json.load(f)
+            _lock_file(f)
+            data = json.load(f)
+            _unlock_file(f)
+        return data
     except Exception:
         return {}
 
@@ -660,7 +670,9 @@ def finalize(session_id):
     else:
         try:
             with open(json_path, 'r', encoding='utf-8') as f:
+                _lock_file(f)
                 data = json.load(f)
+                _unlock_file(f)
         except Exception as e:
             log_event(f"[ERROR] Failed to read summary JSON for {session_id}: {e}")
             return False
@@ -775,7 +787,9 @@ def finalize(session_id):
     data["finalized_at"] = datetime.now().isoformat()
     try:
         with open(json_path, 'w', encoding='utf-8') as f:
+            _lock_file(f)
             json.dump(data, f, indent=2)
+            _unlock_file(f)
     except Exception:
         pass
 
@@ -822,7 +836,9 @@ def auto_trigger_cleanup_if_needed(session_id, summary_data):
         }
 
         with open(baseline_file, 'w', encoding='utf-8') as f:
+            _lock_file(f)
             json.dump(baseline, f, indent=2)
+            _unlock_file(f)
 
         log_event(f"[BASELINE] Context reset to 10% for next session")
 
@@ -872,7 +888,9 @@ def _build_from_session_json(session_id):
 
     try:
         with open(session_file, 'r', encoding='utf-8') as f:
+            _lock_file(f)
             sess = json.load(f)
+            _unlock_file(f)
     except Exception:
         return None
 
@@ -903,7 +921,9 @@ def _build_from_session_json(session_id):
     json_path.parent.mkdir(parents=True, exist_ok=True)
     try:
         with open(json_path, 'w', encoding='utf-8') as f:
+            _lock_file(f)
             json.dump(data, f, indent=2)
+            _unlock_file(f)
     except Exception:
         pass
 
@@ -1405,14 +1425,18 @@ def _update_chain_summary(session_id, data):
 
     try:
         with open(chain_index_file, 'r', encoding='utf-8') as f:
+            _lock_file(f)
             chain = json.load(f)
+            _unlock_file(f)
 
         if session_id in chain.get("sessions", {}):
             chain["sessions"][session_id]["summary"] = _generate_one_liner(data)
             chain["last_updated"] = datetime.now().isoformat()
 
             with open(chain_index_file, 'w', encoding='utf-8') as f:
+                _lock_file(f)
                 json.dump(chain, f, indent=2)
+                _unlock_file(f)
             log_event(f"[OK] Chain index updated with summary for {session_id}")
     except Exception as e:
         log_event(f"[WARN] Could not update chain index: {e}")
@@ -1429,7 +1453,9 @@ def read_summary(session_id, fmt='md'):
         if json_path.exists():
             try:
                 with open(json_path, 'r', encoding='utf-8') as f:
+                    _lock_file(f)
                     data = json.load(f)
+                    _unlock_file(f)
                 return data.get("summary_text") or _generate_one_liner(data)
             except Exception:
                 pass
@@ -1440,7 +1466,10 @@ def read_summary(session_id, fmt='md'):
         if json_path.exists():
             try:
                 with open(json_path, 'r', encoding='utf-8') as f:
-                    return json.load(f)
+                    _lock_file(f)
+                    data = json.load(f)
+                    _unlock_file(f)
+                return data
             except Exception:
                 pass
         return None
@@ -1456,7 +1485,9 @@ def read_summary(session_id, fmt='md'):
         if json_path.exists():
             try:
                 with open(json_path, 'r', encoding='utf-8') as f:
+                    _lock_file(f)
                     data = json.load(f)
+                    _unlock_file(f)
                 return _generate_markdown(data)
             except Exception:
                 pass

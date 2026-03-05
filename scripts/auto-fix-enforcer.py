@@ -62,7 +62,23 @@ class AutoFixEnforcer:
         self.manual_fixes_needed = []
 
     def check_all_systems(self):
-        """Check ALL systems and collect failures"""
+        """Run all 7 system health checks and collect any failures.
+
+        Executes each _check_*() sub-method in order:
+          1. _check_python()               - Python binary availability
+          2. _check_critical_files()        - Presence of blocking-policy-enforcer.py
+          3. _check_blocking_enforcer()     - Blocking-state.json initialisation
+          4. _check_session_state()         - Required session state flags
+          5. _check_daemons()               - Daemon PID file status (informational)
+          6. _check_git_repos()             - Git clean/dirty status (informational)
+          7. _check_windows_python_unicode() - Unicode characters in .py files
+
+        Failures are appended to self.failures.  The method returns
+        True only when self.failures is empty after all checks.
+
+        Returns:
+            bool: True if all checks passed (no failures collected).
+        """
         print("\n" + "="*80)
         print("[ALERT] AUTO-FIX ENFORCER - CHECKING ALL SYSTEMS")
         print("="*80 + "\n")
@@ -79,7 +95,14 @@ class AutoFixEnforcer:
         return len(self.failures) == 0
 
     def _check_python(self):
-        """Check if Python is available"""
+        """Check [1/7]: Verify that the Python binary is available in PATH.
+
+        Runs "python --version" with a 5-second timeout.  A non-zero exit
+        code or an exception appends a CRITICAL failure to self.failures.
+
+        Returns:
+            bool: True if Python is accessible; False otherwise.
+        """
         print("[SEARCH] [1/7] Checking Python...")
         try:
             result = subprocess.run(['python', '--version'],
@@ -107,7 +130,15 @@ class AutoFixEnforcer:
         return False
 
     def _check_critical_files(self):
-        """Check if critical system files exist in ~/.claude/scripts/"""
+        """Check [2/7]: Verify that critical system files exist in scripts_path.
+
+        Currently one CRITICAL file is required: blocking-policy-enforcer.py.
+        Optional files (plan-detector.py, session-start.sh) are reported as
+        informational warnings and do not block the session.
+
+        Appends a CRITICAL failure to self.failures if any required file is
+        missing from self.scripts_path (~/.claude/scripts/ by default).
+        """
         print("\n[SEARCH] [2/7] Checking critical files...")
 
         # ONLY truly critical files that MUST exist (in ~/.claude/scripts/)
@@ -162,7 +193,16 @@ class AutoFixEnforcer:
             print("   [CHECK] All critical files present")
 
     def _check_blocking_enforcer(self):
-        """Check if blocking enforcer is initialized"""
+        """Check [3/7]: Verify the blocking-enforcer state file is initialised.
+
+        Reads .blocking-state.json from self.memory_path.  If the file is
+        missing, attempts _auto_fix_blocking_enforcer() to create it.  If
+        the file exists but session_started is False, appends a CRITICAL
+        failure.  On read errors appends a HIGH priority failure.
+
+        Returns:
+            bool: True when the enforcer state is present and valid.
+        """
         print("\n[SEARCH] [3/7] Checking blocking enforcer...")
 
         state_file = self.memory_path / '.blocking-state.json'
@@ -307,7 +347,16 @@ class AutoFixEnforcer:
             return False
 
     def _check_daemons(self):
-        """Check daemon status"""
+        """Check [5/7]: Report running vs stopped daemon count (informational).
+
+        Reads PID files from memory_path/.pids/ and uses "tasklist /FI PID"
+        to verify each process is alive.  Daemons being stopped is a WARNING,
+        not a CRITICAL failure.  The system works without daemons; only
+        automation features are reduced.
+
+        Returns:
+            bool: Always True (daemon status is never blocking).
+        """
         print("\n[SEARCH] [5/7] Checking daemons...")
 
         # Note: Daemons being stopped is WARNING, not CRITICAL
@@ -357,7 +406,15 @@ class AutoFixEnforcer:
         return True
 
     def _check_git_repos(self):
-        """Check git repository status"""
+        """Check [6/7]: Report git repository cleanliness (informational).
+
+        Runs "git rev-parse --git-dir" to detect a git repo, then
+        "git status --porcelain" to detect uncommitted changes.  Dirty
+        repos emit a WARNING but do NOT append to self.failures.
+
+        Returns:
+            bool: Always True (git status is never blocking).
+        """
         print("\n[SEARCH] [6/7] Checking git repositories...")
 
         # Check if we're in a git repo
@@ -382,7 +439,17 @@ class AutoFixEnforcer:
         return True
 
     def _check_windows_python_unicode(self):
-        """Check Python files for Unicode characters on Windows (CRITICAL)"""
+        """Check [7/7]: Detect and auto-fix Unicode in Python files on Windows.
+
+        Skipped on non-Windows platforms.  On Windows, runs
+        windows-python-unicode-checker.py --scan-dir against self.memory_path
+        and attempts to auto-fix each offending .py file.  Non-zero exit from
+        the checker triggers per-file fix attempts using --fix --no-backup.
+        Timeouts and exceptions are treated as non-blocking warnings.
+
+        Returns:
+            bool: Always True (Unicode scan errors are non-blocking).
+        """
         print("\n[SEARCH] [7/7] Checking Python files for Unicode on Windows...")
 
         # Only check on Windows

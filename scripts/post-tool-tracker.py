@@ -1,40 +1,58 @@
 #!/usr/bin/env python
-# Script Name: post-tool-tracker.py
-# Version: 3.1.0 (Policy-linked + task/phase enforcement)
-# Last Modified: 2026-03-03
-# Description: PostToolUse hook - L3.9 tracking + L3.11 commit + L6 subagent + voice on task complete
-#              + task progress update frequency enforcement (from task-progress-tracking-policy.md)
-#              + complexity-aware progress weighting (from task-phase-enforcement-policy.md)
-# v3.1.0: Policy enforcement: warn if >5 tool calls without TaskUpdate.
-#          Complexity-aware progress deltas from flow-trace. Linked to policy .md files.
-# v3.0.0: Reads flow-trace.json for task type, complexity, skill context.
-#          Enriches tool-tracker.jsonl entries with task context. Better progress estimation.
-# v2.3.0: Added PID-based flag isolation for multi-window support
-# v2.2.0: Auto work-done voice flag when all tasks completed (fixes unreliable voice)
-# v2.1.0: Added file change tracking for git commit reminders (10+ modified files warning)
-# Author: Claude Memory System
-#
-# Hook Type: PostToolUse
-# Trigger: Runs AFTER every tool call (NEVER blocks)
-# Exit: Always 0
-#
-# Policies enforced:
-#   Level 3.9 - Execute Tasks (Auto-Tracking):
-#     - Read  -> progress +10%
-#     - Write -> progress +40%  (likely completed something)
-#     - Edit  -> progress +30%  (likely completed something)
-#     - Bash  -> progress +15%  (ran a command)
-#     - Task  -> progress +20%  (delegated work)
-#     - Grep/Glob -> progress +5% (searching)
-#   Policy: task-progress-tracking-policy.md
-#     - Warn if >5 tool calls without TaskUpdate (update frequency enforcement)
-#     - Recommend update every 2-3 tool calls
-#   Policy: task-phase-enforcement-policy.md
-#     - Complexity >= 6 -> remind about phased execution
-#     - Progress deltas weighted by complexity from flow-trace
-#
-# Logs to: ~/.claude/memory/logs/tool-tracker.jsonl
-# Windows-safe: ASCII only, no Unicode chars
+"""
+post-tool-tracker.py - PostToolUse hook for progress tracking and policy enforcement.
+
+Script Name: post-tool-tracker.py
+Version:     3.1.0 (Policy-linked + task/phase enforcement)
+Last Modified: 2026-03-03
+Author:      Claude Memory System
+
+Hook Type: PostToolUse
+Trigger:   Runs AFTER every tool call.  NEVER blocks (always exits 0).
+
+Level 3.9 - Execute Tasks (Auto-Tracking)
+------------------------------------------
+Increments session progress by a weighted delta per tool call:
+  Read          -> +10%
+  Write         -> +40%
+  Edit          -> +30%
+  Bash          -> +15%
+  Task          -> +20%
+  Grep/Glob     -> +5%
+Deltas are halved at complexity >= 8 and quartered at complexity >= 15
+so that large tasks do not hit 100% prematurely.
+
+Policy: task-progress-tracking-policy.md
+  Warn if more than 5 tool calls occur without a TaskUpdate.
+  Recommend updating every 2-3 tool calls.
+
+Policy: task-phase-enforcement-policy.md
+  Complexity >= 6 requires phased execution.
+  Warn if Write/Edit/NotebookEdit is called before TaskCreate.
+
+Level 3.1 Enforcement
+----------------------
+Clears .task-breakdown-pending flag when TaskCreate is called with
+valid subject (10+ chars) and description (10+ chars).
+
+Level 3.5 Enforcement
+----------------------
+Clears .skill-selection-pending flag when Skill or Task is called
+and the invoked skill matches the required skill in the flag file.
+
+Level 3.11 + GitHub Integration
+---------------------------------
+On TaskUpdate(status=completed): triggers auto-commit, build
+validation, GitHub issue close, and auto-writes .session-work-done
+when all tasks are finished.
+
+Context Chain:
+    3-level-flow.py writes flow-trace.json -> this hook reads it to
+    enrich tool-tracker.jsonl with task_type, complexity, and skill.
+
+Logs to:      ~/.claude/memory/logs/tool-tracker.jsonl
+Windows-safe: ASCII only, no Unicode characters.
+"""
 
 import sys
 import os
@@ -42,6 +60,23 @@ import json
 import glob as _glob
 from pathlib import Path
 from datetime import datetime
+
+# Metrics emitter (fire-and-forget, never blocks)
+try:
+    _me_dir = os.path.dirname(os.path.abspath(__file__))
+    if _me_dir not in sys.path:
+        sys.path.insert(0, _me_dir)
+    from metrics_emitter import (emit_hook_execution, emit_context_sample,
+                                  emit_flag_lifecycle)
+    _METRICS_AVAILABLE = True
+except Exception:
+    def emit_hook_execution(*a, **kw): pass
+    def emit_context_sample(*a, **kw): pass
+    def emit_flag_lifecycle(*a, **kw): pass
+    _METRICS_AVAILABLE = False
+
+# Track hook start time for duration measurement
+_HOOK_START = datetime.now()
 
 # Lazy-loaded GitHub issue manager (non-blocking, never fails the hook)
 _github_issue_manager = None
@@ -136,7 +171,16 @@ except ImportError:
 
 
 def _get_session_id_from_progress():
-    """Get current session ID from session-progress.json."""
+    """Get the current session ID from the session-progress.json file.
+
+    Reads SESSION_STATE_FILE and returns the session_id field.  Returns
+    an empty string on any read/parse error so callers can safely treat
+    a missing session as a no-op rather than raising an exception.
+
+    Returns:
+        str: Active session ID (e.g. "SESSION-20260305-001"), or empty
+             string when the file is missing or unreadable.
+    """
     try:
         if SESSION_STATE_FILE.exists():
             with open(SESSION_STATE_FILE, 'r', encoding='utf-8') as f:
@@ -321,6 +365,24 @@ def is_error_response(tool_response):
 
 
 def main():
+    """PostToolUse hook entry point.
+
+    Reads tool name, input, and response from Claude Code hook stdin
+    (JSON), then in order:
+      1. Loads task-progress-tracking-policy.py (with 3 retries).
+      2. Determines success/error status of the completed tool call.
+      3. Loads flow-trace context to get task complexity and skill.
+      4. Calculates a complexity-weighted progress delta.
+      5. Appends a rich entry to tool-tracker.jsonl.
+      6. Updates session-progress.json (with file locking).
+      7. Enforces task-update frequency and phase-complexity rules.
+      8. Clears task-breakdown and skill-selection flags as appropriate.
+      9. Triggers auto-commit, build validation, and GitHub issue
+         management on task completion.
+
+    Always exits 0.  Errors are caught and swallowed to ensure
+    the hook never disrupts the tool call flow.
+    """
     # INTEGRATION: Load progress tracking policies from scripts/architecture/
     # Retry up to 3 times. On 3rd failure, warn but don't hard-break
     # (PostToolUse runs per-tool, not session-level).
@@ -494,6 +556,12 @@ def main():
         state['context_estimate_pct'] = ctx_est
 
         save_session_progress(state)
+        try:
+            _sid_ctx = _get_session_id_from_progress() or ''
+            emit_context_sample(ctx_est, session_id=_sid_ctx,
+                                source='post-tool-tracker', tool_name=tool_name)
+        except Exception:
+            pass
 
         # -----------------------------------------------------------------------
         # POLICY ENFORCEMENT: Task Progress Update Frequency (v3.1.0)
@@ -549,6 +617,12 @@ def main():
                 if len(tc_subject) >= 10 and len(tc_desc) >= 10:
                     sid = _get_session_id_from_progress()
                     _clear_session_flags('.task-breakdown-pending', sid)
+                    try:
+                        emit_flag_lifecycle('task_breakdown', 'clear',
+                                            session_id=sid or '',
+                                            reason='TaskCreate called with valid subject+desc')
+                    except Exception:
+                        pass
                     # Track total tasks created for auto work-done detection
                     state['tasks_created'] = state.get('tasks_created', 0) + 1
                     save_session_progress(state)

@@ -36,6 +36,32 @@ if sys.platform == 'win32':
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
+# File locking for shared JSON state (Loophole #19)
+try:
+    import msvcrt
+    HAS_MSVCRT = True
+except ImportError:
+    HAS_MSVCRT = False
+
+
+def _lock_file(f):
+    """Lock file for exclusive access (Windows msvcrt, no-op on other OS)."""
+    if HAS_MSVCRT:
+        try:
+            msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, 1)
+        except (IOError, OSError):
+            pass  # lock failed - proceed without lock (better than crash)
+
+
+def _unlock_file(f):
+    """Unlock file (Windows msvcrt, no-op on other OS)."""
+    if HAS_MSVCRT:
+        try:
+            f.seek(0)
+            msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
+        except (IOError, OSError):
+            pass
+
 # Use ide_paths for IDE self-contained installations (with fallback for standalone mode)
 try:
     from ide_paths import (MEMORY_BASE, SCRIPTS_DIR, CURRENT_DIR, FLAG_DIR,
@@ -180,18 +206,21 @@ def count_transcript_messages(transcript_path):
 # =============================================================================
 
 def read_state():
-    """Read the hook state file"""
+    """Read the hook state file with file locking (Loophole #19)"""
     if not HOOK_STATE_FILE.exists():
         return {}
     try:
         with open(HOOK_STATE_FILE, 'r', encoding='utf-8') as f:
-            return json.load(f)
+            _lock_file(f)
+            data = json.load(f)
+            _unlock_file(f)
+        return data
     except Exception:
         return {}
 
 
 def write_state(transcript_path, msg_count):
-    """Update hook state with current values"""
+    """Update hook state with current values and file locking (Loophole #19)"""
     state = {
         'last_transcript_path': str(transcript_path) if transcript_path else '',
         'last_msg_count': msg_count,
@@ -200,7 +229,9 @@ def write_state(transcript_path, msg_count):
     try:
         HOOK_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
         with open(HOOK_STATE_FILE, 'w', encoding='utf-8') as f:
+            _lock_file(f)
             json.dump(state, f, indent=2)
+            _unlock_file(f)
     except Exception:
         pass
 

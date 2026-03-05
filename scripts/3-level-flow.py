@@ -1278,11 +1278,32 @@ def main():
     except Exception:
         pass  # Policy executor is optional, don't block if it fails
 
-    # CHECKPOINT ENFORCEMENT: Clear ALL flags if user is confirming with 'ok'/'proceed' etc.
+    # CHECKPOINT ENFORCEMENT: Clear flags if user is confirming with 'ok'/'proceed' etc.
     # This MUST run before anything else so pre-tool-enforcer sees cleared flags.
+    #
+    # Loophole #11 distinction:
+    #   - Approval message ('ok', 'proceed', 'haan') -> clear_current_session_flags()
+    #     Only this session+PID's flags are cleared so other open windows keep theirs.
+    #   - /clear command -> handled by clear-session-handler.py BEFORE this script runs,
+    #     using clear_all_enforcement_flags() to wipe every window's stale flags.
     _is_approval = is_approval_message(user_message)
     if _is_approval:
-        clear_all_enforcement_flags(reason='user said: ' + user_message.strip()[:20])
+        # Read current session_id early (before session management step) so we can
+        # do precise session-scoped clearing.  Falls back to PID-only if not found.
+        _early_session_id = 'UNKNOWN'
+        try:
+            _csf = MEMORY_BASE / '.current-session.json'
+            if _csf.exists():
+                import json as _json_early
+                _early_session_id = _json_early.loads(_csf.read_text(encoding='utf-8')).get(
+                    'current_session_id', 'UNKNOWN'
+                ) or 'UNKNOWN'
+        except Exception:
+            pass
+        clear_current_session_flags(
+            session_id=_early_session_id,
+            reason='user approval: ' + user_message.strip()[:20]
+        )
 
     SEP = "=" * 80
     flow_start = datetime.now()
@@ -2575,6 +2596,14 @@ Work to complete: Execute phase {i} of the identified work breakdown.
     })
     supp_str = f" + {supplementary_skills}" if supplementary_skills else ""
     print(f"   [3.4] Skill/Agent: {skill_agent_name} ({agent_type}){supp_str}")
+    try:
+        emit_policy_step('LEVEL_3_STEP_3_4_SKILL_SELECTION', level=3, passed=True,
+                         duration_ms=0, session_id=session_id or '',
+                         details={'skill': skill_agent_name, 'type': agent_type,
+                                  'supplementary': supplementary_skills,
+                                  'reason': skill_reason})
+    except Exception:
+        pass
 
     # ------------------------------------------------------------------
     # STEP 3.5: PROMPT GENERATION (WITH SKILL CONTEXT)

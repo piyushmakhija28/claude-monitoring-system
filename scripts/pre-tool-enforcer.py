@@ -1,44 +1,53 @@
 #!/usr/bin/env python
-# Script Name: pre-tool-enforcer.py
-# Version: 3.2.0 (Policy-linked + failure-kb.json integration)
-# Last Modified: 2026-03-03
-# Description: PreToolUse hook - L3.1/3.5 blocking + L3.6 hints + L3.7 prevention
-#              + L3.5+ dynamic per-file skill context switching
-#              + flow-trace.json context chaining for task-aware enforcement
-# v3.1.0: Reads flow-trace.json for task type, complexity, skill/agent context.
-#          Provides task-aware optimization hints. Full context chain from 3-level-flow.
-# v3.0.0: Dynamic per-file skill/agent selection - switches skill context per tool call
-#          based on target file extension/name. Mixed-stack projects get correct skill per file.
-# v2.3.0: Added window-isolation helpers for PID-specific flag isolation
-# v2.2.0: Checkpoint blocking disabled - hook shows table, Claude auto-proceeds (no ok/proceed needed)
-# v2.1.0: Enhanced optimization hints with consistent [OPTIMIZATION] format and clearer guidance
-# Author: Claude Memory System
-#
-# Hook Type: PreToolUse
-# Trigger: Runs BEFORE every tool call
-# Exit 0 = Allow tool (may print hints to stdout)
-# Exit 1 = BLOCK tool (prints reason to stderr)
-#
-# Policies enforced:
-#   Level 3.3 - Review Checkpoint:
-#     - DISABLED (v2.2.0): Hook shows checkpoint table, Claude auto-proceeds. No blocking.
-#     - Flag file .checkpoint-pending-*.json is NEVER written (removed from 3-level-flow.py)
-#   Level 3.1 - Task Breakdown (Loophole #7 Fix):
-#     - Write/Edit/NotebookEdit: BLOCK if .task-breakdown-pending.json exists (same session+PID)
-#     - Bash/Task NOT blocked: investigation and exploration allowed before TaskCreate
-#     - Cleared when TaskCreate is called (post-tool-tracker.py)
-#   Level 3.5 - Skill/Agent Selection (Loophole #7 Fix):
-#     - Write/Edit/NotebookEdit: BLOCK if .skill-selection-pending.json exists (same session+PID)
-#     - Bash/Task NOT blocked: Bash needed for git/tests, Task IS how Step 3.5 is done
-#     - Cleared when Skill or Task tool is called (post-tool-tracker.py)
-#   Level 3.6 - Tool Usage Optimization:
-#     - Grep: warn if missing head_limit
-#     - Read: warn if missing offset+limit (for large files)
-#   Level 3.7 - Failure Prevention:
-#     - Bash: BLOCK Windows-only commands (del, copy, dir, xcopy, etc.)
-#     - Write/Edit/NotebookEdit: BLOCK Unicode chars in .py files on Windows
-#
-# Windows-safe: ASCII only, no Unicode chars
+"""
+pre-tool-enforcer.py - PreToolUse hook that enforces policy before every tool call.
+
+Script Name: pre-tool-enforcer.py
+Version:     3.2.0 (Policy-linked + failure-kb.json integration)
+Last Modified: 2026-03-03
+Author:      Claude Memory System
+
+Hook Type: PreToolUse
+Trigger:   Runs BEFORE every tool call.
+Exit 0   = Allow tool (may print optimization hints to stdout).
+Exit 1/2 = BLOCK tool (prints blocking reason to stderr).
+
+Policies enforced
+-----------------
+Level 3.3 - Review Checkpoint:
+    DISABLED (v2.2.0): Hook shows checkpoint table; Claude auto-proceeds.
+    Flag .checkpoint-pending-*.json is never written.
+
+Level 3.1 - Task Breakdown (Loophole #7 Fix):
+    Write/Edit/NotebookEdit are BLOCKED while .task-breakdown-pending.json
+    exists for the current session+PID.
+    Bash/Task NOT blocked (investigation allowed before TaskCreate).
+    Flag cleared by post-tool-tracker.py when TaskCreate is called.
+
+Level 3.5 - Skill/Agent Selection (Loophole #7 Fix):
+    Write/Edit/NotebookEdit are BLOCKED while .skill-selection-pending.json
+    exists for the current session+PID.
+    Bash/Task NOT blocked (Bash needed for git/tests; Task IS step 3.5).
+    Flag cleared by post-tool-tracker.py when Skill or Task is called.
+
+Level 3.5+ Dynamic Skill Context:
+    Detects file extension/name on every Read/Write/Edit/Grep/Glob call
+    and injects the matching skill/agent hint to stdout.
+
+Level 3.6 - Tool Usage Optimization:
+    Grep: warn if head_limit is missing.
+    Read: warn if offset+limit are missing for large-file reads.
+
+Level 3.7 - Failure Prevention:
+    Bash: BLOCK Windows-only commands (del, copy, dir, xcopy, ...).
+    Write/Edit/NotebookEdit: BLOCK Unicode chars in .py files on Windows.
+
+Context Chain:
+    3-level-flow.py writes flow-trace.json -> this hook reads it to
+    provide task-aware optimization hints (v3.1.0+).
+
+Windows-safe: ASCII only, no Unicode characters.
+"""
 
 import sys
 import os
@@ -54,6 +63,23 @@ except ImportError:
     # Fallback for standalone mode (no IDE_INSTALL_DIR set)
     FLAG_DIR = Path.home() / '.claude'
     CURRENT_SESSION_FILE = Path.home() / '.claude' / 'memory' / '.current-session.json'
+
+# Metrics emitter (fire-and-forget, never blocks)
+try:
+    _me_dir = os.path.dirname(os.path.abspath(__file__))
+    if _me_dir not in sys.path:
+        sys.path.insert(0, _me_dir)
+    from metrics_emitter import (emit_hook_execution, emit_enforcement_event,
+                                  emit_flag_lifecycle)
+    _METRICS_AVAILABLE = True
+except Exception:
+    def emit_hook_execution(*a, **kw): pass
+    def emit_enforcement_event(*a, **kw): pass
+    def emit_flag_lifecycle(*a, **kw): pass
+    _METRICS_AVAILABLE = False
+
+# Track hook start time for total duration
+_HOOK_START = datetime.now()
 
 # Tools that are BLOCKED while checkpoint is pending (file-modification tools ONLY)
 # Write/Edit/NotebookEdit are the ONLY tools that directly create/modify source files.
@@ -440,9 +466,24 @@ WINDOWS_CMDS = [
 
 
 def check_bash(command):
-    """Level 3.7: Detect Windows-only commands that fail in bash.
-    Policy: policies/03-execution-system/failure-prevention/common-failures-prevention.md
-    KB: scripts/architecture/03-execution-system/failure-prevention/failure-kb.json (bash_windows_command)"""
+    """Level 3.7: Detect and block Windows-only shell commands.
+
+    Scans the command string for Windows-only prefixes listed in WINDOWS_CMDS.
+    Matches at the start of the command or after newline, semicolon, or &&
+    chaining operators so piped multi-step commands are caught.
+
+    Policy:    policies/03-execution-system/failure-prevention/
+               common-failures-prevention.md
+    KB source: scripts/architecture/03-execution-system/failure-prevention/
+               failure-kb.json (pattern: bash_windows_command)
+
+    Args:
+        command: Full Bash command string from tool_input['command'].
+
+    Returns:
+        tuple: (hints, blocks) where blocks is non-empty when a Windows
+               command is detected and the tool call must be rejected.
+    """
     hints = []
     blocks = []
     cmd_stripped = command.strip()
@@ -467,9 +508,24 @@ def check_bash(command):
 
 
 def check_python_unicode(content):
-    """Level 3.7: Detect Unicode chars in Python files (crash on Windows cp1252).
-    Policy: policies/03-execution-system/failure-prevention/common-failures-prevention.md
-    Architecture: scripts/architecture/03-execution-system/failure-prevention/windows-python-unicode-checker.py"""
+    """Level 3.7: Detect Unicode characters that crash Python on Windows cp1252.
+
+    Iterates over UNICODE_DANGER to find emoji, smart-quote, arrow, and other
+    non-ASCII codepoints that the Windows cp1252 console cannot encode without
+    raising UnicodeEncodeError.  Returns a blocking message with up to five
+    sample offending characters so the developer knows what to replace.
+
+    Policy:    policies/03-execution-system/failure-prevention/
+               common-failures-prevention.md
+    Arch ref:  scripts/architecture/03-execution-system/failure-prevention/
+               windows-python-unicode-checker.py
+
+    Args:
+        content: String content of the Python file about to be written.
+
+    Returns:
+        list: Block message strings (empty list means no violations found).
+    """
     blocks = []
     found_count = 0
     sample = []
@@ -494,7 +550,25 @@ def check_python_unicode(content):
 
 
 def check_write_edit(tool_name, tool_input):
-    """Level 3.7: Check Python files for Unicode before writing."""
+    """Level 3.7: Block Unicode characters in Python files on Windows.
+
+    Extracts the file content from Write, Edit, or NotebookEdit tool inputs
+    and delegates to check_python_unicode() for any .py target file.  Only
+    .py files are checked; other file types are allowed unconditionally.
+
+    Policy:    policies/03-execution-system/failure-prevention/
+               common-failures-prevention.md
+
+    Args:
+        tool_name: Name of the tool being called ('Write', 'Edit', or
+                   'NotebookEdit').
+        tool_input: Dict of tool parameters containing file_path/notebook_path
+                    and the new content or new_string/new_source field.
+
+    Returns:
+        tuple: (hints, blocks) where blocks is non-empty when dangerous
+               Unicode characters are found in a .py file.
+    """
     hints = []
     blocks = []
 
@@ -701,16 +775,28 @@ _last_skill_hint = ''
 
 
 def check_dynamic_skill_context(tool_name, tool_input):
-    """
-    Level 3.5+ Dynamic: Detect file type and inject appropriate skill/agent context.
+    """Level 3.5+ Dynamic: inject skill/agent context based on target file type.
 
-    Runs on Read/Write/Edit/Grep/Glob - any tool that targets a specific file.
-    Prints a [SKILL-CONTEXT] hint to stdout so Claude gets file-appropriate guidance.
+    Extracts the target file path from any Read, Write, Edit, NotebookEdit,
+    Grep, or Glob tool call, then resolves the most appropriate skill or agent
+    via a priority chain:
+      1. Special filename map (FILENAME_SKILL_MAP)
+      2. Directory path patterns (DIR_PATTERN_SKILL_MAP)
+      3. File extension map (FILE_EXT_SKILL_MAP)
+      4. YAML/XML content heuristics
 
-    Does NOT block (hints only). Does NOT override session-level selection.
-    Adds per-file context ON TOP of the primary skill/agent.
+    Emits a [SKILL-CONTEXT] hint to stdout so Claude applies correct patterns
+    for the specific file.  Does NOT block; does NOT override the session-level
+    skill already selected by 3-level-flow.py.  Deduplicates consecutive
+    identical hints via the _last_skill_hint module-level cache.
 
-    Returns list of hint strings.
+    Args:
+        tool_name: Name of the tool being called ('Read', 'Write', etc.).
+        tool_input: Dict of tool parameters containing the file path key.
+
+    Returns:
+        list: Hint strings to print to stdout.  Empty when no skill matched
+              or the same hint was emitted for the previous tool call.
     """
     global _last_skill_hint
     hints = []
@@ -841,6 +927,24 @@ def check_dynamic_skill_context(tool_name, tool_input):
 
 
 def main():
+    """PreToolUse hook entry point.
+
+    Reads tool name and input from Claude Code hook stdin (JSON), then runs
+    all enforcement checks in order:
+      1. Checkpoint pending (Level 3.3)
+      2. Task breakdown pending (Level 3.1)
+      3. Skill/agent selection pending (Level 3.5)
+      4. Dynamic skill context hints (Level 3.5+)
+      5. Failure-KB hints (Level 3.7)
+      6. Tool-specific checker: Bash / Write-Edit / Grep / Read
+
+    Hints are written to stdout (non-blocking, shown as context to Claude).
+    Blocks are written to stderr and the process exits with code 2 (the
+    blocking exit code per Claude Code hook protocol).
+
+    Never raises exceptions; all errors are silently swallowed so a broken
+    hook never disrupts the underlying tool call.
+    """
     # CONTEXT CHAIN: Load flow-trace context from 3-level-flow (cached per invocation)
     # This gives pre-tool-enforcer awareness of task type, complexity, skill, model
     flow_ctx = _load_flow_trace_context()
@@ -903,6 +1007,18 @@ def main():
         for block in all_blocks:
             sys.stderr.write(block + '\n')
         sys.stderr.flush()
+        try:
+            _sid = get_current_session_id()
+            _dur = int((datetime.now() - _HOOK_START).total_seconds() * 1000)
+            emit_enforcement_event('pre-tool-enforcer.py', 'checkpoint_block',
+                                   tool_name=tool_name,
+                                   reason='checkpoint-pending flag active',
+                                   blocked=True, session_id=_sid)
+            emit_hook_execution('pre-tool-enforcer.py', _dur,
+                                session_id=_sid, exit_code=2,
+                                extra={'tool': tool_name, 'block_type': 'checkpoint'})
+        except Exception:
+            pass
         sys.exit(2)
 
     # TASK BREAKDOWN ENFORCEMENT (Level 3.1 - TaskCreate must be called first)
@@ -917,6 +1033,18 @@ def main():
         for block in all_blocks:
             sys.stderr.write(block + '\n')
         sys.stderr.flush()
+        try:
+            _sid = get_current_session_id()
+            _dur = int((datetime.now() - _HOOK_START).total_seconds() * 1000)
+            emit_enforcement_event('pre-tool-enforcer.py', 'task_breakdown_block',
+                                   tool_name=tool_name,
+                                   reason='task-breakdown-pending flag active',
+                                   blocked=True, session_id=_sid)
+            emit_hook_execution('pre-tool-enforcer.py', _dur,
+                                session_id=_sid, exit_code=2,
+                                extra={'tool': tool_name, 'block_type': 'task_breakdown'})
+        except Exception:
+            pass
         sys.exit(2)
 
     # SKILL/AGENT SELECTION ENFORCEMENT (Level 3.5 - Skill/Task must be invoked first)
@@ -931,6 +1059,18 @@ def main():
         for block in all_blocks:
             sys.stderr.write(block + '\n')
         sys.stderr.flush()
+        try:
+            _sid = get_current_session_id()
+            _dur = int((datetime.now() - _HOOK_START).total_seconds() * 1000)
+            emit_enforcement_event('pre-tool-enforcer.py', 'skill_selection_block',
+                                   tool_name=tool_name,
+                                   reason='skill-selection-pending flag active',
+                                   blocked=True, session_id=_sid)
+            emit_hook_execution('pre-tool-enforcer.py', _dur,
+                                session_id=_sid, exit_code=2,
+                                extra={'tool': tool_name, 'block_type': 'skill_selection'})
+        except Exception:
+            pass
         sys.exit(2)
 
     # DYNAMIC SKILL CONTEXT (Level 3.5+ - v3.0.0)
@@ -977,8 +1117,29 @@ def main():
         for block in all_blocks:
             sys.stderr.write(block + '\n')
         sys.stderr.flush()
+        try:
+            _sid = get_current_session_id()
+            _dur = int((datetime.now() - _HOOK_START).total_seconds() * 1000)
+            emit_enforcement_event('pre-tool-enforcer.py', 'windows_or_unicode_block',
+                                   tool_name=tool_name,
+                                   reason=all_blocks[0][:150] if all_blocks else 'blocked',
+                                   blocked=True, session_id=_sid)
+            emit_hook_execution('pre-tool-enforcer.py', _dur,
+                                session_id=_sid, exit_code=1,
+                                extra={'tool': tool_name, 'hints': len(all_hints),
+                                       'blocks': len(all_blocks)})
+        except Exception:
+            pass
         sys.exit(1)
 
+    try:
+        _sid = get_current_session_id()
+        _dur = int((datetime.now() - _HOOK_START).total_seconds() * 1000)
+        emit_hook_execution('pre-tool-enforcer.py', _dur,
+                            session_id=_sid, exit_code=0,
+                            extra={'tool': tool_name, 'hints': len(all_hints)})
+    except Exception:
+        pass
     sys.exit(0)
 
 
