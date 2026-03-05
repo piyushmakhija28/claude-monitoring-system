@@ -49,6 +49,16 @@ if sys.platform == 'win32':
     except:
         pass
 
+# ===================================================================
+# NEW: POLICY TRACKING INTEGRATION
+# ===================================================================
+try:
+    sys.path.insert(0, str(Path(__file__).parent))
+    from policy_tracking_helper import record_policy_execution, record_sub_operation
+    HAS_TRACKING = True
+except ImportError:
+    HAS_TRACKING = False
+
 # Configuration
 MEMORY_DIR = Path.home() / ".claude" / "memory"
 LOG_FILE = MEMORY_DIR / "logs" / "policy-hits.log"
@@ -722,18 +732,82 @@ def enforce():
         dict: Contains 'status' ('success' or 'error'), 'system', and
               'components' list. On error, contains 'message'.
     """
+    # ===================================================================
+    # TRACKING: Record start time
+    # ===================================================================
+    _track_start_time = datetime.now()
+    _sub_operations = []
+
     try:
         log_policy_hit("ENFORCE_START", "automatic-task-breakdown-enforcement")
 
         MEMORY_DIR.mkdir(parents=True, exist_ok=True)
 
-        # Initialize all components
+        # Sub-op 1: Initialize TaskAutoAnalyzer
+        _op1_start = datetime.now()
         analyzer = TaskAutoAnalyzer()
+        _op1_duration = int((datetime.now() - _op1_start).total_seconds() * 1000)
+        if HAS_TRACKING:
+            _sub_operations.append(record_sub_operation(
+                session_id=os.environ.get('CLAUDE_SESSION_ID', 'unknown'),
+                policy_name="automatic-task-breakdown-policy",
+                operation_name="initialize_task_analyzer",
+                input_params={},
+                output_results={"analyzer_ready": True},
+                duration_ms=_op1_duration
+            ))
+
+        # Sub-op 2: Initialize TaskAutoTracker
+        _op2_start = datetime.now()
         tracker = TaskAutoTracker()
+        _op2_duration = int((datetime.now() - _op2_start).total_seconds() * 1000)
+        if HAS_TRACKING:
+            _sub_operations.append(record_sub_operation(
+                session_id=os.environ.get('CLAUDE_SESSION_ID', 'unknown'),
+                policy_name="automatic-task-breakdown-policy",
+                operation_name="initialize_task_tracker",
+                input_params={},
+                output_results={"tracker_ready": True},
+                duration_ms=_op2_duration
+            ))
+
+        # Sub-op 3: Initialize PhaseEnforcer
+        _op3_start = datetime.now()
         enforcer = PhaseEnforcer()
+        _op3_duration = int((datetime.now() - _op3_start).total_seconds() * 1000)
+        if HAS_TRACKING:
+            _sub_operations.append(record_sub_operation(
+                session_id=os.environ.get('CLAUDE_SESSION_ID', 'unknown'),
+                policy_name="automatic-task-breakdown-policy",
+                operation_name="initialize_phase_enforcer",
+                input_params={},
+                output_results={"enforcer_ready": True},
+                duration_ms=_op3_duration
+            ))
 
         log_policy_hit("ENFORCE_COMPLETE", "automatic-task-breakdown-system-ready")
         print("[automatic-task-breakdown-policy] Policy enforced - Task breakdown system active")
+
+        # ===================================================================
+        # TRACKING: Record overall execution
+        # ===================================================================
+        if HAS_TRACKING:
+            _duration_ms = int((datetime.now() - _track_start_time).total_seconds() * 1000)
+            record_policy_execution(
+                session_id=os.environ.get('CLAUDE_SESSION_ID', 'unknown'),
+                policy_name="automatic-task-breakdown-policy",
+                policy_script="automatic-task-breakdown-policy.py",
+                policy_type="Policy Script",
+                input_params={},
+                output_results={
+                    "status": "success",
+                    "system": "automatic-task-breakdown",
+                    "components_count": 3
+                },
+                decision="Initialized TaskAutoAnalyzer, TaskAutoTracker, and PhaseEnforcer",
+                duration_ms=_duration_ms,
+                sub_operations=_sub_operations if _sub_operations else None
+            )
 
         return {
             "status": "success",
@@ -747,6 +821,24 @@ def enforce():
     except Exception as e:
         log_policy_hit("ENFORCE_ERROR", str(e))
         print(f"[automatic-task-breakdown-policy] ERROR: {e}")
+
+        # ===================================================================
+        # TRACKING: Record error
+        # ===================================================================
+        if HAS_TRACKING:
+            _duration_ms = int((datetime.now() - _track_start_time).total_seconds() * 1000)
+            record_policy_execution(
+                session_id=os.environ.get('CLAUDE_SESSION_ID', 'unknown'),
+                policy_name="automatic-task-breakdown-policy",
+                policy_script="automatic-task-breakdown-policy.py",
+                policy_type="Policy Script",
+                input_params={},
+                output_results={"status": "error", "error": str(e)},
+                decision=f"Policy failed: {e}",
+                duration_ms=_duration_ms,
+                sub_operations=_sub_operations if _sub_operations else None
+            )
+
         return {
             "status": "error",
             "message": str(e)

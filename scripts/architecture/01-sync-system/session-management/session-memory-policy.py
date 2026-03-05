@@ -44,6 +44,16 @@ if sys.stderr.encoding != 'utf-8':
     except AttributeError:
         sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
+# ===================================================================
+# NEW: POLICY TRACKING INTEGRATION
+# ===================================================================
+try:
+    sys.path.insert(0, str(Path(__file__).parent))
+    from policy_tracking_helper import record_policy_execution, record_sub_operation
+    HAS_TRACKING = True
+except ImportError:
+    HAS_TRACKING = False
+
 if sys.platform == 'win32':
     try:
         sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
@@ -743,30 +753,111 @@ def enforce():
         dict: Contains 'status' ('success' or 'error'), 'sessions' count,
               and 'protected_files' count. On error, contains 'message'.
     """
+    # ===================================================================
+    # TRACKING: Record start time
+    # ===================================================================
+    _track_start_time = datetime.now()
+    _sub_operations = []
+
     try:
         log_policy_hit("ENFORCE_START", "session-memory-enforcement")
 
-        # Ensure session directory exists
+        # Sub-op 1: Ensure directories exist
+        _op1_start = datetime.now()
         SESSION_DIR.mkdir(parents=True, exist_ok=True)
         STATE_DIR.mkdir(parents=True, exist_ok=True)
+        _op1_duration = int((datetime.now() - _op1_start).total_seconds() * 1000)
+        if HAS_TRACKING:
+            _sub_operations.append(record_sub_operation(
+                session_id=os.environ.get('CLAUDE_SESSION_ID', 'unknown'),
+                policy_name="session-memory-policy",
+                operation_name="ensure_directories",
+                input_params={},
+                output_results={"directories_created": True},
+                duration_ms=_op1_duration
+            ))
 
-        # Count sessions and protected files
+        # Sub-op 2: Count sessions and protected files
+        _op2_start = datetime.now()
         sessions = list(SESSION_DIR.glob("session-*.json"))
         protected_files = get_protected_files()
         total_protected = sum(len(files) for files in protected_files.values())
+        _op2_duration = int((datetime.now() - _op2_start).total_seconds() * 1000)
+        if HAS_TRACKING:
+            _sub_operations.append(record_sub_operation(
+                session_id=os.environ.get('CLAUDE_SESSION_ID', 'unknown'),
+                policy_name="session-memory-policy",
+                operation_name="count_protected_files",
+                input_params={},
+                output_results={
+                    "sessions_count": len(sessions),
+                    "protected_files_count": total_protected
+                },
+                duration_ms=_op2_duration
+            ))
 
-        # Protect session directory permissions (on Unix systems)
+        # Sub-op 3: Protect directory permissions
+        _op3_start = datetime.now()
         if sys.platform != 'win32':
             os.chmod(SESSION_DIR, 0o700)
             os.chmod(STATE_DIR, 0o700)
+        _op3_duration = int((datetime.now() - _op3_start).total_seconds() * 1000)
+        if HAS_TRACKING:
+            _sub_operations.append(record_sub_operation(
+                session_id=os.environ.get('CLAUDE_SESSION_ID', 'unknown'),
+                policy_name="session-memory-policy",
+                operation_name="apply_permissions",
+                input_params={"platform": sys.platform},
+                output_results={"permissions_applied": sys.platform != 'win32'},
+                duration_ms=_op3_duration
+            ))
 
         log_policy_hit("ENFORCE_COMPLETE", f"sessions={len(sessions)}, protected={total_protected}")
         print(f"[session-memory-policy] {len(sessions)} sessions, {total_protected} protected files")
+
+        # ===================================================================
+        # TRACKING: Record overall execution
+        # ===================================================================
+        if HAS_TRACKING:
+            _duration_ms = int((datetime.now() - _track_start_time).total_seconds() * 1000)
+            record_policy_execution(
+                session_id=os.environ.get('CLAUDE_SESSION_ID', 'unknown'),
+                policy_name="session-memory-policy",
+                policy_script="session-memory-policy.py",
+                policy_type="Policy Script",
+                input_params={},
+                output_results={
+                    "status": "success",
+                    "sessions": len(sessions),
+                    "protected_files": total_protected
+                },
+                decision=f"Protected {len(sessions)} sessions with {total_protected} files",
+                duration_ms=_duration_ms,
+                sub_operations=_sub_operations if _sub_operations else None
+            )
 
         return {"status": "success", "sessions": len(sessions), "protected_files": total_protected}
     except Exception as e:
         log_policy_hit("ENFORCE_ERROR", str(e))
         print(f"[session-memory-policy] ERROR: {e}")
+
+        # ===================================================================
+        # TRACKING: Record error
+        # ===================================================================
+        if HAS_TRACKING:
+            _duration_ms = int((datetime.now() - _track_start_time).total_seconds() * 1000)
+            record_policy_execution(
+                session_id=os.environ.get('CLAUDE_SESSION_ID', 'unknown'),
+                policy_name="session-memory-policy",
+                policy_script="session-memory-policy.py",
+                policy_type="Policy Script",
+                input_params={},
+                output_results={"status": "error", "error": str(e)},
+                decision=f"Policy failed: {e}",
+                duration_ms=_duration_ms,
+                sub_operations=_sub_operations if _sub_operations else None
+            )
+
         return {"status": "error", "message": str(e)}
 
 

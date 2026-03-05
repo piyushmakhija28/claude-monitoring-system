@@ -100,6 +100,16 @@ try:
 except ImportError:
     YAML_AVAILABLE = False
 
+# ===================================================================
+# NEW: POLICY TRACKING INTEGRATION
+# ===================================================================
+try:
+    sys.path.insert(0, str(Path(__file__).parent))
+    from policy_tracking_helper import record_policy_execution, record_sub_operation
+    HAS_TRACKING = True
+except ImportError:
+    HAS_TRACKING = False
+
 
 # ============================================================================
 # GLOBAL CONFIGURATION
@@ -1667,33 +1677,94 @@ def enforce() -> Dict[str, Any]:
     Returns:
         dict with status, models_available, models list
     """
+    # ===================================================================
+    # TRACKING: Record start time
+    # ===================================================================
+    import os
+    _track_start_time = datetime.now()
+    _sub_operations = []
+
     try:
         log_policy_hit("ENFORCE_START", "model-selection-enforcement")
 
-        # Initialize all subsystems
+        # Sub-op 1: Initialize IntelligentModelSelector and register models
+        _op1_start = datetime.now()
         selector = IntelligentModelSelector()
-        enforcer = ModelSelectionEnforcer()
-        monitor = ModelSelectionMonitor()
-
-        # Register available models
         models_available = list(selector.MODEL_INFO.keys())
         log_policy_hit("MODELS_REGISTERED", ", ".join(models_available))
+        _op1_duration = int((datetime.now() - _op1_start).total_seconds() * 1000)
+        if HAS_TRACKING:
+            _sub_operations.append(record_sub_operation(
+                session_id=os.environ.get('CLAUDE_SESSION_ID', 'unknown'),
+                policy_name="intelligent-model-selection-policy",
+                operation_name="initialize_model_selector",
+                input_params={},
+                output_results={"models_registered": models_available},
+                duration_ms=_op1_duration
+            ))
 
-        # Quick validation: enforcer rules loaded
+        # Sub-op 2: Initialize ModelSelectionEnforcer and count keywords
+        _op2_start = datetime.now()
+        enforcer = ModelSelectionEnforcer()
         rule_count = sum(
             len(r['keywords']) for r in enforcer.RULES.values()
         )
         log_policy_hit("ENFORCER_READY", f"{rule_count} enforcement keywords loaded")
+        _op2_duration = int((datetime.now() - _op2_start).total_seconds() * 1000)
+        if HAS_TRACKING:
+            _sub_operations.append(record_sub_operation(
+                session_id=os.environ.get('CLAUDE_SESSION_ID', 'unknown'),
+                policy_name="intelligent-model-selection-policy",
+                operation_name="initialize_selection_enforcer",
+                input_params={},
+                output_results={"enforcement_keywords": rule_count},
+                duration_ms=_op2_duration
+            ))
 
-        # Quick validation: monitor configuration
+        # Sub-op 3: Initialize ModelSelectionMonitor and validate ranges
+        _op3_start = datetime.now()
+        monitor = ModelSelectionMonitor()
         range_count = len(monitor.EXPECTED_RANGES)
         log_policy_hit("MONITOR_READY", f"{range_count} distribution ranges configured")
+        _op3_duration = int((datetime.now() - _op3_start).total_seconds() * 1000)
+        if HAS_TRACKING:
+            _sub_operations.append(record_sub_operation(
+                session_id=os.environ.get('CLAUDE_SESSION_ID', 'unknown'),
+                policy_name="intelligent-model-selection-policy",
+                operation_name="initialize_selection_monitor",
+                input_params={},
+                output_results={"distribution_ranges": range_count},
+                duration_ms=_op3_duration
+            ))
 
         log_policy_hit("ENFORCE_COMPLETE", "All subsystems initialized successfully")
         print(
             "[intelligent-model-selection-policy] Policy enforced - "
             f"{len(models_available)} models available: {', '.join(models_available)}"
         )
+
+        # ===================================================================
+        # TRACKING: Record overall execution
+        # ===================================================================
+        if HAS_TRACKING:
+            _duration_ms = int((datetime.now() - _track_start_time).total_seconds() * 1000)
+            record_policy_execution(
+                session_id=os.environ.get('CLAUDE_SESSION_ID', 'unknown'),
+                policy_name="intelligent-model-selection-policy",
+                policy_script="intelligent-model-selection-policy.py",
+                policy_type="Policy Script",
+                input_params={},
+                output_results={
+                    "status": "success",
+                    "models_available": len(models_available),
+                    "models": models_available,
+                    "enforcer_keywords": rule_count,
+                    "monitor_ranges": range_count
+                },
+                decision=f"Initialized selector with {len(models_available)} models, {rule_count} keywords, {range_count} ranges",
+                duration_ms=_duration_ms,
+                sub_operations=_sub_operations if _sub_operations else None
+            )
 
         return {
             "status": "success",
@@ -1706,6 +1777,24 @@ def enforce() -> Dict[str, Any]:
     except Exception as exc:
         log_policy_hit("ENFORCE_ERROR", str(exc))
         print(f"[intelligent-model-selection-policy] ERROR: {exc}", file=sys.stderr)
+
+        # ===================================================================
+        # TRACKING: Record error
+        # ===================================================================
+        if HAS_TRACKING:
+            _duration_ms = int((datetime.now() - _track_start_time).total_seconds() * 1000)
+            record_policy_execution(
+                session_id=os.environ.get('CLAUDE_SESSION_ID', 'unknown'),
+                policy_name="intelligent-model-selection-policy",
+                policy_script="intelligent-model-selection-policy.py",
+                policy_type="Policy Script",
+                input_params={},
+                output_results={"status": "error", "error": str(exc)},
+                decision=f"Policy failed: {exc}",
+                duration_ms=_duration_ms,
+                sub_operations=_sub_operations if _sub_operations else None
+            )
+
         return {"status": "error", "message": str(exc)}
 
 
