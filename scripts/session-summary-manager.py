@@ -1602,6 +1602,8 @@ def _generate_markdown(data):
             lines.append("")
             lines.append(f"## Policy Execution Timeline ({total_pol} Policies)")
             lines.append("")
+            lines.append("*Detailed execution flow of policy enforcement during this session*")
+            lines.append("")
 
             # Main policy table sorted by execution order (timestamp)
             sorted_policies = sorted(
@@ -1615,7 +1617,16 @@ def _generate_markdown(data):
                 pol_dur = pol.get("duration_ms", 0)
                 pol_decision = pol.get("decision", "")[:60]
                 pol_type = pol.get("type", "Hook")
-                lines.append(f"| {pol_name} | {pol_dur}ms | {pol_decision} | {pol_type} |")
+
+                # Add type badge for better visual distinction
+                if "Hook" in pol_type:
+                    type_badge = "Hook"
+                elif "Policy" in pol_type:
+                    type_badge = "Policy"
+                else:
+                    type_badge = pol_type
+
+                lines.append(f"| {pol_name} | {pol_dur}ms | {pol_decision} | {type_badge} |")
             lines.append("")
 
             # Execution statistics subsection
@@ -1623,6 +1634,11 @@ def _generate_markdown(data):
             lines.append("")
             lines.append(f"- **Total Policies**: {total_pol}")
             lines.append(f"- **Total Duration**: {total_dur_ms}ms")
+
+            # Calculate and display average duration
+            if total_pol > 0:
+                avg_duration = int(total_dur_ms / total_pol)
+                lines.append(f"- **Average Duration**: {avg_duration}ms per policy")
 
             if slowest_policies:
                 slowest_top = slowest_policies[0]
@@ -1651,7 +1667,7 @@ def _generate_markdown(data):
                     else:
                         dec_policy = "policy"
                         dec_text = str(decision)[:80]
-                    lines.append(f"{idx}. {dec_policy}: {dec_text}")
+                    lines.append(f"{idx}. **{dec_policy}**: {dec_text}")
                 lines.append("")
     except Exception:
         pass

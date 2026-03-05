@@ -1,0 +1,255 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Policy Tracking Helper - Simplified interface for policies to record execution
+
+This helper provides easy-to-use functions that policies can call to record
+their execution details. It abstracts away PolicyTracker complexity and ensures
+consistent data format across all policies.
+
+Version: 1.0.0
+Last Modified: 2026-03-05
+Windows-Safe: No Unicode chars (ASCII only, cp1252 compatible)
+"""
+
+import sys
+import os
+import json
+from pathlib import Path
+from datetime import datetime
+from typing import Dict, Any, Optional, List
+
+# Windows-safe encoding
+if sys.platform == 'win32':
+    import io
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+
+
+def record_policy_execution(
+    session_id: str,
+    policy_name: str,
+    policy_script: str,
+    policy_type: str,
+    input_params: Dict[str, Any],
+    output_results: Dict[str, Any],
+    decision: str,
+    duration_ms: int,
+    sub_operations: Optional[List[Dict]] = None
+) -> bool:
+    """
+    Record a policy execution to flow-trace.json.
+
+    This is the main function policies should call to record their execution.
+    It handles all the complexity of appending to flow-trace.json.
+
+    Args:
+        session_id (str): Session ID (SESSION-...)
+        policy_name (str): Policy name (e.g., 'session-id-generator')
+        policy_script (str): Script filename (e.g., 'session-id-generator.py')
+        policy_type (str): Type (e.g., 'Utility Hook', 'Policy Script')
+        input_params (dict): Input parameters to policy
+        output_results (dict): Output results from policy
+        decision (str): Decision text (what the policy decided)
+        duration_ms (int): How long policy took to execute
+        sub_operations (list, optional): List of sub-operations
+
+    Returns:
+        bool: True if recorded successfully, False otherwise
+
+    Example:
+        >>> record_policy_execution(
+        ...     session_id="SESSION-20260305-180752-DR8R",
+        ...     policy_name="session-id-generator",
+        ...     policy_script="session-id-generator.py",
+        ...     policy_type="Utility Hook",
+        ...     input_params={"mode": "auto", "pid": 12345},
+        ...     output_results={"session_id": "SESSION-...", "is_new": True},
+        ...     decision="Created new session",
+        ...     duration_ms=45
+        ... )
+    """
+    try:
+        session_dir = Path.home() / '.claude' / 'memory' / 'logs' / 'sessions' / session_id
+        flow_trace_file = session_dir / 'flow-trace.json'
+
+        # Ensure directory exists
+        session_dir.mkdir(parents=True, exist_ok=True)
+
+        # Load existing flow-trace or create new one
+        if flow_trace_file.exists():
+            flow_trace = json.loads(
+                flow_trace_file.read_text(encoding='utf-8')
+            )
+        else:
+            flow_trace = _create_empty_flow_trace(session_id)
+
+        # Create policy record
+        policy_record = {
+            "policy_name": policy_name,
+            "policy_script": policy_script,
+            "policy_type": policy_type,
+            "timestamp": datetime.now().isoformat(),
+            "duration_ms": duration_ms,
+            "input": input_params,
+            "output": output_results,
+            "decision": decision
+        }
+
+        if sub_operations:
+            policy_record["sub_operations"] = sub_operations
+
+        # Append to all_policies_executed
+        if "all_policies_executed" not in flow_trace:
+            flow_trace["all_policies_executed"] = []
+
+        flow_trace["all_policies_executed"].append(policy_record)
+
+        # Update summary
+        if "execution_summary" not in flow_trace:
+            flow_trace["execution_summary"] = {}
+
+        flow_trace["execution_summary"]["total_policies_executed"] = len(
+            flow_trace["all_policies_executed"]
+        )
+
+        # Update decisions timeline
+        if "decisions_timeline" not in flow_trace:
+            flow_trace["decisions_timeline"] = []
+
+        flow_trace["decisions_timeline"].append({
+            "timestamp": policy_record["timestamp"],
+            "policy": policy_name,
+            "decision": decision
+        })
+
+        # Save updated flow-trace
+        flow_trace_file.write_text(
+            json.dumps(flow_trace, indent=2),
+            encoding='utf-8'
+        )
+
+        return True
+
+    except Exception as e:
+        print(f"[ERROR] Failed to record policy execution: {e}")
+        return False
+
+
+def record_sub_operation(
+    session_id: str,
+    policy_name: str,
+    operation_name: str,
+    input_params: Dict[str, Any],
+    output_results: Dict[str, Any],
+    duration_ms: int
+) -> Dict[str, Any]:
+    """
+    Create a sub-operation record for inclusion in a policy execution.
+
+    Sub-operations are operations within a single policy that should be
+    tracked individually (e.g., different checks in auto-fix-enforcer).
+
+    Args:
+        session_id (str): Session ID
+        policy_name (str): Parent policy name
+        operation_name (str): Operation name
+        input_params (dict): Operation input
+        output_results (dict): Operation output
+        duration_ms (int): Operation duration
+
+    Returns:
+        dict: Sub-operation record
+
+    Example:
+        >>> sub_op = record_sub_operation(
+        ...     session_id="SESSION-...",
+        ...     policy_name="auto-fix-enforcer",
+        ...     operation_name="check_python_available",
+        ...     input_params={"required": "3.8+"},
+        ...     output_results={"found": True, "version": "3.9"},
+        ...     duration_ms=20
+        ... )
+        >>> # Now include sub_op in policy record when calling record_policy_execution
+    """
+    return {
+        "operation": operation_name,
+        "timestamp": datetime.now().isoformat(),
+        "duration_ms": duration_ms,
+        "input": input_params,
+        "output": output_results
+    }
+
+
+def _create_empty_flow_trace(session_id: str) -> Dict[str, Any]:
+    """
+    Create an empty flow-trace.json structure.
+
+    Args:
+        session_id (str): Session ID
+
+    Returns:
+        dict: Empty flow-trace structure
+    """
+    return {
+        "meta": {
+            "session_id": session_id,
+            "created_at": datetime.now().isoformat(),
+            "schema_version": "1.0"
+        },
+        "user_input": {},
+        "all_policies_executed": [],
+        "execution_summary": {
+            "total_policies_executed": 0
+        },
+        "decisions_timeline": []
+    }
+
+
+def get_flow_trace_summary(session_id: str) -> Optional[Dict[str, Any]]:
+    """
+    Get summary statistics from a session's flow-trace.
+
+    Args:
+        session_id (str): Session ID
+
+    Returns:
+        dict: Summary with counts, slowest/fastest policies, decisions
+    """
+    try:
+        session_dir = Path.home() / '.claude' / 'memory' / 'logs' / 'sessions' / session_id
+        flow_trace_file = session_dir / 'flow-trace.json'
+
+        if not flow_trace_file.exists():
+            return None
+
+        flow_trace = json.loads(
+            flow_trace_file.read_text(encoding='utf-8')
+        )
+
+        policies = flow_trace.get("all_policies_executed", [])
+
+        # Find slowest and fastest
+        sorted_by_speed = sorted(policies, key=lambda p: p.get("duration_ms", 0))
+
+        summary = {
+            "total_policies": len(policies),
+            "total_duration_ms": sum(p.get("duration_ms", 0) for p in policies),
+            "slowest_policy": sorted_by_speed[-1] if sorted_by_speed else None,
+            "fastest_policy": sorted_by_speed[0] if sorted_by_speed else None,
+            "average_duration_ms": (
+                sum(p.get("duration_ms", 0) for p in policies) / len(policies)
+                if policies else 0
+            ),
+            "decisions_count": len(flow_trace.get("decisions_timeline", []))
+        }
+
+        return summary
+
+    except Exception as e:
+        print(f"[ERROR] Failed to get flow-trace summary: {e}")
+        return None
+
+
+if __name__ == "__main__":
+    print("[OK] Policy Tracking Helper loaded successfully")
