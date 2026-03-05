@@ -131,6 +131,31 @@ Real-time charts, analytics, alerts
 
 ---
 
+## Project Structure & Folder Organization
+
+### Quick Reference: What Each Folder Does
+
+| Folder | Purpose | Contains |
+|--------|---------|----------|
+| **`policies/`** | Policy Documentation (WHAT to enforce) | 27 .md policy files organized by Level 1/2/3 |
+| **`scripts/`** | Hook & Utility Scripts (entry points) | 8 main hooks + 107 architecture implementation scripts |
+| **`scripts/architecture/01-sync-system/`** | Level 1: Context & Session Management | 38 scripts for session chaining, memory, pruning, preferences |
+| **`scripts/architecture/02-standards-system/`** | Level 2: Standards & Rules Enforcement | 3 scripts for common standards and coding standards |
+| **`scripts/architecture/03-execution-system/`** | Level 3: Execution & Task Management | 66 scripts for prompts, tasks, models, skills, tools, git, etc. |
+| **`src/`** | Flask Application (Web Dashboard) | 45+ service files for monitoring, analytics, notifications |
+| **`tests/`** | Test Suite | Integration and unit tests |
+| **`docs/`** | Supporting Documentation | Architecture guides, setup instructions |
+
+### Complete Mapping Documentation
+
+**See [`ARCHITECTURE_FOLDER_STRUCTURE.md`](./ARCHITECTURE_FOLDER_STRUCTURE.md)** for:
+- Complete folder tree with all subdirectories
+- Full 1:1 Policy-Script mapping table (27 policies → 27 scripts)
+- Which script implements which policy
+- Status of each policy enforcement
+
+---
+
 ## 3-Tier Ecosystem Architecture
 
 Claude Insight is **Tier 2** of a 3-tier architecture:
