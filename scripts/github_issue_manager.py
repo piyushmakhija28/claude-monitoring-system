@@ -1116,7 +1116,18 @@ def _ensure_labels_exist(labels, repo_root):
 
 
 def _detect_scope_labels(subject, description=''):
-    """Detect scope/technology labels from subject and description."""
+    """Detect applicable scope/technology labels from the subject and description.
+
+    Checks for keywords associated with backend, frontend, devops, config,
+    scripts, and policy scopes.
+
+    Args:
+        subject (str): Issue title or task subject line.
+        description (str): Optional longer description. Defaults to ''.
+
+    Returns:
+        list[str]: Scope label name strings that matched (may be empty).
+    """
     labels = []
     combined = (subject + ' ' + (description or '')).lower()
 
@@ -1142,11 +1153,21 @@ def _detect_scope_labels(subject, description=''):
 
 
 def _build_issue_labels(issue_type, complexity, subject, description=''):
-    """
-    Build the complete list of labels for a GitHub issue.
-    CHANGED v3.0: Use semantic labels (p0-critical, p1-high, p2-medium, p3-low).
+    """Build the complete set of labels to attach to a new GitHub issue.
 
-    Returns list of label name strings.
+    Assigns one type label (semantic format matching branch naming), one
+    priority label based on complexity score, a status label ('in-progress'),
+    and any relevant scope labels detected from the subject/description.
+
+    Args:
+        issue_type (str): Semantic type string from _detect_issue_type
+            (e.g. 'bugfix', 'feature', 'refactor').
+        complexity (int or float): Task complexity score (0-25).
+        subject (str): Issue title or task subject line.
+        description (str): Optional longer description. Defaults to ''.
+
+    Returns:
+        list[str]: Label name strings to assign to the issue.
     """
     labels = []
 
@@ -1189,10 +1210,17 @@ def _build_issue_labels(issue_type, complexity, subject, description=''):
 
 
 def _get_priority_labels(complexity):
-    """
-    Get priority and complexity labels based on task complexity score.
-    Returns list of label strings.
-    DEPRECATED: Use _build_issue_labels() instead. Kept for backward compatibility.
+    """Return priority and complexity labels for a given complexity score.
+
+    .. deprecated::
+        Use _build_issue_labels() instead. Retained for backward compatibility.
+
+    Args:
+        complexity (int or float or None): Task complexity score (0-25).
+
+    Returns:
+        list[str]: Priority label and complexity label strings, or an empty
+            list if complexity is falsy or not numeric.
     """
     labels = []
     if not complexity or not isinstance(complexity, (int, float)):
@@ -1220,9 +1248,19 @@ def _get_priority_labels(complexity):
 
 
 def _slugify(text, max_len=40):
-    """
-    Convert text to a URL/branch-safe slug.
-    Lowercase, hyphens only, no special chars, max max_len chars.
+    """Convert text to a URL- and branch-safe slug.
+
+    Lowercases the input, replaces spaces, hyphens, underscores, and
+    forward slashes with a single hyphen, strips non-alphanumeric
+    characters, and truncates at a word boundary up to max_len.
+
+    Args:
+        text (str): Input text to convert.
+        max_len (int): Maximum length of the returned slug. Defaults to 40.
+
+    Returns:
+        str: Lowercase hyphen-separated slug with no leading or trailing
+            hyphens and length <= max_len.
     """
     slug = ''
     for ch in text.lower():

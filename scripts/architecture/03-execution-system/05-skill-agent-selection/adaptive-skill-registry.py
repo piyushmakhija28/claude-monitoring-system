@@ -309,6 +309,7 @@ class SkillDetector:
     """Auto-detect relevant skills from user messages"""
 
     def __init__(self):
+        """Initialize SkillDetector by loading the existing registry from disk."""
         self.registry = self._load_registry()
         self.skills = self.registry.get('skills', {})
 

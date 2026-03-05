@@ -1,6 +1,15 @@
 """
-Community Widgets Manager
-Handles widget sharing, ratings, and community marketplace
+Community Widgets Manager for Claude Insight.
+
+Handles widget publishing, ratings, search, and marketplace statistics
+for the community widget marketplace. Widget records are persisted to
+data/community/widgets.json.
+
+Data persisted to:
+    data/community/widgets.json -- Community widget catalogue.
+
+Classes:
+    CommunityWidgetsManager: Publishes, queries, rates, and manages community widgets.
 """
 import json
 from datetime import datetime
@@ -13,9 +22,19 @@ from utils.path_resolver import get_data_dir, get_logs_dir
 
 
 class CommunityWidgetsManager:
-    """Manage community widget marketplace"""
+    """Publish and manage widgets in the community marketplace.
+
+    Persists a catalogue of shared widgets to widgets.json. Provides
+    methods to publish, search, rate, download-count, and retrieve
+    marketplace statistics.
+
+    Attributes:
+        data_dir (Path): Community data directory (data/community/).
+        widgets_file (Path): Path to widgets.json catalogue.
+    """
 
     def __init__(self):
+        """Initialize CommunityWidgetsManager and ensure widgets.json exists."""
         self.data_dir = get_data_dir() / 'community'
         self.widgets_file = self.data_dir / 'widgets.json'
         self.ensure_data_files()
