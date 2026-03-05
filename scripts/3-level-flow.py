@@ -1746,8 +1746,14 @@ def main():
     print("[LEVEL 1] SYNC SYSTEM (FOUNDATION)")
 
     step_start = datetime.now()
-    ctx_script = CURRENT_DIR / 'context-monitor-v2.py'
-    ctx_stdout, _, ctx_rc, ctx_dur = run_script_with_retry(ctx_script, ['--current-status'], timeout=8, step_name='Level-1.1.Context')
+    # Level 1.1 uses session-pruning-policy for context monitoring
+    ctx_script = SCRIPT_DIR / 'architecture' / '01-sync-system' / 'context-management' / 'session-pruning-policy.py'
+    if not ctx_script.exists():
+        ctx_script = MEMORY_BASE / 'architecture' / '01-sync-system' / 'context-management' / 'session-pruning-policy.py'
+    if not ctx_script.exists():
+        ctx_script = CURRENT_DIR / 'context-monitor-v2.py'  # fallback for backward compatibility
+
+    ctx_stdout, _, ctx_rc, ctx_dur = run_script_with_retry(ctx_script, ['--enforce'], timeout=8, step_name='Level-1.1.Context')
     ctx_data = safe_json(ctx_stdout)
 
     context_pct = ctx_data.get('percentage', 0)
@@ -2052,7 +2058,7 @@ def main():
     state_dur = 0
     state_summary = {}
     if state_script.exists():
-        st_out, _, st_rc, state_dur = run_script_with_retry(state_script, ['--summary'], timeout=5, step_name='Level-1.4.Session-State')
+        st_out, _, st_rc, state_dur = run_script_with_retry(state_script, ['--enforce'], timeout=5, step_name='Level-1.4.Session-State')
         if st_rc == 0 and st_out.strip():
             state_summary = safe_json(st_out)
 
@@ -2528,7 +2534,8 @@ def main():
     enhanced_prompt_summary = ''
     rewritten_prompt = ''
     if prompt_script.exists():
-        pr_out, _, _, pr_dur = run_script_with_retry(prompt_script, ['--', user_message], timeout=8, step_name='Step-3.0.Prompt-Gen')
+        # Prompt script takes message as argument to auto-generate
+        pr_out, _, _, pr_dur = run_script_with_retry(prompt_script, [user_message], timeout=8, step_name='Step-3.0.Prompt-Gen')
         for line in pr_out.splitlines():
             if 'estimated_complexity:' in line:
                 try:
@@ -2579,7 +2586,8 @@ def main():
         task_script = MEMORY_BASE / '03-execution-system' / '01-task-breakdown' / 'automatic-task-breakdown-policy.py'
     tk_dur = 0
     if task_script.exists():
-        tk_out, _, _, tk_dur = run_script_with_retry(task_script, ['--', user_message], timeout=8, step_name='Step-3.1.Task-Breakdown')
+        # Task script supports --analyze <message> for task breakdown
+        tk_out, _, _, tk_dur = run_script_with_retry(task_script, ['--analyze', user_message], timeout=8, step_name='Step-3.1.Task-Breakdown')
         for line in tk_out.splitlines():
             if 'Total Tasks:' in line:
                 try:
@@ -2683,7 +2691,8 @@ Work to complete: Execute phase {i} of the identified work breakdown.
     pl_dur = 0
     plan_score_detail = {}
     if plan_script.exists():
-        pl_out, _, _, pl_dur = run_script_with_retry(plan_script, [str(complexity), user_message], timeout=8, step_name='Step-3.2.Plan-Mode')
+        # Plan mode suggestion script (requires argument after --suggest)
+        pl_out, _, _, pl_dur = run_script_with_retry(plan_script, ['--suggest', user_message], timeout=8, step_name='Step-3.2.Plan-Mode')
         pl_data = safe_json(pl_out)
         plan_required = pl_data.get('plan_mode_required', False)
         if 'score' in pl_data:
@@ -2752,7 +2761,7 @@ Work to complete: Execute phase {i} of the identified work breakdown.
     # STEP 3.3: CONTEXT CHECK (pre-execution re-verify)
     # ------------------------------------------------------------------
     step_start = datetime.now()
-    ctx_out2, _, _, ctx2_dur = run_script_with_retry(ctx_script, ['--current-status'], timeout=8, step_name='Step-3.3.Context-Recheck')
+    ctx_out2, _, _, ctx2_dur = run_script_with_retry(ctx_script, ['--enforce'], timeout=8, step_name='Step-3.3.Context-Recheck')
     ctx_data2 = safe_json(ctx_out2)
     context_pct2 = ctx_data2.get('percentage', context_pct)
 
@@ -2973,7 +2982,8 @@ Work to complete: Execute phase {i} of the identified work breakdown.
         prompt_script = MEMORY_BASE / '03-execution-system' / '00-prompt-generation' / 'prompt-generation-policy.py'
     pr_dur_3_5 = 0
     if prompt_script.exists():
-        pr_out, _, _, pr_dur_3_5 = run_script_with_retry(prompt_script, ['--', user_message], timeout=8, step_name='Step-3.5.Prompt-Skill-Context')
+        # Prompt script with skill context
+        pr_out, _, _, pr_dur_3_5 = run_script_with_retry(prompt_script, [user_message], timeout=8, step_name='Step-3.5.Prompt-Skill-Context')
         pr_data = safe_json(pr_out)
         rewritten_prompt_3_5 = pr_data.get('rewritten_prompt', '')
         enhanced_prompt_3_5 = pr_data.get('enhanced_prompt', '')
@@ -3088,7 +3098,7 @@ Work to complete: Execute phase {i} of the identified work breakdown.
     fp_dur = 0
     fp_checks = {}
     if fp_script.exists():
-        fp_out, _, fp_rc, fp_dur = run_script_with_retry(fp_script, ['--check-all'], timeout=8, step_name='Step-3.7.Failure-Prevention')
+        fp_out, _, fp_rc, fp_dur = run_script_with_retry(fp_script, ['--enforce'], timeout=8, step_name='Step-3.7.Failure-Prevention')
         fp_checks = {"exit_code": fp_rc, "output_lines": len(fp_out.splitlines())}
 
     failure_rules = [
