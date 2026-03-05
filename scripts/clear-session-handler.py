@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
 Script Name: clear-session-handler.py
-Version: 3.1.0 (Context Handoff to 3-level-flow)
-Last Modified: 2026-03-01
+Version: 3.2.0 (Flag auto-expiry cleanup - Loophole #10)
+Last Modified: 2026-03-05
 Description: Detects /clear command usage via UserPromptSubmit hook.
              Compares current transcript message count vs last known count.
              If count decreased or transcript changed = /clear was used.
@@ -96,6 +96,85 @@ except ImportError:
 
 # MULTI-WINDOW FIX: Get window-specific hook state file via isolator
 HOOK_STATE_FILE = None  # Initialized in _init_window_isolation()
+
+# Flag auto-expiry configuration (Loophole #10)
+FLAG_EXPIRY_MINUTES = 60   # Auto-delete flags older than 60 minutes
+FLAG_CLEANUP_ON_STARTUP = True
+
+
+# =============================================================================
+# FLAG AUTO-EXPIRY UTILITIES (Loophole #10)
+# =============================================================================
+
+def _cleanup_expired_flags(max_age_minutes=FLAG_EXPIRY_MINUTES):
+    """Remove flag files in FLAG_DIR older than max_age_minutes.
+
+    Scans ~/.claude/ for all .*.json flag files and deletes any whose
+    filesystem modification time exceeds the expiry threshold.
+
+    Args:
+        max_age_minutes: Maximum allowed flag age in minutes (default 60).
+
+    Returns:
+        int: Number of flag files deleted.
+    """
+    try:
+        from datetime import timedelta
+        cutoff_time = datetime.now() - timedelta(minutes=max_age_minutes)
+        cleaned = 0
+
+        for flag_file in FLAG_DIR.glob('.*.json'):
+            try:
+                if flag_file.stat().st_mtime < cutoff_time.timestamp():
+                    flag_file.unlink(missing_ok=True)
+                    cleaned += 1
+            except Exception:
+                pass
+
+        return cleaned
+    except Exception:
+        return 0
+
+
+def _check_flag_age(flag_path, max_age_minutes=FLAG_EXPIRY_MINUTES):
+    """Check if a flag file is still within its freshness window.
+
+    Checks file modification time and, if present, the JSON created_at
+    field.  Stale files are deleted before returning False.
+
+    Args:
+        flag_path: str or Path to the flag JSON file.
+        max_age_minutes: Maximum allowed age in minutes (default 60).
+
+    Returns:
+        bool: True if fresh and usable; False if expired/missing.
+    """
+    try:
+        path = Path(flag_path)
+        if not path.exists():
+            return False
+
+        mod_time = datetime.fromtimestamp(path.stat().st_mtime)
+        age_minutes = (datetime.now() - mod_time).total_seconds() / 60
+
+        if age_minutes > max_age_minutes:
+            path.unlink(missing_ok=True)
+            return False
+
+        try:
+            data = json.loads(path.read_text(encoding='utf-8'))
+            if 'created_at' in data:
+                created = datetime.fromisoformat(data['created_at'])
+                json_age = (datetime.now() - created).total_seconds() / 60
+                if json_age > max_age_minutes:
+                    path.unlink(missing_ok=True)
+                    return False
+        except Exception:
+            pass
+
+        return True
+    except Exception:
+        return False
 
 
 # =============================================================================
@@ -562,6 +641,14 @@ def _link_session_chain(child_session, parent_session):
 def main():
     # Initialize window isolation (PID-based state files)
     _init_window_isolation()
+
+    # Flag auto-expiry cleanup at session start (Loophole #10)
+    # Runs before reading any session state so stale flags are gone first.
+    if FLAG_CLEANUP_ON_STARTUP:
+        _expired = _cleanup_expired_flags(max_age_minutes=FLAG_EXPIRY_MINUTES)
+        if _expired > 0:
+            log_event(f"[FLAG-CLEANUP] Removed {_expired} expired flag(s) "
+                      f"older than {FLAG_EXPIRY_MINUTES} minutes")
 
     # INTEGRATION: Load session management policies from scripts/architecture/
     # Retry up to 3 times. Warn on failure (session-handler should not hard-break).

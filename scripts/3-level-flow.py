@@ -1352,6 +1352,17 @@ def main():
         user_message = "[NO MESSAGE - hook did not pass user prompt]"
 
     # =========================================================================
+    # STEP 0: FLAG AUTO-EXPIRY CLEANUP (Loophole #10 - v3.9.0)
+    # Remove stale flag files older than FLAG_EXPIRY_MINUTES at startup so
+    # they never accumulate in ~/.claude/ between sessions.
+    # =========================================================================
+    if FLAG_CLEANUP_ON_STARTUP:
+        _expired_count = _cleanup_expired_flags(max_age_minutes=FLAG_EXPIRY_MINUTES)
+        if _expired_count > 0:
+            print(f"[FLAG-CLEANUP] Removed {_expired_count} expired flag(s) "
+                  f"older than {FLAG_EXPIRY_MINUTES} minutes")
+
+    # =========================================================================
     # STEP 0: SYNC ARCHITECTURE MODULES + VERIFY POLICIES (v3.4.1)
     # Issues #9 & #10: Ensure architecture modules are synced to local scripts
     # dir and all policy modules are verified (not blindly executed as CLI tools).
@@ -1401,6 +1412,7 @@ def main():
     # This is the central JSON object that tracks everything A-to-Z
     # =========================================================================
     trace = {
+        "_schema_version": "2.0",  # Artifact versioning (Improvement #6) - validates cross-script compatibility
         "meta": {
             "flow_version": VERSION,
             "script": SCRIPT_NAME,
@@ -1675,6 +1687,7 @@ def main():
         try:
             session_progress_file = MEMORY_BASE / 'logs' / 'session-progress.json'
             fresh_progress = {
+                '_schema_version': '1.5',  # Artifact versioning (Improvement #6)
                 'total_progress': 0,
                 'tool_counts': {},
                 'started_at': datetime.now().strftime('%Y-%m-%dT%H:%M:%S'),
@@ -2014,7 +2027,102 @@ def main():
     else:
         print(f"   [OK] Patterns: None detected yet")
 
-    print("[OK] LEVEL 1 COMPLETE (5 sub-steps)")
+    # =========================================================================
+    # LEVEL 1.6: SCRIPT DEPENDENCY VALIDATION (Improvement #6)
+    # Validates that all scripts can safely call each other:
+    #   - All dependency scripts exist on disk
+    #   - No circular dependencies in the dependency graph
+    #   - Artifact JSON files include schema version headers
+    # Non-blocking: validation issues are logged as warnings, never block flow.
+    # =========================================================================
+    step_start = datetime.now()
+    dep_validator_script = SCRIPT_DIR / 'architecture' / '03-execution-system' / 'script-dependency-validator.py'
+    dep_deployed = SCRIPTS_DIR / 'architecture' / '03-execution-system' / 'script-dependency-validator.py'
+
+    dep_status = 'SKIPPED'
+    dep_dur = 0
+    dep_result = {}
+    dep_missing = []
+    dep_cycles = []
+    dep_artifact_issues = 0
+    dep_script_path = dep_validator_script if dep_validator_script.exists() else (dep_deployed if dep_deployed.exists() else None)
+
+    if dep_script_path:
+        dep_out, dep_err, dep_rc, dep_dur = run_script(dep_script_path, args=['--report'], timeout=8)
+        if dep_out.strip():
+            try:
+                dep_result = json.loads(dep_out.strip())
+                dep_missing = dep_result.get('missing_dependencies', [])
+                dep_cycles = dep_result.get('circular_dependencies', [])
+                dep_artifact_issues = len(dep_result.get('artifact_issues', []))
+                dep_status = dep_result.get('overall_status', 'UNKNOWN')
+            except Exception:
+                dep_status = 'PARSE_ERROR'
+        else:
+            dep_status = 'NO_OUTPUT'
+    else:
+        dep_status = 'SCRIPT_NOT_FOUND'
+
+    trace["pipeline"].append({
+        "step": "LEVEL_1_6_DEP_VALIDATION",
+        "name": "Script Dependency Validation",
+        "level": 1.6,
+        "order": 3.0,
+        "is_blocking": False,
+        "timestamp": step_start.isoformat(),
+        "duration_ms": dep_dur,
+        "input": {
+            "from_previous": "LEVEL_1_PATTERNS",
+            "session_id": session_id,
+            "purpose": "Validate script dependencies and artifact schema versions"
+        },
+        "policy": {
+            "script": "script-dependency-validator.py",
+            "args": ["--report"],
+            "rules_applied": [
+                "validate_dependency_existence",
+                "detect_circular_dependencies",
+                "validate_artifact_schema_versions"
+            ]
+        },
+        "policy_output": {
+            "overall_status": dep_status,
+            "missing_dependencies": dep_missing,
+            "circular_dependencies": dep_cycles,
+            "artifact_issues_count": dep_artifact_issues,
+            "scripts_validated": dep_result.get('scripts_total', 0),
+            "dependencies_checked": dep_result.get('dependencies_total', 0),
+            "script_found": dep_script_path is not None,
+        },
+        "decision": (
+            f"Dependencies valid, no cycles"
+            if dep_status == 'PASS'
+            else f"Dependency validation: {dep_status} "
+                 f"(missing={len(dep_missing)}, cycles={len(dep_cycles)}, "
+                 f"artifact_issues={dep_artifact_issues})"
+        ),
+        "passed_to_next": {
+            "dep_validation_status": dep_status,
+            "dep_issues_found": bool(dep_missing or dep_cycles)
+        }
+    })
+
+    if dep_status == 'PASS':
+        print(f"   [OK] Dep Validator: {dep_result.get('scripts_total', '?')} scripts, "
+              f"{dep_result.get('dependencies_total', '?')} deps, no cycles")
+    elif dep_status in ('SKIPPED', 'SCRIPT_NOT_FOUND'):
+        print(f"   [OK] Dep Validator: Skipped (script not found)")
+    else:
+        if dep_missing:
+            print(f"   [WARN] Dep Validator: {len(dep_missing)} missing dep(s)")
+        if dep_cycles:
+            print(f"   [WARN] Dep Validator: {len(dep_cycles)} cycle(s) detected")
+        if dep_artifact_issues:
+            print(f"   [INFO] Dep Validator: {dep_artifact_issues} artifact(s) missing schema version")
+        if not (dep_missing or dep_cycles or dep_artifact_issues):
+            print(f"   [OK] Dep Validator: {dep_status}")
+
+    print("[OK] LEVEL 1 COMPLETE (6 sub-steps)")
     print()
 
     # =========================================================================
@@ -3187,11 +3295,13 @@ Work to complete: Execute phase {i} of the identified work breakdown.
     print("LEVEL -1: Auto-Fix Enforcement")
     print("   +-- [OK] All 7 system checks passed")
     print()
-    print("LEVEL 1: Sync System (4 sub-steps)")
+    print("LEVEL 1: Sync System (6 sub-steps)")
     print(f"   +-- [1.1] Context: {context_pct}% -> {context_pct2}%")
     print(f"   +-- [1.2] Session: {session_id}")
     print(f"   +-- [1.3] Preferences: {prefs_loaded} loaded")
     print(f"   +-- [1.4] State: {completed_tasks_count} tasks, {files_modified_count} files")
+    print(f"   +-- [1.5] Patterns: {patterns_detected} cross-project patterns")
+    print(f"   +-- [1.6] Dep Validator: {dep_status}")
     print()
     print("LEVEL 2: Standards System (2 sub-levels)")
     print(f"   +-- [2.1] Common: {common_count}, Rules: {common_rules}")
