@@ -98,12 +98,23 @@ class ImportManager:
     
     @staticmethod
     def get_agent(agent_name: str) -> Optional[Dict]:
-        """
-        Load agent from claude-global-library.
-        
-        Usage:
-            agent = ImportManager.get_agent('orchestrator-agent')
-            # Returns: agent definition from GitHub
+        """Load an agent definition from claude-global-library on GitHub.
+
+        Fetches the ``agent.md`` file for the given agent from the
+        claude-global-library repository's main branch.
+
+        Args:
+            agent_name (str): Agent identifier matching the directory name
+                in claude-global-library/agents/ (e.g. 'orchestrator-agent',
+                'devops-engineer').
+
+        Returns:
+            dict or None: On success, a dict with keys:
+                name (str): The agent_name argument.
+                content (str): Raw agent.md markdown content.
+                source (str): Always 'github'.
+                url (str): The full raw URL that was fetched.
+            Returns None on HTTP error (agent not found).
         """
         url = f"{GLOBAL_LIB_URL}/agents/{agent_name}/agent.md"
         try:
@@ -119,12 +130,18 @@ class ImportManager:
     
     @staticmethod
     def get_policy(policy_path: str) -> Optional[str]:
-        """
-        Load policy from claude-insight.
-        
-        Usage:
-            policy = ImportManager.get_policy('01-sync-system/context-management/README.md')
-            # Returns: policy content from GitHub
+        """Load an architecture policy document from claude-insight on GitHub.
+
+        Fetches a policy markdown file from the ``scripts/architecture/``
+        directory of the claude-insight repository's main branch.
+
+        Args:
+            policy_path (str): Relative path within scripts/architecture/
+                (e.g. '01-sync-system/context-management/README.md').
+
+        Returns:
+            str or None: Raw markdown content of the policy file, or None
+                on HTTP error (file not found).
         """
         url = f"{INSIGHT_URL}/scripts/architecture/{policy_path}"
         try:
@@ -135,12 +152,23 @@ class ImportManager:
     
     @staticmethod
     def get_local_module(module_path: str) -> Any:
-        """
-        Load local module (within this project).
-        
-        Usage:
-            services = ImportManager.get_local_module('services.monitoring.metrics_collector')
-            # Returns: imported module
+        """Load a local project module by dotted path.
+
+        Uses Python's built-in import mechanism to load and return the module
+        at the given dotted path. The module must be importable from the
+        current sys.path (i.e. within the src/ package).
+
+        Args:
+            module_path (str): Dotted module path string
+                (e.g. 'services.monitoring.metrics_collector').
+
+        Returns:
+            module: The imported Python module object.
+
+        Raises:
+            ImportError: If the module cannot be found or imported.
+            AttributeError: If any intermediate component of the path is not
+                an attribute of the parent module.
         """
         parts = module_path.split('.')
         module = __import__(module_path)
@@ -150,7 +178,14 @@ class ImportManager:
     
     @staticmethod
     def list_skills() -> Optional[list]:
-        """List all available skills from claude-global-library."""
+        """Fetch and return the skills index from claude-global-library.
+
+        Attempts to download ``skills/INDEX.md`` and returns its lines.
+
+        Returns:
+            list[str] or None: Lines from the INDEX.md file, or None if the
+                file does not exist or cannot be fetched.
+        """
         url = f"{GLOBAL_LIB_URL}/skills/INDEX.md"
         try:
             with urllib.request.urlopen(url) as response:
@@ -162,7 +197,14 @@ class ImportManager:
     
     @staticmethod
     def list_agents() -> Optional[list]:
-        """List all available agents from claude-global-library."""
+        """Fetch and return the agents list from claude-global-library README.
+
+        Attempts to download ``agents/README.md`` and returns its lines.
+
+        Returns:
+            list[str] or None: Lines from the README.md file, or None if the
+                file does not exist or cannot be fetched.
+        """
         url = f"{GLOBAL_LIB_URL}/agents/README.md"
         try:
             with urllib.request.urlopen(url) as response:

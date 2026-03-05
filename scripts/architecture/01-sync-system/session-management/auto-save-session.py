@@ -24,7 +24,12 @@ if sys.platform == 'win32':
     sys.stderr.reconfigure(encoding='utf-8')
 
 def log_policy_hit(action, context):
-    """Log policy execution"""
+    """Append a timestamped entry to the policy hits log.
+
+    Args:
+        action (str): Action identifier (e.g., 'session-saved', 'save-failed').
+        context (str): Additional context string describing the action.
+    """
     log_file = os.path.expanduser("~/.claude/memory/logs/policy-hits.log")
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     log_entry = f"[{timestamp}] auto-save-session | {action} | {context}\n"

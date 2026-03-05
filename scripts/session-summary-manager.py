@@ -334,7 +334,20 @@ def _new_summary(session_id):
 
 
 def _extract_project(cwd):
-    """Extract project name from working directory path"""
+    """Extract a meaningful project name from an absolute working directory path.
+
+    Prefers directory parts that start with known project prefixes
+    ('techdeveloper-', 'surgricalswale-', 'lovepoet-') or match their short
+    forms.  Falls back to the last non-generic directory name (skipping
+    'backend', 'src', 'Documents', etc.).
+
+    Args:
+        cwd (str): Absolute path to the project's working directory.
+
+    Returns:
+        str or None: Extracted project name, or None when no meaningful name
+                     can be determined.
+    """
     parts = Path(cwd).parts
     for part in reversed(parts):
         if part.startswith(('techdeveloper-', 'surgricalswale-', 'lovepoet-')):
@@ -540,7 +553,14 @@ def _analyze_request_activity(req, entries):
 
 
 def _dedupe_list(items):
-    """Remove duplicates while preserving order"""
+    """Remove duplicates from a list while preserving insertion order.
+
+    Args:
+        items (list): Input list that may contain duplicate strings.
+
+    Returns:
+        list: New list with first occurrences of each item retained.
+    """
     seen = set()
     result = []
     for item in items:
@@ -555,7 +575,21 @@ def _dedupe_list(items):
 # =============================================================================
 
 def _load_tool_stats(session_id):
-    """Load tool usage stats from session-progress.json"""
+    """Load tool usage statistics from session-progress.json for the given session.
+
+    Only returns data when the session_id in session-progress.json matches the
+    requested session to avoid returning stale data from a different session.
+
+    Args:
+        session_id (str): Session identifier to match against the progress file.
+
+    Returns:
+        dict: Stat fields including 'tool_counts', 'total_progress',
+              'content_chars', 'tasks_completed', 'errors_seen',
+              'context_estimate_pct', and 'modified_files_since_commit'.
+              Returns {} when the file is missing, unreadable, or belongs to a
+              different session.
+    """
     progress_file = LOGS_DIR / 'session-progress.json'
     try:
         if progress_file.exists():
@@ -580,7 +614,21 @@ def _load_tool_stats(session_id):
 
 
 def _load_tool_tracker_entries(session_id):
-    """Load detailed tool usage from tool-tracker.jsonl for this session"""
+    """Load and filter tool-tracker.jsonl entries for the given session.
+
+    Reads the JSONL file and filters entries to those whose timestamp is on or
+    after the session's start_time (from the session JSON file).  Also
+    classifies entries into files_modified, files_read, and error_entries.
+
+    Args:
+        session_id (str): Session identifier used to look up the session start
+                          time and filter relevant entries.
+
+    Returns:
+        tuple: (entries, files_modified, files_read, error_entries) where each
+               element is a list.  Returns four empty lists when the tracker
+               file does not exist.
+    """
     tracker_file = LOGS_DIR / 'tool-tracker.jsonl'
     entries = []
     files_modified = []
@@ -651,7 +699,19 @@ def _load_tool_tracker_entries(session_id):
 
 
 def _load_flow_trace(session_id):
-    """Load flow-trace.json for pipeline decision data (with file locking - Loophole #19)"""
+    """Load the flow-trace.json pipeline decision data for a session.
+
+    Uses _lock_file/_unlock_file (Windows file locking, Loophole #19) to
+    prevent reading a partially written file.
+
+    Args:
+        session_id (str): Session identifier used to locate the trace file at
+                          session_log_dir(session_id)/flow-trace.json.
+
+    Returns:
+        dict: Full flow-trace data, or {} when the file is missing or
+              unreadable.
+    """
     flow_trace = session_log_dir(session_id) / 'flow-trace.json'
     if not flow_trace.exists():
         return {}
@@ -666,7 +726,17 @@ def _load_flow_trace(session_id):
 
 
 def _load_session_json(session_id):
-    """Load session metadata JSON (with file locking - Loophole #19)"""
+    """Load the session metadata JSON from the sessions directory.
+
+    Uses _lock_file/_unlock_file (Windows file locking, Loophole #19).
+
+    Args:
+        session_id (str): Session identifier used to locate
+                          SESSIONS_DIR/{session_id}.json.
+
+    Returns:
+        dict: Session metadata, or {} when the file is missing or unreadable.
+    """
     session_file = SESSIONS_DIR / f'{session_id}.json'
     if not session_file.exists():
         return {}
@@ -681,7 +751,17 @@ def _load_session_json(session_id):
 
 
 def _calculate_duration(created_at, last_updated):
-    """Calculate human-readable duration between two ISO timestamps"""
+    """Calculate the elapsed time between two ISO 8601 timestamps.
+
+    Args:
+        created_at (str): ISO timestamp for the start of the interval.
+        last_updated (str): ISO timestamp for the end of the interval.
+
+    Returns:
+        tuple: (human_readable, total_seconds) where human_readable is a
+               string like '1h 23m 45s' and total_seconds is an integer.
+               Returns ('unknown', 0) on any parse error.
+    """
     try:
         start = datetime.fromisoformat(created_at)
         end = datetime.fromisoformat(last_updated)
@@ -712,10 +792,27 @@ def _calculate_duration(created_at, last_updated):
 # =============================================================================
 
 def finalize(session_id):
-    """
-    Generate comprehensive session-summary.md from accumulated data + external sources.
-    v2.0.0: Pulls from flow-trace.json, session-progress.json, tool-tracker.jsonl
-    Called when session is closed (on /clear).
+    """Generate the comprehensive session summary on session close.
+
+    Merges data from four sources, generates session-summary.md, updates the
+    session-summary.json with status=COMPLETED, writes a one-liner summary_text,
+    updates the chain-index, and optionally triggers context auto-cleanup.
+
+    Data sources:
+      1. Accumulated per-request JSON (session-summary.json) from accumulate().
+      2. Tool usage stats from session-progress.json (_load_tool_stats).
+      3. Detailed tool entries + files from tool-tracker.jsonl
+         (_load_tool_tracker_entries).
+      4. Pipeline decisions from flow-trace.json (_load_flow_trace).
+
+    Called by clear-session-handler.py on /clear.
+
+    Args:
+        session_id (str): Session identifier to finalise.
+
+    Returns:
+        bool: True on success; False when session_id is falsy or the summary
+              markdown cannot be written.
     """
     if not session_id:
         return False
@@ -865,9 +962,19 @@ def finalize(session_id):
 
 
 def auto_trigger_cleanup_if_needed(session_id, summary_data):
-    """
-    AUTO-CLEANUP EXECUTION: When finalizing a session, check context usage.
-    If context > 90%, AUTOMATICALLY EXECUTE cleanup/compaction.
+    """Execute automatic cleanup when estimated context usage exceeds 90%.
+
+    Estimates context usage from request_count * 1500 tokens per request
+    against the 200k-token limit.  When above 90%, deletes old session files
+    (keeps last 5) and old log directories (keeps last 10), then resets the
+    context baseline to 10% for the next session.
+
+    Called from finalize() after every session close.  Non-blocking: errors
+    are caught and logged.
+
+    Args:
+        session_id (str): Session identifier used for log messages.
+        summary_data (dict): Finalised summary dict containing 'request_count'.
     """
     request_count = summary_data.get("request_count", 0)
     estimated_tokens_per_request = 1500
@@ -903,7 +1010,11 @@ def auto_trigger_cleanup_if_needed(session_id, summary_data):
 
 
 def _execute_session_cleanup():
-    """Delete old session files to free up space"""
+    """Delete old session JSON files from SESSIONS_DIR, keeping the 5 newest.
+
+    Returns:
+        int: Number of session files deleted.
+    """
     deleted_count = 0
     try:
         sessions = sorted(list(SESSIONS_DIR.glob('SESSION-*.json')),
@@ -921,7 +1032,14 @@ def _execute_session_cleanup():
 
 
 def _cleanup_old_logs():
-    """Cleanup old session logs (keep last 10)"""
+    """Delete old per-session log directories from LOGS_DIR/sessions/, keeping 10 newest.
+
+    Uses shutil.rmtree for recursive directory deletion.  Errors on individual
+    directories are silently ignored.
+
+    Returns:
+        int: Number of log directories deleted.
+    """
     cleaned_count = 0
     try:
         session_logs = sorted(list((LOGS_DIR / 'sessions').glob('SESSION-*')),

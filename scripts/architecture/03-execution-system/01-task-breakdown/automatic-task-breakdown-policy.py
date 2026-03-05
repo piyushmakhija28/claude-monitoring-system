@@ -345,7 +345,11 @@ class TaskAutoAnalyzer:
         }
 
     def log_analysis(self, result: Dict):
-        """Log analysis result"""
+        """Append a JSONL entry with key analysis metrics to the task log.
+
+        Args:
+            result (dict): Analysis result from auto_analyze().
+        """
         self.logs_path.mkdir(parents=True, exist_ok=True)
         log_entry = {
             'timestamp': datetime.now().isoformat(),
@@ -366,7 +370,23 @@ class TaskAutoAnalyzer:
 # ============================================================================
 
 class TaskAutoTracker:
-    """Tracks task progress and monitors tool calls"""
+    """Monitors tool calls and tracks progress against active tasks.
+
+    Reads and writes an active-tasks.json file and appends a per-task tracker
+    log. Tool call interception updates task status in real time.
+
+    Attributes:
+        memory_path (Path): Base ~/.claude/memory directory.
+        tasks_file (Path): JSON file storing active task records.
+        logs_path (Path): Directory for per-task tracker logs.
+        current_task: Currently tracked task, or None.
+
+    Key Methods:
+        monitor_tool_call(tool_name, tool_params, result): Record a tool call.
+        update_task_progress(task_id, status, progress): Update task status.
+        auto_complete_task(task_id): Mark a task as 100% done.
+        check_phase_completion(completed_task): Detect phase completion.
+    """
 
     def __init__(self):
         self.memory_path = MEMORY_DIR
@@ -375,7 +395,11 @@ class TaskAutoTracker:
         self.current_task = None
 
     def load_tasks(self) -> Dict:
-        """Load active tasks from file"""
+        """Load the active tasks dictionary from disk.
+
+        Returns:
+            dict: Tasks dict keyed by task ID string. Empty dict if not found.
+        """
         self.tasks_file.parent.mkdir(parents=True, exist_ok=True)
 
         if self.tasks_file.exists():
@@ -387,7 +411,11 @@ class TaskAutoTracker:
         return {}
 
     def save_tasks(self, tasks: Dict):
-        """Save tasks to file"""
+        """Persist the tasks dictionary to the active-tasks.json file.
+
+        Args:
+            tasks (dict): Tasks dict to save.
+        """
         self.tasks_file.parent.mkdir(parents=True, exist_ok=True)
         try:
             with open(self.tasks_file, 'w', encoding='utf-8') as f:
@@ -396,7 +424,11 @@ class TaskAutoTracker:
             pass
 
     def log(self, message: str):
-        """Log task activity"""
+        """Append a timestamped message to the tracker log file.
+
+        Args:
+            message (str): Log message to append.
+        """
         self.logs_path.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.now().isoformat()
         log_entry = f"[{timestamp}] {message}\n"
@@ -409,7 +441,13 @@ class TaskAutoTracker:
             pass
 
     def monitor_tool_call(self, tool_name: str, tool_params: Dict, result: Any):
-        """Monitor tool calls and track task progress"""
+        """Process a tool call event and dispatch to the appropriate handler.
+
+        Args:
+            tool_name (str): Name of the tool (e.g., 'Read', 'Write', 'Bash').
+            tool_params (dict): Parameters passed to the tool.
+            result: Tool execution result.
+        """
         self.log(f"TOOL_CALL: {tool_name}")
 
         tasks = self.load_tasks()
@@ -446,7 +484,13 @@ class TaskAutoTracker:
         self.log(f"BASH: {command[:50]}")
 
     def update_task_progress(self, task_id: int, status: str, progress: int):
-        """Update task progress"""
+        """Update the status and progress percentage for a task.
+
+        Args:
+            task_id (int): Numeric task ID to update.
+            status (str): New status string (e.g., 'in_progress', 'completed').
+            progress (int): Progress percentage from 0 to 100.
+        """
         tasks = self.load_tasks()
 
         if str(task_id) in tasks:
@@ -458,12 +502,24 @@ class TaskAutoTracker:
         self.log(f"PROGRESS: Task {task_id} -> {status} ({progress}%)")
 
     def auto_complete_task(self, task_id: int):
-        """Automatically mark task as complete"""
+        """Mark a task as completed at 100% progress.
+
+        Args:
+            task_id (int): Numeric task ID to complete.
+        """
         self.update_task_progress(task_id, 'completed', 100)
         self.log(f"AUTO_COMPLETE: Task {task_id}")
 
     def check_phase_completion(self, completed_task: Dict):
-        """Check if phase is complete based on task completion"""
+        """Detect if all tasks in a phase are now complete.
+
+        Args:
+            completed_task (dict): The task that was just completed,
+                                   containing a 'phase' key.
+
+        Returns:
+            bool: True if all tasks in the phase are completed, False otherwise.
+        """
         tasks = self.load_tasks()
         phase = completed_task.get('phase', '')
 
@@ -483,11 +539,26 @@ class TaskAutoTracker:
 # ============================================================================
 
 class PhaseEnforcer:
-    """Enforces task and phase requirements"""
+    """Validates whether tasks require phases based on complexity and size scoring.
+
+    All methods are static and operate purely on the task description string.
+
+    Key Methods:
+        calculate_complexity_score(task_desc): Score keyword density (0-10).
+        calculate_size_score(task_desc): Score task breadth by word count (0-10).
+        analyze_task(task_desc): Combine scores to determine phase requirements.
+    """
 
     @staticmethod
     def calculate_complexity_score(task_desc: str) -> int:
-        """Calculate complexity score based on keywords"""
+        """Calculate a complexity score from keyword density in the task description.
+
+        Args:
+            task_desc (str): Task description text.
+
+        Returns:
+            int: Complexity score from 0 to 10.
+        """
         score = 0
 
         requirements_keywords = ['and', 'also', 'plus', 'additionally', 'all']
@@ -514,7 +585,14 @@ class PhaseEnforcer:
 
     @staticmethod
     def calculate_size_score(task_desc: str) -> int:
-        """Calculate task size score"""
+        """Calculate a size score from word count and breadth indicators.
+
+        Args:
+            task_desc (str): Task description text.
+
+        Returns:
+            int: Size score from 0 to 10.
+        """
         score = 0
 
         word_count = len(task_desc.split())
@@ -533,7 +611,15 @@ class PhaseEnforcer:
 
     @staticmethod
     def analyze_task(task_desc: str) -> Dict:
-        """Analyze task and determine phase enforcement requirements"""
+        """Analyze a task description to determine if phases are required.
+
+        Args:
+            task_desc (str): Task description text.
+
+        Returns:
+            dict: Contains 'complexity' (int), 'size' (int),
+                  'needs_task' (bool), 'needs_phases' (bool), and 'status' (str).
+        """
         complexity = PhaseEnforcer.calculate_complexity_score(task_desc)
         size = PhaseEnforcer.calculate_size_score(task_desc)
 
@@ -554,7 +640,12 @@ class PhaseEnforcer:
 # ============================================================================
 
 def log_policy_hit(action: str, context: str = ""):
-    """Log policy execution"""
+    """Append a timestamped entry to the policy-hits log.
+
+    Args:
+        action (str): The action identifier (e.g., 'ENFORCE_START', 'VALIDATE').
+        context (str): Optional human-readable context or detail string.
+    """
     timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     log_entry = f"[{timestamp}] automatic-task-breakdown-policy | {action} | {context}\n"
 
@@ -571,7 +662,11 @@ def log_policy_hit(action: str, context: str = ""):
 # ============================================================================
 
 def validate():
-    """Validate policy compliance"""
+    """Check that the automatic task breakdown policy preconditions are met.
+
+    Returns:
+        bool: True if validation succeeds, False on any exception.
+    """
     try:
         MEMORY_DIR.mkdir(parents=True, exist_ok=True)
         log_policy_hit("VALIDATE", "automatic-task-breakdown-ready")
@@ -582,7 +677,12 @@ def validate():
 
 
 def report():
-    """Generate compliance report"""
+    """Generate a compliance report for the automatic task breakdown policy.
+
+    Returns:
+        dict: Contains 'status', 'policy', 'features', and 'timestamp'.
+              Returns {'status': 'error', ...} on failure.
+    """
     try:
         report_data = {
             "status": "success",
@@ -607,15 +707,18 @@ def report():
 
 
 def enforce():
-    """
-    Main policy enforcement function.
+    """Activate the automatic task breakdown policy.
 
     Consolidates logic from 3 old scripts:
     - task-auto-analyzer.py (400 lines): Automatic task analysis and breakdown
     - task-auto-tracker.py (536 lines): Task progress tracking and monitoring
     - task-phase-enforcer.py (121 lines): Task/phase enforcement validation
 
-    Returns: dict with status and results
+    Initializes all three component classes.
+
+    Returns:
+        dict: Contains 'status' ('success' or 'error'), 'system', and
+              'components' list. On error, contains 'message'.
     """
     try:
         log_policy_hit("ENFORCE_START", "automatic-task-breakdown-enforcement")
