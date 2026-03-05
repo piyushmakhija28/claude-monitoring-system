@@ -149,7 +149,9 @@ def accumulate(session_id, prompt='', task_type='', skill='', complexity=0,
     if json_path.exists():
         try:
             with open(json_path, 'r', encoding='utf-8') as f:
+                _lock_file(f)
                 data = json.load(f)
+                _unlock_file(f)
         except Exception:
             data = _new_summary(session_id)
     else:
@@ -231,7 +233,9 @@ def accumulate(session_id, prompt='', task_type='', skill='', complexity=0,
     # Write back
     try:
         with open(json_path, 'w', encoding='utf-8') as f:
+            _lock_file(f)
             json.dump(data, f, indent=2)
+            _unlock_file(f)
         log_event(f"[OK] Accumulated request #{data['request_count']} for {session_id}")
         return True
     except Exception as e:
