@@ -191,7 +191,16 @@ class TaskAutoAnalyzer:
         return needs_phases, phase_list
 
     def generate_tasks(self, message: str, entities: List[str], phases: List[Dict]) -> List[Dict]:
-        """Automatically generate task list"""
+        """Generate a typed task list from entities and phases.
+
+        Args:
+            message (str): Original task description.
+            entities (list[str]): Extracted entity names.
+            phases (list[dict]): Phase dicts from detect_phases().
+
+        Returns:
+            list[dict]: Task dicts each with 'id', 'title', 'phase', and 'type'.
+        """
         tasks = []
         task_id = 1
 
@@ -238,7 +247,14 @@ class TaskAutoAnalyzer:
         return tasks
 
     def create_dependencies(self, tasks: List[Dict]) -> List[Dict]:
-        """Create task dependencies based on logical order"""
+        """Assign depends_on and blocked_by relationships to each task.
+
+        Args:
+            tasks (list[dict]): Task list from generate_tasks().
+
+        Returns:
+            list[dict]: Same tasks with 'depends_on' and 'blocked_by' lists added.
+        """
         for i, task in enumerate(tasks):
             task['depends_on'] = []
             task['blocked_by'] = []
@@ -264,7 +280,15 @@ class TaskAutoAnalyzer:
         return tasks
 
     def estimate_complexity(self, message: str, entities: List[str]) -> int:
-        """Estimate complexity score 1-30"""
+        """Estimate task complexity on a 5-30 scale.
+
+        Args:
+            message (str): Raw task description.
+            entities (list[str]): Extracted entity names.
+
+        Returns:
+            int: Complexity score from 5 (simple) to 30 (very complex).
+        """
         score = 5
 
         # Entity count
@@ -292,7 +316,15 @@ class TaskAutoAnalyzer:
         return min(30, score)
 
     def auto_analyze(self, user_message: str) -> Dict:
-        """Main entry point for task analysis"""
+        """Run the full task analysis pipeline on a user message.
+
+        Args:
+            user_message (str): Raw task description from the user.
+
+        Returns:
+            dict: Contains 'message', 'entities', 'file_count', 'complexity',
+                  'needs_phases', 'phases', 'tasks', 'task_count', 'timestamp'.
+        """
         entities = self.extract_entities(user_message)
         file_count = self.estimate_file_count(user_message, entities)
         complexity = self.estimate_complexity(user_message, entities)

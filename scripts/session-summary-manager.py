@@ -161,10 +161,31 @@ def summary_md_path(session_id):
 def accumulate(session_id, prompt='', task_type='', skill='', complexity=0,
                model='', cwd='', plan_mode='false', context_pct=0,
                supplementary_skills='', standards_count=0, rules_count=0):
-    """
-    Add a request entry to the session's accumulated summary.
-    Called by 3-level-flow.py after every user message.
-    v2.0.0: Now captures plan_mode, context_pct, supplementary_skills, standards, rules
+    """Accumulate a per-request entry in the session's summary JSON.
+
+    Called by 3-level-flow.py after every user message.  Reads the existing
+    summary JSON (or creates a fresh one), appends a new request entry, and
+    updates aggregate fields (skills_used, task_types, max_complexity, etc.).
+
+    Uses _lock_file/_unlock_file to prevent data corruption under concurrent
+    hook invocations.
+
+    Args:
+        session_id (str): Active session identifier.
+        prompt (str): User message text (truncated to 500 chars).
+        task_type (str): Classified task type (e.g. 'Backend').
+        skill (str): Primary skill or agent selected.
+        complexity (int): Task complexity score (0-25).
+        model (str): Model name used for this request (e.g. 'SONNET').
+        cwd (str): Working directory of the project.
+        plan_mode (str): 'true' or 'false' string from flow output.
+        context_pct (int): Estimated context window usage at this point.
+        supplementary_skills (str): Comma-separated supplementary skill names.
+        standards_count (int): Number of active standards loaded.
+        rules_count (int): Number of active rules loaded.
+
+    Returns:
+        bool: True on success; False when session_id is falsy or write fails.
     """
     if not session_id:
         return False
@@ -272,7 +293,17 @@ def accumulate(session_id, prompt='', task_type='', skill='', complexity=0,
 
 
 def _new_summary(session_id):
-    """Create a fresh summary structure (v2.1.0: enhanced fields + quality metrics)"""
+    """Create a new empty summary structure for a session.
+
+    Initialises all aggregate counters to zero and empty lists so
+    accumulate() can safely use setdefault and arithmetic on the returned dict.
+
+    Args:
+        session_id (str): Session identifier to embed in the summary.
+
+    Returns:
+        dict: Fresh summary dict at version '2.1.0' with all required fields.
+    """
     return {
         "version": "2.1.0",
         "session_id": session_id,

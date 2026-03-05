@@ -1,8 +1,26 @@
 """
-Import Manager - Handles both local and GitHub imports
-Provides unified interface for accessing skills, agents, and utilities from:
-1. Local project (relative imports)
-2. claude-global-library (GitHub raw URLs)
+Import Manager for Claude Insight.
+
+Provides a unified interface for loading resources from both the local project
+and the remote GitHub repositories. Handles UTF-8 encoding setup for Windows
+consoles before performing any network requests.
+
+Resources are sourced from:
+1. Local project modules - via Python's import system
+2. claude-global-library - GitHub raw URLs (skills and agents)
+3. claude-insight - GitHub raw URLs (architecture policies)
+
+Module-level constants:
+    GITHUB_BASE (str): Base GitHub raw-content URL prefix.
+    GLOBAL_LIB_URL (str): Raw URL prefix for claude-global-library main branch.
+    INSIGHT_URL (str): Raw URL prefix for claude-insight main branch.
+    PROJECT_ROOT (Path): Absolute path to the project root directory.
+    SKILL_URLS (dict): Quick-reference URL map for common skills.
+    AGENT_URLS (dict): Quick-reference URL map for common agents.
+    POLICY_URLS (dict): Quick-reference URL map for policy README files.
+
+Classes:
+    ImportManager: Static utility class for loading remote and local resources.
 """
 
 # Fix encoding for Windows console
@@ -35,16 +53,36 @@ PROJECT_ROOT = Path(__file__).parent.parent.parent
 
 
 class ImportManager:
-    """Unified import manager for local and GitHub resources."""
-    
+    """Unified import manager for local project modules and GitHub-hosted resources.
+
+    All methods are static - no instance is required. Resources are fetched
+    directly over HTTPS using urllib and decoded as UTF-8.
+
+    GitHub base URLs used:
+        Skills:  https://raw.../claude-global-library/main/skills/{name}/skill.md
+        Agents:  https://raw.../claude-global-library/main/agents/{name}/agent.md
+        Policies: https://raw.../claude-insight/main/scripts/architecture/{path}
+    """
+
     @staticmethod
     def get_skill(skill_name: str) -> Optional[Dict]:
-        """
-        Load skill from claude-global-library.
-        
-        Usage:
-            skill = ImportManager.get_skill('docker')
-            # Returns: skill definition from GitHub
+        """Load a skill definition from claude-global-library on GitHub.
+
+        Fetches the ``skill.md`` file for the given skill from the
+        claude-global-library repository's main branch.
+
+        Args:
+            skill_name (str): Skill identifier matching the directory name
+                in claude-global-library/skills/ (e.g. 'docker',
+                'java-spring-boot-microservices').
+
+        Returns:
+            dict or None: On success, a dict with keys:
+                name (str): The skill_name argument.
+                content (str): Raw skill.md markdown content.
+                source (str): Always 'github'.
+                url (str): The full raw URL that was fetched.
+            Returns None on HTTP error (skill not found).
         """
         url = f"{GLOBAL_LIB_URL}/skills/{skill_name}/skill.md"
         try:

@@ -58,7 +58,12 @@ KEEP_RECENT_COUNT = 10
 
 
 def log_action(action, context):
-    """Log archival action to policy hits log."""
+    """Append a timestamped archival action entry to the policy hits log.
+
+    Args:
+        action (str): Action identifier (e.g., 'archived', 'archived-all').
+        context (str): Additional context string describing the action.
+    """
     timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     log_entry = f"[{timestamp}] session-pruning | {action} | {context}\n"
 
