@@ -294,9 +294,12 @@ def _get_flow_trace_context():
 
 
 def _get_session_progress_context():
-    """
-    Load session-progress.json for current tool counts, tasks completed, modified files.
-    Returns dict with extracted fields, or empty dict.
+    """Load session-progress.json for tool counts, completed tasks, and modified files.
+
+    Returns:
+        dict: Mapping with keys tool_counts, tasks_completed, total_progress,
+            modified_files, errors_seen, started_at, and context_estimate_pct,
+            or an empty dict if the file is missing or unreadable.
     """
     try:
         if SESSION_STATE_FILE.exists():
@@ -317,10 +320,22 @@ def _get_session_progress_context():
 
 
 def _get_tool_activity_for_task(task_id):
-    """
-    Scan tool-tracker.jsonl for activity related to a specific task.
-    Returns dict with files_read, files_written, files_edited, commands_run, searches.
-    Scans entries AFTER the TaskCreate for this task_id until the TaskUpdate(completed).
+    """Scan tool-tracker.jsonl for tool activity belonging to a specific task.
+
+    Locates the Nth TaskCreate event corresponding to task_id, then records
+    all subsequent tool calls until a TaskUpdate(completed) event for that
+    task is found.
+
+    Args:
+        task_id: Task ID string or int (e.g. '1') used to locate the
+            TaskCreate event by ordinal position.
+
+    Returns:
+        dict: Keys files_read, files_written, files_edited (lists of file
+            paths), commands_run and searches (lists of strings), edits
+            (list of edit-description strings), and total_tools (int).
+            All lists are empty and total_tools is 0 if the log is missing
+            or no matching activity is found.
     """
     tracker_log = Path.home() / '.claude' / 'memory' / 'logs' / 'tool-tracker.jsonl'
     result = {

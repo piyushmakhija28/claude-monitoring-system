@@ -57,6 +57,7 @@ class AutoPlanModeSuggester:
     """Analyzes complexity and suggests whether to use plan mode"""
 
     def __init__(self):
+        """Initialize AutoPlanModeSuggester with an empty decision log and memory path."""
         self.decision_log = []
         self.memory_path = MEMORY_DIR
 
@@ -228,6 +229,7 @@ class PlanModeAutoDecider:
     """Automatically decides on plan mode with risk-based analysis"""
 
     def __init__(self):
+        """Initialize PlanModeAutoDecider with an empty decision history and memory path."""
         self.decision_history = []
         self.memory_path = MEMORY_DIR
 
