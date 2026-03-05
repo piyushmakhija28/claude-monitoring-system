@@ -1,18 +1,36 @@
 #!/usr/bin/env python
-# Script Name: github_pr_workflow.py
-# Version: 1.0.0
-# Last Modified: 2026-02-28
-# Description: GitHub PR lifecycle orchestrator. Creates commit, push, PR,
-#              auto-review comment, merge, and switches back to main.
-#              Called from stop-notifier.py when .session-work-done flag exists.
-#              Non-blocking - never fails the stop hook.
-# Author: Claude Memory System
-#
-# Safety:
-#   - 30s timeout on all gh CLI calls
-#   - All functions wrapped in try/except (never raises)
-#   - If any step fails, logs and continues (PR stays open for manual handling)
-#   - Never force-pushes or deletes branches
+"""GitHub PR lifecycle orchestrator for the Claude Memory System.
+
+Executes a 7-step PR workflow automatically at the end of a coding session
+when the ``.session-work-done`` flag file is present. Called from
+``stop-notifier.py``; never blocks the stop hook on failure.
+
+Workflow steps
+--------------
+0. Build validation        -- Run ``auto_build_validator.validate_build()``.
+1. Commit changes          -- Stage all changes; build a commit message from
+                              the session summary; append ``Closes #N``.
+2. Push branch             -- Push the current feature branch to ``origin``.
+3. Create PR               -- Open a PR with session summary body via ``gh``.
+4. Auto-review comment     -- Post a metrics table comment on the new PR.
+5. Merge PR                -- Merge with ``--delete-branch``; falls back to
+                              leaving the PR open if branch protection blocks.
+6. Switch to main          -- ``git checkout main && git pull --ff-only``.
+7. Version bump on main    -- Increment patch version, update CHANGELOG,
+                              commit and push to main.
+
+Safety constraints
+------------------
+- 30 s timeout on all ``gh`` CLI calls.
+- All public and private functions wrapped in try/except (never raises).
+- Never force-pushes or deletes branches without a preceding merge.
+- Skipped entirely when not on a feature branch (main/master are ignored).
+- Requires ``gh auth status`` to succeed; skipped if gh is unavailable.
+
+Version: 1.0.0
+Last Modified: 2026-02-28
+Author: Claude Memory System
+"""
 
 import sys
 import os
@@ -222,8 +240,16 @@ def _get_issue_numbers():
     return sorted(numbers)
 
 
-def _has_changes(repo_root):
-    """Check if there are uncommitted changes (staged or unstaged)."""
+def _has_changes(repo_root: str) -> bool:
+    """Return True if the working tree has staged or unstaged changes.
+
+    Args:
+        repo_root: Absolute path to the git repository root.
+
+    Returns:
+        ``True`` if ``git status --porcelain`` produces any output,
+        ``False`` if the working tree is clean or on error.
+    """
     try:
         result = subprocess.run(
             ['git', 'status', '--porcelain'],
@@ -237,11 +263,22 @@ def _has_changes(repo_root):
     return False
 
 
-def _commit_session_changes(repo_root, session_summary, issue_numbers=None):
-    """
-    Stage and commit all changes with a meaningful message from session summary.
-    Includes 'Closes #N' in commit message for auto-closing GitHub issues.
-    Returns True if commit succeeded (or no changes to commit).
+def _commit_session_changes(repo_root: str, session_summary: dict,
+                            issue_numbers: list = None) -> bool:
+    """Stage all changes and create a commit with a session-derived message.
+
+    Builds the commit title from ``session_summary['task_types']`` and the
+    body from ``session_summary['requests']``. Appends ``Closes #N`` lines
+    for each issue number so GitHub auto-closes them on merge.
+
+    Args:
+        repo_root: Absolute path to the git repository root.
+        session_summary: Session summary dict loaded from session-summary.json.
+        issue_numbers: Optional list of GitHub issue numbers to close.
+
+    Returns:
+        ``True`` if the commit succeeded or there were no changes to commit.
+        ``False`` if ``git add`` or ``git commit`` exited with a non-zero code.
     """
     try:
         if not _has_changes(repo_root):
@@ -308,8 +345,16 @@ def _commit_session_changes(repo_root, session_summary, issue_numbers=None):
         return False
 
 
-def _push_branch(repo_root, branch_name):
-    """Push the branch to remote. Returns True on success."""
+def _push_branch(repo_root: str, branch_name: str) -> bool:
+    """Push the local branch to the remote origin and set upstream tracking.
+
+    Args:
+        repo_root: Absolute path to the git repository root.
+        branch_name: Name of the branch to push.
+
+    Returns:
+        ``True`` if the push succeeded, ``False`` on failure or error.
+    """
     try:
         result = subprocess.run(
             ['git', 'push', '-u', 'origin', branch_name],
@@ -630,10 +675,19 @@ def _bump_version_and_changelog(repo_root, session_summary, issue_numbers):
         return False
 
 
-def _merge_pr(repo_root, pr_number):
-    """
-    Merge the PR via gh CLI. Falls back to leaving PR open if merge fails.
-    Returns True if merged successfully.
+def _merge_pr(repo_root: str, pr_number: int) -> bool:
+    """Merge the pull request via the gh CLI using merge commit strategy.
+
+    Uses ``gh pr merge --merge --delete-branch`` so the source branch is
+    cleaned up automatically. Falls back gracefully (logs a message, leaves
+    the PR open for manual review) when branch protection rules block the merge.
+
+    Args:
+        repo_root: Absolute path to the git repository root (used as cwd).
+        pr_number: GitHub PR number to merge.
+
+    Returns:
+        ``True`` if the merge succeeded, ``False`` on failure or error.
     """
     try:
         if not pr_number:
@@ -668,8 +722,16 @@ def _merge_pr(repo_root, pr_number):
         return False
 
 
-def _switch_to_main(repo_root):
-    """Switch back to main/master branch and pull latest."""
+def _switch_to_main(repo_root: str) -> None:
+    """Checkout the default branch and fast-forward pull the latest changes.
+
+    Detects the default branch name by running ``git remote show origin``
+    and extracting the ``HEAD branch`` line. Falls back to 'main' if the
+    detection fails or times out.
+
+    Args:
+        repo_root: Absolute path to the git repository root.
+    """
     try:
         # Detect default branch
         default_branch = 'main'
@@ -708,11 +770,20 @@ def _switch_to_main(repo_root):
         _log(f"Switch to main error: {e}")
 
 
-def _bump_and_push_on_main(repo_root, session_summary, issue_numbers):
-    """
-    Bump VERSION + CHANGELOG on main branch, commit and push.
-    Called AFTER PR merge + switch to main. This ensures version bump
-    is always a separate commit on main, never on a feature branch.
+def _bump_and_push_on_main(repo_root: str, session_summary: dict,
+                           issue_numbers: list) -> None:
+    """Bump the patch version and push a CHANGELOG commit on main.
+
+    Must be called after ``_switch_to_main()`` so the version bump lands
+    on the default branch as a separate commit from the feature work. This
+    satisfies the version-release-policy requirement that every code push
+    must update VERSION and CHANGELOG.
+
+    Args:
+        repo_root: Absolute path to the git repository root.
+        session_summary: Session summary dict for building the changelog entry.
+        issue_numbers: List of closed GitHub issue numbers to mention in the
+            changelog entry.
     """
     try:
         version_file = Path(repo_root) / 'VERSION'

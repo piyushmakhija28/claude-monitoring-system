@@ -1,6 +1,36 @@
-"""
-Security Configuration and Utilities
-Provides centralized security settings and helper functions
+"""Security configuration and utilities for Claude Insight.
+
+Provides a centralised collection of security-related classes that enforce
+safe defaults for the Flask application. All classes are designed to fail
+loudly during startup (via logging warnings) rather than silently accepting
+weak or missing configuration.
+
+Classes:
+    SecurityConfig    -- Loads and validates all security settings from
+                         environment variables or a .env file. Applies them
+                         to a Flask app via ``apply_to_flask_app()``.
+    PasswordValidator -- Enforces password complexity rules (length,
+                         character classes, common-password blacklist).
+    PathValidator     -- Prevents directory traversal by ensuring all file
+                         paths remain within a declared base directory.
+    FilenameValidator -- Sanitises user-supplied filenames to remove
+                         path components, null bytes, and unsafe characters.
+    CommandValidator  -- Restricts subprocess execution to a whitelist of
+                         known-safe script names within an allowed directory.
+    LogSanitizer      -- Redacts sensitive patterns (passwords, tokens,
+                         emails, phone numbers) from log messages.
+    SecurityError     -- Exception raised by the validator classes when a
+                         security constraint is violated.
+
+Environment variables:
+    SECRET_KEY              -- HMAC session signing key (min 32 chars).
+    SESSION_TIMEOUT         -- Session lifetime in minutes (default 30).
+    SESSION_COOKIE_SECURE   -- Require HTTPS for cookies (default True).
+    SESSION_COOKIE_SAMESITE -- SameSite cookie policy (default 'Lax').
+    CSRF_ENABLED            -- Enable CSRF protection (default True).
+    CSRF_TIME_LIMIT         -- CSRF token lifetime in seconds (default 3600).
+    FORCE_HTTPS             -- Redirect HTTP to HTTPS (default True).
+    DEVELOPMENT_MODE        -- Relaxes some checks; DO NOT use in production.
 """
 
 import os
@@ -14,13 +44,48 @@ logger = logging.getLogger(__name__)
 
 
 class SecurityConfig:
-    """Security configuration with validation"""
+    """Security configuration with validation.
+
+    Loads all security settings at construction time by calling
+    ``load_config()``. Settings are sourced from environment variables
+    first, then from a ``.env`` file in the project root, and finally
+    from safe defaults where applicable.
+
+    Attributes:
+        secret_key: HMAC key for signing Flask sessions.
+        session_timeout: Session lifetime in minutes.
+        session_cookie_secure: Whether to set the Secure cookie flag.
+        session_cookie_httponly: Always True (HttpOnly flag always set).
+        session_cookie_samesite: SameSite cookie policy string.
+        csrf_enabled: Whether CSRF protection is active.
+        csrf_time_limit: CSRF token validity window in seconds.
+        force_https: Whether to redirect HTTP requests to HTTPS.
+        csp_config: Content Security Policy directives dict.
+        development_mode: Whether relaxed development checks are active.
+
+    Example::
+
+        from src.config.security import SecurityConfig
+        sec = SecurityConfig()
+        sec.apply_to_flask_app(app)
+    """
 
     def __init__(self):
+        """Initialise and validate security configuration from environment."""
         self.load_config()
 
-    def load_config(self):
-        """Load and validate security configuration"""
+    def load_config(self) -> None:
+        """Load and validate all security configuration values.
+
+        Resolution order for ``SECRET_KEY``:
+            1. ``SECRET_KEY`` environment variable.
+            2. ``SECRET_KEY`` key in a ``.env`` file at the project root.
+            3. Ephemeral random 32-byte hex key (warns, not suitable for
+               multi-process or persistent-session deployments).
+
+        Keys shorter than 32 characters are rejected and replaced with a
+        freshly generated secure key, with a warning logged.
+        """
         # Secret Key — try env var first, then .env file, then generate fallback
         self.secret_key = os.environ.get('SECRET_KEY')
 
@@ -82,7 +147,18 @@ class SecurityConfig:
         return None
 
     def apply_to_flask_app(self, app):
-        """Apply security configuration to Flask app"""
+        """Apply security configuration to a Flask application instance.
+
+        Sets ``app.config`` keys for secret key, session cookies, and CSRF
+        protection. Must be called after ``app`` is created but before the
+        first request is handled.
+
+        Args:
+            app: The Flask application instance to configure.
+
+        Returns:
+            The configured Flask application instance (for chaining).
+        """
         app.config['SECRET_KEY'] = self.secret_key
         app.config['PERMANENT_SESSION_LIFETIME'] = self.session_timeout * 60
         app.config['SESSION_COOKIE_SECURE'] = self.session_cookie_secure
@@ -209,7 +285,16 @@ class FilenameValidator:
 
 
 class CommandValidator:
-    """Command validation to prevent injection attacks"""
+    """Command validation to prevent injection attacks.
+
+    Restricts subprocess execution to a whitelist of known-safe script
+    names and enforces that those scripts reside within a declared allowed
+    directory. This prevents arbitrary code execution via crafted paths.
+
+    Class attributes:
+        ALLOWED_SCRIPTS: Set of filenames (basename only) that may be
+            executed. Any other script name raises ``SecurityError``.
+    """
 
     ALLOWED_SCRIPTS = {
         'context-monitor-v2.py',
@@ -254,7 +339,18 @@ class CommandValidator:
 
 
 class LogSanitizer:
-    """Sanitize sensitive data from log messages"""
+    """Sanitise sensitive data from log messages before they are persisted.
+
+    Applies a sequence of regex substitutions to replace API keys,
+    passwords, tokens, email addresses, and phone numbers with
+    redaction placeholders. Patterns are applied in declaration order;
+    more specific patterns are listed before general ones to avoid
+    partial matches masking full replacements.
+
+    Class attributes:
+        PATTERNS: List of ``(name, regex_pattern, replacement)`` tuples
+            applied in order by ``sanitize()``.
+    """
 
     # Order matters: More specific patterns should come before general ones
     PATTERNS = [
@@ -285,8 +381,13 @@ class LogSanitizer:
 
 
 class SecurityError(Exception):
-    """Security validation error"""
-    pass
+    """Exception raised when a security constraint is violated.
+
+    Raised by ``PathValidator``, ``CommandValidator``, and any other
+    validator that detects an unsafe operation. Callers should catch
+    this exception and return an appropriate HTTP 400/403 response
+    rather than propagating it to the user as a 500 error.
+    """
 
 
 # Export singleton instance

@@ -1,19 +1,39 @@
 #!/usr/bin/env python
-# Script Name: github_issue_manager.py
-# Version: 3.0.0
-# Last Modified: 2026-02-28
-# Description: GitHub Issues + Branch integration for Level 3 Execution.
-#              Auto-creates issues on TaskCreate, auto-closes on TaskUpdate(completed).
-#              Creates issue branches using {label}/{issueId} format (e.g. fix/42, feature/123).
-#              Adds priority + complexity labels. Includes comprehensive stories on create/close.
-#              Uses gh CLI. Non-blocking - never fails the hook if GitHub is unavailable.
-# Author: Claude Memory System
-#
-# Safety:
-#   - Max 10 GitHub operations per session (create + close combined)
-#   - 15s timeout on all gh CLI calls
-#   - All public functions wrapped in try/except (never raises)
-#   - gh auth status is the implicit enable/disable toggle
+"""GitHub Issues and branch integration for Level 3 Execution policy.
+
+Integrates with the 3-level enforcement system to automatically manage
+GitHub Issues corresponding to tasks tracked by the session. Called by
+post-tool-tracker.py on TaskCreate/TaskUpdate events.
+
+Key behaviours
+--------------
+Create  -- On ``TaskCreate``: opens a GitHub Issue with a description built
+           from the task story, assigns priority/complexity labels, and
+           creates a matching branch in ``{label}/{issueId}`` format
+           (e.g. ``fix/42``, ``feature/123``).
+Close   -- On ``TaskUpdate(completed)``: closes the corresponding issue with
+           a closing comment summarising what was done.
+Mapping -- Issue numbers are persisted to ``github-issues.json`` in the
+           session log directory so the PR workflow can reference them.
+
+Safety constraints
+------------------
+- Maximum 10 GitHub operations per session (creates + closes combined).
+- 15 s timeout on every ``gh`` CLI call.
+- All public functions wrapped in try/except -- never raises.
+- Entire module is a no-op when ``gh auth status`` fails (offline mode).
+
+Branch naming format::
+
+    {semantic-label}/{issue-number}
+
+    Semantic labels: fix, feature, refactor, docs, enhancement, test
+    Example: fix/42, feature/123, docs/55
+
+Version: 3.0.0
+Last Modified: 2026-02-28
+Author: Claude Memory System
+"""
 
 import sys
 import os

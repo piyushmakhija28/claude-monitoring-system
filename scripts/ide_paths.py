@@ -100,18 +100,41 @@ def create_necessary_dirs():
         return False
 
 
-def get_install_base():
-    """Get the base installation directory."""
+def get_install_base() -> 'Path':
+    """Return the base installation directory for content files.
+
+    In IDE mode this is the directory set by ``CLAUDE_IDE_INSTALL_DIR``.
+    In standalone mode it is ``~/.claude``.
+
+    Returns:
+        ``pathlib.Path`` object for the installation base directory.
+    """
     return _INSTALL_BASE
 
 
-def get_data_base():
-    """Get the base data directory."""
+def get_data_base() -> 'Path':
+    """Return the base data directory for memory and log files.
+
+    In IDE mode this is the directory set by ``CLAUDE_IDE_DATA_DIR``
+    (or ``<install_base>/data`` when that variable is unset).
+    In standalone mode it is ``~/.claude``.
+
+    Returns:
+        ``pathlib.Path`` object for the data base directory.
+    """
     return _DATA_BASE
 
 
-def is_ide_mode():
-    """Check if running in IDE mode (CLAUDE_IDE_INSTALL_DIR set)."""
+def is_ide_mode() -> bool:
+    """Return True if the module is running inside a Claude Code IDE installation.
+
+    IDE mode is active when the ``CLAUDE_IDE_INSTALL_DIR`` environment
+    variable is set to a non-empty value. In this mode all paths use the
+    IDE-specific directories instead of ``~/.claude``.
+
+    Returns:
+        ``True`` when ``CLAUDE_IDE_INSTALL_DIR`` is set, ``False`` otherwise.
+    """
     return IDE_MODE
 
 

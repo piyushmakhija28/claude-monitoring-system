@@ -36,7 +36,15 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 
 def _metrics_file() -> Path:
-    """Return the path to metrics.jsonl, creating parent dirs if needed."""
+    """Return the path to metrics.jsonl, creating parent dirs if needed.
+
+    Falls back to a temporary directory path when the home-directory path
+    cannot be created, ensuring callers never receive an exception.
+
+    Returns:
+        ``Path`` object pointing to the metrics JSONL file. Parent
+        directories are created if they do not exist.
+    """
     try:
         p = Path.home() / '.claude' / 'memory' / 'logs' / 'metrics.jsonl'
         p.parent.mkdir(parents=True, exist_ok=True)
@@ -47,7 +55,14 @@ def _metrics_file() -> Path:
 
 
 def _now_iso() -> str:
-    """Current timestamp as ISO-8601 with UTC timezone."""
+    """Return the current UTC time as an ISO-8601 string.
+
+    Uses ``datetime.now(timezone.utc).isoformat()`` for a timezone-aware
+    string. Falls back to a UTC suffix appended manually on older runtimes.
+
+    Returns:
+        ISO-8601 timestamp string with UTC timezone info.
+    """
     try:
         return datetime.now(timezone.utc).isoformat()
     except Exception:

@@ -1,23 +1,40 @@
 #!/usr/bin/env python
-"""
-Script Name: session-id-generator.py
-Version: 1.0.0
-Last Modified: 2026-02-16
-Description: Generates unique session IDs for tracking purposes
-Author: Claude Memory System
-Changelog: See CHANGELOG.md
+"""Session ID generator and session lifecycle manager.
 
-Generates unique session IDs for tracking purposes.
-Every session and work item gets a traceable ID.
+Generates unique, human-readable session IDs used to correlate log entries,
+policy enforcement events, and work items across a single Claude Code session.
 
-Format: SESSION-YYYYMMDD-HHMMSS-XXXX
-Example: SESSION-20260216-143055-A7B3
+ID format::
+
+    TYPE-YYYYMMDD-HHMMSS-XXXX
+
+    Examples:
+        SESSION-20260216-143055-A7B3
+        TASK-20260216-143100-Z9Q2
 
 Components:
-- SESSION = Session prefix
-- YYYYMMDD = Date
-- HHMMSS = Time
-- XXXX = Random 4-char hash
+    TYPE     -- Caller-supplied prefix (e.g. 'SESSION', 'TASK', 'WORK').
+    YYYYMMDD -- Date stamp for rapid visual identification.
+    HHMMSS   -- Time stamp for ordering within a day.
+    XXXX     -- 4-character random alphanumeric suffix to avoid collisions
+                when multiple IDs are generated within the same second.
+
+Session state is persisted to JSON files under ``~/.claude/memory/sessions/``
+and the active session is tracked via ``~/.claude/memory/.current-session.json``.
+
+CLI usage::
+
+    python session-id-generator.py create --type SESSION --description "My session"
+    python session-id-generator.py current
+    python session-id-generator.py list --limit 5
+    python session-id-generator.py stats --session-id SESSION-20260216-143055-A7B3
+    python session-id-generator.py end
+
+Windows-safe: reconfigures stdout/stderr to UTF-8 on startup.
+
+Version: 1.0.0
+Last Modified: 2026-02-16
+Author: Claude Memory System
 """
 
 import os
@@ -36,9 +53,29 @@ if sys.stderr.encoding != 'utf-8':
     sys.stderr.reconfigure(encoding='utf-8')
 
 class SessionIDGenerator:
-    """Generates and manages session IDs"""
+    """Generates and manages Claude Code session IDs and lifecycle state.
+
+    Persists session metadata as JSON files under ``~/.claude/memory/sessions/``
+    and maintains a pointer to the currently active session in
+    ``~/.claude/memory/.current-session.json``.
+
+    Attributes:
+        memory_path: Base path to the Claude memory directory.
+        sessions_dir: Directory containing per-session JSON files.
+        current_session_file: JSON file tracking the active session ID.
+        sessions_log: Append-only log of session lifecycle events.
+
+    Example::
+
+        gen = SessionIDGenerator()
+        sid, data = gen.create_session('SESSION', 'Fixing login bug')
+        work_id = gen.add_work_item(sid, 'TASK', 'Update auth module')
+        gen.complete_work_item(sid, work_id)
+        gen.end_session(sid)
+    """
 
     def __init__(self):
+        """Initialise paths and create required directories if absent."""
         self.memory_path = Path.home() / '.claude' / 'memory'
         self.sessions_dir = self.memory_path / 'sessions'
         self.current_session_file = self.memory_path / '.current-session.json'
@@ -48,8 +85,16 @@ class SessionIDGenerator:
         self.sessions_dir.mkdir(parents=True, exist_ok=True)
         self.sessions_log.parent.mkdir(parents=True, exist_ok=True)
 
-    def generate_session_id(self, session_type='SESSION'):
-        """Generate unique session ID"""
+    def generate_session_id(self, session_type: str = 'SESSION') -> str:
+        """Generate a unique session ID with the given type prefix.
+
+        Args:
+            session_type: Prefix for the ID (e.g. 'SESSION', 'TASK').
+                Defaults to 'SESSION'.
+
+        Returns:
+            ID string in the format ``TYPE-YYYYMMDD-HHMMSS-XXXX``.
+        """
         now = datetime.now()
 
         # Format: TYPE-YYYYMMDD-HHMMSS-XXXX
@@ -63,8 +108,20 @@ class SessionIDGenerator:
 
         return session_id
 
-    def create_session(self, session_type='SESSION', description='', metadata=None):
-        """Create a new session with ID and metadata"""
+    def create_session(self, session_type: str = 'SESSION',
+                       description: str = '', metadata: dict = None) -> tuple:
+        """Create a new session, persist it, and set it as current.
+
+        Args:
+            session_type: Prefix for the generated ID. Defaults to 'SESSION'.
+            description: Human-readable description of the session purpose.
+            metadata: Optional dict of additional fields to store with the
+                session (e.g. project name, branch, git hash).
+
+        Returns:
+            Tuple of ``(session_id, session_data)`` where ``session_data``
+            is the full dict written to disk.
+        """
         session_id = self.generate_session_id(session_type)
 
         session_data = {
@@ -96,8 +153,13 @@ class SessionIDGenerator:
 
         return session_id, session_data
 
-    def get_current_session(self):
-        """Get current active session ID"""
+    def get_current_session(self) -> str:
+        """Return the ID of the currently active session, or None.
+
+        Returns:
+            Session ID string if a current session file exists and is
+            readable, otherwise ``None``.
+        """
         if not self.current_session_file.exists():
             return None
 
@@ -108,8 +170,16 @@ class SessionIDGenerator:
         except:
             return None
 
-    def get_session_data(self, session_id):
-        """Get session data by ID"""
+    def get_session_data(self, session_id: str) -> dict:
+        """Load and return session data for the given session ID.
+
+        Args:
+            session_id: The session ID string to look up.
+
+        Returns:
+            Session data dict loaded from disk, or ``None`` if the session
+            file does not exist or cannot be parsed.
+        """
         session_file = self.sessions_dir / f'{session_id}.json'
         if not session_file.exists():
             return None
@@ -120,8 +190,20 @@ class SessionIDGenerator:
         except:
             return None
 
-    def add_work_item(self, session_id, work_type, description, metadata=None):
-        """Add a work item to session"""
+    def add_work_item(self, session_id: str, work_type: str,
+                      description: str, metadata: dict = None) -> str:
+        """Add a work item to an existing session and return its ID.
+
+        Args:
+            session_id: ID of the session to add the work item to.
+            work_type: Prefix for the work item ID (e.g. 'TASK', 'WORK').
+            description: Human-readable description of the work item.
+            metadata: Optional dict of additional fields for the work item.
+
+        Returns:
+            Generated work item ID string, or empty string if the session
+            was not found.
+        """
         work_id = self.generate_session_id(work_type)
 
         work_item = {
@@ -147,8 +229,19 @@ class SessionIDGenerator:
 
         return work_id
 
-    def complete_work_item(self, session_id, work_id, status='COMPLETED'):
-        """Mark work item as completed"""
+    def complete_work_item(self, session_id: str, work_id: str,
+                           status: str = 'COMPLETED') -> bool:
+        """Mark a work item as completed and persist the change.
+
+        Args:
+            session_id: ID of the parent session.
+            work_id: ID of the work item to update.
+            status: Completion status string. Defaults to 'COMPLETED'.
+
+        Returns:
+            ``True`` if the work item was found and updated, ``False``
+            if the session or work item was not found.
+        """
         session_data = self.get_session_data(session_id)
         if not session_data:
             return False
@@ -166,8 +259,17 @@ class SessionIDGenerator:
         self._log_session(session_id, 'WORK_COMPLETED', work_id)
         return True
 
-    def end_session(self, session_id, status='COMPLETED'):
-        """End a session"""
+    def end_session(self, session_id: str, status: str = 'COMPLETED') -> bool:
+        """End a session, persist its end time, and clear the current session pointer.
+
+        Args:
+            session_id: ID of the session to end.
+            status: Final status string. Defaults to 'COMPLETED'.
+
+        Returns:
+            ``True`` if the session was found and updated, ``False`` if
+            the session file was not found.
+        """
         session_data = self.get_session_data(session_id)
         if not session_data:
             return False
@@ -188,8 +290,15 @@ class SessionIDGenerator:
         self._log_session(session_id, 'ENDED', status)
         return True
 
-    def display_session_banner(self, session_id, session_data=None):
-        """Display session ID banner"""
+    def display_session_banner(self, session_id: str,
+                               session_data: dict = None) -> None:
+        """Print a formatted session summary banner to stdout.
+
+        Args:
+            session_id: Session ID to display.
+            session_data: Optional pre-loaded session data dict. If not
+                provided the data is loaded from disk automatically.
+        """
         if not session_data:
             session_data = self.get_session_data(session_id)
 
@@ -209,8 +318,16 @@ class SessionIDGenerator:
         print("\n[BULB] Use this ID to track this session in logs and reports")
         print("="*80 + "\n")
 
-    def list_recent_sessions(self, limit=10):
-        """List recent sessions"""
+    def list_recent_sessions(self, limit: int = 10) -> list:
+        """Return a list of recent session data dicts, newest first.
+
+        Args:
+            limit: Maximum number of sessions to return. Defaults to 10.
+
+        Returns:
+            List of session data dicts ordered by most-recently-modified
+            session file. Unreadable files are silently skipped.
+        """
         session_files = sorted(
             self.sessions_dir.glob('SESSION-*.json'),
             key=lambda x: x.stat().st_mtime,
@@ -228,8 +345,23 @@ class SessionIDGenerator:
 
         return sessions
 
-    def get_session_stats(self, session_id):
-        """Get session statistics"""
+    def get_session_stats(self, session_id: str) -> dict:
+        """Compute summary statistics for a session.
+
+        Args:
+            session_id: ID of the session to analyse.
+
+        Returns:
+            Dict with keys:
+                ``session_id``              -- The queried session ID.
+                ``duration_seconds``        -- Total elapsed time in seconds.
+                ``duration_formatted``      -- Human-readable duration string.
+                ``total_work_items``        -- Count of all work items.
+                ``completed_work_items``    -- Count of completed work items.
+                ``in_progress_work_items``  -- Count of items not yet done.
+                ``status``                  -- Current session status string.
+            Returns ``None`` if the session is not found.
+        """
         session_data = self.get_session_data(session_id)
         if not session_data:
             return None
@@ -252,8 +384,15 @@ class SessionIDGenerator:
             'status': session_data['status']
         }
 
-    def _log_session(self, session_id, event, details=''):
-        """Log session event"""
+    def _log_session(self, session_id: str, event: str,
+                     details: str = '') -> None:
+        """Append a session lifecycle event to the sessions log file.
+
+        Args:
+            session_id: ID of the session the event belongs to.
+            event: Event type string (e.g. 'CREATED', 'ENDED', 'WORK_ADDED').
+            details: Optional free-text details string for the log entry.
+        """
         timestamp = datetime.now().isoformat()
         log_line = f"{timestamp} | {session_id} | {event} | {details}\n"
 
@@ -261,8 +400,21 @@ class SessionIDGenerator:
             f.write(log_line)
 
 
-def main():
-    """Main function"""
+def main() -> None:
+    """CLI entry point for the session ID generator.
+
+    Parses command-line arguments and dispatches to the appropriate
+    ``SessionIDGenerator`` method. Prints results to stdout and exits
+    with code 1 on error.
+
+    Available actions:
+        create   -- Create a new session and print its ID.
+        current  -- Show the currently active session.
+        display  -- Print a banner for a specific or current session.
+        list     -- List recent sessions.
+        stats    -- Show statistics for a specific or current session.
+        end      -- End a specific or current session.
+    """
     import sys
     import argparse
 

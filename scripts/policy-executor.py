@@ -170,17 +170,54 @@ POLICY_MODULES = [
 
 
 class PolicyExecutor:
-    """Verifies availability and health of all 34+ architecture policy modules."""
+    """Verifies availability and health of all 34+ architecture policy modules.
+
+    Performs a read-only health check: it does not execute the modules
+    (many require session context passed by 3-level-flow.py) but instead
+    confirms they exist on disk and are syntactically importable.
+
+    Attributes:
+        verified: List of ``'L{level}/{name}'`` strings for OK modules.
+        missing: List of ``'L{level}/{name}'`` strings for absent modules.
+        failed_import: List of ``'L{level}/{name}'`` strings where importlib
+            failed to load the module spec.
+
+    Example::
+
+        executor = PolicyExecutor()
+        report = executor.verify_all()
+        print(report['verified_ok'], '/', report['total_modules'])
+    """
 
     def __init__(self):
+        """Initialise empty verification result lists."""
         self.verified = []
         self.missing = []
         self.failed_import = []
 
     def verify_module(self, module_spec: dict) -> dict:
-        """
-        Verify a module exists and is importable.
-        Returns a result dict with status and details.
+        """Verify that one policy module exists and is syntactically importable.
+
+        Uses ``importlib.util.spec_from_file_location()`` to load the module
+        spec without executing the module's top-level code, providing a safe
+        syntax check.
+
+        Args:
+            module_spec: Entry from ``POLICY_MODULES`` containing keys:
+                ``level``, ``path`` (relative to ``ARCH_DIR``), ``name``,
+                and ``context_required``.
+
+        Returns:
+            Dict with keys:
+                ``name``           -- Module display name.
+                ``path``           -- Relative path from ``ARCH_DIR``.
+                ``level``          -- Policy level integer (1, 2, or 3).
+                ``context_required``-- True if 3-level-flow.py must supply args.
+                ``exists``         -- True if the script file was found.
+                ``importable``     -- True if importlib loaded the spec.
+                ``status``         -- 'OK', 'MISSING', 'IMPORT_FAILED', or
+                                     'ERROR: ...' string.
+                ``invoked_by``     -- Who runs this module.
         """
         script = ARCH_DIR / module_spec['path']
         result = {
@@ -220,7 +257,21 @@ class PolicyExecutor:
         return result
 
     def verify_all(self) -> dict:
-        """Verify all policy modules and return a full report."""
+        """Verify all registered policy modules and return a health report.
+
+        Prints a formatted summary to stdout grouped by level and writes a
+        JSON health report to ``~/.claude/memory/logs/architecture-health.json``.
+
+        Returns:
+            Dict with keys:
+                ``timestamp``      -- ISO-8601 timestamp of the check.
+                ``total_modules``  -- Total number of modules in the registry.
+                ``verified_ok``    -- Count of modules with 'OK' status.
+                ``missing``        -- List of missing module label strings.
+                ``failed_import``  -- List of import-failed module label strings.
+                ``by_level``       -- Per-level ok/total summary dicts.
+                ``results``        -- Per-level lists of full verify_module results.
+        """
         print()
         print("=" * 70)
         print("POLICY EXECUTOR v2.0.0 - Architecture Module Health Check")

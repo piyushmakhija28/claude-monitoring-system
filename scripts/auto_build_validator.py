@@ -1,28 +1,39 @@
 #!/usr/bin/env python
-# Script Name: auto_build_validator.py
-# Version: 1.0.0
-# Last Modified: 2026-02-28
-# Description: Auto-detect project type and run compile/build check.
-#              Returns pass/fail with error output so Claude can auto-fix.
-#              Called on TaskUpdate(completed) and before PR commit.
-#              Non-blocking - never fails the hook if build tool is missing.
-# Author: Claude Memory System
-#
-# Supported project types:
-#   pom.xml           -> mvn compile -q
-#   build.gradle(.kts)-> gradle compileJava -q (or gradlew)
-#   package.json      -> npm run build / npx tsc --noEmit
-#   *.py files        -> python -m py_compile (per modified file)
-#   Cargo.toml        -> cargo check
-#   go.mod            -> go build ./...
-#
-# Safety:
-#   - 90s timeout on build commands (Maven/Gradle can be slow)
-#   - All functions wrapped in try/except
-#   - Only runs if build tool is detected in project
-#   - Caches project type detection per session
-#
-# Windows-safe: ASCII only, no Unicode chars
+"""Auto-detect project type and run compile/build validation.
+
+Called by the PR workflow (github_pr_workflow.py) before creating a pull
+request and optionally on TaskUpdate(completed). Returns a structured
+pass/fail result with error output so Claude can auto-fix build failures
+before committing.
+
+Non-blocking: if the build tool is not installed the check is skipped
+(reported as SKIPPED) rather than failing the calling hook.
+
+Supported project types
+-----------------------
+pom.xml              -> ``mvn compile -q -DskipTests``
+build.gradle(.kts)   -> ``gradle compileJava -q`` (or ``./gradlew``)
+package.json         -> ``npm run build`` or ``npx tsc --noEmit``
+*.py files           -> ``python -m py_compile`` per modified file
+Cargo.toml           -> ``cargo check``
+go.mod               -> ``go build ./...``
+
+A project can match multiple types (e.g. Maven backend + npm frontend);
+all matched types are checked and their results combined.
+
+Safety constraints
+------------------
+- 90 s timeout for Maven/Gradle (they can be slow on first run).
+- 15 s timeout per file for Python syntax checks.
+- All public functions wrapped in try/except -- never raises.
+- Only checks files or directories that actually exist in the repo root.
+
+Windows-safe: ASCII-only output, no Unicode characters.
+
+Version: 1.0.0
+Last Modified: 2026-02-28
+Author: Claude Memory System
+"""
 
 import sys
 import os
@@ -35,8 +46,16 @@ BUILD_TIMEOUT = 90  # seconds (Maven/Gradle need time)
 PY_COMPILE_TIMEOUT = 15  # seconds per file
 
 
-def _get_repo_root():
-    """Get the git repo root from CWD, or CWD itself."""
+def _get_repo_root() -> str:
+    """Return the git repository root directory, falling back to CWD.
+
+    Runs ``git rev-parse --show-toplevel`` to locate the repo root.
+    If git is unavailable or the current directory is not inside a git
+    repository, returns ``os.getcwd()`` so callers always get a valid path.
+
+    Returns:
+        Absolute path string for the repository root (or current directory).
+    """
     try:
         result = subprocess.run(
             ['git', 'rev-parse', '--show-toplevel'],
@@ -49,11 +68,25 @@ def _get_repo_root():
     return os.getcwd()
 
 
-def detect_project_type(repo_root):
-    """
-    Detect the project type by looking for build files.
-    Returns list of dicts: [{'type': 'maven', 'build_file': 'pom.xml', ...}, ...]
-    A project can have multiple types (e.g., Maven backend + npm frontend).
+def detect_project_type(repo_root: str) -> list:
+    """Detect the project build system(s) by inspecting well-known build files.
+
+    Examines the repository root for build descriptor files and returns a
+    list of project descriptors, one per matched build system. A monorepo
+    can match multiple types simultaneously.
+
+    Args:
+        repo_root: Absolute path to the repository root directory.
+
+    Returns:
+        List of dicts, each with keys:
+            ``type``       -- Build system identifier string (e.g. 'maven').
+            ``build_file`` -- Filename of the detected build descriptor.
+            ``command``    -- List of command tokens to run, or ``None``
+                             for Python (handled by ``run_python_compile``).
+            ``label``      -- Human-readable label for output messages.
+
+        Returns an empty list if no supported build system is detected.
     """
     root = Path(repo_root)
     detected = []
@@ -150,10 +183,28 @@ def detect_project_type(repo_root):
     return detected
 
 
-def run_build_check(repo_root, project_info):
-    """
-    Run a single build/compile check.
-    Returns dict: {'passed': bool, 'output': str, 'label': str, 'duration_ms': int}
+def run_build_check(repo_root: str, project_info: dict) -> dict:
+    """Run a single build or compile check for one project descriptor.
+
+    Executes the command specified in ``project_info['command']`` with a
+    90-second timeout. Treats a missing build tool (FileNotFoundError) as
+    a non-fatal skip rather than a failure so that CI environments without
+    all tools installed do not block the workflow.
+
+    Args:
+        repo_root: Absolute path to the repository root (used as cwd).
+        project_info: Dict returned by ``detect_project_type()``. Must
+            contain ``'command'``, ``'label'``, and ``'type'`` keys.
+
+    Returns:
+        Dict with keys:
+            ``passed``      -- True if the build command exited with code 0.
+            ``output``      -- Error output (stderr + stdout) on failure,
+                              empty string on success.
+            ``label``       -- Human-readable label copied from ``project_info``.
+            ``duration_ms`` -- Wall-clock time in milliseconds.
+            ``skipped``     -- True (optional key) when the build tool was
+                              not found or an unexpected error occurred.
     """
     label = project_info.get('label', 'Build')
     command = project_info.get('command')
@@ -220,11 +271,27 @@ def run_build_check(repo_root, project_info):
         }
 
 
-def run_python_compile(repo_root, modified_files=None):
-    """
-    Run py_compile on modified Python files.
-    If modified_files is None, compiles all .py files in repo root.
-    Returns dict: {'passed': bool, 'output': str, 'label': str, 'errors': list}
+def run_python_compile(repo_root: str, modified_files: list = None) -> dict:
+    """Run ``py_compile`` syntax checks on Python files.
+
+    Checks only the files in ``modified_files`` when provided; otherwise
+    scans the entire repository (capped at 50 files to avoid slow scans).
+    Skips common virtual-environment and cache directories.
+
+    Args:
+        repo_root: Absolute path to the repository root directory.
+        modified_files: Optional list of file paths to check. Paths may be
+            absolute or relative to ``repo_root``. Non-``.py`` files and
+            files that do not exist are silently skipped.
+
+    Returns:
+        Dict with keys:
+            ``passed``      -- True if all checked files compiled without error.
+            ``output``      -- Newline-joined error messages on failure,
+                              or a success message on pass.
+            ``label``       -- Human-readable label including the file count.
+            ``errors``      -- List of individual error strings (empty on pass).
+            ``duration_ms`` -- Always 0 (individual per-file timing not tracked).
     """
     root = Path(repo_root)
     errors = []

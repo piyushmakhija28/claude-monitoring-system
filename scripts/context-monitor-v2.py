@@ -1,13 +1,41 @@
 #!/usr/bin/env python3
-"""
-Script Name: context-monitor-v2.py
+"""Context window monitoring with actionable recommendations.
+
+Reads the current context window usage percentage from the Claude Memory
+System and produces colour-coded status levels with concrete optimisation
+recommendations. Designed to be embedded in the 3-level policy flow so
+that Claude always knows how much context remains and can act accordingly.
+
+Context percentage source priority
+-----------------------------------
+1. ``session-progress.json`` -- Updated after every tool call by the
+   post-tool-tracker hook (most up-to-date).
+2. ``.context-estimate`` -- JSON file written by hook metrics.
+3. ``.context-usage`` -- JSON file, used only if younger than 30 minutes
+   (older values are considered stale).
+4. ``0`` -- Unknown/unavailable (better than returning a lying 80%).
+
+Status levels (configurable via ``thresholds`` attribute)
+----------------------------------------------------------
+green   -- < 60 %   : Healthy, proceed normally.
+yellow  -- 60-70 %  : Elevated, use caching and pagination.
+orange  -- 70-80 %  : High, use external state; consider new session.
+red     -- >= 80 %  : Critical, save session and restart immediately.
+
+CLI usage::
+
+    python context-monitor-v2.py
+    python context-monitor-v2.py --current-status
+    python context-monitor-v2.py --update 75.5
+    python context-monitor-v2.py --simulate 90
+    python context-monitor-v2.py --init
+    python context-monitor-v2.py --recommendations
+
+Windows-safe: reconfigures stdout/stderr to UTF-8 on startup.
+
 Version: 2.0.0
 Last Modified: 2026-02-18
-Description: Context monitoring with actionable recommendations
 Author: Claude Memory System
-Changelog: See CHANGELOG.md
-
-Enhanced monitoring with actionable recommendations for context optimization.
 """
 
 # Fix encoding for Windows console
@@ -33,7 +61,29 @@ from pathlib import Path
 from datetime import datetime
 
 class ContextMonitorV2:
+    """Context window usage monitor with threshold-based status levels.
+
+    Reads context usage data written by hook scripts and exposes it as
+    structured status objects with actionable recommendations. All file
+    reads are wrapped in try/except so a missing or corrupt file never
+    causes the hook chain to fail.
+
+    Attributes:
+        memory_dir: Base path to the Claude memory directory.
+        context_file: Path to the ``.context-usage`` JSON file.
+        estimate_file: Path to the ``.context-estimate`` JSON file.
+        thresholds: Dict mapping status level names to percentage limits.
+            ``green`` < threshold, ``yellow`` < threshold, etc.
+
+    Example::
+
+        monitor = ContextMonitorV2()
+        status = monitor.get_current_status()
+        print(status['level'], status['percentage'])
+    """
+
     def __init__(self):
+        """Initialise monitor with default thresholds and file paths."""
         self.memory_dir = Path.home() / '.claude' / 'memory'
         self.context_file = self.memory_dir / '.context-usage'
         self.estimate_file = self.memory_dir / '.context-estimate'
@@ -95,8 +145,16 @@ class ContextMonitorV2:
         # --- Priority 4: unknown ---
         return 0
 
-    def get_status_level(self, percentage):
-        """Get status level based on percentage"""
+    def get_status_level(self, percentage: float) -> str:
+        """Map a context usage percentage to a named status level.
+
+        Args:
+            percentage: Context usage as a float between 0 and 100.
+
+        Returns:
+            One of ``'green'``, ``'yellow'``, ``'orange'``, or ``'red'``
+            based on the configured threshold values.
+        """
         if percentage < self.thresholds['green']:
             return 'green'
         elif percentage < self.thresholds['yellow']:
@@ -106,8 +164,16 @@ class ContextMonitorV2:
         else:
             return 'red'
 
-    def get_recommendations(self, percentage):
-        """Get actionable recommendations based on usage"""
+    def get_recommendations(self, percentage: float) -> list:
+        """Return actionable recommendation strings for the given usage level.
+
+        Args:
+            percentage: Context usage percentage (0-100).
+
+        Returns:
+            List of recommendation strings tailored to the current level.
+            Each string is suitable for direct display in hook output.
+        """
         level = self.get_status_level(percentage)
         recommendations = []
 
@@ -135,8 +201,13 @@ class ContextMonitorV2:
 
         return recommendations
 
-    def get_optimization_suggestions(self):
-        """Get general optimization suggestions"""
+    def get_optimization_suggestions(self) -> list:
+        """Return a static list of general context optimisation suggestions.
+
+        Returns:
+            List of tip strings referencing specific helper scripts that
+            Claude can use to reduce context consumption.
+        """
         return [
             "Use pre-execution-optimizer.py before tool calls",
             "Use context-extractor.py after tool outputs",
@@ -145,8 +216,23 @@ class ContextMonitorV2:
             "Review files accessed 3+ times for caching"
         ]
 
-    def get_current_status(self):
-        """Get complete current status"""
+    def get_current_status(self) -> dict:
+        """Return a complete status snapshot for the current moment.
+
+        Combines the usage percentage, status level, and recommendations
+        into a single dict. Also adds optional cache and session state
+        counters if the relevant directories exist.
+
+        Returns:
+            Dict with keys:
+                ``percentage``     -- Current usage float.
+                ``level``          -- Status level string.
+                ``thresholds``     -- Copy of the threshold configuration.
+                ``recommendations``-- List of recommendation strings.
+                ``timestamp``      -- ISO-8601 timestamp of this snapshot.
+                ``cache_entries``  -- (optional) Count of cached JSON files.
+                ``active_sessions``-- (optional) Count of active state files.
+        """
         percentage = self.get_context_percentage()
         level = self.get_status_level(percentage)
         recommendations = self.get_recommendations(percentage)
@@ -180,8 +266,19 @@ class ContextMonitorV2:
 
         return status
 
-    def update_percentage(self, percentage):
-        """Update context percentage"""
+    def update_percentage(self, percentage: float) -> bool:
+        """Persist a new context usage percentage to the monitoring files.
+
+        Writes both the ``.context-usage`` JSON file (with timestamp) and
+        the ``.context-estimate`` JSON file so that subsequent reads return
+        the updated value.
+
+        Args:
+            percentage: New context usage percentage (0-100).
+
+        Returns:
+            Always ``True`` (errors propagate as exceptions from file I/O).
+        """
         data = {
             'percentage': percentage,
             'updated_at': datetime.now().isoformat()
@@ -192,8 +289,20 @@ class ContextMonitorV2:
 
         return True
 
-    def simulate(self, percentage):
-        """Simulate context usage at percentage"""
+    def simulate(self, percentage: float) -> dict:
+        """Temporarily set usage to ``percentage`` and display the result.
+
+        Saves the original percentage, updates to the simulated value,
+        retrieves the status and prints it, then restores the original.
+        Useful for testing how the hook output looks at various usage levels.
+
+        Args:
+            percentage: Simulated context usage percentage (0-100).
+
+        Returns:
+            Status dict returned by ``get_current_status()`` at the
+            simulated percentage.
+        """
         print(f"\n{'='*60}")
         print(f"SIMULATING CONTEXT AT {percentage}%")
         print(f"{'='*60}\n")
@@ -220,8 +329,16 @@ class ContextMonitorV2:
 
         return status
 
-    def init(self):
-        """Initialize monitoring"""
+    def init(self) -> bool:
+        """Initialise the context monitoring directory structure.
+
+        Creates the cache and state directories required by the monitoring
+        system and seeds the context usage file at 0 % if it does not yet
+        exist. Safe to call multiple times (idempotent).
+
+        Returns:
+            ``True`` after successful initialisation.
+        """
         # Create necessary directories
         (self.memory_dir / '.cache').mkdir(exist_ok=True)
         (self.memory_dir / '.cache' / 'summaries').mkdir(exist_ok=True)
@@ -235,7 +352,19 @@ class ContextMonitorV2:
         print("[OK] Context monitoring initialized")
         return True
 
-def main():
+def main() -> int:
+    """CLI entry point for the context monitor.
+
+    Parses command-line flags and delegates to the appropriate
+    ``ContextMonitorV2`` method. Returns 0 on success.
+
+    Flags:
+        --current-status   Print full status JSON to stdout.
+        --update FLOAT     Set the context usage percentage.
+        --simulate FLOAT   Display status at a hypothetical percentage.
+        --init             Initialise directory structure.
+        --recommendations  Print only the recommendation strings.
+    """
     parser = argparse.ArgumentParser(description='Context monitor v2')
     parser.add_argument('--current-status', action='store_true', help='Get current status')
     parser.add_argument('--update', type=float, help='Update percentage')
