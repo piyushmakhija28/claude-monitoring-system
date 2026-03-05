@@ -57,7 +57,12 @@ _ops_count = 0
 
 
 def _get_session_id():
-    """Get current session ID from session-progress.json."""
+    """Read the current session ID from the session-progress.json state file.
+
+    Returns:
+        str: The session_id value from the file, or an empty string if the
+            file does not exist, cannot be parsed, or lacks the key.
+    """
     try:
         if SESSION_STATE_FILE.exists():
             with open(SESSION_STATE_FILE, 'r', encoding='utf-8') as f:
@@ -69,7 +74,14 @@ def _get_session_id():
 
 
 def _get_repo_root():
-    """Get the git repo root from CWD, or None."""
+    """Return the absolute path to the git repository root from the current directory.
+
+    Runs ``git rev-parse --show-toplevel`` with a 5-second timeout.
+
+    Returns:
+        str or None: Absolute repo root path, or None if not inside a git
+            repository or the command fails.
+    """
     try:
         result = subprocess.run(
             ['git', 'rev-parse', '--show-toplevel'],
@@ -83,7 +95,14 @@ def _get_repo_root():
 
 
 def _get_mapping_file():
-    """Get path to the github-issues.json mapping file for current session."""
+    """Return the Path to the github-issues.json mapping file for the current session.
+
+    If a session ID is available the file is placed under the per-session log
+    directory; otherwise a shared fallback path is used.
+
+    Returns:
+        Path: Resolved path to the github-issues.json mapping file.
+    """
     session_id = _get_session_id()
     if session_id:
         session_dir = Path.home() / '.claude' / 'memory' / 'logs' / 'sessions' / session_id
@@ -93,7 +112,13 @@ def _get_mapping_file():
 
 
 def _load_issues_mapping():
-    """Load task-to-issue mapping from disk."""
+    """Load the task-to-issue mapping dict from the session mapping file.
+
+    Returns:
+        dict: Parsed mapping with at minimum the keys ``task_to_issue`` (dict),
+            ``ops_count`` (int), and ``session_id`` (str). Returns this default
+            structure if the file is missing or unreadable.
+    """
     mapping_file = _get_mapping_file()
     try:
         if mapping_file.exists():
@@ -105,7 +130,14 @@ def _load_issues_mapping():
 
 
 def _save_issues_mapping(mapping):
-    """Persist task-to-issue mapping to disk."""
+    """Write the task-to-issue mapping dict to the session mapping file.
+
+    Creates parent directories as needed. Failures are silently ignored so
+    that a write error never interrupts the main workflow.
+
+    Args:
+        mapping (dict): Mapping data to serialise and persist.
+    """
     mapping_file = _get_mapping_file()
     try:
         mapping_file.parent.mkdir(parents=True, exist_ok=True)
@@ -116,13 +148,17 @@ def _save_issues_mapping(mapping):
 
 
 def _get_ops_count():
-    """Get number of GitHub operations performed this session."""
+    """Return the number of GitHub operations already performed this session.
+
+    Returns:
+        int: Value of ``ops_count`` from the persisted mapping, or 0 if not set.
+    """
     mapping = _load_issues_mapping()
     return mapping.get('ops_count', 0)
 
 
 def _increment_ops_count():
-    """Increment and persist the ops counter."""
+    """Increment the session GitHub operations counter and persist it to disk."""
     mapping = _load_issues_mapping()
     mapping['ops_count'] = mapping.get('ops_count', 0) + 1
     _save_issues_mapping(mapping)
@@ -225,10 +261,16 @@ def extract_task_id_from_response(tool_response):
 
 
 def _get_flow_trace_context():
-    """
-    Load flow-trace.json to get current session's execution context:
-    task type, complexity, model, skill/agent, context usage, etc.
-    Returns dict with extracted fields, or empty dict.
+    """Load the current session's flow-trace.json for execution context fields.
+
+    Reads the trace file for the active session and extracts key planning
+    metadata: task_type, complexity, model, skill/agent, context_pct, and
+    plan_mode.
+
+    Returns:
+        dict: Mapping of extracted fields (task_type, complexity, model, skill,
+            context_pct, plan_mode), or an empty dict if the session ID is
+            unavailable, the file is missing, or parsing fails.
     """
     session_id = _get_session_id()
     if not session_id:

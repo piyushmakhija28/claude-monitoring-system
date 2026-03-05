@@ -210,6 +210,12 @@ def detect_circular_dependencies():
     cycles = []
 
     def dfs(node, path):
+        """Recursively visit nodes to detect back-edges (cycles).
+
+        Args:
+            node (str): Current script name being visited.
+            path (list[str]): Ordered path of nodes from the DFS root to node.
+        """
         visited.add(node)
         rec_stack.add(node)
 

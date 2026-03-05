@@ -79,6 +79,7 @@ class TaskAutoAnalyzer:
     """
 
     def __init__(self):
+        """Initialize TaskAutoAnalyzer with memory directory and task-breakdown log path."""
         self.memory_path = MEMORY_DIR
         self.logs_path = self.memory_path / "logs"
         self.task_log = self.logs_path / "task-breakdown.log"
@@ -389,6 +390,7 @@ class TaskAutoTracker:
     """
 
     def __init__(self):
+        """Initialize TaskAutoTracker with task file, logs, and empty current-task state."""
         self.memory_path = MEMORY_DIR
         self.tasks_file = self.memory_path / "tasks" / "active-tasks.json"
         self.logs_path = self.memory_path / "logs" / "tasks"

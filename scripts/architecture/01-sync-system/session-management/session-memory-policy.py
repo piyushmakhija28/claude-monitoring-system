@@ -84,6 +84,7 @@ class SessionLoader:
     """
 
     def __init__(self):
+        """Initialize SessionLoader with memory, sessions, and index file paths."""
         self.memory_dir = MEMORY_DIR
         self.sessions_dir = SESSION_DIR
         self.index_file = self.sessions_dir / "session-index.json"
@@ -236,6 +237,12 @@ class SessionState:
     """
 
     def __init__(self, project_name=None):
+        """Initialize SessionState for the given project, defaulting to the cwd name.
+
+        Args:
+            project_name (str, optional): Name of the project whose state to manage.
+                Defaults to the current working directory name.
+        """
         STATE_DIR.mkdir(parents=True, exist_ok=True)
 
         if project_name is None:

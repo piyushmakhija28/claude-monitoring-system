@@ -1,6 +1,13 @@
 """
-Alert Sender
-Handles Email and SMS alerts for critical system events
+Alert Sender for Claude Insight.
+
+Handles delivery of email and SMS alerts for critical system events.
+Supports SMTP email (with TLS) and Twilio/Nexmo/AWS-SNS SMS delivery.
+Configuration (SMTP credentials, recipients, rate limiting, quiet hours)
+is persisted to data/alert_config.json.
+
+Classes:
+    AlertSender: Sends email and SMS alerts for critical events.
 """
 import smtplib
 import json
@@ -16,15 +23,25 @@ from utils.path_resolver import get_data_dir, get_logs_dir
 
 
 class AlertSender:
-    """Send email and SMS alerts for critical events"""
+    """Send email and SMS alerts for critical system events.
+
+    Loads delivery configuration from alert_config.json and provides
+    methods to send emails via SMTP and SMS via external providers.
+    Also enforces rate limiting and quiet hours.
+
+    Attributes:
+        config_dir (Path): Root data directory resolved by PathResolver.
+        config_file (Path): Path to alert_config.json.
+    """
 
     def __init__(self):
+        """Initialize AlertSender and ensure alert_config.json exists with defaults."""
         self.config_dir = get_data_dir()
         self.config_file = self.config_dir / 'alert_config.json'
         self.ensure_config_file()
 
     def ensure_config_file(self):
-        """Ensure alert configuration file exists"""
+        """Create alert_config.json with default settings if it does not exist."""
         if not self.config_file.exists():
             self.config_file.parent.mkdir(parents=True, exist_ok=True)
             default_config = {
@@ -65,7 +82,11 @@ class AlertSender:
             self.config_file.write_text(json.dumps(default_config, indent=2))
 
     def load_config(self):
-        """Load alert configuration"""
+        """Load the alert configuration from alert_config.json.
+
+        Returns:
+            dict: Alert configuration data, or empty dict on read errors.
+        """
         try:
             if self.config_file.exists():
                 return json.loads(self.config_file.read_text())
@@ -75,7 +96,11 @@ class AlertSender:
             return {}
 
     def save_config(self, config):
-        """Save alert configuration"""
+        """Write the alert configuration dictionary to alert_config.json.
+
+        Args:
+            config (dict): Configuration data to persist.
+        """
         try:
             self.config_file.write_text(json.dumps(config, indent=2))
             return True

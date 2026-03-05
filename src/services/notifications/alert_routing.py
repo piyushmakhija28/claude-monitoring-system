@@ -1,6 +1,18 @@
 """
-Custom Alert Routing and Escalation Engine
-Advanced alert routing with multi-level escalation policies
+Custom Alert Routing and Escalation Engine for Claude Insight.
+
+Provides advanced alert routing with multi-level escalation policies,
+on-call schedules, and per-channel notification delivery tracking.
+
+Data is persisted to JSON files under data/alert_routing/:
+    routing_rules.json          -- Alert routing rule definitions.
+    escalation_policies.json    -- Escalation policy configurations.
+    on_call_schedules.json      -- On-call rotation schedules.
+    alert_history.json          -- Historical alert records.
+    notification_channels.json  -- Configured notification channels.
+
+Classes:
+    AlertRoutingEngine: Manage alert routing rules and escalation policies.
 """
 import json
 import uuid
@@ -15,9 +27,23 @@ from collections import defaultdict
 
 
 class AlertRoutingEngine:
-    """Manage alert routing rules and escalation policies"""
+    """Manage alert routing rules, escalation policies, on-call schedules, and channels.
+
+    Persists all configuration and history to JSON files under data/alert_routing/.
+    Provides CRUD operations for routing rules, escalation policies, and
+    notification channels, plus alert history recording and routing logic.
+
+    Attributes:
+        data_dir (Path): Directory for alert routing data files.
+        routing_rules_file (Path): Path to routing_rules.json.
+        escalation_policies_file (Path): Path to escalation_policies.json.
+        on_call_schedules_file (Path): Path to on_call_schedules.json.
+        alert_history_file (Path): Path to alert_history.json.
+        notification_channels_file (Path): Path to notification_channels.json.
+    """
 
     def __init__(self):
+        """Initialize AlertRoutingEngine, create data directory, and ensure data files exist."""
         self.data_dir = get_data_dir() / 'alert_routing'
         self.routing_rules_file = self.data_dir / 'routing_rules.json'
         self.escalation_policies_file = self.data_dir / 'escalation_policies.json'
@@ -28,7 +54,7 @@ class AlertRoutingEngine:
         self.ensure_data_files()
 
     def ensure_data_files(self):
-        """Ensure alert routing data files exist"""
+        """Create data_dir and initialize all alert routing JSON files if absent."""
         if not self.data_dir.exists():
             self.data_dir.mkdir(parents=True, exist_ok=True)
 

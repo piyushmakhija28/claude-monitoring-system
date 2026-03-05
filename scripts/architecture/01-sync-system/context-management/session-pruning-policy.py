@@ -78,6 +78,7 @@ class ContextMonitor:
     """
 
     def __init__(self):
+        """Initialize ContextMonitor with default file paths and status thresholds."""
         self.memory_dir = MEMORY_DIR
         self.context_file = self.memory_dir / '.context-usage'
         self.estimate_file = self.memory_dir / '.context-estimate'

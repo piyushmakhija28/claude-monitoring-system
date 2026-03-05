@@ -77,6 +77,7 @@ class PromptGenerator:
     """
 
     def __init__(self):
+        """Initialize PromptGenerator with memory directory paths and an empty generation log."""
         self.memory_dir = MEMORY_DIR
         self.workspace = Path.home() / "Documents" / "workspace-spring-tool-suite-4-4.27.0-new"
         self.docs = self.memory_dir / "docs"
@@ -467,6 +468,7 @@ class PromptAutoGenerator:
     """
 
     def __init__(self):
+        """Initialize PromptAutoGenerator with log paths and a PromptGenerator instance."""
         self.memory_path = MEMORY_DIR
         self.logs_path = self.memory_path / "logs"
         self.prompt_log = self.logs_path / "prompt-generation.log"

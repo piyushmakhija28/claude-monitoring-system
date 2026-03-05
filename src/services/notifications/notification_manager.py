@@ -1,6 +1,14 @@
 """
-Notification Manager
-Handles browser push notifications and notification history
+Notification Manager for Claude Insight.
+
+Handles browser push notification records and maintains a persistent
+notification history in JSON format.
+
+Data is persisted to:
+    data/notifications_history.json -- Historical notification records.
+
+Classes:
+    NotificationManager: Manages browser notifications and notification history.
 """
 import json
 from datetime import datetime, timezone
@@ -13,15 +21,24 @@ from utils.path_resolver import get_data_dir, get_logs_dir
 
 
 class NotificationManager:
-    """Manage browser notifications and history"""
+    """Manage browser push notifications and persistent notification history.
+
+    Persists notification records to notifications_history.json. Provides
+    methods to add, load, mark as read, and clear notifications.
+
+    Attributes:
+        memory_dir (Path): Root data directory resolved by PathResolver.
+        notifications_file (Path): Path to notifications_history.json.
+    """
 
     def __init__(self):
+        """Initialize NotificationManager and ensure notifications_history.json exists."""
         self.memory_dir = get_data_dir()
         self.notifications_file = self.memory_dir / 'notifications_history.json'
         self.ensure_notifications_file()
 
     def ensure_notifications_file(self):
-        """Ensure notifications history file exists"""
+        """Create notifications_history.json with an empty structure if it does not exist."""
         if not self.notifications_file.exists():
             self.notifications_file.parent.mkdir(parents=True, exist_ok=True)
             self.notifications_file.write_text(json.dumps({
@@ -30,7 +47,12 @@ class NotificationManager:
             }))
 
     def load_notifications(self):
-        """Load notification history"""
+        """Load the notifications history from the JSON file.
+
+        Returns:
+            dict: Data with keys notifications (list) and last_updated (str or None).
+                Returns empty structure on read errors.
+        """
         try:
             if self.notifications_file.exists():
                 return json.loads(self.notifications_file.read_text())
@@ -40,14 +62,30 @@ class NotificationManager:
             return {'notifications': [], 'last_updated': None}
 
     def save_notifications(self, data):
-        """Save notification history"""
+        """Write the notifications history dictionary to the JSON file.
+
+        Args:
+            data (dict): Notification history data to persist.
+        """
         try:
             self.notifications_file.write_text(json.dumps(data, indent=2))
         except Exception as e:
             print(f"Error saving notifications: {e}")
 
     def add_notification(self, notification_type, title, message, severity='info', data=None):
-        """Add a notification to history"""
+        """Create and persist a new notification record.
+
+        Args:
+            notification_type (str): Notification category (e.g. 'alert', 'info', 'warning').
+            title (str): Short notification title.
+            message (str): Full notification message body.
+            severity (str): Severity level ('info', 'warning', 'error', 'critical').
+                Defaults to 'info'.
+            data (dict or None): Optional additional payload data. Defaults to None.
+
+        Returns:
+            dict: The newly created notification record.
+        """
         history = self.load_notifications()
 
         notification = {

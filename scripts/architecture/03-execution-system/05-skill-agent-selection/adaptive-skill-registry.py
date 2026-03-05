@@ -634,7 +634,13 @@ def validate():
 
 
 def report():
-    """Generate compliance report"""
+    """Generate a compliance report for the adaptive skill registry policy.
+
+    Returns:
+        Dict: Contains 'status', 'policy', 'components', 'total_skills',
+              'by_language', 'by_category', and 'timestamp'.
+              Returns {'status': 'error', ...} on failure.
+    """
     try:
         manager = SkillManager()
         detector = SkillDetector()
@@ -660,16 +666,17 @@ def report():
 
 
 def enforce():
-    """
-    Main policy enforcement function.
+    """Activate the adaptive skill registry policy.
 
     Consolidates skill/agent registry management from four sources:
-    - Skill manager (CRUD operations)
-    - Skill detector (auto-detection)
+    - SkillManager (CRUD operations)
+    - SkillDetector (auto-detection)
     - Auto-suggester (daemon functionality)
-    - Recommendation display (visualization)
+    - RecommendationDisplay (visualization)
 
-    Returns: dict with status and results
+    Returns:
+        Dict: Contains 'status' ('success' or 'error').
+              On error, contains 'message' with the exception string.
     """
     try:
         log_policy_hit("ENFORCE_START", "adaptive-skill-registry-enforcement")

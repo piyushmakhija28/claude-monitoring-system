@@ -57,6 +57,7 @@ class SessionChainManager:
     """
 
     def __init__(self):
+        """Initialize SessionChainManager with sessions, archive, and chain-index paths."""
         self.sessions_dir = MEMORY_DIR / "sessions"
         self.archive_dir = MEMORY_DIR / "archive"
         self.chain_index = self.sessions_dir / "chain-index.json"

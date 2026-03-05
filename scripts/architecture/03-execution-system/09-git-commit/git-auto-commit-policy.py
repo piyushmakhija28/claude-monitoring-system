@@ -161,6 +161,8 @@ def _run_git(args, cwd=None, timeout=30):
         _logger.warning("git %s timed out after %ds", " ".join(args), timeout)
 
         class _Timeout:
+            """Stub result object returned when a git command times out."""
+
             returncode = 1
             stdout = ""
             stderr = "Timed out after {}s".format(timeout)
@@ -169,6 +171,8 @@ def _run_git(args, cwd=None, timeout=30):
     except Exception as exc:
 
         class _Error:
+            """Stub result object returned when a git command raises an exception."""
+
             returncode = 1
             stdout = ""
             stderr = str(exc)
@@ -234,6 +238,7 @@ class GitAutoCommitAI:
     DOC_EXTENSIONS = (".md", ".txt", ".rst", ".adoc")
 
     def __init__(self):
+        """Initialize GitAutoCommitAI with memory and log directory paths."""
         self.memory_path = MEMORY_DIR
         self.logs_path = LOGS_DIR
         self.commit_log = COMMIT_LOG
@@ -356,15 +361,39 @@ class GitAutoCommitAI:
         return self.parse_status(status)
 
     def _has_source_files(self, filenames):
+        """Return True if any filename ends with a recognised source-code extension.
+
+        Args:
+            filenames (list[str]): List of changed file names.
+
+        Returns:
+            bool: True if at least one file is a source file.
+        """
         return any(f.endswith(self.SOURCE_EXTENSIONS) for f in filenames)
 
     def _has_test_files(self, filenames):
+        """Return True if any filename contains a test or spec marker.
+
+        Args:
+            filenames (list[str]): List of changed file names.
+
+        Returns:
+            bool: True if at least one file is a test/spec file.
+        """
         return any(
             any(marker in f.lower() for marker in self.TEST_MARKERS)
             for f in filenames
         )
 
     def _has_doc_files(self, filenames):
+        """Return True if any filename ends with a documentation extension.
+
+        Args:
+            filenames (list[str]): List of changed file names.
+
+        Returns:
+            bool: True if at least one file is a documentation file.
+        """
         return any(f.endswith(self.DOC_EXTENSIONS) for f in filenames)
 
     # ------------------------------------------------------------------
@@ -547,6 +576,12 @@ class GitAutoCommitAI:
         _MAX = 5
 
         def _section(label, files):
+            """Append a labelled file list (up to _MAX entries) to body.
+
+            Args:
+                label (str): Section label string (e.g., 'Added files').
+                files (list[str]): Files to list under this label.
+            """
             if not files:
                 return
             body.append("{} ({}):".format(label, len(files)))
@@ -967,6 +1002,14 @@ class AutoCommitDetector:
         """
         try:
             def _list(args):
+                """Run a git command and return its output as a list of non-empty lines.
+
+                Args:
+                    args (list[str]): Git sub-command arguments.
+
+                Returns:
+                    list[str]: Output lines, or an empty list on failure.
+                """
                 r = _run_git(args, cwd=project_dir, timeout=5)
                 if r.returncode == 0:
                     return [f for f in r.stdout.strip().split("\n") if f]
@@ -1649,6 +1692,7 @@ class GitAutoCommitEngine:
     """
 
     def __init__(self):
+        """Initialize GitAutoCommitEngine with AI and detector sub-components."""
         self._ai = GitAutoCommitAI()
         self._detector = AutoCommitDetector()
 
