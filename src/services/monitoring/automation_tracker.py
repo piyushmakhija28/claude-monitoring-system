@@ -1,10 +1,26 @@
 """
-Automation System Tracker
-Tracks all CLAUDE.md automation components:
-- Session-start recommendations
-- Task breakdown enforcement
-- 9th daemon (auto-recommendation)
-- Task auto-tracker
+Automation System Tracker - Track Claude Memory System automation components.
+
+Monitors the automation features embedded in the 3-Level Architecture and
+surfaced via flow-trace.json session data. Tracks session-start recommendations
+derived from the most recent session, task breakdown enforcement statistics
+(complexity distribution, average tasks per session), and git auto-commit activity.
+
+Reads from:
+  - ~/.claude/memory/logs/sessions/*/flow-trace.json (primary source)
+  - ~/.claude/memory/.last-automation-check.json (legacy fallback)
+  - ~/.claude/memory/logs/git-auto-commit.log (commit statistics)
+
+Key responsibilities:
+  - Return session-start recommendations (model, skills, context status) from
+    the most recent flow-trace.json final_decision
+  - Compute task breakdown statistics: avg task count, complexity distribution,
+    plan mode usage, and recent breakdowns
+  - Retrieve git auto-commit statistics (total commits, recent entries)
+  - Combine all automation statistics in a single comprehensive call
+
+Classes:
+  AutomationTracker: Tracks all Claude Memory System automation components.
 """
 import json
 import os
@@ -19,7 +35,17 @@ from collections import defaultdict
 
 
 class AutomationTracker:
-    """Track Claude Memory System automation components"""
+    """Track Claude Memory System automation components and session recommendations.
+
+    Reads flow-trace.json session files and legacy automation state files to
+    produce statistics about session recommendations, task breakdowns, and
+    git commit activity.
+
+    Attributes:
+        memory_dir (Path): Root data directory (~/.claude/memory).
+        logs_dir (Path): Path to the logs subdirectory.
+        sessions_dir (Path): Path to the sessions state directory.
+    """
 
     def __init__(self):
         self.memory_dir = get_data_dir()
@@ -27,7 +53,18 @@ class AutomationTracker:
         self.sessions_dir = self.memory_dir / 'sessions'
 
     def get_auto_commit_stats(self):
-        """Get git auto-commit automation statistics"""
+        """Get git auto-commit automation statistics from git-auto-commit.log.
+
+        Reads git-auto-commit.log and counts total commit events and
+        automatically triggered commit events. Returns the last 10 commit lines.
+
+        Returns:
+            dict: Git auto-commit stats with keys:
+                total_commits (int): Lines containing 'COMMIT' in the log.
+                commits_today (int): Always 0 (not yet implemented for this method).
+                auto_triggered (int): Lines where 'AUTO' appears in the log.
+                recent_commits (list[str]): Last 10 lines containing 'COMMIT'.
+        """
         git_log = self.logs_dir / 'git-auto-commit.log'
         stats = {
             'total_commits': 0,
@@ -152,7 +189,17 @@ class AutomationTracker:
             }
 
     def _is_process_running(self, pid):
-        """Check if process is running"""
+        """Check if a process is currently running.
+
+        Attempts psutil.pid_exists first, falls back to os.kill(pid, 0)
+        on systems without psutil.
+
+        Args:
+            pid (int): Process ID to check.
+
+        Returns:
+            bool: True if the process is running, False otherwise.
+        """
         try:
             import psutil
             return psutil.pid_exists(pid)
@@ -253,9 +300,19 @@ class AutomationTracker:
         return stats
 
     def get_task_tracker_stats(self):
-        """
-        Get task auto-tracker statistics
-        Tracks automatic task progress updates
+        """Get task auto-tracker statistics for automatic progress updates.
+
+        Returns placeholder statistics. Full implementation will track
+        automatic task progress updates from the post-tool-tracker hook.
+
+        Returns:
+            dict: Task tracker stats with keys:
+                enabled (bool): Always True (feature is enabled).
+                total_tasks_tracked (int): Always 0 (not yet implemented).
+                auto_updates (int): Always 0 (not yet implemented).
+                manual_updates (int): Always 0 (not yet implemented).
+                completion_rate (int): Always 0 (not yet implemented).
+                average_progress_updates (int): Always 0 (not yet implemented).
         """
         # This would read from task tracking logs
         # For now, return placeholder
@@ -269,8 +326,17 @@ class AutomationTracker:
         }
 
     def get_comprehensive_automation_stats(self):
-        """
-        Get all automation statistics in one call
+        """Get all automation statistics aggregated in one call.
+
+        Combines session-start recommendations, task breakdown statistics,
+        and task tracker stats into a single dict for efficient dashboard rendering.
+
+        Returns:
+            dict: All automation stats with keys:
+                session_start (dict): Output of get_session_start_recommendations().
+                task_breakdown (dict): Output of get_task_breakdown_stats().
+                task_tracker (dict): Output of get_task_tracker_stats().
+                timestamp (str): ISO-format current timestamp.
         """
         return {
             'session_start': self.get_session_start_recommendations(),

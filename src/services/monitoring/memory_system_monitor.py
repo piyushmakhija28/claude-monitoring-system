@@ -1,6 +1,29 @@
 """
-Memory System Integration Monitor
-Monitors all Claude Memory System v3.2.0 (3-Level Architecture) components, policies, and automation
+Memory System Integration Monitor - Monitor all Claude Memory System components.
+
+Provides comprehensive health monitoring for the Claude Memory System v3.2.0
+(3-Level Architecture). Tracks hook script presence, policy enforcement statistics,
+context optimization, failure prevention, model selection distribution, session
+memory usage, and git auto-commit activity.
+
+Reads from:
+  - ~/.claude/scripts/ (hook script presence checks)
+  - ~/.claude/memory/logs/policy-hits.log (enforcement events)
+  - ~/.claude/memory/logs/sessions/*/flow-trace.json (model distribution, sessions)
+  - ~/.claude/memory/logs/auto-enforcement.log (auto-fix events)
+  - ~/.claude/memory/logs/git-auto-commit.log (commit history)
+  - ~/.claude/memory/logs/failures.log (failure prevention events)
+  - ~/.claude/memory/failure-kb.json (failure knowledge base)
+  - ~/.claude/memory/.cache/ (context cache stats)
+
+Key responsibilities:
+  - Report hook script status (replaces daemon process monitoring removed in v3.3.0)
+  - Compute a 100-point health score: hooks (60pts) + policies (20pts) + session activity (20pts)
+  - Provide per-component statistics for policy, context, failure prevention, and git commits
+  - Return a complete system overview for the dashboard health card
+
+Classes:
+  MemorySystemMonitor: Central monitor for all Claude Memory System components.
 """
 import json
 import os
@@ -15,7 +38,20 @@ from collections import defaultdict
 
 
 class MemorySystemMonitor:
-    """Monitor Claude Memory System v3.2.0 (3-Level Architecture) health, policies, and automation"""
+    """Monitor Claude Memory System v3.2.0 (3-Level Architecture) health, policies, and automation.
+
+    Provides methods to check hook script availability, compute health scores,
+    gather policy enforcement statistics, context optimization data, failure
+    prevention metrics, model selection distribution, session memory usage,
+    and git auto-commit history.
+
+    Attributes:
+        memory_dir (Path): Root data directory (~/.claude/memory).
+        logs_dir (Path): Path to the logs subdirectory.
+        sessions_dir (Path): Path to the sessions state directory.
+        daemons (list[str]): Legacy daemon name list (kept for reference only;
+            daemons were removed in v3.3.0 and replaced with hooks).
+    """
 
     def __init__(self):
         self.memory_dir = get_data_dir()
@@ -75,7 +111,17 @@ class MemorySystemMonitor:
         return statuses
 
     def _is_process_running(self, pid):
-        """Check if process is running (cross-platform)"""
+        """Check if a process is currently running (cross-platform).
+
+        Attempts to use psutil for process existence check. Falls back to
+        os.kill(pid, 0) on platforms without psutil.
+
+        Args:
+            pid (int): Process ID to check.
+
+        Returns:
+            bool: True if the process is running, False otherwise.
+        """
         try:
             import psutil
             return psutil.pid_exists(pid)
@@ -88,7 +134,18 @@ class MemorySystemMonitor:
                 return False
 
     def get_policy_enforcement_stats(self):
-        """Get policy enforcement statistics from policy-hits.log"""
+        """Get policy enforcement statistics aggregated from policy-hits.log.
+
+        Reads the last 100 entries from policy-hits.log and groups them
+        by policy name. Also captures recent activity for the dashboard.
+
+        Returns:
+            dict: Enforcement stats with keys:
+                total_enforcements (int): Total number of log entries.
+                by_policy (dict): Map of policy name to hit count.
+                recent_activity (list[dict]): Last 10 entries as
+                    {timestamp, policy, action} dicts.
+        """
         policy_hits_file = self.logs_dir / 'policy-hits.log'
 
         if not policy_hits_file.exists():
@@ -124,7 +181,20 @@ class MemorySystemMonitor:
             return {'total_enforcements': 0, 'by_policy': {}, 'recent_activity': []}
 
     def get_context_optimization_stats(self):
-        """Get context optimization and cache statistics"""
+        """Get context optimization and cache usage statistics.
+
+        Reads from the .cache/ directory and context-related log files
+        to compute cache file counts, total cache size, cache hit counts,
+        estimated token savings, and number of optimizations applied.
+
+        Returns:
+            dict: Cache and optimization stats with keys:
+                cache_size (int): Total cache size in bytes.
+                cached_files (int): Number of cached JSON files.
+                cache_hits (int): Count of 'CACHE HIT' entries in context-cache.log.
+                token_savings (int): Estimated tokens saved (cache_hits * 500).
+                optimizations_applied (int): Lines in optimizations.log.
+        """
         cache_dir = self.memory_dir / '.cache'
 
         stats = {
@@ -165,7 +235,20 @@ class MemorySystemMonitor:
         return stats
 
     def get_failure_prevention_stats(self):
-        """Get failure prevention statistics"""
+        """Get failure prevention and auto-fix statistics.
+
+        Reads failures.log for total prevented failures and auto-fix counts,
+        categorizing by tool (Bash, Edit, Read, Grep). Also reads
+        failure-kb.json to count learned patterns.
+
+        Returns:
+            dict: Failure prevention stats with keys:
+                failures_prevented (int): Total entries in failures.log.
+                auto_fixes_applied (int): Lines with 'FIXED' in failures.log.
+                patterns_learned (int): Total patterns in failure-kb.json.
+                by_tool (dict): Map of tool name to auto-fix count.
+                recent_fixes (list): Reserved for future use (currently empty).
+        """
         failures_file = self.logs_dir / 'failures.log'
         kb_file = self.memory_dir / 'failure-kb.json'
 
@@ -266,7 +349,19 @@ class MemorySystemMonitor:
         return stats
 
     def get_session_memory_stats(self):
-        """Get session memory statistics"""
+        """Get session memory storage and usage statistics.
+
+        Counts session directories in logs/sessions/ and computes total disk
+        usage. Sessions with a flow-trace.json modified within the last 7 days
+        are counted as active. Also reads session-pruning.log for pruned count.
+
+        Returns:
+            dict: Session memory stats with keys:
+                total_sessions (int): Total number of session directories.
+                active_sessions (int): Sessions modified within the last 7 days.
+                pruned_sessions (int): Count of 'PRUNED' entries in pruning log.
+                total_size_mb (float): Total disk usage of all session data in MB.
+        """
         stats = {
             'total_sessions': 0,
             'active_sessions': 0,
@@ -311,7 +406,18 @@ class MemorySystemMonitor:
         return stats
 
     def get_git_autocommit_stats(self):
-        """Get git auto-commit statistics"""
+        """Get git auto-commit activity statistics from git-auto-commit.log.
+
+        Parses git-auto-commit.log to count total commits, commits today,
+        commits this week, and returns the last 10 commit log lines.
+
+        Returns:
+            dict: Git auto-commit stats with keys:
+                total_commits (int): Total lines with 'COMMIT' in the log.
+                commits_today (int): Commits since midnight today.
+                commits_this_week (int): Commits in the last 7 days.
+                recent_commits (list[str]): Last 10 log lines containing 'COMMIT'.
+        """
         git_log = self.logs_dir / 'git-auto-commit.log'
 
         stats = {
@@ -396,7 +502,17 @@ class MemorySystemMonitor:
         }
 
     def get_system_overview(self):
-        """Get a high-level system overview dict"""
+        """Get a high-level system overview dict for the dashboard.
+
+        Returns:
+            dict: Overview with keys:
+                health_score (float): Overall health score (0-100).
+                status (str): 'healthy', 'degraded', or 'critical'.
+                hooks_present (int): Number of hook scripts found.
+                hooks_total (int): Total expected hook scripts.
+                daemons (list[dict]): Hook script status list from get_daemon_status().
+                timestamp (str): ISO-format current timestamp.
+        """
         health = self.get_system_health_score()
         return {
             'health_score': health['overall_score'],
@@ -408,7 +524,23 @@ class MemorySystemMonitor:
         }
 
     def get_comprehensive_stats(self):
-        """Get all memory system statistics in one call"""
+        """Get all memory system statistics aggregated in one call.
+
+        Combines all monitoring categories into a single dict for efficient
+        full-system health reporting.
+
+        Returns:
+            dict: All stats with keys:
+                system_health (dict): Health score and status.
+                daemons (list): Hook script status list.
+                policies (dict): Policy enforcement stats.
+                context_optimization (dict): Cache and optimization stats.
+                failure_prevention (dict): Failure and auto-fix stats.
+                model_selection (dict): Model usage distribution.
+                session_memory (dict): Session storage stats.
+                git_autocommit (dict): Git commit activity.
+                timestamp (str): ISO-format current timestamp.
+        """
         return {
             'system_health': self.get_system_health_score(),
             'daemons': self.get_daemon_status(),
@@ -422,7 +554,20 @@ class MemorySystemMonitor:
         }
 
     def get_policy_status(self):
-        """Get status of all policies from the actual policy directory structure"""
+        """Get the active/inactive status for all policies based on their file existence.
+
+        Checks whether each policy's .md file exists in the policies directory
+        and returns a list of policy status dicts. Policies with files present
+        are marked as active.
+
+        Returns:
+            list[dict]: Policy status records, each with:
+                name (str): Human-readable policy name.
+                file (str): Relative path to the policy .md file.
+                status (str): 'active' (always set).
+                exists (bool): True if the policy file exists on disk.
+                active (bool): True if file exists and status is 'active'.
+        """
         # Paths relative to memory_dir matching actual 3-level layout
         policies = [
             {'name': 'Core Skills Mandate',

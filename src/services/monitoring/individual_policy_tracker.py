@@ -1,15 +1,33 @@
 """
-Individual Policy Tracker (Issue #11)
-Tracks execution metrics for each of the 34+ policies individually.
+Individual Policy Tracker - Track per-policy execution metrics from session data.
+
+Tracks execution metrics for each of the 20 registered policies individually.
+Reads flow-trace.json pipeline step data to compute per-policy execution counts,
+pass rates, average durations, and last run timestamps. Provides API-ready output
+for the /api/policies/<name>/stats and /api/policies/all/stats endpoints.
+
+Policy registry covers 20 policies across all 3 levels:
+  - Level -1: auto-fix-enforcement
+  - Level  1: session-memory, session-chaining, session-pruning,
+               context-management, user-preferences, patterns
+  - Level  2: coding-standards-enforcement
+  - Level  3: prompt-generation, task-breakdown, plan-mode, model-selection,
+               skill-agent-selection, tool-optimization, failure-prevention,
+               parallel-execution, progress-tracking, session-save,
+               git-auto-commit, logging
 
 Reads from:
-  - ~/.claude/memory/logs/sessions/*/flow-trace.json
-  - ~/.claude/memory/logs/policies/*.json  (per-policy logs if present)
+  - ~/.claude/memory/logs/sessions/*/flow-trace.json (pipeline step data)
+  - ~/.claude/memory/logs/policies/*.json (per-policy logs if present)
 
-Provides:
-  - Per-policy execution count, pass rate, last run time
-  - History for each of the 34 named policies
-  - API-ready output for /api/policies/<name>/stats
+Module-level constants:
+  POLICY_REGISTRY (dict): Maps policy key strings to metadata dicts containing
+      level, name, component, pipeline step name, and policy file name.
+  STEP_TO_POLICY (dict): Maps pipeline step names to policy key strings for
+      efficient single-pass trace parsing.
+
+Classes:
+  IndividualPolicyTracker: Per-policy execution metrics tracker.
 """
 
 import json
@@ -192,15 +210,39 @@ STEP_TO_POLICY = {
 
 
 class IndividualPolicyTracker:
-    """Track execution metrics per individual policy."""
+    """Track execution metrics for each individual policy in the registry.
+
+    Reads flow-trace.json files from all session log directories and
+    aggregates per-policy execution counts, pass rates, durations, and
+    last-run timestamps for the /api/policies/<name>/stats endpoints.
+
+    Attributes:
+        memory_dir (Path): Root memory directory (~/.claude/memory).
+        sessions_dir (Path): Per-session logs directory
+            (~/.claude/memory/logs/sessions/).
+        policies_log_dir (Path): Per-policy log files directory
+            (~/.claude/memory/logs/policies/).
+    """
 
     def __init__(self):
+        """Initialize IndividualPolicyTracker with standard directory paths."""
         self.memory_dir = Path.home() / '.claude' / 'memory'
         self.sessions_dir = self.memory_dir / 'logs' / 'sessions'
         self.policies_log_dir = self.memory_dir / 'logs' / 'policies'
 
     def _parse_all_traces(self, hours: int = 168) -> list:
-        """Parse all flow-trace.json files from the last N hours."""
+        """Parse flow-trace.json files from the last N hours of sessions.
+
+        Scans ``sessions_dir`` for ``*/flow-trace.json`` files, filters by
+        file modification time, and returns a list of the parsed JSON dicts.
+        At most 500 files are processed to avoid excessive I/O.
+
+        Args:
+            hours (int): Lookback window in hours. Defaults to 168 (7 days).
+
+        Returns:
+            list[dict]: Parsed flow-trace data dictionaries, most recent first.
+        """
         cutoff = datetime.now() - timedelta(hours=hours)
         traces = []
 
@@ -228,7 +270,27 @@ class IndividualPolicyTracker:
         return traces
 
     def get_policy_stats(self, policy_key: str, hours: int = 168) -> dict:
-        """Return execution stats for a single named policy."""
+        """Return execution statistics for a single named policy.
+
+        Loads flow-traces from the lookback window and extracts all pipeline
+        step records that match the given policy's step name. Calculates
+        total executions, pass count, fail count, pass rate, average duration,
+        last run timestamp, and returns the 20 most recent execution records.
+
+        Args:
+            policy_key (str): Key from POLICY_REGISTRY (e.g. 'model-selection',
+                'task-breakdown').
+            hours (int): Lookback window in hours. Defaults to 168 (7 days).
+
+        Returns:
+            dict: Statistics dict with keys:
+                policy_key (str), name (str), level (int), component (str),
+                step (str), timeframe_hours (int), total_executions (int),
+                passed (int), failed (int), pass_rate (float),
+                avg_duration_ms (float), last_run (str or None),
+                recent_executions (list[dict]).
+            Returns ``{'error': ...}`` if policy_key is not in POLICY_REGISTRY.
+        """
         meta = POLICY_REGISTRY.get(policy_key)
         if not meta:
             return {'error': f'Unknown policy: {policy_key}'}
@@ -281,7 +343,21 @@ class IndividualPolicyTracker:
         }
 
     def get_all_policy_stats(self, hours: int = 168) -> dict:
-        """Return stats for ALL registered policies."""
+        """Return execution statistics for all registered policies in one call.
+
+        Parses flow-traces once and aggregates per-policy counters in a single
+        pass, which is more efficient than calling get_policy_stats() for each
+        policy individually.
+
+        Args:
+            hours (int): Lookback window in hours. Defaults to 168 (7 days).
+
+        Returns:
+            dict: Mapping of policy_key (str) to a stats dict with keys:
+                policy_key (str), name (str), level (int), component (str),
+                step (str), total_executions (int), passed (int), failed (int),
+                pass_rate (float), avg_duration_ms (float), last_run (str or None).
+        """
         traces = self._parse_all_traces(hours)
 
         # Build per-policy counters from traces in one pass

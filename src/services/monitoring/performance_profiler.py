@@ -1,6 +1,30 @@
 """
-Performance Profiler Service
-Tracks and analyzes performance metrics for tool operations
+Performance Profiler - Track and analyze performance metrics for tool operations.
+
+Collects timing data for individual tool operations (Read, Write, Edit, Grep, Glob,
+Bash) and pipeline steps from flow-trace.json session data. Stores operation records
+in daily JSON files and provides statistical analysis, bottleneck identification,
+and optimization recommendations.
+
+Data sources (in priority order):
+  1. ~/.claude/memory/performance/operations_YYYY-MM-DD.json (from track_operation calls)
+  2. ~/.claude/memory/logs/sessions/*/flow-trace.json (fallback - always available)
+
+Key responsibilities:
+  - Track individual tool operation timing and metadata
+  - Identify slow operations exceeding configurable thresholds
+  - Maintain per-tool bottleneck caches (top 10 slowest per tool)
+  - Compute summary statistics: mean, median, p95, p99 durations
+  - Generate optimization recommendations based on observed patterns
+  - Analyze performance trends over N days (daily avg/count/slow-count)
+  - Report current process resource usage via psutil
+
+Performance thresholds:
+  - SLOW_THRESHOLD: 2000 ms (operations logged as slow)
+  - CRITICAL_THRESHOLD: 5000 ms (operations flagged as critical)
+
+Classes:
+  PerformanceProfiler: Main profiler for tool operation timing and analysis.
 """
 
 import json
@@ -13,13 +37,28 @@ from typing import Dict, List, Optional, Any
 
 
 class PerformanceProfiler:
-    """
-    Collects, analyzes, and stores performance metrics for all tool operations.
-    Identifies bottlenecks and slow operations.
+    """Collect, analyze, and store performance metrics for all tool operations.
+
+    Maintains in-memory buffers of recent and slow operations, persists daily
+    operation records to JSON files, and provides statistical analysis of
+    tool performance including bottleneck identification and recommendations.
+
+    Attributes:
+        storage_dir (Path): Directory for daily operations_YYYY-MM-DD.json files.
+        recent_operations (deque): Ring buffer of last 1000 operations.
+        slow_operations (deque): Ring buffer of last 100 slow operations.
+        bottleneck_cache (dict): Per-tool lists of top 10 slowest operations.
+        SLOW_THRESHOLD (int): Duration threshold in ms for slow operations (2000ms).
+        CRITICAL_THRESHOLD (int): Duration threshold in ms for critical operations (5000ms).
     """
 
     def __init__(self, storage_dir: str = None):
-        """Initialize the performance profiler"""
+        """Initialize the performance profiler.
+
+        Args:
+            storage_dir (str or None): Custom storage directory path for operation
+                files. Defaults to ~/.claude/memory/performance/ when None.
+        """
         if storage_dir is None:
             storage_dir = os.path.expanduser("~/.claude/memory/performance")
             self._is_default_storage = True
@@ -169,7 +208,15 @@ class PerformanceProfiler:
         self._save_operation(operation)
 
     def _update_bottleneck_cache(self, operation: Dict):
-        """Update the bottleneck cache with this operation"""
+        """Update the per-tool bottleneck cache with a new operation.
+
+        Maintains a sorted list of the top 10 slowest operations per tool type.
+        Older entries are evicted when the list exceeds 10 items.
+
+        Args:
+            operation (dict): Operation record with 'tool', 'target',
+                'duration_ms', and 'timestamp' keys.
+        """
         tool = operation['tool']
         duration = operation['duration_ms']
 
@@ -191,7 +238,14 @@ class PerformanceProfiler:
         )[:10]
 
     def _save_operation(self, operation: Dict):
-        """Save operation to today's file"""
+        """Persist a single operation record to today's daily JSON file.
+
+        Appends the operation to the 'operations' list in
+        storage_dir/operations_YYYY-MM-DD.json.
+
+        Args:
+            operation (dict): Operation record to persist.
+        """
         today_file = self.storage_dir / f"operations_{datetime.now().strftime('%Y-%m-%d')}.json"
 
         try:
@@ -295,7 +349,15 @@ class PerformanceProfiler:
         }
 
     def _percentile(self, data: List[float], percentile: float) -> float:
-        """Calculate percentile value"""
+        """Calculate a percentile value from a list of floats.
+
+        Args:
+            data (list[float]): List of numeric values.
+            percentile (float): Percentile as a fraction between 0 and 1 (e.g. 0.95).
+
+        Returns:
+            float: The value at the given percentile. Returns 0.0 if data is empty.
+        """
         if not data:
             return 0.0
         sorted_data = sorted(data)

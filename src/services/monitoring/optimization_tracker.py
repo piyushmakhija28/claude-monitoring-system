@@ -1,21 +1,35 @@
 """
-Tool Optimization Tracker
-Tracks 15 token optimization strategies from ADVANCED-TOKEN-OPTIMIZATION.md:
-1. Response Compression
-2. Diff-Based Editing
-3. Smart Tool Selection (tree, Glob vs Grep)
-4. Smart Grep Optimization
-5. Tiered Caching
-6. Session State (Aggressive)
-7. Incremental Updates
-8. File Type Optimization
-9. Lazy Context Loading
-10. Smart File Summarization
-11. Batch File Operations
-12. MCP Response Filtering
-13. Conversation Pruning
-14. AST-Based Code Navigation
-15. Parallel Tool Calls
+Tool Optimization Tracker - Track the 15 token optimization strategies.
+
+Monitors and quantifies the application of 15 token optimization strategies
+derived from ADVANCED-TOKEN-OPTIMIZATION.md. Derives counts by analyzing
+flow-trace.json session data and inferring which strategies were applied
+based on context usage, complexity, and execution mode.
+
+The 15 strategies tracked:
+  1. Response Compression   - Ultra-brief responses
+  2. Diff-Based Editing     - Show only changed lines
+  3. Smart Tool Selection   - tree vs Glob/Grep
+  4. Smart Grep Optimization - head_limit, files_with_matches
+  5. Tiered Caching         - Hot/Warm/Cold cache
+  6. Session State          - Aggressive external state
+  7. Incremental Updates    - Partial updates only
+  8. File Type Optimization - Language-specific strategies
+  9. Lazy Context Loading   - Load only when needed
+  10. Smart Summarization   - Intelligent summaries
+  11. Batch Operations      - Combine multiple operations
+  12. MCP Filtering         - Filter MCP responses
+  13. Conversation Pruning  - Remove old messages
+  14. AST Navigation        - AST-based code navigation
+  15. Parallel Tool Calls   - Parallel tool execution
+
+Also tracks coding standards enforcement per session (tech stack, standards count).
+
+Reads from:
+  - ~/.claude/memory/logs/sessions/*/flow-trace.json
+
+Classes:
+  OptimizationTracker: Tracks optimization strategy application and token savings.
 """
 import json
 import os
@@ -30,7 +44,18 @@ from collections import defaultdict
 
 
 class OptimizationTracker:
-    """Track tool optimization strategies and token savings"""
+    """Track tool optimization strategies and estimated token savings.
+
+    Analyzes flow-trace.json session data to count how often each of the 15
+    token optimization strategies was applied, and estimates the tokens saved.
+    Also tracks coding standards enforcement patterns by tech stack.
+
+    Attributes:
+        memory_dir (Path): Root data directory (~/.claude/memory).
+        logs_dir (Path): Path to the logs subdirectory.
+        docs_dir (Path): Path to the docs subdirectory.
+        sessions_dir (Path): Path to the sessions log directory.
+    """
 
     def __init__(self):
         self.memory_dir = get_data_dir()
@@ -39,7 +64,17 @@ class OptimizationTracker:
         self.sessions_dir = self.logs_dir / 'sessions'
 
     def _load_flow_traces(self, max_files=200):
-        """Load flow-trace.json files from sessions directory"""
+        """Load and parse flow-trace.json files from the sessions directory.
+
+        Reads up to max_files most-recent flow-trace.json files.
+
+        Args:
+            max_files (int): Maximum number of trace files to load (default 200).
+
+        Returns:
+            list[dict]: Parsed trace data dicts. Returns an empty list if the
+                sessions directory does not exist or no files can be parsed.
+        """
         traces = []
         if not self.sessions_dir.exists():
             return traces
@@ -190,9 +225,24 @@ class OptimizationTracker:
             }
 
     def get_standards_enforcement_stats(self):
-        """
-        Track coding standards loading and enforcement.
-        Reads from flow-trace.json final_decision.standards_active and rules_active.
+        """Track coding standards loading and enforcement across sessions.
+
+        Reads flow-trace.json final_decision.standards_active and rules_active
+        to count total standards enforced and categorize by tech stack (Java/Spring,
+        DevOps, Frontend, Database, General).
+
+        Returns:
+            dict: Standards enforcement stats with keys:
+                total_enforcements (int): Sessions where standards were loaded.
+                standards_by_type (dict): Map of tech category to enforcement count.
+                violations_detected (int): Currently always 0 (not yet tracked).
+                auto_fixes_applied (int): Currently always 0 (not yet tracked).
+                recent_enforcements (list[dict]): Last 15 enforcement records with
+                    timestamp, standards_active, rules_active, task_type, tech_stack.
+                avg_standards_per_session (float): Average standards count per session.
+                avg_rules_per_session (float): Average rules count per session.
+                total_standards (int): Cumulative standards count across all sessions.
+                total_rules (int): Cumulative rules count across all sessions.
         """
         stats = {
             'total_enforcements': 0,
@@ -275,7 +325,19 @@ class OptimizationTracker:
         return stats
 
     def get_context_savings(self):
-        """Get context token savings summary"""
+        """Get a compact summary of context token savings.
+
+        Extracts the top-level token savings metrics from
+        get_tool_optimization_metrics() for quick dashboard display.
+
+        Returns:
+            dict: Context savings summary with keys:
+                total_tokens_saved (int): Estimated total tokens saved.
+                total_optimizations (int): Total strategy applications counted.
+                estimated_savings_percentage (float): Savings percentage (0-80).
+                top_strategies (list[dict]): Top 5 strategies by tokens saved.
+                sessions_analyzed (int): Number of session traces analyzed.
+        """
         metrics = self.get_tool_optimization_metrics()
         strategies = metrics.get('strategies', {})
         return {
@@ -287,7 +349,14 @@ class OptimizationTracker:
         }
 
     def get_optimization_summary(self):
-        """Get a compact optimization summary"""
+        """Get a compact optimization summary combining tool and standards data.
+
+        Returns:
+            dict: Summary with keys:
+                tool_optimization (dict): Output of get_tool_optimization_metrics().
+                standards_enforcement (dict): Output of get_standards_enforcement_stats().
+                timestamp (str): ISO-format current timestamp.
+        """
         metrics = self.get_tool_optimization_metrics()
         standards = self.get_standards_enforcement_stats()
         return {
@@ -297,8 +366,13 @@ class OptimizationTracker:
         }
 
     def get_comprehensive_optimization_stats(self):
-        """
-        Get all optimization statistics in one call
+        """Get all optimization statistics aggregated in one call.
+
+        Returns:
+            dict: All optimization stats with keys:
+                tool_optimization (dict): Output of get_tool_optimization_metrics().
+                standards_enforcement (dict): Output of get_standards_enforcement_stats().
+                timestamp (str): ISO-format current timestamp.
         """
         return {
             'tool_optimization': self.get_tool_optimization_metrics(),

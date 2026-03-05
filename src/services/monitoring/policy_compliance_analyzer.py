@@ -22,9 +22,22 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 
 class PolicyComplianceAnalyzer:
-    """Analyze compliance trends across all policies."""
+    """Analyze compliance trends and statistics across all 3-level policies.
+
+    Reads flow-trace.json files from session log directories to compute per-policy
+    and per-level execution totals, pass rates, average durations, and compliance
+    status. Results power the /api/policies/compliance/stats endpoint.
+
+    Attributes:
+        memory_dir (Path): Root memory directory (~/.claude/memory).
+        sessions_dir (Path): Per-session logs directory
+            (~/.claude/memory/logs/sessions/).
+        STEP_LEVEL_MAP (dict): Maps pipeline step names to level numbers (-1 to 3).
+        STEP_NAMES (dict): Maps pipeline step names to human-readable labels.
+    """
 
     def __init__(self):
+        """Initialize PolicyComplianceAnalyzer with standard directory paths."""
         self.memory_dir = Path.home() / '.claude' / 'memory'
         self.sessions_dir = self.memory_dir / 'logs' / 'sessions'
 
@@ -69,7 +82,18 @@ class PolicyComplianceAnalyzer:
     }
 
     def _load_traces(self, hours: int = 720) -> list:
-        """Load flow-trace.json files within the time window."""
+        """Load and return flow-trace.json files from the last N hours.
+
+        Scans the sessions directory for flow-trace.json files, filters by
+        file modification time (using the ``hours`` lookback), and returns
+        parsed JSON dicts. At most 1000 files are loaded per call.
+
+        Args:
+            hours (int): Lookback window in hours. Defaults to 720 (30 days).
+
+        Returns:
+            list[dict]: Parsed flow-trace data dicts, most recent first.
+        """
         cutoff = datetime.now() - timedelta(hours=hours)
         traces = []
 
@@ -97,7 +121,29 @@ class PolicyComplianceAnalyzer:
         return traces
 
     def get_compliance_stats(self, hours: int = 168) -> dict:
-        """Get compliance statistics aggregated by step/policy."""
+        """Compute compliance statistics aggregated by pipeline step and level.
+
+        Parses flow-trace files from the lookback window and counts total
+        executions and passes for each pipeline step. Derives per-level
+        aggregates and an overall compliance percentage.
+
+        A policy step is considered "compliant" when its pass rate is >= 80%.
+
+        Args:
+            hours (int): Lookback window in hours. Defaults to 168 (7 days).
+
+        Returns:
+            dict: Compliance statistics with keys:
+                total_sessions (int): Number of traces analyzed.
+                overall_compliance (float): Overall pass rate percentage (0-100).
+                compliant_policies (int): Policies with pass_rate >= 80%.
+                total_policies (int): Total distinct pipeline steps observed.
+                by_level (dict): Per-level aggregates, keyed by level number.
+                    Each value has total (int), passed (int), compliance (float).
+                policies (list[dict]): Per-policy details sorted by pass_rate
+                    (ascending), each with step, name, level, total, passed,
+                    failed, pass_rate, avg_duration_ms, compliant.
+        """
         traces = self._load_traces(hours)
 
         # Per-step counters
@@ -178,7 +224,23 @@ class PolicyComplianceAnalyzer:
         }
 
     def get_compliance_trend(self, days: int = 7) -> dict:
-        """Get daily compliance trend for the last N days."""
+        """Compute a daily compliance trend over the last N days.
+
+        Groups flow-trace pipeline step executions by calendar day and
+        calculates a daily compliance percentage (passed/total * 100).
+        Suitable for powering a time-series compliance trend chart.
+
+        Args:
+            days (int): Number of days to look back. Defaults to 7.
+
+        Returns:
+            dict: Trend data with keys:
+                labels (list[str]): ISO date strings ('YYYY-MM-DD') sorted
+                    chronologically.
+                compliance_pcts (list[float]): Per-day compliance percentage
+                    (0-100) corresponding to each label.
+                days (int): The requested lookback window.
+        """
         traces = self._load_traces(hours=days * 24)
 
         daily = defaultdict(lambda: {'total': 0, 'passed': 0})

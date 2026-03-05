@@ -1,9 +1,18 @@
 """
-Skill & Agent Selection Tracker
-Tracks:
-- Skill usage and auto-selection
-- Agent invocations
-- Plan mode suggestions
+Skill & Agent Selection Tracker - Track skill/agent usage and plan mode decisions.
+
+Reads flow-trace.json files written by the 3-level-flow.py hook and extracts
+data from the LEVEL_3_STEP_3_5 pipeline step to track:
+  - Which skills were auto-selected by the enforcement system
+  - Which agents were invoked and their execution modes (parallel/sequential)
+  - Plan mode suggestion rates and complexity distributions
+
+Reads from:
+  - ~/.claude/memory/logs/sessions/*/flow-trace.json
+
+Key classes:
+  SkillAgentTracker: Aggregates skill selection, agent invocation, and plan
+      mode statistics across session traces.
 """
 import json
 import os
@@ -18,7 +27,18 @@ from collections import defaultdict
 
 
 class SkillAgentTracker:
-    """Track skill and agent usage from Claude Memory System"""
+    """Track skill and agent usage from the Claude Memory System.
+
+    Reads flow-trace.json session data to count skill invocations, agent
+    invocations, and plan mode triggers. All selections are auto-selected
+    by the 4-layer enforcement system (3-level-flow.py v3.0.0+).
+
+    Attributes:
+        memory_dir (Path): Root data directory (~/.claude/memory).
+        logs_dir (Path): Path to the logs subdirectory.
+        skills_dir (Path): Path to ~/.claude/skills/ (local skill cache).
+        sessions_dir (Path): Path to the sessions log directory.
+    """
 
     def __init__(self):
         self.memory_dir = get_data_dir()
@@ -27,7 +47,18 @@ class SkillAgentTracker:
         self.sessions_dir = self.logs_dir / 'sessions'
 
     def _load_flow_traces(self, max_files=100):
-        """Load flow-trace.json files from sessions directory"""
+        """Load and parse flow-trace.json files from the sessions directory.
+
+        Reads up to max_files flow-trace.json files sorted by most recent
+        modification time.
+
+        Args:
+            max_files (int): Maximum number of trace files to load (default 100).
+
+        Returns:
+            list[dict]: Parsed trace data dicts. Returns an empty list if the
+                sessions directory does not exist or no files can be parsed.
+        """
         traces = []
         if not self.sessions_dir.exists():
             return traces
@@ -48,7 +79,17 @@ class SkillAgentTracker:
         return traces
 
     def _get_skill_agent_step(self, trace):
-        """Extract LEVEL_3_STEP_3_5 policy_output from a trace"""
+        """Extract the LEVEL_3_STEP_3_5 policy_output dict from a trace.
+
+        Searches the pipeline list for the skill/agent selection step and
+        returns its policy_output dict for further analysis.
+
+        Args:
+            trace (dict): Parsed flow-trace.json data.
+
+        Returns:
+            dict: policy_output for LEVEL_3_STEP_3_5, or empty dict if not found.
+        """
         for step in trace.get('pipeline', []):
             if step.get('step') == 'LEVEL_3_STEP_3_5':
                 return step.get('policy_output', {})
@@ -116,9 +157,21 @@ class SkillAgentTracker:
         return stats
 
     def get_agent_usage_stats(self):
-        """
-        Track agent invocations
-        Reads from flow-trace.json LEVEL_3_STEP_3_5 policy_output
+        """Track agent invocations from flow-trace.json LEVEL_3_STEP_3_5 policy_output.
+
+        Counts agent invocations by agent type, computes average duration
+        per invocation, and tracks parallel vs sequential execution modes.
+
+        Returns:
+            dict: Agent usage statistics with keys:
+                total_agent_invocations (int): Total agent invocations across all sessions.
+                agents_by_type (dict): Map of agent name to invocation count.
+                avg_agent_duration (float): Average duration in seconds per invocation.
+                parallel_agents (int): Count of sessions with parallel execution mode.
+                sequential_agents (int): Count of sessions with sequential execution mode.
+                recent_invocations (list[dict]): Last 15 invocations with timestamp,
+                    agent_type, reason, task_type, complexity, duration_seconds.
+                top_agents (list[dict]): Top 10 agents by invocation count.
         """
         stats = {
             'total_agent_invocations': 0,
@@ -194,9 +247,21 @@ class SkillAgentTracker:
         return stats
 
     def get_plan_mode_suggestions(self):
-        """
-        Track plan mode auto-suggestions
-        Reads from flow-trace.json final_decision.plan_mode and complexity
+        """Track plan mode auto-suggestion rates across sessions.
+
+        Reads flow-trace.json final_decision.plan_mode and complexity to
+        determine when plan mode was triggered and classify outcomes.
+
+        Returns:
+            dict: Plan mode statistics with keys:
+                total_suggestions (int): Total sessions analyzed.
+                auto_entered (int): Sessions where plan mode was triggered.
+                user_approved (int): Sessions where user explicitly approved (currently 0).
+                user_declined (int): Sessions where plan mode was not triggered.
+                complexity_scores (list[int]): Complexity scores per session.
+                avg_complexity (float): Average complexity score across sessions.
+                recent_suggestions (list[dict]): Last 10 suggestions with timestamp,
+                    plan_mode, complexity, task_type, model.
         """
         stats = {
             'total_suggestions': 0,
@@ -261,16 +326,33 @@ class SkillAgentTracker:
         return stats
 
     def get_plan_mode_stats(self):
-        """Alias for get_plan_mode_suggestions()"""
+        """Return plan mode statistics. Alias for get_plan_mode_suggestions().
+
+        Returns:
+            dict: Plan mode statistics (see get_plan_mode_suggestions).
+        """
         return self.get_plan_mode_suggestions()
 
     def get_agent_invocation_stats(self):
-        """Alias for get_agent_usage_stats()"""
+        """Return agent usage statistics. Alias for get_agent_usage_stats().
+
+        Returns:
+            dict: Agent usage statistics (see get_agent_usage_stats).
+        """
         return self.get_agent_usage_stats()
 
     def get_comprehensive_stats(self):
-        """
-        Get all skill/agent statistics in one call
+        """Get all skill/agent statistics aggregated in one call.
+
+        Combines skill selection, agent usage, and plan mode statistics
+        into a single dict for efficient dashboard rendering.
+
+        Returns:
+            dict: Combined stats with keys:
+                skills (dict): Output of get_skill_selection_stats().
+                agents (dict): Output of get_agent_usage_stats().
+                plan_mode (dict): Output of get_plan_mode_suggestions().
+                timestamp (str): ISO-format current timestamp.
         """
         return {
             'skills': self.get_skill_selection_stats(),
