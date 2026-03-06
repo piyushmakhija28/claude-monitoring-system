@@ -79,6 +79,7 @@ from services.notifications.alert_routing import AlertRoutingEngine
 
 # Import utilities
 from utils.history_tracker import HistoryTracker
+from services.monitoring.cache_manager import get_cache
 from flasgger import Swagger, swag_from
 
 # Import session search routes
@@ -1230,6 +1231,13 @@ def api_log_files():
 def api_metrics():
     """API endpoint for dashboard metrics - REAL DATA from Claude Memory System"""
     try:
+        cache = get_cache()
+
+        # Try to get cached metrics (15 second TTL)
+        cached_metrics = cache.get('metrics_data')
+        if cached_metrics is not None:
+            return jsonify(cached_metrics)
+
         system_health = metrics.get_system_health()
         daemon_status = metrics.get_daemon_status()
         # Use get_detailed_policy_status() which returns a dict
@@ -1248,7 +1256,7 @@ def api_metrics():
         live_timeline = policy_execution_tracker.get_execution_timeline(hours=2)
         live_stats = policy_execution_tracker.get_execution_stats(hours=2)
 
-        return jsonify({
+        result = {
             'success': True,
             'health_score': health_score,
             'daemons_running': daemons_running,
@@ -1267,7 +1275,11 @@ def api_metrics():
                 'total_recent': live_stats.get('total_executions', 0),
                 'by_category': live_stats.get('by_category', {})
             }
-        })
+        }
+
+        # Cache the result for 15 seconds
+        cache.set('metrics_data', result, ttl=15)
+        return jsonify(result)
     except Exception as e:
         print(f"Error in api_metrics: {e}")
         return jsonify({'success': False, 'error': 'Failed to fetch metrics'}), 500
