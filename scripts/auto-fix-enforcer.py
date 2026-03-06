@@ -302,11 +302,12 @@ class AutoFixEnforcer:
 
         # ONLY truly critical files that MUST exist (in ~/.claude/scripts/)
         critical_files = {
-            'blocking-policy-enforcer.py': 'Blocking enforcer',
+            # Currently no files are truly critical - blocking enforcer is auto-initialized
         }
 
         # Optional files that are nice-to-have but not blocking
         optional_files = {
+            'blocking-policy-enforcer.py': 'Blocking enforcer utility',
             'plan-detector.py': 'Plan detector',
             'plan-detector.sh': 'Plan detector shell wrapper',
             'session-start.sh': 'Session start script'
