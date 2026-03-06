@@ -2,6 +2,36 @@
 
 {% block title %}Sessions - Claude Insight{% endblock %}
 
+{% from "macros.html" import metric_box %}
+
+{% block extra_css %}
+<style>
+    .metric-box {
+        padding: 1rem;
+        border-radius: 10px;
+        background: #f8f9fa;
+        transition: all 0.3s ease;
+    }
+
+    .metric-box:hover {
+        background: #e9ecef;
+        transform: translateY(-2px);
+    }
+
+    .metric-box h3 {
+        margin: 0.5rem 0;
+        color: #1e293b;
+    }
+
+    code {
+        background: #e9ecef;
+        padding: 0.25rem 0.5rem;
+        border-radius: 5px;
+        font-size: 0.9rem;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="row mb-4">
     <div class="col-12">
@@ -307,32 +337,6 @@
         </div>
     </div>
 </div>
-
-<style>
-    .metric-box {
-        padding: 1rem;
-        border-radius: 10px;
-        background: #f8f9fa;
-        transition: all 0.3s ease;
-    }
-
-    .metric-box:hover {
-        background: #e9ecef;
-        transform: translateY(-2px);
-    }
-
-    .metric-box h3 {
-        margin: 0.5rem 0;
-        color: #1e293b;
-    }
-
-    code {
-        background: #e9ecef;
-        padding: 0.25rem 0.5rem;
-        border-radius: 5px;
-        font-size: 0.9rem;
-    }
-</style>
 
 <script>
     function endSession() {
