@@ -194,10 +194,55 @@ app = Flask(
 )
 app.secret_key = 'claude-insight-secret-key-2026'
 
-# Make version available to all templates
+# Endpoint to sidebar section mapping for active state highlighting
+ENDPOINT_TO_SECTION = {
+    'dashboard': 'dashboard',
+    'analytics': 'analytics',
+    'comparison': 'analytics',
+    'predictive_analytics_page': 'analytics',
+    'performance_profiling': 'analytics',
+    'automation_dashboard': 'automation',
+    'three_level_flow_history': 'automation',
+    'level_1_monitor': 'level-1',
+    'level_2_monitor': 'level-2',
+    'level_3_monitor': 'level-3',
+    'architecture_health': 'architecture',
+    'policy_timeline': 'automation',
+    'session_diff_view': 'automation',
+    'anomaly_detection': 'automation',
+    'ml_training': 'automation',
+    'sessions': 'sessions',
+    'session_search.session_search_page': 'sessions',
+    'advanced_search': 'sessions',
+    'logs': 'sessions',
+    'voice_notification_history': 'sessions',
+    'widgets': 'widgets',
+    'widget_builder': 'widgets',
+    'dashboard_builder': 'widgets',
+    'community_marketplace': 'widgets',
+    'debugging_tools': 'tools',
+    'plugins': 'tools',
+    'alert_routing_page': 'tools',
+    'skill_registry_browser': 'tools',
+    'claude_md_viewer': 'tools',
+    'docs_browser': 'tools',
+    'integrations': 'integrations',
+    'notification_channels': 'integrations',
+    'policies': 'policies',
+    'policy_detail': 'policies',
+    'policy_compliance_report': 'policies',
+    'policy_impact_analysis': 'policies',
+    'settings': 'settings',
+    'claude_credentials.credentials_page': 'settings',
+    'twofa_settings': 'settings',
+}
+
+# Make version and sidebar section available to all templates
 @app.context_processor
 def inject_version():
-    return dict(app_version=APP_VERSION)
+    current_endpoint = request.endpoint
+    current_section = ENDPOINT_TO_SECTION.get(current_endpoint, '')
+    return dict(app_version=APP_VERSION, current_section=current_section)
 
 # Register blueprints
 app.register_blueprint(session_search_bp)
