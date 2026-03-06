@@ -2563,9 +2563,9 @@ def main():
     print()
 
     # =========================================================================
-    # LEVEL 3: EXECUTION SYSTEM - 12 STEPS
+    # LEVEL 3: EXECUTION SYSTEM - PRE-FLIGHT + 12 STEPS
     # =========================================================================
-    print("[LEVEL 3] EXECUTION SYSTEM (IMPLEMENTATION) - 12 STEPS")
+    print("[LEVEL 3] EXECUTION SYSTEM (PRE-FLIGHT + 12 STEPS)")
 
     # Carry-forward from Level 2 for chaining
     prev_output = {
@@ -2579,6 +2579,98 @@ def main():
         "context_pct": context_pct,
         "session_id": session_id
     }
+
+    # ------------------------------------------------------------------
+    # STEP 3.0.0: CONTEXT READING (PRE-FLIGHT)
+    # ------------------------------------------------------------------
+    step_start = datetime.now()
+    context_reader_script = SCRIPT_DIR / 'architecture' / '03-execution-system' / '00-context-reading' / 'context-reader.py'
+    if not context_reader_script.exists():
+        context_reader_script = MEMORY_BASE / '03-execution-system' / '00-context-reading' / 'context-reader.py'
+
+    context_cache = {}
+    enrichment_data = {}
+    cr_dur = 0
+
+    if context_reader_script.exists():
+        # Pass hook_cwd and session_id to context-reader
+        cr_out, _, _, cr_dur = run_script_with_retry(
+            context_reader_script,
+            [hook_cwd or str(Path.cwd()), session_id],
+            timeout=5,
+            step_name='Step-3.0.0.Context-Reading'
+        )
+
+        # Extract trace entry and context from output
+        try:
+            # Last line should be JSON trace entry (from print(json.dumps(trace_entry)))
+            lines = cr_out.strip().splitlines()
+            for line in lines:
+                if line.startswith('{'):
+                    trace_entry = json.loads(line)
+                    # Extract context cache if available
+                    if 'passed_to_next' in trace_entry:
+                        enrichment_data = trace_entry.get('passed_to_next', {})
+                    break
+        except Exception as e:
+            print(f"[WARN] Could not parse context-reader output: {e}")
+            enrichment_data = {}
+
+        # Show context reading result
+        if enrichment_data.get('project_name'):
+            print(f"   [3.0.0] Project: {enrichment_data.get('project_name', 'Unknown')}")
+            print(f"   [3.0.0] Version: {enrichment_data.get('current_version', 'Unknown')}")
+            if enrichment_data.get('tech_stack'):
+                print(f"   [3.0.0] Tech Stack: {', '.join(enrichment_data.get('tech_stack', []))}")
+        else:
+            print(f"   [3.0.0] Context: Not available (new project)")
+
+    step_3_0_0_output = {
+        "project_detected": enrichment_data.get('context_available', False) if enrichment_data else False,
+        "project_name": enrichment_data.get('project_name'),
+        "enrichment_data": enrichment_data,
+        "script_exists": context_reader_script.exists()
+    }
+    step_3_0_0_decision = f"Context reading completed - {'Project context loaded' if enrichment_data else 'No context files found'}"
+
+    # Add STEP 3.0.0 to trace pipeline
+    trace["pipeline"].append({
+        "step": "LEVEL_3_STEP_3_0_0",
+        "name": "Context Reading (Pre-Flight)",
+        "level": 3,
+        "order": 0,
+        "is_blocking": False,
+        "timestamp": step_start.isoformat(),
+        "duration_ms": cr_dur,
+        "input": {
+            "from_previous": "LEVEL_2_STANDARDS",
+            "hook_cwd": hook_cwd or str(Path.cwd()),
+            "session_id": session_id,
+            "purpose": "Detect and read project context files before execution"
+        },
+        "policy": {
+            "script": "context-reader.py",
+            "args": [hook_cwd or str(Path.cwd()), session_id],
+            "rules_applied": [
+                "detect_project_from_readme",
+                "scan_context_files",
+                "read_with_encoding_safety",
+                "extract_metadata",
+                "cache_in_session",
+                "handle_missing_files_gracefully"
+            ]
+        },
+        "policy_output": step_3_0_0_output,
+        "decision": step_3_0_0_decision,
+        "passed_to_next": {
+            "project_name": enrichment_data.get('project_name'),
+            "current_version": enrichment_data.get('current_version'),
+            "tech_stack": enrichment_data.get('tech_stack', []),
+            "project_overview": enrichment_data.get('project_overview', '')[:500],
+            "enrichment_available": bool(enrichment_data)
+        }
+    })
+    print(f"   [3.0.0] Context Reading: Complete")
 
     # ------------------------------------------------------------------
     # STEP 3.0: PROMPT GENERATION
