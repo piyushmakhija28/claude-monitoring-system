@@ -237,16 +237,29 @@ def log_event(msg):
 def read_hook_stdin():
     """Read JSON data piped by the Claude Code UserPromptSubmit hook via stdin.
 
-    Safe to call when stdin is a TTY (returns {} instead of blocking).
+    Uses select() to avoid blocking indefinitely when stdin has no data.
+    Returns {} if stdin is empty or unavailable.
 
     Returns:
         dict: Parsed hook payload, or {} on any read or parse error.
     """
     try:
-        if not sys.stdin.isatty():
-            raw = sys.stdin.read()
-            if raw and raw.strip():
-                return json.loads(raw.strip())
+        import select
+
+        if sys.stdin.isatty():
+            return {}
+
+        # Use select to check if data is ready (with 0.1s timeout)
+        try:
+            readable, _, _ = select.select([sys.stdin], [], [], 0.1)
+            if readable:
+                raw = sys.stdin.read()
+                if raw and raw.strip():
+                    return json.loads(raw.strip())
+        except (OSError, IOError):
+            # select() not available on this platform
+            pass
+
     except Exception:
         pass
     return {}

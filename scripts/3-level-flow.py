@@ -909,21 +909,33 @@ def read_hook_stdin():
     Claude Code UserPromptSubmit hook pipes a JSON object with at least:
       {"prompt": "...", "session_id": "...", "cwd": "...", ...}
 
-    The function is safe to call when stdin is a TTY (interactive mode);
-    it returns empty strings instead of blocking.
+    Uses select() to avoid blocking indefinitely when stdin has no data.
+    Returns ('', '') if stdin is empty or unavailable.
 
     Returns:
         tuple: (prompt, cwd) both as strings.  Returns ('', '') on any
                read or parse error.
     """
     try:
-        if not sys.stdin.isatty():
-            raw = sys.stdin.read()
-            if raw and raw.strip():
-                data = json.loads(raw.strip())
-                prompt = data.get('prompt', '') or data.get('message', '')
-                cwd = data.get('cwd', '')
-                return prompt, cwd
+        import select
+
+        if sys.stdin.isatty():
+            return '', ''
+
+        # Use select to check if data is ready (with 0.1s timeout)
+        try:
+            readable, _, _ = select.select([sys.stdin], [], [], 0.1)
+            if readable:
+                raw = sys.stdin.read()
+                if raw and raw.strip():
+                    data = json.loads(raw.strip())
+                    prompt = data.get('prompt', '') or data.get('message', '')
+                    cwd = data.get('cwd', '')
+                    return prompt, cwd
+        except (OSError, IOError):
+            # select() not available on this platform
+            pass
+
     except Exception:
         pass
     return '', ''
