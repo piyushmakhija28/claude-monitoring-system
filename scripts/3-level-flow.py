@@ -1761,6 +1761,7 @@ def main():
         "level": -1,
         "order": 0,
         "is_blocking": True,
+        "status": "PASSED" if rc == 0 else "FAILED",
         "timestamp": step_start.isoformat(),
         "duration_ms": dur,
         "input": lvl_minus1_input,
@@ -1779,7 +1780,9 @@ def main():
         },
         "policy_output": lvl_minus1_output,
         "decision": lvl_minus1_decision,
-        "passed_to_next": lvl_minus1_passed
+        "passed_to_next": lvl_minus1_passed,
+        "errors": [],
+        "warnings": []
     })
 
     if rc != 0:
