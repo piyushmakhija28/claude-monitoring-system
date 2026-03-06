@@ -87,6 +87,7 @@ from routes.session_search import session_search_bp
 from routes.claude_credentials import claude_creds_bp
 from routes.dashboard_routes import dashboard_bp
 from routes.api_routes import api_bp
+from routes.monitor_routes import monitor_bp
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
 from reportlab.lib import colors
@@ -252,6 +253,7 @@ app.register_blueprint(session_search_bp)
 app.register_blueprint(claude_creds_bp)
 app.register_blueprint(dashboard_bp)
 app.register_blueprint(api_bp)
+app.register_blueprint(monitor_bp)
 
 # Initialize SocketIO for real-time updates
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
