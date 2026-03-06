@@ -361,6 +361,58 @@
             </button>
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <!-- Theme Selector for Login Page -->
+                        <div class="theme-selector" id="themeSelectorWrap" style="margin-right: 1.5rem;">
+                            <button class="theme-selector__trigger"
+                                    id="themeSelectorBtn"
+                                    aria-haspopup="listbox"
+                                    aria-expanded="false"
+                                    aria-controls="themeDropdown"
+                                    title="Change theme">
+                                <span class="theme-selector__icon">
+                                    <i class="fas fa-sun"     id="themeIconLight"></i>
+                                    <i class="fas fa-moon"    id="themeIconDark"></i>
+                                    <i class="fas fa-palette" id="themeIconMaterial"></i>
+                                </span>
+                                <span class="theme-selector__label" id="themeLabel">Light</span>
+                                <i class="fas fa-chevron-down theme-selector__chevron" id="themeChevron"></i>
+                            </button>
+
+                            <div class="theme-selector__dropdown"
+                                 id="themeDropdown"
+                                 role="listbox"
+                                 aria-label="Select a theme">
+
+                                <button class="theme-option" role="option" data-theme="light">
+                                    <span class="theme-option__swatch theme-option__swatch--light"></span>
+                                    <span class="theme-option__info">
+                                        <span class="theme-option__name">Light</span>
+                                        <span class="theme-option__desc">Clean white surface</span>
+                                    </span>
+                                    <i class="fas fa-check theme-option__check" aria-hidden="true"></i>
+                                </button>
+
+                                <button class="theme-option" role="option" data-theme="dark">
+                                    <span class="theme-option__swatch theme-option__swatch--dark"></span>
+                                    <span class="theme-option__info">
+                                        <span class="theme-option__name">Dark</span>
+                                        <span class="theme-option__desc">Deep-space slate</span>
+                                    </span>
+                                    <i class="fas fa-check theme-option__check" aria-hidden="true"></i>
+                                </button>
+
+                                <button class="theme-option" role="option" data-theme="material">
+                                    <span class="theme-option__swatch theme-option__swatch--material"></span>
+                                    <span class="theme-option__info">
+                                        <span class="theme-option__name">Material</span>
+                                        <span class="theme-option__desc">MD3 indigo palette</span>
+                                    </span>
+                                    <i class="fas fa-check theme-option__check" aria-hidden="true"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </li>
                 </ul>
             </div>
         </div>
