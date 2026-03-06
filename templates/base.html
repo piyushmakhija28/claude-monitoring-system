@@ -13,7 +13,11 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <!-- Main CSS -->
+    <!-- Theme System (must load before main.css so tokens are defined first) -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/themes.css') }}">
+    <!-- Theme Selector UI Component -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/theme-selector.css') }}">
+    <!-- Main CSS (component-specific overrides that build on tokens) -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
     <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -177,9 +181,56 @@
                     <span id="contextBadge" class="badge bg-secondary" style="font-size:0.75rem; min-width:52px;">CTX --</span>
                 </div>
 
-                <button class="header-icon" onclick="toggleTheme()" title="Toggle Theme">
-                    <i class="fas fa-moon" id="theme-icon"></i>
-                </button>
+                <!-- Theme Selector Dropdown -->
+                <div class="theme-selector" id="themeSelectorWrap">
+                    <button class="theme-selector__trigger"
+                            id="themeSelectorBtn"
+                            aria-haspopup="listbox"
+                            aria-expanded="false"
+                            aria-controls="themeDropdown"
+                            title="Change theme">
+                        <span class="theme-selector__icon">
+                            <i class="fas fa-sun"     id="themeIconLight"></i>
+                            <i class="fas fa-moon"    id="themeIconDark"></i>
+                            <i class="fas fa-palette" id="themeIconMaterial"></i>
+                        </span>
+                        <span class="theme-selector__label" id="themeLabel">Light</span>
+                        <i class="fas fa-chevron-down theme-selector__chevron" id="themeChevron"></i>
+                    </button>
+
+                    <div class="theme-selector__dropdown"
+                         id="themeDropdown"
+                         role="listbox"
+                         aria-label="Select a theme">
+
+                        <button class="theme-option" role="option" data-theme="light">
+                            <span class="theme-option__swatch theme-option__swatch--light"></span>
+                            <span class="theme-option__info">
+                                <span class="theme-option__name">Light</span>
+                                <span class="theme-option__desc">Clean white surface</span>
+                            </span>
+                            <i class="fas fa-check theme-option__check" aria-hidden="true"></i>
+                        </button>
+
+                        <button class="theme-option" role="option" data-theme="dark">
+                            <span class="theme-option__swatch theme-option__swatch--dark"></span>
+                            <span class="theme-option__info">
+                                <span class="theme-option__name">Dark</span>
+                                <span class="theme-option__desc">Deep-space slate</span>
+                            </span>
+                            <i class="fas fa-check theme-option__check" aria-hidden="true"></i>
+                        </button>
+
+                        <button class="theme-option" role="option" data-theme="material">
+                            <span class="theme-option__swatch theme-option__swatch--material"></span>
+                            <span class="theme-option__info">
+                                <span class="theme-option__name">Material</span>
+                                <span class="theme-option__desc">MD3 indigo palette</span>
+                            </span>
+                            <i class="fas fa-check theme-option__check" aria-hidden="true"></i>
+                        </button>
+                    </div>
+                </div>
 
                 <button class="header-icon" href="{{ url_for('notifications') }}" title="Notifications">
                     <i class="fas fa-bell"></i>
@@ -268,14 +319,13 @@
             submenu.classList.toggle('show');
         }
 
-        // Load sidebar state
+        // Load sidebar collapsed state on DOMContentLoaded
+        // (context badge polling is handled by the theme engine script below)
         document.addEventListener('DOMContentLoaded', function() {
             const sidebarCollapsed = localStorage.getItem('sidebarCollapsed') === 'true';
             if (sidebarCollapsed) {
                 toggleSidebar();
             }
-            updateContextBadge();
-            setInterval(updateContextBadge, 30000);
         });
 
         function updateContextBadge() {
@@ -428,61 +478,237 @@
     <!-- i18n Library -->
     <script src="{{ url_for('static', filename='js/i18n.js') }}"></script>
 
-    <!-- Theme Switcher -->
+    <!-- Theme Engine (three-theme system: light / dark / material) -->
     <script>
-        // Load theme on page load
-        document.addEventListener('DOMContentLoaded', function() {
-            const savedTheme = localStorage.getItem('theme') || 'light';
-            applyTheme(savedTheme);
-        });
+    (function () {
+        'use strict';
 
+        /* ----------------------------------------------------------------
+           THEME METADATA
+           Maps theme key -> { label, icon id suffix, data-theme attr value }
+        ---------------------------------------------------------------- */
+        var THEMES = {
+            light:    { label: 'Light',    iconId: 'themeIconLight',    attr: null         },
+            dark:     { label: 'Dark',     iconId: 'themeIconDark',     attr: 'dark'       },
+            material: { label: 'Material', iconId: 'themeIconMaterial', attr: 'material'   }
+        };
+
+        var VALID_THEMES = Object.keys(THEMES);
+        var STORAGE_KEY  = 'claude-insight-theme';
+
+        /* ----------------------------------------------------------------
+           APPLY THEME TO <html>
+        ---------------------------------------------------------------- */
         function applyTheme(theme) {
-            if (theme === 'dark') {
-                document.documentElement.setAttribute('data-theme', 'dark');
-                const icon = document.getElementById('theme-icon');
-                if (icon) {
-                    icon.className = 'fas fa-sun';
-                }
+            if (VALID_THEMES.indexOf(theme) === -1) { theme = 'light'; }
+
+            var meta = THEMES[theme];
+            var html = document.documentElement;
+
+            if (meta.attr) {
+                html.setAttribute('data-theme', meta.attr);
             } else {
-                document.documentElement.removeAttribute('data-theme');
-                const icon = document.getElementById('theme-icon');
-                if (icon) {
-                    icon.className = 'fas fa-moon';
-                }
+                html.removeAttribute('data-theme');
             }
-            localStorage.setItem('theme', theme);
+
+            localStorage.setItem(STORAGE_KEY, theme);
+            _updateUI(theme);
         }
 
-        function toggleTheme() {
-            const currentTheme = localStorage.getItem('theme') || 'light';
-            const newTheme = currentTheme === 'light' ? 'dark' : 'light';
-            applyTheme(newTheme);
-        }
+        /* ----------------------------------------------------------------
+           UPDATE SELECTOR UI
+        ---------------------------------------------------------------- */
+        function _updateUI(theme) {
+            var meta = THEMES[theme];
 
-        // Language switcher
-        async function changeLanguage(lang) {
-            if (window.i18n) {
-                await window.i18n.changeLanguage(lang);
-                updateLanguageCheckmarks(lang);
-                window.location.reload();
-            }
-        }
+            /* Label */
+            var label = document.getElementById('themeLabel');
+            if (label) { label.textContent = meta.label; }
 
-        function updateLanguageCheckmarks(selectedLang) {
-            const languages = ['en', 'hi', 'es', 'fr', 'de'];
-            languages.forEach(lang => {
-                const checkmark = document.getElementById(`lang-check-${lang}`);
-                if (checkmark) {
-                    checkmark.style.visibility = lang === selectedLang ? 'visible' : 'hidden';
+            /* Icons: hide all, show active */
+            VALID_THEMES.forEach(function (t) {
+                var el = document.getElementById(THEMES[t].iconId);
+                if (!el) { return; }
+                if (t === theme) {
+                    el.classList.add('active');
+                } else {
+                    el.classList.remove('active');
                 }
+            });
+
+            /* Option check marks */
+            var options = document.querySelectorAll('.theme-option');
+            options.forEach(function (btn) {
+                var isActive = btn.getAttribute('data-theme') === theme;
+                btn.classList.toggle('is-active', isActive);
+                btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
             });
         }
 
-        // Update language checkmarks on page load
-        document.addEventListener('DOMContentLoaded', function() {
-            const currentLang = localStorage.getItem('language') || 'en';
+        /* ----------------------------------------------------------------
+           DROPDOWN OPEN / CLOSE
+        ---------------------------------------------------------------- */
+        function _openDropdown() {
+            var wrap = document.getElementById('themeSelectorWrap');
+            var btn  = document.getElementById('themeSelectorBtn');
+            if (!wrap) { return; }
+            wrap.classList.add('theme-selector--open');
+            if (btn) { btn.setAttribute('aria-expanded', 'true'); }
+        }
+
+        function _closeDropdown() {
+            var wrap = document.getElementById('themeSelectorWrap');
+            var btn  = document.getElementById('themeSelectorBtn');
+            if (!wrap) { return; }
+            wrap.classList.remove('theme-selector--open');
+            if (btn) { btn.setAttribute('aria-expanded', 'false'); }
+        }
+
+        function _isOpen() {
+            var wrap = document.getElementById('themeSelectorWrap');
+            return wrap ? wrap.classList.contains('theme-selector--open') : false;
+        }
+
+        /* ----------------------------------------------------------------
+           SMOOTH TRANSITION OVERLAY
+        ---------------------------------------------------------------- */
+        function _applyWithTransition(theme) {
+            var overlay = document.getElementById('themeTransitionOverlay');
+            if (!overlay || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+                applyTheme(theme);
+                return;
+            }
+            overlay.classList.add('fade-in');
+            setTimeout(function () {
+                applyTheme(theme);
+                overlay.classList.remove('fade-in');
+            }, 130);
+        }
+
+        /* ----------------------------------------------------------------
+           KEYBOARD NAVIGATION inside dropdown
+           Arrow keys move focus between .theme-option buttons.
+        ---------------------------------------------------------------- */
+        function _handleDropdownKeyboard(e) {
+            var options  = Array.prototype.slice.call(document.querySelectorAll('.theme-option'));
+            var focused  = document.activeElement;
+            var idx      = options.indexOf(focused);
+
+            if (e.key === 'ArrowDown' || e.key === 'Down') {
+                e.preventDefault();
+                if (idx < options.length - 1) { options[idx + 1].focus(); }
+                else { options[0].focus(); }
+            } else if (e.key === 'ArrowUp' || e.key === 'Up') {
+                e.preventDefault();
+                if (idx > 0) { options[idx - 1].focus(); }
+                else { options[options.length - 1].focus(); }
+            } else if (e.key === 'Escape') {
+                _closeDropdown();
+                var btn = document.getElementById('themeSelectorBtn');
+                if (btn) { btn.focus(); }
+            }
+        }
+
+        /* ----------------------------------------------------------------
+           DOM-READY WIRING
+        ---------------------------------------------------------------- */
+        document.addEventListener('DOMContentLoaded', function () {
+            /* 1. Restore saved theme */
+            var saved = localStorage.getItem(STORAGE_KEY) || 'light';
+            applyTheme(saved);
+
+            /* 2. Inject transition overlay into body */
+            var overlay = document.createElement('div');
+            overlay.id        = 'themeTransitionOverlay';
+            overlay.className = 'theme-transition-overlay';
+            overlay.setAttribute('aria-hidden', 'true');
+            document.body.appendChild(overlay);
+
+            /* 3. Trigger button toggle */
+            var triggerBtn = document.getElementById('themeSelectorBtn');
+            if (triggerBtn) {
+                triggerBtn.addEventListener('click', function (e) {
+                    e.stopPropagation();
+                    if (_isOpen()) { _closeDropdown(); } else { _openDropdown(); }
+                });
+
+                triggerBtn.addEventListener('keydown', function (e) {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        if (_isOpen()) { _closeDropdown(); } else { _openDropdown(); }
+                    } else if (e.key === 'ArrowDown' && _isOpen()) {
+                        e.preventDefault();
+                        var first = document.querySelector('.theme-option');
+                        if (first) { first.focus(); }
+                    }
+                });
+            }
+
+            /* 4. Theme option click handlers */
+            var options = document.querySelectorAll('.theme-option');
+            options.forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    var chosen = btn.getAttribute('data-theme');
+                    _applyWithTransition(chosen);
+                    _closeDropdown();
+                    var trigger = document.getElementById('themeSelectorBtn');
+                    if (trigger) { trigger.focus(); }
+                });
+            });
+
+            /* 5. Keyboard navigation inside dropdown */
+            var dropdown = document.getElementById('themeDropdown');
+            if (dropdown) {
+                dropdown.addEventListener('keydown', _handleDropdownKeyboard);
+            }
+
+            /* 6. Close on outside click */
+            document.addEventListener('click', function (e) {
+                var wrap = document.getElementById('themeSelectorWrap');
+                if (wrap && !wrap.contains(e.target)) {
+                    _closeDropdown();
+                }
+            });
+
+            /* 7. Context badge */
+            updateContextBadge();
+            setInterval(updateContextBadge, 30000);
+
+            /* 8. Language checkmarks */
+            var currentLang = localStorage.getItem('language') || 'en';
             updateLanguageCheckmarks(currentLang);
         });
+
+        /* Expose applyTheme globally so inline callers can still use it */
+        window.applyTheme  = applyTheme;
+        /* Legacy toggleTheme kept for backward compatibility */
+        window.toggleTheme = function () {
+            var cur = localStorage.getItem(STORAGE_KEY) || 'light';
+            _applyWithTransition(cur === 'light' ? 'dark' : 'light');
+        };
+
+    }());
+
+    /* ----------------------------------------------------------------
+       LANGUAGE SWITCHER (unchanged logic, moved here for consolidation)
+    ---------------------------------------------------------------- */
+    async function changeLanguage(lang) {
+        if (window.i18n) {
+            await window.i18n.changeLanguage(lang);
+            updateLanguageCheckmarks(lang);
+            window.location.reload();
+        }
+    }
+
+    function updateLanguageCheckmarks(selectedLang) {
+        var languages = ['en', 'hi', 'es', 'fr', 'de'];
+        languages.forEach(function (lang) {
+            var el = document.getElementById('lang-check-' + lang);
+            if (el) {
+                el.style.visibility = lang === selectedLang ? 'visible' : 'hidden';
+            }
+        });
+    }
     </script>
 
     {% block extra_js %}{% endblock %}
