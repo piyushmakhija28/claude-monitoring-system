@@ -3,8 +3,8 @@
 pre-tool-enforcer.py - PreToolUse hook that enforces policy before every tool call.
 
 Script Name: pre-tool-enforcer.py
-Version:     3.2.0 (Policy-linked + failure-kb.json integration)
-Last Modified: 2026-03-03
+Version:     3.3.0 (Level 1/2 flow-trace blocking checks added)
+Last Modified: 2026-03-07
 Author:      Claude Memory System
 
 Hook Type: PreToolUse
@@ -29,6 +29,18 @@ Level 3.5 - Skill/Agent Selection (Loophole #7 Fix):
     exists for the current session+PID.
     Bash/Task NOT blocked (Bash needed for git/tests; Task IS step 3.5).
     Flag cleared by post-tool-tracker.py when Skill or Task is called.
+
+Level 1 Sync System Check (v3.3.0):
+    Write/Edit/NotebookEdit are BLOCKED if flow-trace.json for the current
+    session does NOT contain LEVEL_1_CONTEXT and LEVEL_1_SESSION pipeline steps.
+    Fail-open: if trace file is absent the check is skipped (fresh session).
+    Block message: "Level 1 Sync System not complete yet!"
+
+Level 2 Standards System Check (v3.3.0):
+    Write/Edit/NotebookEdit are BLOCKED if flow-trace.json for the current
+    session does NOT contain LEVEL_2_STANDARDS pipeline step.
+    Fail-open: same as Level 1 check above.
+    Block message: "Level 2 Standards System not complete yet!"
 
 Level 3.5+ Dynamic Skill Context:
     Detects file extension/name on every Read/Write/Edit/Grep/Glob call
@@ -494,6 +506,143 @@ def check_skill_selection_pending(tool_name):
         '  Required : ' + action_required + '\n'
         '  Reason   : CLAUDE.md Step 3.5 - Skill/Agent MUST be invoked before coding.\n'
         '  Action   : Invoke the skill/agent first, then continue coding.'
+    )
+
+    return hints, blocks
+
+
+def _load_raw_flow_trace():
+    """
+    Load the full raw flow-trace.json for the current session.
+    Returns the parsed dict, or None if unavailable.
+    Used by Level 1/2 completion checks which need the pipeline array,
+    not just the final_decision summary extracted by _load_flow_trace_context().
+    """
+    try:
+        session_id = get_current_session_id()
+        if not session_id:
+            return None
+        memory_base = Path.home() / '.claude' / 'memory'
+        trace_file = memory_base / 'logs' / 'sessions' / session_id / 'flow-trace.json'
+        if not trace_file.exists():
+            return None
+        with open(trace_file, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception:
+        return None
+
+
+def _pipeline_step_present(raw_trace, step_name):
+    """
+    Return True if the named pipeline step exists in flow-trace.json's pipeline array.
+    step_name is compared against the 'step' field of each pipeline entry.
+    """
+    if not raw_trace:
+        return False
+    for entry in raw_trace.get('pipeline', []):
+        if entry.get('step') == step_name:
+            return True
+    return False
+
+
+def check_level1_sync_complete(tool_name):
+    """
+    Level 1 Sync System enforcement: Block Write/Edit/NotebookEdit if the
+    Level 1 Sync System (context reading, session init, pattern detection) has
+    NOT been completed by 3-level-flow.py for the current session.
+
+    Completion is detected by the presence of LEVEL_1_CONTEXT and
+    LEVEL_1_SESSION entries in the flow-trace.json pipeline array.
+
+    Fail-open: if flow-trace.json cannot be read (e.g. first prompt of session
+    before 3-level-flow has written the file), the check is skipped and the
+    tool is allowed through.  This prevents false positives on the very first
+    tool call of a fresh session.
+
+    Returns (hints, blocks) tuple.
+    """
+    hints = []
+    blocks = []
+
+    BLOCKED_TOOLS = {'Write', 'Edit', 'NotebookEdit'}
+    if tool_name not in BLOCKED_TOOLS:
+        return hints, blocks
+
+    current_session_id = get_current_session_id()
+    if not current_session_id:
+        return hints, blocks
+
+    raw_trace = _load_raw_flow_trace()
+    if raw_trace is None:
+        # Fail-open: trace not available yet, do not block
+        return hints, blocks
+
+    # Level 1 is complete when both key pipeline steps are present
+    level1_context_done = _pipeline_step_present(raw_trace, 'LEVEL_1_CONTEXT')
+    level1_session_done = _pipeline_step_present(raw_trace, 'LEVEL_1_SESSION')
+
+    if level1_context_done and level1_session_done:
+        return hints, blocks
+
+    missing = []
+    if not level1_context_done:
+        missing.append('LEVEL_1_CONTEXT (context reading)')
+    if not level1_session_done:
+        missing.append('LEVEL_1_SESSION (session init)')
+
+    blocks.append(
+        '[PRE-TOOL BLOCKED] Level 1 Sync System not complete yet!\n'
+        '  Session  : ' + current_session_id + '\n'
+        '  Tool     : ' + tool_name + ' is BLOCKED until Level 1 finishes.\n'
+        '  Missing  : ' + ', '.join(missing) + '\n'
+        '  Required : Need context reading, session init, pattern detection.\n'
+        '  Reason   : 3-level-flow.py Level 1 must complete before code changes.\n'
+        '  Action   : Wait for 3-level-flow.py to finish Level 1 Sync System.'
+    )
+
+    return hints, blocks
+
+
+def check_level2_standards_complete(tool_name):
+    """
+    Level 2 Standards System enforcement: Block Write/Edit/NotebookEdit if the
+    Level 2 Standards System (coding standards loader) has NOT been completed
+    by 3-level-flow.py for the current session.
+
+    Completion is detected by the presence of LEVEL_2_STANDARDS in the
+    flow-trace.json pipeline array.
+
+    Fail-open: same as check_level1_sync_complete - if trace is unavailable
+    the check is skipped to avoid blocking legitimate first-prompt tool calls.
+
+    Returns (hints, blocks) tuple.
+    """
+    hints = []
+    blocks = []
+
+    BLOCKED_TOOLS = {'Write', 'Edit', 'NotebookEdit'}
+    if tool_name not in BLOCKED_TOOLS:
+        return hints, blocks
+
+    current_session_id = get_current_session_id()
+    if not current_session_id:
+        return hints, blocks
+
+    raw_trace = _load_raw_flow_trace()
+    if raw_trace is None:
+        # Fail-open: trace not available yet, do not block
+        return hints, blocks
+
+    if _pipeline_step_present(raw_trace, 'LEVEL_2_STANDARDS'):
+        return hints, blocks
+
+    blocks.append(
+        '[PRE-TOOL BLOCKED] Level 2 Standards System not complete yet!\n'
+        '  Session  : ' + current_session_id + '\n'
+        '  Tool     : ' + tool_name + ' is BLOCKED until Level 2 finishes.\n'
+        '  Required : Need to load 65 coding standards.\n'
+        '  Reason   : 3-level-flow.py Level 2 must complete before code changes.\n'
+        '  Action   : Wait for 3-level-flow.py to finish Level 2 Standards System.'
     )
 
     return hints, blocks
@@ -1367,6 +1516,58 @@ def main():
             emit_hook_execution('pre-tool-enforcer.py', _dur,
                                 session_id=_sid, exit_code=2,
                                 extra={'tool': tool_name, 'block_type': 'skill_selection'})
+        except Exception:
+            pass
+        sys.exit(2)
+
+    # LEVEL 1 SYNC SYSTEM ENFORCEMENT (flow-trace pipeline check)
+    h, b = check_level1_sync_complete(tool_name)
+    all_hints.extend(h)
+    all_blocks.extend(b)
+
+    if all_blocks:
+        for hint in all_hints:
+            sys.stdout.write(hint + '\n')
+        sys.stdout.flush()
+        for block in all_blocks:
+            sys.stderr.write(block + '\n')
+        sys.stderr.flush()
+        try:
+            _sid = get_current_session_id()
+            _dur = int((datetime.now() - _HOOK_START).total_seconds() * 1000)
+            emit_enforcement_event('pre-tool-enforcer.py', 'level1_sync_block',
+                                   tool_name=tool_name,
+                                   reason='Level 1 Sync System not complete in flow-trace',
+                                   blocked=True, session_id=_sid)
+            emit_hook_execution('pre-tool-enforcer.py', _dur,
+                                session_id=_sid, exit_code=2,
+                                extra={'tool': tool_name, 'block_type': 'level1_sync'})
+        except Exception:
+            pass
+        sys.exit(2)
+
+    # LEVEL 2 STANDARDS SYSTEM ENFORCEMENT (flow-trace pipeline check)
+    h, b = check_level2_standards_complete(tool_name)
+    all_hints.extend(h)
+    all_blocks.extend(b)
+
+    if all_blocks:
+        for hint in all_hints:
+            sys.stdout.write(hint + '\n')
+        sys.stdout.flush()
+        for block in all_blocks:
+            sys.stderr.write(block + '\n')
+        sys.stderr.flush()
+        try:
+            _sid = get_current_session_id()
+            _dur = int((datetime.now() - _HOOK_START).total_seconds() * 1000)
+            emit_enforcement_event('pre-tool-enforcer.py', 'level2_standards_block',
+                                   tool_name=tool_name,
+                                   reason='Level 2 Standards System not complete in flow-trace',
+                                   blocked=True, session_id=_sid)
+            emit_hook_execution('pre-tool-enforcer.py', _dur,
+                                session_id=_sid, exit_code=2,
+                                extra={'tool': tool_name, 'block_type': 'level2_standards'})
         except Exception:
             pass
         sys.exit(2)
