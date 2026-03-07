@@ -196,21 +196,35 @@ except ImportError:
 
 
 def _get_session_id_from_progress():
-    """Get the current session ID from the session-progress.json file.
+    """Get the current session ID with multiple fallback sources.
 
-    Reads SESSION_STATE_FILE and returns the session_id field.  Returns
-    an empty string on any read/parse error so callers can safely treat
-    a missing session as a no-op rather than raising an exception.
+    Checks in order:
+    1. .current-session.json (most reliable - written by session-id-generator)
+    2. session-progress.json (may be stale or have session_broken=true)
 
     Returns:
-        str: Active session ID (e.g. "SESSION-20260305-001"), or empty
-             string when the file is missing or unreadable.
+        str: Active session ID (e.g. "SESSION-20260307-115241-GQQQ"), or
+             empty string when no valid session ID can be found.
     """
+    # Primary: .current-session.json (most reliable source)
+    try:
+        current_sess_file = Path.home() / '.claude' / 'memory' / '.current-session.json'
+        if current_sess_file.exists():
+            with open(current_sess_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            sid = data.get('current_session_id', '')
+            if sid and sid.startswith('SESSION-'):
+                return sid
+    except Exception:
+        pass
+    # Fallback: session-progress.json
     try:
         if SESSION_STATE_FILE.exists():
             with open(SESSION_STATE_FILE, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-            return data.get('session_id', '')
+            sid = data.get('session_id', '')
+            if sid and sid.startswith('SESSION-'):
+                return sid
     except Exception:
         pass
     return ''
@@ -218,22 +232,31 @@ def _get_session_id_from_progress():
 
 def _clear_session_flags(pattern_prefix, session_id):
     """
-    Clear PID-isolated session-specific flag file(s).
+    Clear session-specific flag file(s) for the given session.
 
-    MULTI-WINDOW FIX: Clears only the current window's flag
-    Pattern: .{prefix}-{SESSION_ID}-{PID}.json
+    Uses session ID only (no PID) for flag matching. Also cleans up
+    any legacy PID-based flags for backwards compatibility.
+
+    Pattern: .{prefix}-{SESSION_ID}.json (primary)
+             .{prefix}-{SESSION_ID}-*.json (legacy cleanup)
 
     Args:
-        pattern_prefix: Flag type prefix (e.g., 'task-breakdown-pending')
+        pattern_prefix: Flag type prefix (e.g., '.task-breakdown-pending')
         session_id: Session ID
     """
     if session_id:
-        # Direct path for current window's flag (includes PID)
-        current_pid = os.getpid()
-        flag_path = FLAG_DIR / f'{pattern_prefix}-{session_id}-{current_pid}.json'
+        # Primary: session-only flag (new format)
+        flag_path = FLAG_DIR / f'{pattern_prefix}-{session_id}.json'
         if flag_path.exists():
             try:
                 flag_path.unlink()
+            except Exception:
+                pass
+        # Legacy cleanup: remove any PID-based flags for this session
+        import glob as _flag_glob
+        for old_flag in _flag_glob.glob(str(FLAG_DIR / f'{pattern_prefix}-{session_id}-*.json')):
+            try:
+                Path(old_flag).unlink()
             except Exception:
                 pass
 
@@ -743,7 +766,7 @@ def main():
                 # Loophole #15 fix: validate TaskCreate has meaningful content
                 tc_subject = (tool_input or {}).get('subject', '')
                 tc_desc = (tool_input or {}).get('description', '')
-                if len(tc_subject) >= 10 and len(tc_desc) >= 10:
+                if len(tc_subject) >= 3 and len(tc_desc) >= 3:
                     sid = _get_session_id_from_progress()
                     _clear_session_flags('.task-breakdown-pending', sid)
                     try:
@@ -758,10 +781,10 @@ def main():
                 else:
                     # FEEDBACK: Tell Claude why task-breakdown flag didn't clear
                     reasons = []
-                    if len(tc_subject) < 10:
-                        reasons.append('subject too short (' + str(len(tc_subject)) + ' chars, need 10+)')
-                    if len(tc_desc) < 10:
-                        reasons.append('description too short (' + str(len(tc_desc)) + ' chars, need 10+)')
+                    if len(tc_subject) < 3:
+                        reasons.append('subject too short (' + str(len(tc_subject)) + ' chars, need 3+)')
+                    if len(tc_desc) < 3:
+                        reasons.append('description too short (' + str(len(tc_desc)) + ' chars, need 3+)')
                     sys.stdout.write(
                         '[POST-TOOL WARN] TaskCreate validation FAILED - task-breakdown flag NOT cleared!\n'
                         '  Reason: ' + ', '.join(reasons) + '\n'

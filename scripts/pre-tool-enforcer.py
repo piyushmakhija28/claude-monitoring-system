@@ -307,31 +307,19 @@ def find_session_flag(pattern_prefix, current_session_id):
     """
     Find session-specific flag file matching the current session ID.
     Returns (flag_path, flag_data) or (None, None) if not found.
-    Auto-cleans stale flags (>60 min) from current session.
+    Auto-cleans stale flags (>60 min).
 
-    FIX: Each hook runs as a separate subprocess with a different PID.
-    3-level-flow.py (PID=X) creates the flag, but pre-tool-enforcer.py
-    (PID=Y) must find it. So we search for ANY flag matching the session
-    ID, regardless of which PID created it.
-
-    Pattern searched: .{prefix}-{SESSION_ID}-*.json
+    Flag naming: .{prefix}-{SESSION_ID}.json (no PID in filename).
+    Session ID is unique per conversation window, providing natural
+    multi-window isolation without PID-based matching.
 
     Returns:
-        (flag_path, flag_data) for the newest matching flag, or (None, None)
+        (flag_path, flag_data) or (None, None) if not found/expired.
     """
-    import glob as _flag_glob
-    # Search for ANY flag matching this session (any PID)
-    search_pattern = str(FLAG_DIR / '{}-{}-*.json'.format(pattern_prefix, current_session_id))
-    matching_files = _flag_glob.glob(search_pattern)
+    # Direct path: session-only flag (new format, no PID)
+    flag_path = FLAG_DIR / '{}-{}.json'.format(pattern_prefix, current_session_id)
 
-    if not matching_files:
-        return (None, None)
-
-    # Use the most recently created flag (newest modification time)
-    matching_files.sort(key=lambda f: os.path.getmtime(f), reverse=True)
-
-    for flag_file in matching_files:
-        flag_path = Path(flag_file)
+    if flag_path.exists():
         try:
             with open(flag_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
@@ -344,13 +332,27 @@ def find_session_flag(pattern_prefix, current_session_id):
                     age = datetime.now() - created_at
                     if age > timedelta(minutes=CHECKPOINT_MAX_AGE_MINUTES):
                         flag_path.unlink(missing_ok=True)
-                        continue  # Try next flag
+                        return (None, None)
                 except Exception:
                     pass
 
             return (flag_path, data)
         except Exception:
             pass
+
+    # Fallback: check for legacy PID-based flags (backwards compat)
+    import glob as _flag_glob
+    legacy_pattern = str(FLAG_DIR / '{}-{}-*.json'.format(pattern_prefix, current_session_id))
+    legacy_files = _flag_glob.glob(legacy_pattern)
+    if legacy_files:
+        legacy_files.sort(key=lambda f: os.path.getmtime(f), reverse=True)
+        for lf in legacy_files:
+            try:
+                with open(lf, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                return (Path(lf), data)
+            except Exception:
+                pass
 
     return (None, None)
 

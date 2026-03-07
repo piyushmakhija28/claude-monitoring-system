@@ -1,3 +1,43 @@
+## [4.10.0] - 2026-03-07
+### Fixed
+- **CRITICAL: PID mismatch across all hook scripts (3-level-flow, pre-tool-enforcer, post-tool-tracker)**
+  - Each hook runs as a SEPARATE subprocess with different PID
+  - Flag files created by 3-level-flow.py (PID=X) were NEVER found by pre-tool-enforcer.py (PID=Y)
+  - Result: Task breakdown enforcement, checkpoint enforcement, skill selection - ALL silently broken
+  - **Fix:** Removed PID from all flag filenames, use session ID only for isolation
+  - Session ID is unique per conversation window - provides natural multi-window isolation
+
+- **CRITICAL: post-tool-tracker session ID resolution failure**
+  - `_get_session_id_from_progress()` only checked `session-progress.json` which had `session_broken: true` and no `session_id`
+  - Result: After TaskCreate, flag was NEVER cleared - Edit/Write stayed blocked forever
+  - **Fix:** Added `.current-session.json` as primary source (same fallback as pre-tool-enforcer)
+
+- **CRITICAL: stop-notifier referencing deleted scripts**
+  - `auto-commit-enforcer.py` was consolidated into `git-auto-commit-policy.py` but reference not updated
+  - `failure-detector.py` was consolidated into `common-failures-prevention.py` but reference not updated
+  - Result: Git auto-commit and failure detection were completely broken (scripts not found)
+  - **Fix:** Updated stop-notifier to reference correct consolidated script names
+
+- **Git push to main/master now BLOCKED by pre-tool-enforcer**
+  - Added branch protection in `check_bash()` - detects `git push origin main/master`
+  - Checks current branch via `git rev-parse --abbrev-ref HEAD`
+  - Blocks with clear error message and instructions
+
+### Changed
+- Flag file naming: `.{prefix}-{SESSION_ID}.json` (was `.{prefix}-{SESSION_ID}-{PID}.json`)
+- Legacy PID-based flags auto-cleaned on flag clear operations
+- post-tool-tracker: `_get_session_id_from_progress()` now checks `.current-session.json` first
+- pre-tool-enforcer: `find_session_flag()` uses session-only matching with legacy fallback
+- stop-notifier: `auto-commit-enforcer.py` -> `git-auto-commit-policy.py`
+- stop-notifier: `failure-detector.py --analyze-logs` -> `common-failures-prevention.py --analyze`
+
+### Policy Audit Results
+- **16 scripts** actually called by 3-level-flow.py via `run_script`/`run_script_with_retry`
+- **3 steps** use inline logic (model selection, skill selection, parallel analysis)
+- **5 scripts** called by stop-notifier via `subprocess.run` (all now point to existing files)
+- **6 enforcement checks** in pre-tool-enforcer with real blocking (`sys.exit(1)`/`sys.exit(2)`)
+- All architecture scripts verified present on disk
+
 ## [4.9.0] - 2026-03-07
 ### Fixed
 - **CRITICAL: Session hard-break bug (3-level-flow.py)**

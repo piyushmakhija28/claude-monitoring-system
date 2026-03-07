@@ -68,7 +68,7 @@ if sys.platform == 'win32':
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
-VERSION = "4.0.0"  # v4.0.0: Fix session hard-break + false retry bugs
+VERSION = "4.1.0"  # v4.1.0: PID mismatch fix - session-only flag isolation
 SCRIPT_NAME = "3-level-flow.py"
 
 # Flag auto-expiry configuration (Loophole #10)
@@ -238,9 +238,13 @@ def load_policy_rules() -> dict:
 
 
 def checkpoint_flag_path(session_id):
-    """Build the session-specific, PID-isolated checkpoint flag file path.
+    """Build the session-specific checkpoint flag file path.
 
-    Pattern: .checkpoint-pending-{SESSION_ID}-{PID}.json
+    Pattern: .checkpoint-pending-{SESSION_ID}.json
+
+    NO PID in filename. Each hook runs as a separate subprocess with a
+    different PID, so PID-based matching breaks the create/check/clear chain.
+    Session ID is already unique per conversation window.
 
     This naming contract MUST stay in sync with:
       - pre-tool-enforcer.py: find_session_flag()
@@ -252,13 +256,15 @@ def checkpoint_flag_path(session_id):
     Returns:
         Path: Absolute path to the checkpoint flag file in FLAG_DIR.
     """
-    return FLAG_DIR / f'.checkpoint-pending-{session_id}-{os.getpid()}.json'
+    return FLAG_DIR / f'.checkpoint-pending-{session_id}.json'
 
 
 def task_breakdown_flag_path(session_id):
-    """Build the session-specific, PID-isolated task-breakdown flag file path.
+    """Build the session-specific task-breakdown flag file path.
 
-    Pattern: .task-breakdown-pending-{SESSION_ID}-{PID}.json
+    Pattern: .task-breakdown-pending-{SESSION_ID}.json
+
+    NO PID in filename. Session ID provides window isolation.
 
     This naming contract MUST stay in sync with:
       - pre-tool-enforcer.py: find_session_flag()
@@ -270,13 +276,15 @@ def task_breakdown_flag_path(session_id):
     Returns:
         Path: Absolute path to the task-breakdown flag file in FLAG_DIR.
     """
-    return FLAG_DIR / f'.task-breakdown-pending-{session_id}-{os.getpid()}.json'
+    return FLAG_DIR / f'.task-breakdown-pending-{session_id}.json'
 
 
 def skill_selection_flag_path(session_id):
-    """Build the session-specific, PID-isolated skill-selection flag file path.
+    """Build the session-specific skill-selection flag file path.
 
-    Pattern: .skill-selection-pending-{SESSION_ID}-{PID}.json
+    Pattern: .skill-selection-pending-{SESSION_ID}.json
+
+    NO PID in filename. Session ID provides window isolation.
 
     This naming contract MUST stay in sync with:
       - pre-tool-enforcer.py: find_session_flag()
@@ -288,7 +296,7 @@ def skill_selection_flag_path(session_id):
     Returns:
         Path: Absolute path to the skill-selection flag file in FLAG_DIR.
     """
-    return FLAG_DIR / f'.skill-selection-pending-{session_id}-{os.getpid()}.json'
+    return FLAG_DIR / f'.skill-selection-pending-{session_id}.json'
 
 # Short approval words that clear the checkpoint flag
 # MUST be <= 30 chars total
@@ -445,19 +453,16 @@ def clear_all_enforcement_flags(reason=''):
 
 def clear_current_session_flags(session_id, reason=''):
     """
-    Delete enforcement flags for the CURRENT session + PID only (Loophole #11 fix).
+    Delete enforcement flags for the CURRENT session.
 
-    Unlike clear_all_enforcement_flags() which wipes every window's flags,
-    this function only removes flags belonging to THIS session and THIS process.
-    This is the correct behavior for approval messages so that other open
-    Claude Code windows keep their own pending enforcement flags intact.
+    Uses session ID only (no PID) for flag matching. Different Claude Code
+    windows have different session IDs, so session-only matching provides
+    correct window isolation without the PID mismatch problem.
 
-    Flag naming contract (MUST match task/skill flag writers in this file):
-      .checkpoint-pending-{SESSION_ID}-{PID}.json
-      .task-breakdown-pending-{SESSION_ID}-{PID}.json
-      .skill-selection-pending-{SESSION_ID}-{PID}.json
-
-    Also clears legacy (non-PID) patterns for backward compatibility.
+    Flag naming contract (MUST match flag writers in this file):
+      .checkpoint-pending-{SESSION_ID}.json
+      .task-breakdown-pending-{SESSION_ID}.json
+      .skill-selection-pending-{SESSION_ID}.json
 
     Args:
         session_id: Current session identifier (e.g. SESSION-20260305-123456-ABCD).
@@ -469,24 +474,10 @@ def clear_current_session_flags(session_id, reason=''):
 
     try:
         import glob as _glob
-        pid = os.getpid()
         cleared = 0
         cleared_types = []
 
-        # Primary: session+PID specific flags (isolated naming pattern)
-        for fname, flag_type in [
-            (f".checkpoint-pending-{session_id}-{pid}.json", "checkpoint"),
-            (f".task-breakdown-pending-{session_id}-{pid}.json", "task_breakdown"),
-            (f".skill-selection-pending-{session_id}-{pid}.json", "skill_selection"),
-        ]:
-            flag_path = FLAG_DIR / fname
-            if flag_path.exists():
-                flag_path.unlink()
-                cleared += 1
-                if flag_type not in cleared_types:
-                    cleared_types.append(flag_type)
-
-        # Backward compat: legacy session-only flags (no PID suffix)
+        # Session-specific flags (no PID in filename)
         for fname, flag_type in [
             (f".checkpoint-pending-{session_id}.json", "checkpoint"),
             (f".task-breakdown-pending-{session_id}.json", "task_breakdown"),
@@ -499,13 +490,24 @@ def clear_current_session_flags(session_id, reason=''):
                 if flag_type not in cleared_types:
                     cleared_types.append(flag_type)
 
+        # Also clean up any legacy PID-based flags for this session
+        for pattern in [
+            f".checkpoint-pending-{session_id}-*.json",
+            f".task-breakdown-pending-{session_id}-*.json",
+            f".skill-selection-pending-{session_id}-*.json",
+        ]:
+            for old_flag in _glob.glob(str(FLAG_DIR / pattern)):
+                try:
+                    Path(old_flag).unlink()
+                    cleared += 1
+                except Exception:
+                    pass
+
         if cleared > 0:
             print(
                 f"[ENFORCEMENT] {cleared} flag(s) cleared "
-                f"(session: {session_id[:16]}..., PID: {pid}) - {reason}"
+                f"(session: {session_id[:16]}...) - {reason}"
             )
-        else:
-            print(f"[ENFORCEMENT] No flags to clear for current session/PID - {reason}")
 
         try:
             for ft in cleared_types:

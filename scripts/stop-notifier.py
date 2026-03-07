@@ -585,7 +585,7 @@ def main():
         from pathlib import Path
         import subprocess
         script_dir = Path(__file__).parent
-        git_commit_script = script_dir / 'architecture' / '03-execution-system' / '09-git-commit' / 'auto-commit-enforcer.py'
+        git_commit_script = script_dir / 'architecture' / '03-execution-system' / '09-git-commit' / 'git-auto-commit-policy.py'
         if git_commit_script.exists():
             _commit_ok = False
             for _attempt in range(1, 4):
@@ -668,15 +668,15 @@ def main():
         log_s('[SESSION-ARCHIVE] Skipped: ' + str(e))
 
     # 3. Failure detection analysis - learn from errors (3 retries)
-    # Architecture: 03-execution-system/failure-prevention/failure-detector.py
+    # Architecture: 03-execution-system/failure-prevention/common-failures-prevention.py --analyze
     try:
-        failure_script = script_dir / 'architecture' / '03-execution-system' / 'failure-prevention' / 'failure-detector.py'
+        failure_script = script_dir / 'architecture' / '03-execution-system' / 'failure-prevention' / 'common-failures-prevention.py'
         if failure_script.exists():
             _fail_ok = False
             for _attempt in range(1, 4):
                 try:
                     _r = subprocess.run(
-                        [sys.executable, str(failure_script), '--analyze-logs'],
+                        [sys.executable, str(failure_script), '--analyze'],
                         timeout=10, capture_output=True
                     )
                     if _r.returncode == 0:
