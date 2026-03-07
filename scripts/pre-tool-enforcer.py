@@ -275,14 +275,29 @@ def check_failure_kb_hints(tool_name, tool_input):
 
 def get_current_session_id():
     """
-    Read the active session ID from .current-session.json.
+    Read the active session ID from .current-session.json or session-progress.json.
+    Falls back to session-progress.json if .current-session.json is missing
+    (which happens after /clear or fresh sessions).
     Returns empty string if not available (fail open - don't block on missing data).
     """
     try:
         if CURRENT_SESSION_FILE.exists():
             with open(CURRENT_SESSION_FILE, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-            return data.get('current_session_id', '')
+            sid = data.get('current_session_id', '')
+            if sid:
+                return sid
+    except Exception:
+        pass
+    # Fallback: read from session-progress.json (written by 3-level-flow.py)
+    try:
+        progress_file = Path.home() / '.claude' / 'memory' / 'logs' / 'session-progress.json'
+        if progress_file.exists():
+            with open(progress_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            sid = data.get('session_id', '')
+            if sid and sid.startswith('SESSION-'):
+                return sid
     except Exception:
         pass
     return ''
@@ -290,23 +305,35 @@ def get_current_session_id():
 
 def find_session_flag(pattern_prefix, current_session_id):
     """
-    Find PID-isolated session-specific flag file for the current window.
+    Find session-specific flag file matching the current session ID.
     Returns (flag_path, flag_data) or (None, None) if not found.
-    Also auto-cleans stale flags (>60 min) from current session.
+    Auto-cleans stale flags (>60 min) from current session.
 
-    MULTI-WINDOW FIX: Looks for flags with matching SESSION_ID AND PID.
-    Pattern: .{prefix}-{SESSION_ID}-{PID}.json
+    FIX: Each hook runs as a separate subprocess with a different PID.
+    3-level-flow.py (PID=X) creates the flag, but pre-tool-enforcer.py
+    (PID=Y) must find it. So we search for ANY flag matching the session
+    ID, regardless of which PID created it.
+
+    Pattern searched: .{prefix}-{SESSION_ID}-*.json
 
     Returns:
-        (flag_path, flag_data) for current window's flag, or (None, None)
+        (flag_path, flag_data) for the newest matching flag, or (None, None)
     """
-    current_pid = os.getpid()
-    pid_specific_pattern = '{}-{}-{}.json'.format(pattern_prefix, current_session_id, current_pid)
-    pid_specific_path = FLAG_DIR / pid_specific_pattern
+    import glob as _flag_glob
+    # Search for ANY flag matching this session (any PID)
+    search_pattern = str(FLAG_DIR / '{}-{}-*.json'.format(pattern_prefix, current_session_id))
+    matching_files = _flag_glob.glob(search_pattern)
 
-    if pid_specific_path.exists():
+    if not matching_files:
+        return (None, None)
+
+    # Use the most recently created flag (newest modification time)
+    matching_files.sort(key=lambda f: os.path.getmtime(f), reverse=True)
+
+    for flag_file in matching_files:
+        flag_path = Path(flag_file)
         try:
-            with open(pid_specific_path, 'r', encoding='utf-8') as f:
+            with open(flag_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
 
             # Auto-expire stale flags (>60 min)
@@ -316,12 +343,12 @@ def find_session_flag(pattern_prefix, current_session_id):
                     created_at = datetime.fromisoformat(created_at_str)
                     age = datetime.now() - created_at
                     if age > timedelta(minutes=CHECKPOINT_MAX_AGE_MINUTES):
-                        pid_specific_path.unlink(missing_ok=True)
-                        return (None, None)
+                        flag_path.unlink(missing_ok=True)
+                        continue  # Try next flag
                 except Exception:
                     pass
 
-            return (pid_specific_path, data)
+            return (flag_path, data)
         except Exception:
             pass
 
@@ -509,11 +536,11 @@ WINDOWS_CMDS = [
 
 
 def check_bash(command):
-    """Level 3.7: Detect and block Windows-only shell commands.
+    """Level 3.7: Detect and block Windows-only shell commands + branch protection.
 
     Scans the command string for Windows-only prefixes listed in WINDOWS_CMDS.
-    Matches at the start of the command or after newline, semicolon, or &&
-    chaining operators so piped multi-step commands are caught.
+    Also enforces branch protection: blocks git push/commit to main/master
+    when no issue branch has been created (GitHub workflow enforcement).
 
     Policy:    policies/03-execution-system/failure-prevention/
                common-failures-prevention.md
@@ -525,13 +552,50 @@ def check_bash(command):
 
     Returns:
         tuple: (hints, blocks) where blocks is non-empty when a Windows
-               command is detected and the tool call must be rejected.
+               command is detected or branch policy is violated.
     """
     hints = []
     blocks = []
     cmd_stripped = command.strip()
     cmd_lower = cmd_stripped.lower()
 
+    # ===================================================================
+    # BRANCH PROTECTION: Block git push to main/master
+    # Forces creating an issue branch first via github_issue_manager.py
+    # ===================================================================
+    if 'git push' in cmd_lower:
+        # Check if pushing to main or master (direct push or via origin)
+        push_to_protected = False
+        for protected in ['main', 'master']:
+            if ('push origin ' + protected) in cmd_lower:
+                push_to_protected = True
+            elif cmd_lower.strip().endswith('push origin ' + protected):
+                push_to_protected = True
+
+        if push_to_protected:
+            # Check current branch - if we're ON main, block
+            try:
+                import subprocess as _sp
+                _branch_result = _sp.run(
+                    ['git', 'rev-parse', '--abbrev-ref', 'HEAD'],
+                    capture_output=True, text=True, timeout=5
+                )
+                current_branch = _branch_result.stdout.strip()
+                if current_branch in ('main', 'master'):
+                    blocks.append(
+                        '[PRE-TOOL BLOCKED] Direct push to ' + current_branch + ' is NOT allowed!\n'
+                        '  Policy   : GitHub Branch Protection (github-branch-pr-policy)\n'
+                        '  Current  : On branch "' + current_branch + '"\n'
+                        '  Required : Create an issue branch first (e.g. fix/42, feature/123)\n'
+                        '  Workflow : TaskCreate -> GitHub Issue -> Branch -> Work -> PR -> Merge\n'
+                        '  Action   : Create a task with TaskCreate, then use the issue branch.'
+                    )
+            except Exception:
+                pass
+
+    # ===================================================================
+    # WINDOWS COMMAND BLOCKING
+    # ===================================================================
     for win_cmd, bash_equiv in WINDOWS_CMDS:
         win_lower = win_cmd.lower()
         # Check if command starts with win_cmd or has it after newline/semicolon/&&
