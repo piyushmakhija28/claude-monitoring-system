@@ -633,7 +633,10 @@ def check_level2_standards_complete(tool_name):
         # Fail-open: trace not available yet, do not block
         return hints, blocks
 
-    if _pipeline_step_present(raw_trace, 'LEVEL_2_STANDARDS'):
+    # Check for any Level 2 step name variant (3-level-flow.py uses different names
+    # across versions: LEVEL_2_STANDARDS (older), LEVEL_2_1_COMMON + LEVEL_2_2_MICROSERVICES (newer))
+    L2_STEP_NAMES = {'LEVEL_2_STANDARDS', 'LEVEL_2_1_COMMON', 'LEVEL_2_2_MICROSERVICES'}
+    if any(_pipeline_step_present(raw_trace, name) for name in L2_STEP_NAMES):
         return hints, blocks
 
     blocks.append(
