@@ -68,7 +68,7 @@ if sys.platform == 'win32':
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
-VERSION = "3.9.0"  # v3.9.0: Flag auto-expiry with 60-minute cleanup (Loophole #10)
+VERSION = "4.0.0"  # v4.0.0: Fix session hard-break + false retry bugs
 SCRIPT_NAME = "3-level-flow.py"
 
 # Flag auto-expiry configuration (Loophole #10)

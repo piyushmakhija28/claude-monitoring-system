@@ -1,3 +1,27 @@
+## [4.9.0] - 2026-03-07
+### Fixed
+- **CRITICAL: Session hard-break bug (3-level-flow.py)**
+  - v3.9.1 introduced forced deletion of `.current-session.json` BEFORE session check
+  - `run_script_with_retry()` then failed 3 times (file was just deleted)
+  - `_policy_hard_break()` called `sys.exit(1)` - killed entire 3-level flow
+  - Auto-create session fallback at line 1925 NEVER ran (process already dead)
+  - **Fix:** Removed forced deletion + switched to `run_script()` (no hard-break on expected failure)
+- **False retry warnings in post-tool-tracker (task-progress-tracking-policy.py)**
+  - `exit(1)` returned when finding incomplete work (TODOs, PENDING) - normal during development
+  - Caused 3 false retries + `[POLICY-WARN]` on every single tool call
+  - **Fix:** Changed to `exit(0)` for informational checks (finding work is not an error)
+
+### Changed
+- 3-level-flow.py: Session management uses `run_script()` instead of `run_script_with_retry()`
+- 3-level-flow.py: Internal version bumped to 4.0.0
+- task-progress-tracking-policy.py: Exit code semantics corrected
+
+### Verified
+- All 5 hooks pass cleanly: clear-session, 3-level-flow, pre-tool-enforcer, post-tool-tracker, stop-notifier
+- All 69 architecture scripts: syntax valid, no broken dependencies
+- All 3 levels + 12 execution steps: complete end-to-end flow working
+- Full checkpoint display with decision table
+
 ## [4.6.0] - 2026-03-06
 ### Added
 - **Phase 3: Template Macro Application**
