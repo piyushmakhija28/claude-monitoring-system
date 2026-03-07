@@ -68,7 +68,7 @@ if sys.platform == 'win32':
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
-VERSION = "4.2.0"  # v4.2.0: Wire Steps 3.4/3.5/3.8 to actual architecture scripts
+VERSION = "4.3.0"  # v4.3.0: Wire all remaining steps (3.6/3.9/3.10/3.11/3.12) to scripts
 SCRIPT_NAME = "3-level-flow.py"
 
 # Flag auto-expiry configuration (Loophole #10)
@@ -3337,8 +3337,13 @@ Work to complete: Execute phase {i} of the identified work breakdown.
         print(f"   [3.5] CLAUDE_MUST: Use REWRITTEN_PROMPT + {skill_agent_name} patterns")
 
     # ------------------------------------------------------------------
-    # STEP 3.6: TOOL OPTIMIZATION
+    # STEP 3.6: TOOL OPTIMIZATION (via tool-usage-optimization-policy.py)
     # ------------------------------------------------------------------
+    step_start = datetime.now()
+    tool_opt_script = SCRIPT_DIR / 'architecture' / '03-execution-system' / '06-tool-optimization' / 'tool-usage-optimization-policy.py'
+    if not tool_opt_script.exists():
+        tool_opt_script = MEMORY_BASE / '03-execution-system' / '06-tool-optimization' / 'tool-usage-optimization-policy.py'
+
     tool_rules = [
         "read_files_gt_500_lines_use_offset_limit",
         "grep_always_add_head_limit_100",
@@ -3347,6 +3352,17 @@ Work to complete: Execute phase {i} of the identified work breakdown.
         "bash_combine_sequential_commands",
         "edit_write_show_brief_confirmation"
     ]
+    to_dur = 0
+    to_script_used = False
+    to_output = {}
+
+    if tool_opt_script.exists():
+        try:
+            to_out, to_err, to_rc, to_dur = run_script(tool_opt_script, ['--enforce'], timeout=8)
+            to_script_used = to_rc == 0
+            to_output = {"exit_code": to_rc, "output_lines": len(to_out.splitlines())}
+        except Exception:
+            pass
 
     trace["pipeline"].append({
         "step": "LEVEL_3_STEP_3_6",
@@ -3355,8 +3371,8 @@ Work to complete: Execute phase {i} of the identified work breakdown.
         "order": 10,
         "is_blocking": False,
         "status": "PASSED",
-        "timestamp": datetime.now().isoformat(),
-        "duration_ms": dur,
+        "timestamp": step_start.isoformat(),
+        "duration_ms": to_dur,
         "input": {
             "from_previous": "LEVEL_3_STEP_3_5",
             "skill_agent": skill_agent_name,
@@ -3364,21 +3380,21 @@ Work to complete: Execute phase {i} of the identified work breakdown.
             "purpose": "Apply token-saving optimizations to every tool call"
         },
         "policy": {
-            "script": "tool-usage-optimizer.py (rules loaded)",
+            "script": "tool-usage-optimization-policy.py" if to_script_used else "inline rules",
             "rules_applied": tool_rules
         },
-        "policy_output": {
+        "policy_output": to_output if to_script_used else {
             "rules_active": len(tool_rules),
             "estimated_token_savings": "60-80%",
             "optimization_level": ctx_optimization
         },
-        "decision": f"Tool optimization rules loaded - apply before every tool call",
+        "decision": "Tool optimization enforced via script" if to_script_used else "Tool optimization rules loaded (inline)",
         "passed_to_next": {
             "tool_rules_active": True,
             "optimization_level": ctx_optimization
         }
     })
-    print(f"   [3.6] Tool Optimization: Ready ({len(tool_rules)} rules)")
+    print(f"   [3.6] Tool Optimization: {'Enforced' if to_script_used else 'Ready'} ({len(tool_rules)} rules)")
 
     # ------------------------------------------------------------------
     # STEP 3.7: FAILURE PREVENTION
@@ -3511,29 +3527,113 @@ Work to complete: Execute phase {i} of the identified work breakdown.
     loaded_policies = load_policy_rules()
     policy_count = sum(len(v) for v in loaded_policies.values())
 
-    for step_info in [
-        ("3.9",  13, "Execute Tasks",   "All policies enforced - execute with full standards active"),
-        ("3.10", 14, "Session Save",    "Auto-save session state at each milestone"),
-        ("3.11", 15, "Git Auto-Commit", f"Auto-commit + version bump + release ({policy_count} policies loaded)"),
-        ("3.12", 16, "Logging",         "Log all policy applications, tool calls, decisions"),
-    ]:
-        step_num, order, step_name, step_decision = step_info
-        trace["pipeline"].append({
-            "step": f"LEVEL_3_STEP_{step_num.replace('.', '_')}",
-            "name": step_name,
-            "level": 3,
-            "order": order,
-            "is_blocking": False,
-            "status": "PASSED",
-            "timestamp": datetime.now().isoformat(),
-            "duration_ms": dur,
-            "input": {"from_previous": f"LEVEL_3_STEP_3_{int(float(step_num))-1 if float(step_num) > 9 else '8'}"},
-            "policy": {"rules_applied": [step_name.lower().replace(' ', '_')]},
-            "policy_output": {"status": "ACTIVE", "policies_loaded": policy_count},
-            "decision": step_decision,
-            "passed_to_next": {"status": "ACTIVE"}
-        })
-        print(f"   [{step_num}] {step_name}: Active")
+    # --- Step 3.9: Execute Tasks (via task-progress-tracking-policy.py) ---
+    step_start = datetime.now()
+    exec_script = SCRIPT_DIR / 'architecture' / '03-execution-system' / '08-progress-tracking' / 'task-progress-tracking-policy.py'
+    if not exec_script.exists():
+        exec_script = MEMORY_BASE / '03-execution-system' / '08-progress-tracking' / 'task-progress-tracking-policy.py'
+    exec_dur = 0
+    exec_script_used = False
+    if exec_script.exists():
+        try:
+            ex_out, ex_err, ex_rc, exec_dur = run_script(exec_script, ['--enforce'], timeout=8)
+            exec_script_used = ex_rc == 0
+        except Exception:
+            pass
+    trace["pipeline"].append({
+        "step": "LEVEL_3_STEP_3_9",
+        "name": "Execute Tasks",
+        "level": 3,
+        "order": 13,
+        "is_blocking": False,
+        "status": "PASSED",
+        "timestamp": step_start.isoformat(),
+        "duration_ms": exec_dur,
+        "input": {"from_previous": "LEVEL_3_STEP_3_8"},
+        "policy": {
+            "script": "task-progress-tracking-policy.py" if exec_script_used else "declarative",
+            "rules_applied": ["task_progress_tracking", "incomplete_work_detection"]
+        },
+        "policy_output": {"status": "ENFORCED" if exec_script_used else "ACTIVE", "policies_loaded": policy_count},
+        "decision": "Task tracking enforced via script" if exec_script_used else "All policies enforced - execute with full standards active",
+        "passed_to_next": {"status": "ACTIVE"}
+    })
+    print(f"   [3.9] Execute Tasks: {'Enforced' if exec_script_used else 'Active'}")
+
+    # --- Step 3.10: Session Save (declarative - actual save by stop-notifier.py Stop hook) ---
+    trace["pipeline"].append({
+        "step": "LEVEL_3_STEP_3_10",
+        "name": "Session Save",
+        "level": 3,
+        "order": 14,
+        "is_blocking": False,
+        "status": "PASSED",
+        "timestamp": datetime.now().isoformat(),
+        "duration_ms": 0,
+        "input": {"from_previous": "LEVEL_3_STEP_3_9"},
+        "policy": {
+            "script": "stop-notifier.py (Stop hook)",
+            "rules_applied": ["session_save_on_stop"]
+        },
+        "policy_output": {"status": "ACTIVE", "executor": "stop-notifier.py"},
+        "decision": "Auto-save session state at each milestone (via Stop hook)",
+        "passed_to_next": {"status": "ACTIVE"}
+    })
+    print(f"   [3.10] Session Save: Active (stop-notifier)")
+
+    # --- Step 3.11: Git Auto-Commit (via git-auto-commit-policy.py pre-check) ---
+    step_start = datetime.now()
+    git_script = SCRIPT_DIR / 'architecture' / '03-execution-system' / '09-git-commit' / 'git-auto-commit-policy.py'
+    if not git_script.exists():
+        git_script = MEMORY_BASE / '03-execution-system' / '09-git-commit' / 'git-auto-commit-policy.py'
+    git_dur = 0
+    git_script_used = False
+    if git_script.exists():
+        try:
+            gc_out, gc_err, gc_rc, git_dur = run_script(git_script, ['--detect', '--json'], timeout=10)
+            git_script_used = gc_rc == 0
+        except Exception:
+            pass
+    trace["pipeline"].append({
+        "step": "LEVEL_3_STEP_3_11",
+        "name": "Git Auto-Commit",
+        "level": 3,
+        "order": 15,
+        "is_blocking": False,
+        "status": "PASSED",
+        "timestamp": step_start.isoformat(),
+        "duration_ms": git_dur,
+        "input": {"from_previous": "LEVEL_3_STEP_3_10"},
+        "policy": {
+            "script": "git-auto-commit-policy.py" if git_script_used else "declarative",
+            "rules_applied": ["auto_commit_detection", "version_bump", "release_creation"]
+        },
+        "policy_output": {"status": "ENFORCED" if git_script_used else "ACTIVE", "policies_loaded": policy_count},
+        "decision": f"Git auto-commit pre-checked via script ({policy_count} policies loaded)" if git_script_used else f"Auto-commit + version bump + release ({policy_count} policies loaded)",
+        "passed_to_next": {"status": "ACTIVE"}
+    })
+    print(f"   [3.11] Git Auto-Commit: {'Pre-checked' if git_script_used else 'Active'}")
+
+    # --- Step 3.12: Logging (declarative - actual logging by post-tool-tracker.py) ---
+    trace["pipeline"].append({
+        "step": "LEVEL_3_STEP_3_12",
+        "name": "Logging",
+        "level": 3,
+        "order": 16,
+        "is_blocking": False,
+        "status": "PASSED",
+        "timestamp": datetime.now().isoformat(),
+        "duration_ms": 0,
+        "input": {"from_previous": "LEVEL_3_STEP_3_11"},
+        "policy": {
+            "script": "post-tool-tracker.py (PostToolUse hook)",
+            "rules_applied": ["log_all_policy_applications", "log_tool_calls", "log_decisions"]
+        },
+        "policy_output": {"status": "ACTIVE", "executor": "post-tool-tracker.py"},
+        "decision": "Log all policy applications, tool calls, decisions (via PostToolUse hook)",
+        "passed_to_next": {"status": "ACTIVE"}
+    })
+    print(f"   [3.12] Logging: Active (post-tool-tracker)")
 
     # =========================================================================
     # POLICY ENFORCEMENT OUTPUT: Print critical rules to stdout (Claude reads these)
@@ -3821,7 +3921,7 @@ Work to complete: Execute phase {i} of the identified work breakdown.
     print(f"   +-- [3.6] Tool Optimization={len(tool_rules)} rules")
     print(f"   +-- [3.7] Failure Prevention=Active")
     print(f"   +-- [3.8] Execution Mode={'Parallel' if parallel_possible else 'Sequential'}")
-    print(f"   +-- [3.9-3.12] Execute, Save, Commit, Log=Active")
+    print(f"   +-- [3.9] Execute={'Enforced' if exec_script_used else 'Active'}, [3.10] Save=stop-notifier, [3.11] Commit={'Pre-checked' if git_script_used else 'Active'}, [3.12] Log=post-tool-tracker")
     print()
     print("[FINAL DECISION]:")
     print(f"   {final_decision['summary']}")

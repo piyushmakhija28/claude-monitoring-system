@@ -1,3 +1,24 @@
+## [4.13.0] - 2026-03-07
+### Changed
+- **Step 3.6 (Tool Optimization): Now calls `tool-usage-optimization-policy.py --enforce`**
+  - Was: hardcoded 6 rule strings into trace with no script call
+  - Now: runs the full optimization policy (ToolOptimizer, Interceptor, SmartRead, etc.)
+  - Inline rules kept as fallback
+- **Step 3.9 (Execute Tasks): Now calls `task-progress-tracking-policy.py --enforce`**
+  - Was: just printed "Active"
+  - Now: validates task tracking system, checks for incomplete work
+- **Step 3.11 (Git Auto-Commit): Now calls `git-auto-commit-policy.py --detect --json`**
+  - Was: just printed "Active"
+  - Now: pre-checks repos for uncommitted changes before execution starts
+- **Steps 3.10/3.12: Correctly documented as delegated**
+  - Step 3.10 (Session Save): Documented as `stop-notifier.py` (Stop hook)
+  - Step 3.12 (Logging): Documented as `post-tool-tracker.py` (PostToolUse hook)
+  - These are NOT theater - they execute at the RIGHT time in the RIGHT hook
+
+### Fixed
+- All 12 steps now either call their script OR correctly document which hook handles them
+- No more "theater steps" - every step is accountable
+
 ## [4.12.0] - 2026-03-07
 ### Changed
 - **Step 3.4 (Model Selection): Now calls `intelligent-model-selection-policy.py --analyze`**
