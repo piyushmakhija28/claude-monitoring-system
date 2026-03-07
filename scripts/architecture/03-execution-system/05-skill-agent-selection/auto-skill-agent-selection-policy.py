@@ -232,20 +232,15 @@ class AutoSkillAgentSelector:
                 'agent': None,
                 'agent_threshold': 999
             },
-            'python': {
-                'skill': None,
-                'agent': None,
-                'agent_threshold': 999
-            },
             'flask': {
-                'skill': None,
-                'agent': None,
-                'agent_threshold': 999
+                'skill': 'python-system-scripting',
+                'agent': 'python-backend-engineer',
+                'agent_threshold': 10
             },
             'django': {
-                'skill': None,
-                'agent': None,
-                'agent_threshold': 999
+                'skill': 'python-system-scripting',
+                'agent': 'python-backend-engineer',
+                'agent_threshold': 10
             },
             'docker': {
                 'skill': 'docker',

@@ -511,37 +511,68 @@ def _get_changed_files(repo_root):
 
 
 def _get_file_skill(file_path, tech_stack=None):
-    """Determine which skill should review this file."""
-    file_lower = file_path.lower()
+    """Determine which skill should review this file.
 
-    # File extension mapping to skill
-    skill_map = {
+    Uses a 2-layer approach:
+    1. Exact filename match (dockerfile, pom.xml, etc.)
+    2. File extension match with tech_stack context for disambiguation
+    """
+    file_lower = file_path.lower()
+    file_name = Path(file_path).name.lower()
+    tech_set = set(t.lower() for t in (tech_stack or []))
+
+    # Exact filename matches (highest priority)
+    filename_map = {
+        'dockerfile': 'docker',
+        'docker-compose.yml': 'docker',
+        'docker-compose.yaml': 'docker',
+        'pom.xml': 'java-spring-boot-microservices',
+        'build.gradle': 'java-spring-boot-microservices',
+        'package.json': 'angular-engineer',
+        'jenkinsfile': 'jenkins-pipeline',
+    }
+    if file_name in filename_map:
+        return filename_map[file_name]
+
+    # Extension-based mapping (with tech_stack disambiguation)
+    ext = Path(file_path).suffix.lower()
+
+    ext_map = {
         '.java': 'java-spring-boot-microservices',
+        '.kt': 'java-spring-boot-microservices',
         '.ts': 'angular-engineer',
-        '.tsx': 'ui-ux-designer',
+        '.tsx': 'angular-engineer',
+        '.jsx': 'angular-engineer',
         '.html': 'ui-ux-designer',
         '.scss': 'css-core',
         '.css': 'css-core',
-        '.py': 'python-backend-engineer',
+        '.py': 'python-system-scripting',
         '.sql': 'rdbms-core',
         '.yaml': 'docker',
         '.yml': 'docker',
-        'dockerfile': 'docker',
-        'pom.xml': 'java-spring-boot-microservices',
-        'package.json': 'angular-engineer',
+        '.json': 'adaptive-skill-intelligence',
+        '.xml': 'java-spring-boot-microservices',
+        '.gradle': 'java-spring-boot-microservices',
     }
 
-    # Check for exact filename matches
-    file_name = Path(file_path).name.lower()
-    if file_name in skill_map:
-        return skill_map[file_name]
+    skill = ext_map.get(ext)
+    if not skill:
+        return 'adaptive-skill-intelligence'
 
-    # Check for extensions
-    for ext, skill in skill_map.items():
-        if file_lower.endswith(ext):
-            return skill
+    # Tech-stack context: refine generic mappings when project context available
+    if ext == '.py' and tech_set:
+        if 'flask' in tech_set or 'django' in tech_set or 'fastapi' in tech_set:
+            return 'python-system-scripting'
+    if ext in ('.ts', '.tsx', '.jsx') and tech_set:
+        if 'react' in tech_set:
+            return 'ui-ux-designer'
+        if 'angular' in tech_set:
+            return 'angular-engineer'
+    if ext == '.kt' and tech_set:
+        if 'android' in tech_set:
+            return 'java-spring-boot-microservices'
 
-    return 'adaptive-skill-intelligence'
+    return skill
 
 
 def _smart_code_review(repo_root, pr_number, session_summary, flow_trace):
