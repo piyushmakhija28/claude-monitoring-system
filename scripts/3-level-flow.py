@@ -68,7 +68,7 @@ if sys.platform == 'win32':
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
-VERSION = "4.1.0"  # v4.1.0: PID mismatch fix - session-only flag isolation
+VERSION = "4.2.0"  # v4.2.0: Wire Steps 3.4/3.5/3.8 to actual architecture scripts
 SCRIPT_NAME = "3-level-flow.py"
 
 # Flag auto-expiry configuration (Loophole #10)
@@ -3008,26 +3008,56 @@ Work to complete: Execute phase {i} of the identified work breakdown.
         pass
 
     # ------------------------------------------------------------------
-    # STEP 3.4: MODEL SELECTION
+    # STEP 3.4: MODEL SELECTION (via intelligent-model-selection-policy.py)
     # ------------------------------------------------------------------
     step_start = datetime.now()
-    # Model Selection: Opus 4.6 "The Strategist" | Sonnet 4.6 "The Workhorse" | Haiku 4.5 "The Executor"
-    # Pricing: Opus $5/$25, Sonnet $3/$15, Haiku $1/$5 per MTok
-    if adj_complexity < 5:
-        selected_model = 'HAIKU'
-        model_reason = "Simple task (<5) - Haiku 4.5 'The Executor' (fastest, $1/$5 MTok)"
-    elif adj_complexity < 10:
-        selected_model = 'HAIKU/SONNET'
-        model_reason = "Moderate task (5-9) - Haiku or Sonnet based on type"
-    elif adj_complexity < 20:
-        selected_model = 'SONNET'
-        model_reason = "Complex task (10-19) - Sonnet 4.6 'The Workhorse' ($3/$15 MTok)"
-    else:
-        selected_model = 'OPUS'
-        model_reason = "Very complex (>=20) - Opus 4.6 'The Strategist' ($5/$25 MTok)"
+    model_script = SCRIPT_DIR / 'architecture' / '03-execution-system' / '04-model-selection' / 'intelligent-model-selection-policy.py'
+    if not model_script.exists():
+        model_script = MEMORY_BASE / '03-execution-system' / '04-model-selection' / 'intelligent-model-selection-policy.py'
 
-    # Override rules
+    selected_model = None
+    model_reason = ''
     model_overrides = []
+    model_script_used = False
+
+    if model_script.exists():
+        try:
+            ms_out, ms_err, ms_rc, ms_dur = run_script(model_script, ['--analyze', user_message], timeout=8)
+            if ms_rc == 0 and ms_out.strip():
+                # Parse JSON — script may output only JSON or JSON after text
+                try:
+                    ms_json = json.loads(ms_out.strip())
+                except json.JSONDecodeError:
+                    ms_json = None
+                    last_brace = ms_out.rfind('\n{')
+                    if last_brace >= 0:
+                        ms_json = json.loads(ms_out[last_brace + 1:])
+                raw_model = ms_json.get('recommended_model', '').upper() if ms_json else ''
+                ms_reasoning = ms_json.get('reasoning', '') if ms_json else ''
+                ms_confidence = ms_json.get('confidence', 0) if ms_json else 0
+                if raw_model in ('HAIKU', 'SONNET', 'OPUS'):
+                    selected_model = raw_model
+                    model_reason = f"[Script] {ms_reasoning} (confidence={ms_confidence})"
+                    model_script_used = True
+        except (json.JSONDecodeError, Exception):
+            pass
+
+    # Fallback: inline logic if script failed or not found
+    if not selected_model:
+        if adj_complexity < 5:
+            selected_model = 'HAIKU'
+            model_reason = "Simple task (<5) - Haiku 4.5 'The Executor' (fastest, $1/$5 MTok)"
+        elif adj_complexity < 10:
+            selected_model = 'HAIKU/SONNET'
+            model_reason = "Moderate task (5-9) - Haiku or Sonnet based on type"
+        elif adj_complexity < 20:
+            selected_model = 'SONNET'
+            model_reason = "Complex task (10-19) - Sonnet 4.6 'The Workhorse' ($3/$15 MTok)"
+        else:
+            selected_model = 'OPUS'
+            model_reason = "Very complex (>=20) - Opus 4.6 'The Strategist' ($5/$25 MTok)"
+
+    # Override rules (always applied, even on script results)
     if plan_required:
         selected_model = 'OPUS'
         model_reason = "Plan mode active - Opus 4.6 'The Strategist' mandatory"
@@ -3055,7 +3085,7 @@ Work to complete: Execute phase {i} of the identified work breakdown.
             "purpose": "Select optimal Claude model for this task"
         },
         "policy": {
-            "script": "model-auto-selector.py (inline logic)",
+            "script": "intelligent-model-selection-policy.py" if model_script_used else "inline fallback",
             "rules_applied": [
                 "complexity_0_4_haiku",
                 "complexity_5_9_haiku_or_sonnet",
@@ -3091,24 +3121,77 @@ Work to complete: Execute phase {i} of the identified work breakdown.
         pass
 
     # ------------------------------------------------------------------
-    # STEP 3.5: SKILL/AGENT SELECTION
+    # STEP 3.5: SKILL/AGENT SELECTION (via auto-skill-agent-selection-policy.py)
     # ------------------------------------------------------------------
     step_start = datetime.now()
+    skill_script = SCRIPT_DIR / 'architecture' / '03-execution-system' / '05-skill-agent-selection' / 'auto-skill-agent-selection-policy.py'
+    if not skill_script.exists():
+        skill_script = MEMORY_BASE / '03-execution-system' / '05-skill-agent-selection' / 'auto-skill-agent-selection-policy.py'
 
-    # tech_stack already detected before Level 2 (reused here)
+    skill_agent_name = None
+    agent_type = None
+    supplementary_skills = []
+    skill_reason = ''
+    skill_script_used = False
 
-    # Step 2: 4-layer selection: task_type -> keyword score -> tech_stack -> adaptive
-    # Passes user_message for dynamic keyword analysis (Layer 2)
-    skill_agent_name, agent_type, supplementary_skills, skill_reason = get_agent_and_skills(
-        tech_stack, task_type=task_type, user_message=user_message
-    )
+    if skill_script.exists():
+        try:
+            import tempfile as _tempfile
+            task_ctx = {
+                'task_type': task_type,
+                'complexity': {'score': adj_complexity},
+                'prompt': {'text': user_message},
+                'tech_stack': tech_stack,
+                'task_count': task_count
+            }
+            with _tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False, encoding='utf-8') as tf:
+                json.dump(task_ctx, tf)
+                tf_path = tf.name
+            ss_out, ss_err, ss_rc, ss_dur = run_script(skill_script, ['--select', tf_path], timeout=10)
+            try:
+                os.unlink(tf_path)
+            except OSError:
+                pass
+            if ss_rc == 0 and ss_out.strip():
+                # Parse multi-line JSON block from end of stdout
+                ss_json = None
+                # Find the last top-level '{' that starts a JSON object
+                last_brace = ss_out.rfind('\n{')
+                if last_brace >= 0:
+                    try:
+                        ss_json = json.loads(ss_out[last_brace + 1:])
+                    except json.JSONDecodeError:
+                        pass
+                if ss_json is None and ss_out.strip().startswith('{'):
+                    try:
+                        ss_json = json.loads(ss_out.strip())
+                    except json.JSONDecodeError:
+                        pass
+                if ss_json:
+                    ss_skills = ss_json.get('skills', [])
+                    ss_agents = ss_json.get('agents', [])
+                    if ss_agents:
+                        skill_agent_name = ss_agents[0]
+                        agent_type = 'agent'
+                        supplementary_skills = ss_skills
+                        skill_reason = f"[Script] {'; '.join(ss_json.get('reasoning', []))}"
+                        skill_script_used = True
+                    elif ss_skills:
+                        skill_agent_name = ss_skills[0]
+                        agent_type = 'skill'
+                        supplementary_skills = ss_skills[1:]
+                        skill_reason = f"[Script] {'; '.join(ss_json.get('reasoning', []))}"
+                        skill_script_used = True
+        except (json.JSONDecodeError, Exception):
+            pass
 
-    # Step 3: Escalate to orchestrator for very high complexity / many tasks
-    # RULES:
-    #   - NEVER override L1-TaskType matches (trust explicit task-type->agent mapping)
-    #   - NEVER override adaptive-skill-intelligence (it handles its own logic)
-    #   - Only escalate when complexity >= 15 OR task_count > 8 (truly overloaded)
-    #   - orchestrator-agent is for MULTI-DOMAIN coordination, not just "many tasks"
+    # Fallback: inline 4-layer waterfall if script failed or returned nothing
+    if not skill_agent_name:
+        skill_agent_name, agent_type, supplementary_skills, skill_reason = get_agent_and_skills(
+            tech_stack, task_type=task_type, user_message=user_message
+        )
+
+    # Escalate to orchestrator for very high complexity / many tasks
     l1_matched = skill_reason.startswith('[L1-TaskType]')
     if (adj_complexity >= 15 or task_count > 8) and not l1_matched and skill_agent_name != 'adaptive-skill-intelligence':
         agent_type = 'agent'
@@ -3133,7 +3216,7 @@ Work to complete: Execute phase {i} of the identified work breakdown.
             "purpose": "Select skill or agent from registry for this task"
         },
         "policy": {
-            "script": "auto-skill-agent-selector.py (inline logic)",
+            "script": "auto-skill-agent-selection-policy.py" if skill_script_used else "inline 4-layer waterfall",
             "rules_applied": [
                 "task_type_registry_checked_FIRST",
                 "ui_ux_task_type_maps_to_ui_ux_designer_agent",
@@ -3348,9 +3431,39 @@ Work to complete: Execute phase {i} of the identified work breakdown.
     print(f"   [3.7] Failure Prevention: Checked")
 
     # ------------------------------------------------------------------
-    # STEP 3.8: PARALLEL EXECUTION ANALYSIS
+    # STEP 3.8: PARALLEL EXECUTION ANALYSIS (via parallel-execution-policy.py)
     # ------------------------------------------------------------------
-    parallel_possible = task_count >= 3
+    par_script = SCRIPT_DIR / 'architecture' / '03-execution-system' / 'parallel-execution-policy.py'
+    if not par_script.exists():
+        par_script = MEMORY_BASE / '03-execution-system' / 'parallel-execution-policy.py'
+
+    parallel_possible = task_count >= 3  # inline fallback default
+    par_script_used = False
+    par_execution_mode = 'sequential'
+    par_reason = "3+ independent tasks" if parallel_possible else "Tasks have dependencies or count < 3"
+
+    if par_script.exists():
+        try:
+            pe_out, pe_err, pe_rc, pe_dur = run_script(par_script, ['--enforce'], timeout=8)
+            if pe_rc == 0:
+                parallel_possible = True
+                par_execution_mode = 'parallel'
+                par_reason = pe_out.strip() if pe_out.strip() else "Policy enforced - parallel safe"
+                par_script_used = True
+            else:
+                parallel_possible = False
+                par_execution_mode = 'sequential'
+                par_reason = pe_out.strip() if pe_out.strip() else "Policy enforced - sequential required"
+                par_script_used = True
+        except Exception:
+            pass
+
+    # Override: if task_count < 3, parallel never makes sense regardless of script
+    if task_count < 3:
+        parallel_possible = False
+        par_execution_mode = 'sequential'
+        if not par_script_used:
+            par_reason = "Tasks have dependencies or count < 3"
 
     trace["pipeline"].append({
         "step": "LEVEL_3_STEP_3_8",
@@ -3360,29 +3473,31 @@ Work to complete: Execute phase {i} of the identified work breakdown.
         "is_blocking": False,
         "status": "PASSED",
         "timestamp": datetime.now().isoformat(),
-        "duration_ms": dur,
+        "duration_ms": pe_dur if par_script_used else 0,
         "input": {
             "from_previous": "LEVEL_3_STEP_3_7",
             "task_count": task_count,
             "purpose": "Detect which tasks can run in parallel for 3-10x speedup"
         },
         "policy": {
-            "script": "auto-parallel-detector.py (inline logic)",
+            "script": "parallel-execution-policy.py" if par_script_used else "inline fallback",
             "rules_applied": [
                 "check_tasks_with_no_blockedBy_dependencies",
                 "group_tasks_by_dependency_wave",
                 "calculate_speedup_estimate",
-                "3_or_more_independent_use_parallel"
+                "3_or_more_independent_use_parallel",
+                "token_limit_awareness" if par_script_used else "simple_count_check"
             ]
         },
         "policy_output": {
             "parallel_possible": parallel_possible,
             "task_count": task_count,
-            "reason": "3+ independent tasks" if parallel_possible else "Tasks have dependencies or count < 3"
+            "execution_mode": par_execution_mode,
+            "reason": par_reason
         },
         "decision": "Use parallel execution" if parallel_possible else "Use sequential execution",
         "passed_to_next": {
-            "execution_mode": "parallel" if parallel_possible else "sequential",
+            "execution_mode": par_execution_mode,
             "parallel_possible": parallel_possible
         }
     })
@@ -3920,10 +4035,11 @@ def _build_script_inventory():
         {"name": "failure-detector.py", "path": "03-execution-system/failure-prevention/", "hook": "stop-notifier.py", "status": "EXECUTED", "desc": "Analyzes failure patterns from logs"},
     ]
 
-    # --- 3 INLINE SCRIPTS (Logic inside hook code) ---
+    # --- 1 INLINE SCRIPT (Logic inside hook code) + 2 NOW WIRED ---
     inventory["active_scripts"].extend([
-        {"name": "model-auto-selector.py", "path": "03-execution-system/04-model-selection/", "hook": "3-level-flow.py 3.4 INLINE", "status": "INLINE", "desc": "Logic implemented inline in 3-level-flow.py"},
-        {"name": "auto-skill-agent-selector.py", "path": "03-execution-system/05-skill-agent-selection/", "hook": "3-level-flow.py 3.5 INLINE", "status": "INLINE", "desc": "Logic implemented inline in 3-level-flow.py"},
+        {"name": "intelligent-model-selection-policy.py", "path": "03-execution-system/04-model-selection/", "hook": "3-level-flow.py 3.4", "status": "CALLED", "desc": "Script called via run_script(), inline fallback if fails"},
+        {"name": "auto-skill-agent-selection-policy.py", "path": "03-execution-system/05-skill-agent-selection/", "hook": "3-level-flow.py 3.5", "status": "CALLED", "desc": "Script called via run_script(), inline 4-layer waterfall as fallback"},
+        {"name": "parallel-execution-policy.py", "path": "03-execution-system/", "hook": "3-level-flow.py 3.8", "status": "CALLED", "desc": "Script called via run_script(), inline count check as fallback"},
         {"name": "windows-python-unicode-checker.py", "path": "03-execution-system/failure-prevention/", "hook": "pre-tool-enforcer.py L3.7 INLINE", "status": "INLINE", "desc": "Logic implemented inline in pre-tool-enforcer.py"},
     ])
 

@@ -1,3 +1,23 @@
+## [4.12.0] - 2026-03-07
+### Changed
+- **Step 3.4 (Model Selection): Now calls `intelligent-model-selection-policy.py --analyze`**
+  - Script returns JSON with `recommended_model`, `reasoning`, `confidence`
+  - Inline if/elif complexity logic kept as fallback if script fails
+  - Override rules (plan_mode_forces_opus, security_task_minimum_sonnet) always applied on top
+- **Step 3.5 (Skill/Agent Selection): Now calls `auto-skill-agent-selection-policy.py --select`**
+  - Writes task context (task_type, complexity, prompt, tech_stack) to temp JSON file
+  - Script returns JSON with `skills`, `agents`, `reasoning`, `execution_plan`
+  - Inline 4-layer waterfall (`get_agent_and_skills()`) kept as fallback
+  - Orchestrator escalation logic still applied on top of script results
+- **Step 3.8 (Parallel Execution): Now calls `parallel-execution-policy.py --enforce`**
+  - Script checks token limits, plan type, and returns exit 0 (parallel safe) or exit 1 (sequential)
+  - Inline `task_count >= 3` check kept as override (parallel never if < 3 tasks)
+  - Token limit awareness now part of parallel decision
+
+### Fixed
+- Script inventory registry updated: 3 scripts changed from INLINE to CALLED status
+- Multi-line JSON parsing for script stdout (handles print statements before JSON block)
+
 ## [4.11.0] - 2026-03-07
 ### Added
 - **Per-project session isolation for multi-window support**
