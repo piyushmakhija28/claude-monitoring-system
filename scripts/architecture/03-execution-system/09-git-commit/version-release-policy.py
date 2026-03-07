@@ -1,34 +1,42 @@
 #!/usr/bin/env python3
 """
-Version Release Policy Enforcement (v2.0)
+Version Release Policy Enforcement (v5.0) - LLM-Powered Documentation Generation
 
 Maps to: policies/03-execution-system/09-git-commit/version-release-policy.md
 
 This module enforces the version release policy for the Claude Memory System.
 It ensures that version numbers are bumped according to semantic versioning
-(SemVer) principles before releases, that VERSION files are updated consistently
-across all relevant locations, and that release commits follow the required
-format.
+(SemVer) principles, that VERSION files are updated consistently, and that
+release documentation (README.md, SRS) is comprehensively updated using
+LLM-powered content generation via OpenRouter free models.
 
-NEW in v3.0: Auto-updates VERSION, CHANGELOG.md, SYSTEM_REQUIREMENTS_SPECIFICATION.md, and README.md!
+NEW in v5.0: LLM-Powered Documentation!
+  - Uses OpenRouter free models (llama-3.3-70b, qwen3-coder, mistral-small)
+  - Generic project scanner (no hardcoded paths, works for ANY project)
+  - JSON template approach: LLM fills structured template -> renders to markdown
+  - Two modes: CREATE (new doc from scratch) vs UPDATE (fill gaps in existing)
+  - Automatic fallback: if LLM fails, uses regex-based version/date updates
+  - IEEE 830 / ISO 29148 compliant SRS generation
 
 Policy rules enforced:
   - Version numbers follow SemVer: MAJOR.MINOR.PATCH
-  - Version bumps must be committed before tagging a release
   - VERSION file in the repository root is the authoritative version source
   - Release commit message format: 'bump: vX.Y.Z -> vX.Y.Z+1'
   - CHANGELOG.md must be updated with each version bump
-  - SYSTEM_REQUIREMENTS_SPECIFICATION.md must be updated (Document Version + Last Updated)
-  - README.md must be updated (title, version badge, Latest Version header)
+  - SYSTEM_REQUIREMENTS_SPECIFICATION.md comprehensively updated via LLM
+  - README.md comprehensively updated via LLM
 
 Key Functions:
   enforce(): Activate version release policy and perform version bump.
   validate(): Check git state and compliance.
   report(): Generate a summary report of the policy state.
-  bump_version(): Increment version and update all documentation files.
-  update_changelog(): Add entry to CHANGELOG.md (create if not exists).
-  update_srs(): Update SYSTEM_REQUIREMENTS_SPECIFICATION.md metadata.
-  update_readme(): Update README.md version references (title, badge, header).
+  scan_project(): Generic project scanner (works for ANY project).
+  call_llm(): Call OpenRouter free models with fallback chain.
+  generate_readme_content(): LLM-powered README content generation.
+  generate_srs_content(): LLM-powered SRS content generation.
+  render_readme(): Convert JSON template to markdown README.
+  render_srs(): Convert JSON template to markdown SRS.
+  bump_version(): Increment version, scan project, generate docs, update all.
   log_action(): Append enforcement events to the policy-hits log.
 
 CLI Usage:
@@ -36,14 +44,21 @@ CLI Usage:
   python version-release-policy.py --validate  # Validate policy compliance
   python version-release-policy.py --report    # Generate policy report
   python version-release-policy.py --bump      # Bump version + update docs
+  python version-release-policy.py --scan      # Scan project and print stats
 """
 
 import sys
 import io
 import json
 import re
+import subprocess
 from pathlib import Path
 from datetime import datetime
+
+try:
+    import urllib.request as urllib_request
+except ImportError:
+    urllib_request = None
 
 # ===================================================================
 # POLICY TRACKING INTEGRATION
@@ -59,19 +74,136 @@ if sys.platform == 'win32':
     try:
         sys.stdout.reconfigure(encoding='utf-8', errors='replace')
         sys.stderr.reconfigure(encoding='utf-8', errors='replace')
-    except:
+    except Exception:
         pass
+
+# ===================================================================
+# CONSTANTS
+# ===================================================================
 
 LOG_FILE = Path.home() / ".claude" / "memory" / "logs" / "policy-hits.log"
 
+# OpenRouter LLM Configuration
+OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+LLM_MODELS = [
+    "meta-llama/llama-3.3-70b-instruct:free",
+    "qwen/qwen3-coder:free",
+    "mistralai/mistral-small-3.1-24b-instruct:free",
+]
+LLM_TIMEOUT = 60
+DOC_MAX_TOKENS = 4096
+
+# API Key File
+try:
+    _search = Path(__file__).resolve().parent
+    while _search != _search.parent:
+        if (_search / 'ide_paths.py').exists():
+            sys.path.insert(0, str(_search))
+            break
+        _search = _search.parent
+    from ide_paths import CONFIG_DIR
+    API_KEY_FILE = CONFIG_DIR / 'openrouter-api-key'
+except ImportError:
+    API_KEY_FILE = Path.home() / '.claude' / 'config' / 'openrouter-api-key'
+
+# Directories to skip during project scanning
+SKIP_DIRS = {
+    '.git', 'node_modules', '__pycache__', '.venv', 'venv', '.env',
+    'dist', 'build', '.idea', '.vscode', '.claude', '.tox', '.mypy_cache',
+    '.pytest_cache', 'egg-info', '.eggs', 'target', 'out', 'bin', 'obj',
+}
+
+# Code file extensions for line counting
+CODE_EXTENSIONS = {
+    '.py', '.java', '.js', '.ts', '.jsx', '.tsx', '.go', '.rs', '.rb',
+    '.php', '.c', '.cpp', '.h', '.cs', '.swift', '.kt', '.scala',
+    '.sh', '.bash', '.ps1', '.r', '.m', '.lua', '.pl', '.ex', '.exs',
+}
+
+# ===================================================================
+# LLM SYSTEM PROMPTS
+# ===================================================================
+
+README_SYSTEM_PROMPT = (
+    "You are an expert technical writer creating enterprise-grade README.md content. "
+    "You will receive project statistics and optionally existing content. "
+    "Return ONLY a valid JSON object (no markdown, no explanation, no code fences). "
+    "ALL values must be strings or arrays. Use plain text, not markdown inside values. "
+    "Be accurate - use the provided statistics exactly. Do not invent numbers. "
+    "Be professional and comprehensive.\n\n"
+    "Required JSON structure:\n"
+    "{\n"
+    '  "project_name": "string",\n'
+    '  "tagline": "one-line description of the project",\n'
+    '  "overview": "2-3 paragraphs about what the project does and why it exists",\n'
+    '  "key_features": ["feature 1", "feature 2", ...],\n'
+    '  "architecture_overview": "description of system architecture and components",\n'
+    '  "components": [{"name": "str", "description": "str", "path": "str", "file_count": 0}],\n'
+    '  "prerequisites": ["Python 3.8+", ...],\n'
+    '  "installation_steps": ["step 1", "step 2", ...],\n'
+    '  "quick_start": "command to get started",\n'
+    '  "usage_commands": [{"command": "str", "description": "str"}],\n'
+    '  "project_structure_tree": "directory tree as plain text",\n'
+    '  "configuration_options": [{"name": "str", "description": "str", "default": "str"}],\n'
+    '  "testing_info": {"how_to_run": "str", "framework": "str"},\n'
+    '  "contributing_guidelines": "short contributing guide",\n'
+    '  "recent_changes_summary": "summary of recent changes from git log",\n'
+    '  "license_type": "MIT or similar"\n'
+    "}\n\n"
+    "RULES:\n"
+    "- Use the exact statistics provided. Never fabricate numbers.\n"
+    "- If existing content is provided (UPDATE mode), preserve important custom info.\n"
+    "- Return ONLY valid JSON. No markdown wrapping, no comments."
+)
+
+SRS_SYSTEM_PROMPT = (
+    "You are an expert technical writer creating an enterprise-grade System Requirements "
+    "Specification (SRS) document following IEEE 830 / ISO 29148 standards. "
+    "You will receive project statistics and optionally existing content. "
+    "Return ONLY a valid JSON object (no markdown, no explanation, no code fences). "
+    "ALL values must be strings or arrays. Use plain text inside values. "
+    "Be accurate with statistics. Be thorough and professional.\n\n"
+    "Required JSON structure:\n"
+    "{\n"
+    '  "document_title": "string",\n'
+    '  "executive_summary": "2-3 paragraphs summarizing the system",\n'
+    '  "key_statistics": [{"label": "str", "value": "str"}],\n'
+    '  "purpose": "why this system exists (1 paragraph)",\n'
+    '  "scope": "what the system covers (1 paragraph)",\n'
+    '  "definitions": [{"term": "str", "definition": "str"}],\n'
+    '  "product_perspective": "how this fits in the larger ecosystem",\n'
+    '  "product_functions": ["main function 1", "main function 2"],\n'
+    '  "user_characteristics": "who uses this system",\n'
+    '  "constraints": ["constraint 1", "constraint 2"],\n'
+    '  "assumptions": ["assumption 1", "assumption 2"],\n'
+    '  "architecture_overview": "detailed architecture description",\n'
+    '  "components": [\n'
+    '    {"name": "str", "description": "str", "responsibilities": ["str"], "file_count": 0}\n'
+    '  ],\n'
+    '  "functional_requirements": [\n'
+    '    {"id": "FR-001", "title": "str", "description": "str", "priority": "High/Medium/Low"}\n'
+    '  ],\n'
+    '  "non_functional_requirements": [\n'
+    '    {"id": "NFR-001", "category": "Performance/Security/etc", "title": "str", "description": "str"}\n'
+    '  ],\n'
+    '  "testing_strategy": "test approach description",\n'
+    '  "deployment_info": "deployment procedure",\n'
+    '  "conclusion": "summary paragraph"\n'
+    "}\n\n"
+    "RULES:\n"
+    "- Follow IEEE 830 structure strictly.\n"
+    "- Use exact statistics provided. Never fabricate numbers.\n"
+    "- If existing content is provided (UPDATE mode), preserve custom info.\n"
+    "- Return ONLY valid JSON. No markdown wrapping, no comments."
+)
+
+
+# ===================================================================
+# LOGGING
+# ===================================================================
 
 def log_action(action, context=""):
-    """Append a timestamped entry to the policy-hits log.
-
-    Args:
-        action (str): The action identifier (e.g., 'ENFORCE_START', 'VERSION_BUMPED').
-        context (str): Optional human-readable context or detail string.
-    """
+    """Append a timestamped entry to the policy-hits log."""
     timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     log_entry = f"[{timestamp}] version-release-policy | {action} | {context}\n"
     LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -79,12 +211,12 @@ def log_action(action, context=""):
         f.write(log_entry)
 
 
-def get_project_root():
-    """Find the project root directory (where VERSION file should be).
+# ===================================================================
+# CORE VERSION FUNCTIONS
+# ===================================================================
 
-    Returns:
-        Path: Path to project root, or current directory if not found.
-    """
+def get_project_root():
+    """Find the project root directory (where VERSION file should be)."""
     current = Path(__file__).resolve()
     while current != current.parent:
         if (current / "VERSION").exists() or (current / ".git").exists():
@@ -94,11 +226,7 @@ def get_project_root():
 
 
 def read_version():
-    """Read current version from VERSION file.
-
-    Returns:
-        str: Version string (e.g., '5.0.1') or '0.0.1' if file not found.
-    """
+    """Read current version from VERSION file."""
     version_file = get_project_root() / "VERSION"
     if version_file.exists():
         return version_file.read_text(encoding='utf-8').strip()
@@ -106,14 +234,7 @@ def read_version():
 
 
 def parse_version(version_str):
-    """Parse version string into (major, minor, patch).
-
-    Args:
-        version_str (str): Version string like '5.0.1'
-
-    Returns:
-        tuple: (major, minor, patch) as integers
-    """
+    """Parse version string into (major, minor, patch)."""
     parts = version_str.split('.')
     try:
         return int(parts[0]), int(parts[1]), int(parts[2])
@@ -122,65 +243,758 @@ def parse_version(version_str):
 
 
 def bump_patch_version(current_version):
-    """Bump the patch version.
-
-    Args:
-        current_version (str): Current version like '5.0.1'
-
-    Returns:
-        str: New version like '5.0.2'
-    """
+    """Bump the patch version."""
     major, minor, patch = parse_version(current_version)
     return f"{major}.{minor}.{patch + 1}"
 
 
 def write_version(new_version):
-    """Write new version to VERSION file.
-
-    Args:
-        new_version (str): New version string
-
-    Returns:
-        bool: True if successful
-    """
+    """Write new version to VERSION file."""
     try:
         version_file = get_project_root() / "VERSION"
+        old_version = (version_file.read_text(encoding='utf-8').strip()
+                       if version_file.exists() else "unknown")
         version_file.write_text(new_version, encoding='utf-8')
-        log_action("VERSION_BUMPED", f"{read_version()} -> {new_version}")
+        log_action("VERSION_BUMPED", f"{old_version} -> {new_version}")
         return True
     except Exception as e:
         log_action("VERSION_WRITE_ERROR", str(e))
         return False
 
 
-def update_changelog(new_version):
-    """Update CHANGELOG.md with new version entry.
+# ===================================================================
+# LLM INTEGRATION (OpenRouter Free Models)
+# ===================================================================
 
-    Creates file if not exists. Adds entry at top.
+def load_api_key():
+    """Load OpenRouter API key from config file."""
+    if not API_KEY_FILE.exists():
+        return None
+    try:
+        key = API_KEY_FILE.read_text(encoding='utf-8').strip()
+        if not key or len(key) < 10:
+            return None
+        return key
+    except Exception:
+        return None
 
-    Args:
-        new_version (str): New version string
 
-    Returns:
-        bool: True if successful
+def call_llm(system_prompt, user_prompt, max_tokens=None):
+    """Call OpenRouter LLM with model fallback chain.
+
+    Tries each model in LLM_MODELS until one succeeds and returns
+    valid JSON. Returns None if all models fail.
     """
+    if urllib_request is None:
+        log_action("LLM_SKIP", "urllib.request not available")
+        return None
+
+    api_key = load_api_key()
+    if not api_key:
+        log_action("LLM_SKIP", "No API key found")
+        return None
+
+    if max_tokens is None:
+        max_tokens = DOC_MAX_TOKENS
+
+    for attempt, model in enumerate(LLM_MODELS, 1):
+        try:
+            log_action("LLM_ATTEMPT", f"{attempt}/{len(LLM_MODELS)}: {model}")
+
+            payload = json.dumps({
+                "model": model,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                "max_tokens": max_tokens,
+                "temperature": 0.3,
+            }).encode('utf-8')
+
+            req = urllib_request.Request(
+                OPENROUTER_URL,
+                data=payload,
+                headers={
+                    'Content-Type': 'application/json',
+                    'Authorization': f'Bearer {api_key}',
+                    'HTTP-Referer': 'https://claude-insight.local',
+                    'X-Title': 'Claude Insight Doc Generator',
+                },
+                method='POST'
+            )
+
+            with urllib_request.urlopen(req, timeout=LLM_TIMEOUT) as resp:
+                result = json.loads(resp.read().decode('utf-8'))
+                content = (result.get('choices', [{}])[0]
+                           .get('message', {}).get('content', '').strip())
+
+                if not content:
+                    log_action("LLM_EMPTY", f"{model} returned empty response")
+                    continue
+
+                # Strip markdown code fences if LLM wrapped the JSON
+                if content.startswith('```'):
+                    fence_lines = content.split('\n')
+                    if fence_lines[0].startswith('```'):
+                        fence_lines = fence_lines[1:]
+                    if fence_lines and fence_lines[-1].strip() == '```':
+                        fence_lines = fence_lines[:-1]
+                    content = '\n'.join(fence_lines)
+
+                parsed = json.loads(content)
+                log_action("LLM_SUCCESS", f"{model} returned valid JSON")
+                return parsed
+
+        except json.JSONDecodeError as e:
+            log_action("LLM_JSON_ERROR", f"{model}: {str(e)[:80]}")
+            continue
+        except urllib_request.URLError as e:
+            log_action("LLM_URL_ERROR", f"{model}: {str(e)[:80]}")
+            continue
+        except Exception as e:
+            log_action("LLM_ERROR", f"{model} ({type(e).__name__}): {str(e)[:80]}")
+            continue
+
+    log_action("LLM_ALL_FAILED", "All models failed - using fallback")
+    return None
+
+
+def get_recent_git_changes(root):
+    """Get recent git commit messages for context."""
+    try:
+        result = subprocess.run(
+            ['git', 'log', '--oneline', '-20', '--no-decorate'],
+            capture_output=True, text=True, cwd=str(root), timeout=10
+        )
+        if result.returncode == 0:
+            return result.stdout.strip()
+    except Exception:
+        pass
+    return ""
+
+
+# ===================================================================
+# GENERIC PROJECT SCANNER (works for ANY project)
+# ===================================================================
+
+def scan_project():
+    """Scan the project directory and collect comprehensive statistics.
+
+    Fully generic - works for ANY project type without hardcoded paths.
+    Dynamically discovers directories, counts files by extension, detects
+    project type, and collects metadata.
+    """
+    root = get_project_root()
+    stats = {}
+
+    # 1. Count files by extension
+    file_counts = {}
+    total_lines = 0
+    total_files = 0
+
+    for f in root.rglob('*'):
+        if not f.is_file():
+            continue
+        if any(skip in f.parts for skip in SKIP_DIRS):
+            continue
+        total_files += 1
+        ext = f.suffix.lower()
+        if ext:
+            file_counts[ext] = file_counts.get(ext, 0) + 1
+        if ext in CODE_EXTENSIONS:
+            try:
+                total_lines += sum(1 for _ in f.open('r', encoding='utf-8', errors='replace'))
+            except Exception:
+                pass
+
+    stats['file_counts_by_extension'] = file_counts
+    stats['total_files'] = total_files
+    stats['total_lines'] = total_lines
+    stats['total_python'] = file_counts.get('.py', 0)
+    stats['total_java'] = file_counts.get('.java', 0)
+    stats['total_js'] = file_counts.get('.js', 0) + file_counts.get('.jsx', 0)
+    stats['total_ts'] = file_counts.get('.ts', 0) + file_counts.get('.tsx', 0)
+    stats['total_html'] = file_counts.get('.html', 0)
+    stats['total_css'] = file_counts.get('.css', 0)
+    stats['total_md'] = file_counts.get('.md', 0)
+    stats['total_yaml'] = file_counts.get('.yaml', 0) + file_counts.get('.yml', 0)
+    stats['total_shell'] = (file_counts.get('.sh', 0) + file_counts.get('.bash', 0)
+                            + file_counts.get('.ps1', 0))
+
+    # 2. Detect project type
+    indicators = []
+    if (root / 'pom.xml').exists():
+        indicators.append('Java (Maven)')
+    if (root / 'build.gradle').exists() or (root / 'build.gradle.kts').exists():
+        indicators.append('Java (Gradle)')
+    if (root / 'package.json').exists():
+        indicators.append('Node.js')
+    if (root / 'requirements.txt').exists() or (root / 'setup.py').exists():
+        indicators.append('Python (pip)')
+    if (root / 'pyproject.toml').exists():
+        indicators.append('Python (Poetry/PEP)')
+    if (root / 'Pipfile').exists():
+        indicators.append('Python (Pipenv)')
+    if (root / 'Cargo.toml').exists():
+        indicators.append('Rust')
+    if (root / 'go.mod').exists():
+        indicators.append('Go')
+    if (root / 'Gemfile').exists():
+        indicators.append('Ruby')
+    if (root / 'composer.json').exists():
+        indicators.append('PHP')
+    if (root / 'Dockerfile').exists() or (root / 'docker-compose.yml').exists():
+        indicators.append('Docker')
+    if (root / '.github').exists():
+        indicators.append('GitHub CI/CD')
+    if (root / 'Jenkinsfile').exists():
+        indicators.append('Jenkins CI/CD')
+    stats['project_type'] = indicators if indicators else ['Unknown']
+
+    lang_counts = [
+        ('Python', stats['total_python']),
+        ('Java', stats['total_java']),
+        ('JavaScript', stats['total_js']),
+        ('TypeScript', stats['total_ts']),
+    ]
+    lang_counts.sort(key=lambda x: x[1], reverse=True)
+    stats['primary_language'] = lang_counts[0][0] if lang_counts[0][1] > 0 else 'Unknown'
+
+    # 3. Discover directory structure (top-level)
+    dir_structure = {}
+    for d in sorted(root.iterdir()):
+        if d.is_dir() and d.name not in SKIP_DIRS and not d.name.startswith('.'):
+            count = sum(1 for f in d.rglob('*') if f.is_file()
+                        and not any(skip in f.parts for skip in SKIP_DIRS))
+            dir_structure[d.name] = count
+    stats['directory_structure'] = dir_structure
+
+    # 4. Count dependencies
+    deps_count = 0
+    deps_source = 'none'
+    if (root / 'requirements.txt').exists():
+        try:
+            lines = (root / 'requirements.txt').read_text(
+                encoding='utf-8', errors='replace').splitlines()
+            deps_count = len([l for l in lines
+                              if l.strip() and not l.startswith('#') and not l.startswith('-')])
+            deps_source = 'requirements.txt'
+        except Exception:
+            pass
+    elif (root / 'package.json').exists():
+        try:
+            pkg = json.loads((root / 'package.json').read_text(encoding='utf-8'))
+            deps_count = len(pkg.get('dependencies', {})) + len(pkg.get('devDependencies', {}))
+            deps_source = 'package.json'
+        except Exception:
+            pass
+    elif (root / 'pom.xml').exists():
+        try:
+            pom = (root / 'pom.xml').read_text(encoding='utf-8', errors='replace')
+            deps_count = pom.count('<dependency>')
+            deps_source = 'pom.xml'
+        except Exception:
+            pass
+    stats['dependency_count'] = deps_count
+    stats['deps_source'] = deps_source
+
+    # 5. Detect test files
+    test_count = 0
+    test_dirs_found = []
+    for test_dir_name in ['tests', 'test', 'spec', 'specs', '__tests__']:
+        td = root / test_dir_name
+        if td.exists() and td.is_dir():
+            count = sum(1 for f in td.rglob('*')
+                        if f.is_file() and f.suffix in CODE_EXTENSIONS)
+            test_count += count
+            test_dirs_found.append(test_dir_name)
+    src_test = root / 'src' / 'test'
+    if src_test.exists():
+        test_count += sum(1 for f in src_test.rglob('*')
+                          if f.is_file() and f.suffix in CODE_EXTENSIONS)
+        test_dirs_found.append('src/test')
+    stats['test_files'] = test_count
+    stats['test_dirs'] = test_dirs_found
+
+    # 6. Detect templates
+    template_count = 0
+    template_exts = {'.html', '.jinja2', '.j2', '.ejs', '.pug', '.hbs',
+                     '.mustache', '.ftl', '.vm', '.jsp', '.erb'}
+    for tpl_dir in ['templates', 'views', 'pages']:
+        td = root / tpl_dir
+        if td.exists():
+            template_count += sum(1 for f in td.rglob('*')
+                                  if f.is_file() and f.suffix in template_exts)
+    java_tpl = root / 'src' / 'main' / 'resources' / 'templates'
+    if java_tpl.exists():
+        template_count += sum(1 for f in java_tpl.rglob('*')
+                              if f.is_file() and f.suffix in template_exts)
+    stats['templates'] = template_count
+
+    # 7. Static assets
+    static_css = 0
+    static_js = 0
+    static_images = 0
+    image_exts = {'.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico', '.webp'}
+    for sd_name in ['static', 'public', 'assets']:
+        sd = root / sd_name
+        if sd.exists():
+            static_css += sum(1 for f in sd.rglob('*.css'))
+            static_js += sum(1 for f in sd.rglob('*.js'))
+            static_images += sum(1 for f in sd.rglob('*')
+                                 if f.suffix.lower() in image_exts)
+    stats['static_css'] = static_css
+    stats['static_js'] = static_js
+    stats['static_images'] = static_images
+
+    # 8. Existing documentation state
+    readme_file = root / 'README.md'
+    srs_file = root / 'SYSTEM_REQUIREMENTS_SPECIFICATION.md'
+    stats['has_readme'] = readme_file.exists()
+    stats['has_srs'] = srs_file.exists()
+    stats['readme_lines'] = 0
+    stats['srs_lines'] = 0
+    if readme_file.exists():
+        try:
+            stats['readme_lines'] = sum(
+                1 for _ in readme_file.open('r', encoding='utf-8', errors='replace'))
+        except Exception:
+            pass
+    if srs_file.exists():
+        try:
+            stats['srs_lines'] = sum(
+                1 for _ in srs_file.open('r', encoding='utf-8', errors='replace'))
+        except Exception:
+            pass
+
+    # 9. Project metadata
+    stats['version'] = read_version()
+    stats['timestamp'] = datetime.now().strftime('%Y-%m-%d')
+    stats['project_name'] = root.name
+    stats['project_root'] = str(root)
+
+    return stats
+
+
+# ===================================================================
+# DOCUMENT CONTENT GENERATION (LLM)
+# ===================================================================
+
+def _build_user_prompt(stats, existing_content, git_changes, doc_type):
+    """Build the user prompt for LLM doc generation."""
+    parts = []
+    parts.append(f"PROJECT: {stats.get('project_name', 'Unknown')}")
+    parts.append(f"VERSION: {stats.get('version', '0.0.1')}")
+    parts.append(f"PRIMARY LANGUAGE: {stats.get('primary_language', 'Unknown')}")
+    parts.append(f"PROJECT TYPE: {', '.join(stats.get('project_type', ['Unknown']))}")
+    parts.append(f"TOTAL FILES: {stats.get('total_files', 0)}")
+    parts.append(f"TOTAL CODE LINES: ~{stats.get('total_lines', 0)}")
+    parts.append(f"DEPENDENCIES: {stats.get('dependency_count', 0)}"
+                 f" (from {stats.get('deps_source', 'unknown')})")
+    parts.append(f"TEST FILES: {stats.get('test_files', 0)}")
+    parts.append(f"TEMPLATES: {stats.get('templates', 0)}")
+
+    ext_counts = stats.get('file_counts_by_extension', {})
+    if ext_counts:
+        top_exts = sorted(ext_counts.items(), key=lambda x: x[1], reverse=True)[:10]
+        ext_str = ', '.join(f"{ext}: {count}" for ext, count in top_exts)
+        parts.append(f"FILE TYPES (top 10): {ext_str}")
+
+    dir_struct = stats.get('directory_structure', {})
+    if dir_struct:
+        dir_str = ', '.join(f"{name}/ ({count} files)"
+                            for name, count in sorted(dir_struct.items()))
+        parts.append(f"DIRECTORIES: {dir_str}")
+
+    if git_changes:
+        parts.append(f"\nRECENT GIT CHANGES (last 20 commits):\n{git_changes}")
+
+    if existing_content:
+        parts.append(f"\nMODE: UPDATE - Existing {doc_type.upper()} provided below. "
+                     f"Preserve important custom content, update statistics, fill gaps.")
+        truncated = existing_content[:3000]
+        if len(existing_content) > 3000:
+            truncated += f"\n... (truncated, original is {len(existing_content)} chars)"
+        parts.append(f"\nEXISTING CONTENT:\n{truncated}")
+    else:
+        parts.append(f"\nMODE: CREATE - Generate a COMPLETE new {doc_type.upper()} from scratch.")
+
+    return '\n'.join(parts)
+
+
+def generate_readme_content(stats, existing_content, git_changes):
+    """Generate README content using LLM."""
+    user_prompt = _build_user_prompt(stats, existing_content, git_changes, 'readme')
+    return call_llm(README_SYSTEM_PROMPT, user_prompt)
+
+
+def generate_srs_content(stats, existing_content, git_changes):
+    """Generate SRS content using LLM."""
+    user_prompt = _build_user_prompt(stats, existing_content, git_changes, 'srs')
+    return call_llm(SRS_SYSTEM_PROMPT, user_prompt)
+
+
+# ===================================================================
+# MARKDOWN RENDERERS (JSON -> Markdown)
+# ===================================================================
+
+def render_readme(data, version, timestamp):
+    """Convert LLM JSON response to formatted README.md markdown."""
+    lines = []
+    name = data.get('project_name', 'Project')
+
+    lines.append(f"# {name} v{version}")
+    lines.append("")
+    lines.append(f"![Version](https://img.shields.io/badge/Version-{version}-brightgreen)")
+    lines.append("")
+
+    tagline = data.get('tagline', '')
+    if tagline:
+        lines.append(f"> {tagline}")
+        lines.append("")
+
+    overview = data.get('overview', '')
+    if overview:
+        lines.append("## Overview")
+        lines.append("")
+        lines.append(overview)
+        lines.append("")
+
+    features = data.get('key_features', [])
+    if features:
+        lines.append("## Key Features")
+        lines.append("")
+        for feat in features:
+            lines.append(f"- {feat}")
+        lines.append("")
+
+    arch = data.get('architecture_overview', '')
+    if arch:
+        lines.append("## Architecture")
+        lines.append("")
+        lines.append(arch)
+        lines.append("")
+
+    components = data.get('components', [])
+    if components:
+        lines.append("### Components")
+        lines.append("")
+        lines.append("| Component | Description | Path | Files |")
+        lines.append("|-----------|-------------|------|-------|")
+        for c in components:
+            lines.append(f"| {c.get('name', '')} | {c.get('description', '')} "
+                         f"| `{c.get('path', '')}` | {c.get('file_count', '')} |")
+        lines.append("")
+
+    prereqs = data.get('prerequisites', [])
+    install_steps = data.get('installation_steps', [])
+    if prereqs or install_steps:
+        lines.append("## Installation")
+        lines.append("")
+        if prereqs:
+            lines.append("### Prerequisites")
+            lines.append("")
+            for p in prereqs:
+                lines.append(f"- {p}")
+            lines.append("")
+        if install_steps:
+            lines.append("### Setup")
+            lines.append("")
+            for i, step in enumerate(install_steps, 1):
+                lines.append(f"{i}. {step}")
+            lines.append("")
+
+    qs = data.get('quick_start', '')
+    if qs:
+        lines.append("### Quick Start")
+        lines.append("")
+        lines.append(f"```bash\n{qs}\n```")
+        lines.append("")
+
+    cmds = data.get('usage_commands', [])
+    if cmds:
+        lines.append("## Usage")
+        lines.append("")
+        lines.append("```bash")
+        for cmd in cmds:
+            lines.append(f"# {cmd.get('description', '')}")
+            lines.append(cmd.get('command', ''))
+            lines.append("")
+        lines.append("```")
+        lines.append("")
+
+    tree = data.get('project_structure_tree', '')
+    if tree:
+        lines.append("## Project Structure")
+        lines.append("")
+        lines.append("```")
+        lines.append(tree)
+        lines.append("```")
+        lines.append("")
+
+    config = data.get('configuration_options', [])
+    if config:
+        lines.append("## Configuration")
+        lines.append("")
+        lines.append("| Option | Description | Default |")
+        lines.append("|--------|-------------|---------|")
+        for opt in config:
+            lines.append(f"| `{opt.get('name', '')}` | {opt.get('description', '')} "
+                         f"| `{opt.get('default', '')}` |")
+        lines.append("")
+
+    test_info = data.get('testing_info', {})
+    if test_info:
+        lines.append("## Testing")
+        lines.append("")
+        if isinstance(test_info, dict):
+            how = test_info.get('how_to_run', '')
+            fw = test_info.get('framework', '')
+            if how:
+                lines.append(f"```bash\n{how}\n```")
+            if fw:
+                lines.append(f"\nTest framework: {fw}")
+        else:
+            lines.append(str(test_info))
+        lines.append("")
+
+    contrib = data.get('contributing_guidelines', '')
+    if contrib:
+        lines.append("## Contributing")
+        lines.append("")
+        lines.append(contrib)
+        lines.append("")
+
+    changes = data.get('recent_changes_summary', '')
+    if changes:
+        lines.append("## Recent Changes")
+        lines.append("")
+        lines.append(changes)
+        lines.append("")
+
+    lic = data.get('license_type', '')
+    if lic:
+        lines.append("## License")
+        lines.append("")
+        lines.append(lic)
+        lines.append("")
+
+    lines.append("---")
+    lines.append(f"**Version:** {version} | **Last Updated:** {timestamp}")
+    lines.append("")
+    lines.append("*Documentation auto-generated by version-release-policy.py v5.0*")
+    lines.append("")
+
+    return '\n'.join(lines)
+
+
+def render_srs(data, version, timestamp):
+    """Convert LLM JSON response to formatted SRS markdown (IEEE 830)."""
+    lines = []
+    title = data.get('document_title', 'System Requirements Specification')
+
+    lines.append(f"# {title} v{version}")
+    lines.append("")
+    lines.append("**Document Version:** 1.0")
+    lines.append(f"**Release Date:** {timestamp}")
+    lines.append(f"**Last Updated:** {timestamp}")
+    lines.append("**Classification:** Enterprise-Grade System Documentation")
+    lines.append("**Status:** Active")
+    lines.append("")
+    lines.append("---")
+    lines.append("")
+
+    exec_summary = data.get('executive_summary', '')
+    if exec_summary:
+        lines.append("## 1. Executive Summary")
+        lines.append("")
+        lines.append(exec_summary)
+        lines.append("")
+
+    key_stats = data.get('key_statistics', [])
+    if key_stats:
+        lines.append("### Key Statistics")
+        lines.append("")
+        for ks in key_stats:
+            lines.append(f"- **{ks.get('label', '')}:** {ks.get('value', '')}")
+        lines.append("")
+
+    lines.append("## 2. Introduction")
+    lines.append("")
+
+    purpose = data.get('purpose', '')
+    if purpose:
+        lines.append("### 2.1 Purpose")
+        lines.append("")
+        lines.append(purpose)
+        lines.append("")
+
+    scope = data.get('scope', '')
+    if scope:
+        lines.append("### 2.2 Scope")
+        lines.append("")
+        lines.append(scope)
+        lines.append("")
+
+    defs = data.get('definitions', [])
+    if defs:
+        lines.append("### 2.3 Definitions")
+        lines.append("")
+        lines.append("| Term | Definition |")
+        lines.append("|------|-----------|")
+        for d in defs:
+            lines.append(f"| {d.get('term', '')} | {d.get('definition', '')} |")
+        lines.append("")
+
+    lines.append("## 3. Overall Description")
+    lines.append("")
+
+    perspective = data.get('product_perspective', '')
+    if perspective:
+        lines.append("### 3.1 Product Perspective")
+        lines.append("")
+        lines.append(perspective)
+        lines.append("")
+
+    functions = data.get('product_functions', [])
+    if functions:
+        lines.append("### 3.2 Product Functions")
+        lines.append("")
+        for fn in functions:
+            lines.append(f"- {fn}")
+        lines.append("")
+
+    users = data.get('user_characteristics', '')
+    if users:
+        lines.append("### 3.3 User Characteristics")
+        lines.append("")
+        lines.append(users)
+        lines.append("")
+
+    constraints = data.get('constraints', [])
+    if constraints:
+        lines.append("### 3.4 Constraints")
+        lines.append("")
+        for c in constraints:
+            lines.append(f"- {c}")
+        lines.append("")
+
+    assumptions = data.get('assumptions', [])
+    if assumptions:
+        lines.append("### 3.5 Assumptions and Dependencies")
+        lines.append("")
+        for a in assumptions:
+            lines.append(f"- {a}")
+        lines.append("")
+
+    arch = data.get('architecture_overview', '')
+    if arch:
+        lines.append("## 4. System Architecture")
+        lines.append("")
+        lines.append(arch)
+        lines.append("")
+
+    components = data.get('components', [])
+    if components:
+        lines.append("### 4.1 Components")
+        lines.append("")
+        for comp in components:
+            cname = comp.get('name', '')
+            ccount = comp.get('file_count', '')
+            lines.append(f"#### {cname} ({ccount} files)")
+            lines.append("")
+            lines.append(comp.get('description', ''))
+            lines.append("")
+            resps = comp.get('responsibilities', [])
+            if resps:
+                for r in resps:
+                    lines.append(f"- {r}")
+                lines.append("")
+
+    func_reqs = data.get('functional_requirements', [])
+    if func_reqs:
+        lines.append("## 5. Functional Requirements")
+        lines.append("")
+        lines.append("| ID | Title | Description | Priority |")
+        lines.append("|----|-------|-------------|----------|")
+        for fr in func_reqs:
+            lines.append(f"| {fr.get('id', '')} | {fr.get('title', '')} "
+                         f"| {fr.get('description', '')} | {fr.get('priority', 'Medium')} |")
+        lines.append("")
+
+    nfr = data.get('non_functional_requirements', [])
+    if nfr:
+        lines.append("## 6. Non-Functional Requirements")
+        lines.append("")
+        lines.append("| ID | Category | Title | Description |")
+        lines.append("|----|----------|-------|-------------|")
+        for nr in nfr:
+            lines.append(f"| {nr.get('id', '')} | {nr.get('category', '')} "
+                         f"| {nr.get('title', '')} | {nr.get('description', '')} |")
+        lines.append("")
+
+    test_strat = data.get('testing_strategy', '')
+    if test_strat:
+        lines.append("## 7. Quality Assurance")
+        lines.append("")
+        lines.append(test_strat)
+        lines.append("")
+
+    deploy = data.get('deployment_info', '')
+    if deploy:
+        lines.append("## 8. Deployment")
+        lines.append("")
+        lines.append(deploy)
+        lines.append("")
+
+    conclusion = data.get('conclusion', '')
+    if conclusion:
+        lines.append("## 9. Conclusion")
+        lines.append("")
+        lines.append(conclusion)
+        lines.append("")
+
+    lines.append("---")
+    lines.append("")
+    lines.append(f"**Version:** {version} | **Document Version:** 1.0 "
+                 f"| **Last Updated:** {timestamp}")
+    lines.append("")
+    lines.append("*This document is auto-generated by version-release-policy.py v5.0 "
+                 "(IEEE 830 compliant)*")
+    lines.append("")
+
+    return '\n'.join(lines)
+
+
+# ===================================================================
+# UPDATE FUNCTIONS
+# ===================================================================
+
+def update_changelog(new_version, stats=None):
+    """Update CHANGELOG.md with new version entry. Creates file if not exists."""
     try:
         changelog_file = get_project_root() / "CHANGELOG.md"
         timestamp = datetime.now().strftime('%Y-%m-%d')
 
         new_entry = f"## [{new_version}] - {timestamp}\n"
-        new_entry += f"### Changed\n"
+        new_entry += "### Changed\n"
         new_entry += f"- Version bump to {new_version}\n"
-        new_entry += f"- Updated SYSTEM_REQUIREMENTS_SPECIFICATION.md\n"
-        new_entry += f"- Auto-updated via version-release-policy.py\n\n"
+
+        if stats:
+            new_entry += (f"- Project: {stats.get('total_files', '?')} files, "
+                          f"{stats.get('total_python', '?')} Python, "
+                          f"~{stats.get('total_lines', '?')} lines\n")
+            new_entry += (f"- Dependencies: {stats.get('dependency_count', '?')}, "
+                          f"Tests: {stats.get('test_files', '?')}, "
+                          f"Templates: {stats.get('templates', '?')}\n")
+
+        new_entry += "- Updated README.md, SYSTEM_REQUIREMENTS_SPECIFICATION.md\n"
+        new_entry += "- Auto-updated via version-release-policy.py v5.0\n\n"
 
         if changelog_file.exists():
-            # Read existing content
             existing_content = changelog_file.read_text(encoding='utf-8')
-            # Prepend new entry
             new_content = new_entry + existing_content
         else:
-            # Create new file with header
             new_content = "# Changelog\n\n"
             new_content += "All notable changes to this project will be documented in this file.\n\n"
             new_content += new_entry
@@ -193,198 +1007,239 @@ def update_changelog(new_version):
         return False
 
 
-def update_srs(new_version):
-    """Update SYSTEM_REQUIREMENTS_SPECIFICATION.md metadata.
+def update_srs(new_version, stats=None, llm_content=None):
+    """Update SYSTEM_REQUIREMENTS_SPECIFICATION.md.
 
-    Updates Document Version and Last Updated timestamp.
-    Creates basic file if not exists.
-
-    Args:
-        new_version (str): New version string
-
-    Returns:
-        bool: True if successful
+    Three modes:
+    1. LLM mode: Use LLM-generated content (llm_content provided)
+    2. Fallback mode: Update version/date strings only (file exists, no LLM)
+    3. Create mode: Generate minimal SRS template (no file, no LLM)
     """
     try:
         srs_file = get_project_root() / "SYSTEM_REQUIREMENTS_SPECIFICATION.md"
         timestamp = datetime.now().strftime('%Y-%m-%d')
 
+        if llm_content:
+            rendered = render_srs(llm_content, new_version, timestamp)
+            srs_file.write_text(rendered, encoding='utf-8')
+            log_action("SRS_UPDATED", f"LLM-powered update for v{new_version}")
+            return True
+
         if srs_file.exists():
-            # Read and update metadata
             content = srs_file.read_text(encoding='utf-8')
-
-            # Update Document Version (increment minor)
-            version_match = re.search(r'Document Version.*?(\d+\.\d+)', content)
-            if version_match:
-                old_doc_version = version_match.group(1)
-                major, minor = old_doc_version.split('.')
-                new_doc_version = f"{major}.{int(minor) + 1}"
+            content = re.sub(
+                r'(#\s+.*?v)\d+\.\d+\.\d+',
+                rf'\g<1>{new_version}',
+                content, count=1
+            )
+            doc_ver = re.search(r'Document Version.*?(\d+)\.(\d+)', content)
+            if doc_ver:
+                new_minor = int(doc_ver.group(2)) + 1
                 content = re.sub(
-                    r'Document Version.*?\d+\.\d+',
-                    f'Document Version: {new_doc_version}',
-                    content
+                    r'(Document Version.*?)\d+\.\d+',
+                    rf'\g<1>{doc_ver.group(1)}.{new_minor}',
+                    content, count=1
                 )
-
-            # Update Last Updated timestamp
             content = re.sub(
-                r'Last Updated:.*?\d{4}-\d{2}-\d{2}',
-                f'Last Updated: {timestamp}',
-                content
+                r'(Last Updated:.*?)\d{4}-\d{2}-\d{2}',
+                rf'\g<1>{timestamp}', content
             )
-
-            # Update Release Date if it starts with ## Executive Summary
             content = re.sub(
-                r'Release Date:.*?\d{4}-\d{2}-\d{2}',
-                f'Release Date: {timestamp}',
-                content
+                r'(Release Date:.*?)\d{4}-\d{2}-\d{2}',
+                rf'\g<1>{timestamp}', content
             )
-
+            content = re.sub(
+                r'(\*\*Version:\*\*\s*)\d+\.\d+\.\d+',
+                rf'\g<1>{new_version}', content
+            )
             srs_file.write_text(content, encoding='utf-8')
-            log_action("SRS_UPDATED", f"Updated for v{new_version}")
-        else:
-            # Create basic SRS file
-            basic_srs = f"""# Claude Insight v{new_version} - System Requirements Specification (SRS)
+            log_action("SRS_UPDATED", f"Fallback: version/date update for v{new_version}")
+            return True
 
-**Document Version:** 1.0
-**Release Date:** {timestamp}
-**Last Updated:** {timestamp}
-**Classification:** Enterprise-Grade System Documentation
-**Status:** Auto-created by version-release-policy.py
-
-## Overview
-
-This is an auto-generated basic SRS for Claude Insight v{new_version}.
-
----
-
-## System Information
-
-- **Product Name:** Claude Insight
-- **Version:** {new_version}
-- **Release Date:** {timestamp}
-- **Document Version:** 1.0
-
-## Documentation
-
-See README.md for comprehensive system documentation.
-
----
-
-*This file is auto-updated by version-release-policy.py on each version bump.*
-"""
-            srs_file.write_text(basic_srs, encoding='utf-8')
-            log_action("SRS_CREATED", f"Created basic SRS for v{new_version}")
-
+        s = stats or {}
+        basic_srs = (
+            f"# {s.get('project_name', 'Project')} v{new_version}"
+            f" - System Requirements Specification\n\n"
+            f"**Document Version:** 1.0\n"
+            f"**Release Date:** {timestamp}\n"
+            f"**Last Updated:** {timestamp}\n\n"
+            f"---\n\n"
+            f"## Overview\n\n"
+            f"{s.get('project_name', 'Project')} v{new_version} - "
+            f"{s.get('total_files', '?')} files, "
+            f"~{s.get('total_lines', '?')} lines of code.\n\n"
+            f"---\n\n"
+            f"**Version:** {new_version} | **Last Updated:** {timestamp}\n\n"
+            f"*Auto-generated by version-release-policy.py v5.0*\n"
+        )
+        srs_file.write_text(basic_srs, encoding='utf-8')
+        log_action("SRS_CREATED", f"Minimal SRS for v{new_version}")
         return True
+
     except Exception as e:
         log_action("SRS_UPDATE_ERROR", str(e))
         return False
 
 
-def update_readme(new_version):
-    """Update README.md with new version references.
+def update_readme(new_version, stats=None, llm_content=None):
+    """Update README.md.
 
-    Replaces version strings in the title line, badge URLs, and
-    'Latest Version' header so README always reflects the current release.
-
-    Args:
-        new_version (str): The new version string, e.g. '4.14.0'.
-
-    Returns:
-        bool: True if README was updated (or does not exist), False on error.
+    Three modes:
+    1. LLM mode: Use LLM-generated content (llm_content provided)
+    2. Fallback mode: Update version/date strings only (file exists, no LLM)
+    3. Create mode: Generate minimal README (no file, no LLM)
     """
     try:
         readme_file = get_project_root() / "README.md"
-        if not readme_file.exists():
-            log_action("README_SKIP", "README.md not found")
+        timestamp = datetime.now().strftime('%Y-%m-%d')
+
+        if llm_content:
+            rendered = render_readme(llm_content, new_version, timestamp)
+            readme_file.write_text(rendered, encoding='utf-8')
+            log_action("README_UPDATED", f"LLM-powered update for v{new_version}")
             return True
 
-        content = readme_file.read_text(encoding='utf-8')
+        if readme_file.exists():
+            content = readme_file.read_text(encoding='utf-8')
+            content = re.sub(
+                r'(#\s+\S+.*?v)\d+\.\d+\.\d+',
+                rf'\g<1>{new_version}',
+                content, count=1
+            )
+            content = re.sub(
+                r'(Version-)\d+\.\d+\.\d+(-\w+)',
+                rf'\g<1>{new_version}\g<2>', content
+            )
+            content = re.sub(
+                r'(\*\*Version:\*\*\s*)\d+\.\d+\.\d+',
+                rf'\g<1>{new_version}', content
+            )
+            content = re.sub(
+                r'(\*\*Last Updated:\*\*\s*)\d{4}-\d{2}-\d{2}',
+                rf'\g<1>{timestamp}', content
+            )
+            readme_file.write_text(content, encoding='utf-8')
+            log_action("README_UPDATED", f"Fallback: version/date update for v{new_version}")
+            return True
 
-        # Update title line: # Claude Insight v4.x.x
-        content = re.sub(
-            r'(#\s+Claude Insight\s+v)\d+\.\d+\.\d+',
-            rf'\g<1>{new_version}',
-            content
+        s = stats or {}
+        basic = (
+            f"# {s.get('project_name', 'Project')} v{new_version}\n\n"
+            f"![Version](https://img.shields.io/badge/Version-{new_version}-brightgreen)\n\n"
+            f"## Overview\n\n"
+            f"Project with {s.get('total_files', '?')} files "
+            f"and ~{s.get('total_lines', '?')} lines of code.\n\n"
+            f"---\n\n"
+            f"**Version:** {new_version} | **Last Updated:** {timestamp}\n\n"
+            f"*Auto-generated by version-release-policy.py v5.0*\n"
         )
-
-        # Update version badge: Version-4.x.x-brightgreen
-        content = re.sub(
-            r'(Version-)\d+\.\d+\.\d+(-brightgreen)',
-            rf'\g<1>{new_version}\g<2>',
-            content
-        )
-
-        # Update Latest Version header: **Latest Version (v4.x.x):**
-        content = re.sub(
-            r'(\*\*Latest Version\s*\(v)\d+\.\d+\.\d+(\))',
-            rf'\g<1>{new_version}\g<2>',
-            content
-        )
-
-        readme_file.write_text(content, encoding='utf-8')
-        log_action("README_UPDATED", f"Updated for v{new_version}")
+        readme_file.write_text(basic, encoding='utf-8')
+        log_action("README_CREATED", f"Minimal README for v{new_version}")
         return True
+
     except Exception as e:
         log_action("README_UPDATE_ERROR", str(e))
         return False
 
 
+# ===================================================================
+# ORCHESTRATION
+# ===================================================================
+
 def bump_version():
-    """Perform complete version bump operation.
+    """Perform complete version bump with LLM-powered doc generation.
 
-    Updates VERSION, CHANGELOG.md, SYSTEM_REQUIREMENTS_SPECIFICATION.md, and README.md.
-
-    Returns:
-        dict: Result with status and details
+    Flow: scan -> git changes -> read existing -> LLM calls -> update all files.
+    Falls back to regex-based updates if LLM is unavailable.
     """
     try:
         current_version = read_version()
         new_version = bump_patch_version(current_version)
+        root = get_project_root()
 
-        print(f"[version-release-policy] Bumping version: {current_version} -> {new_version}")
+        print(f"[version-release-policy] Bumping: {current_version} -> {new_version}")
+        print(f"[version-release-policy] Scanning project (generic mode)...")
 
-        # Step 1: Update VERSION file
+        stats = scan_project()
+        print(f"[version-release-policy] Scanned: {stats.get('total_files', 0)} files, "
+              f"{stats.get('primary_language', '?')} primary, "
+              f"~{stats.get('total_lines', 0)} lines")
+
+        git_changes = get_recent_git_changes(root)
+
+        readme_file = root / "README.md"
+        srs_file = root / "SYSTEM_REQUIREMENTS_SPECIFICATION.md"
+        existing_readme = None
+        existing_srs = None
+        if readme_file.exists():
+            try:
+                existing_readme = readme_file.read_text(encoding='utf-8', errors='replace')
+            except Exception:
+                pass
+        if srs_file.exists():
+            try:
+                existing_srs = srs_file.read_text(encoding='utf-8', errors='replace')
+            except Exception:
+                pass
+
+        readme_llm = None
+        srs_llm = None
+        llm_used = False
+
+        print(f"[version-release-policy] Calling LLM for README generation...")
+        readme_llm = generate_readme_content(stats, existing_readme, git_changes)
+        if readme_llm:
+            print(f"[version-release-policy] README content generated via LLM [OK]")
+            llm_used = True
+        else:
+            print(f"[version-release-policy] README LLM failed - will use fallback")
+
+        print(f"[version-release-policy] Calling LLM for SRS generation...")
+        srs_llm = generate_srs_content(stats, existing_srs, git_changes)
+        if srs_llm:
+            print(f"[version-release-policy] SRS content generated via LLM [OK]")
+            llm_used = True
+        else:
+            print(f"[version-release-policy] SRS LLM failed - will use fallback")
+
         if not write_version(new_version):
             return {"status": "error", "message": "Failed to update VERSION file"}
 
-        # Step 2: Update CHANGELOG.md
-        if not update_changelog(new_version):
+        if not update_changelog(new_version, stats):
             return {"status": "error", "message": "Failed to update CHANGELOG.md"}
 
-        # Step 3: Update SYSTEM_REQUIREMENTS_SPECIFICATION.md
-        if not update_srs(new_version):
+        if not update_srs(new_version, stats, srs_llm):
             return {"status": "error", "message": "Failed to update SRS"}
 
-        # Step 4: Update README.md
-        if not update_readme(new_version):
+        if not update_readme(new_version, stats, readme_llm):
             return {"status": "error", "message": "Failed to update README.md"}
 
-        print(f"[version-release-policy] Version bumped: {new_version}")
-        print(f"[version-release-policy] CHANGELOG.md updated")
-        print(f"[version-release-policy] SYSTEM_REQUIREMENTS_SPECIFICATION.md updated")
-        print(f"[version-release-policy] README.md updated")
+        mode = "LLM-powered" if llm_used else "Fallback (regex)"
+        print(f"[version-release-policy] Version bumped: {new_version} ({mode})")
+        print(f"[version-release-policy] All docs updated [OK]")
 
         return {
             "status": "success",
             "old_version": current_version,
             "new_version": new_version,
-            "files_updated": ["VERSION", "CHANGELOG.md", "SYSTEM_REQUIREMENTS_SPECIFICATION.md", "README.md"]
+            "mode": mode,
+            "files_updated": [
+                "VERSION", "CHANGELOG.md",
+                "SYSTEM_REQUIREMENTS_SPECIFICATION.md", "README.md"
+            ],
+            "stats": stats
         }
     except Exception as e:
         log_action("BUMP_ERROR", str(e))
         return {"status": "error", "message": str(e)}
 
 
+# ===================================================================
+# ENFORCEMENT & REPORTING
+# ===================================================================
+
 def validate():
-    """Check that the version release policy preconditions are met.
-
-    Logs the validation event to the policy-hits log and confirms the
-    policy infrastructure is ready.
-
-    Returns:
-        bool: True if validation succeeds, False on any exception.
-    """
+    """Check that the version release policy preconditions are met."""
     try:
         log_action("VALIDATE", "version-release-ready")
         return True
@@ -394,44 +1249,33 @@ def validate():
 
 
 def report():
-    """Generate a compliance report for the version release policy.
-
-    Returns a structured dictionary describing the current policy state.
-
-    Returns:
-        dict: Report containing 'status', 'policy', and 'timestamp'.
-    """
+    """Generate a compliance report for the version release policy."""
     current_version = read_version()
     return {
         "status": "success",
         "policy": "version-release",
-        "description": "Enforces SemVer versioning, CHANGELOG updates, and SRS maintenance",
+        "description": "Enforces SemVer versioning with LLM-powered doc generation",
         "current_version": current_version,
         "rules": [
             "Version numbers follow MAJOR.MINOR.PATCH (SemVer)",
             "VERSION file is updated on each release",
             "CHANGELOG.md updated with each version bump",
-            "SYSTEM_REQUIREMENTS_SPECIFICATION.md metadata updated",
-            "Release commit format: 'bump: vX.Y.Z -> vX.Y.Z+1'"
+            "README.md comprehensively updated via LLM",
+            "SYSTEM_REQUIREMENTS_SPECIFICATION.md updated via LLM (IEEE 830)",
+            "Release commit format: 'bump: vX.Y.Z -> vX.Y.Z+1'",
+            "Fallback to regex-based updates if LLM unavailable"
         ],
+        "llm_models": LLM_MODELS,
         "files_tracked": [
-            "VERSION",
-            "CHANGELOG.md",
-            "SYSTEM_REQUIREMENTS_SPECIFICATION.md"
+            "VERSION", "CHANGELOG.md",
+            "SYSTEM_REQUIREMENTS_SPECIFICATION.md", "README.md"
         ],
         "timestamp": datetime.now().isoformat()
     }
 
 
 def enforce():
-    """Activate the version release policy and perform version bump.
-
-    Initializes the policy, bumps version, and logs all enforcement events.
-    Called by 3-level-flow.py or github_pr_workflow.py after PR merge.
-
-    Returns:
-        dict: Result with 'status' ('success' or 'error') and details.
-    """
+    """Activate the version release policy and perform version bump."""
     import os
     _track_start_time = datetime.now()
     _sub_operations = []
@@ -439,7 +1283,6 @@ def enforce():
     try:
         log_action("ENFORCE_START", "version-release")
 
-        # Run version bump
         _op_start = datetime.now()
         bump_result = bump_version()
         _sub_operations.append(
@@ -449,7 +1292,8 @@ def enforce():
                 int((datetime.now() - _op_start).total_seconds() * 1000),
                 {
                     "old_version": bump_result.get("old_version"),
-                    "new_version": bump_result.get("new_version")
+                    "new_version": bump_result.get("new_version"),
+                    "mode": bump_result.get("mode", "unknown")
                 }
             ) if HAS_TRACKING else None
         )
@@ -459,7 +1303,7 @@ def enforce():
             return bump_result
 
         log_action("ENFORCE_SUCCESS", f"Version bumped to {bump_result.get('new_version')}")
-        print("[version-release-policy] Policy enforced successfully ✅")
+        print("[version-release-policy] Policy enforced successfully [OK]")
 
         result = {
             "status": "success",
@@ -467,7 +1311,6 @@ def enforce():
             "details": bump_result
         }
 
-        # Track in policy execution
         try:
             if HAS_TRACKING:
                 record_policy_execution(
@@ -477,7 +1320,8 @@ def enforce():
                     policy_type="Policy Script",
                     input_params={"current_version": bump_result.get("old_version")},
                     output_results=result,
-                    decision=f"Version bumped to {bump_result.get('new_version')} with docs update",
+                    decision=(f"Version bumped to {bump_result.get('new_version')} "
+                              f"({bump_result.get('mode', 'unknown')})"),
                     duration_ms=int((datetime.now() - _track_start_time).total_seconds() * 1000),
                     sub_operations=[op for op in _sub_operations if op is not None]
                 )
@@ -507,6 +1351,10 @@ def enforce():
         return error_result
 
 
+# ===================================================================
+# CLI ENTRY POINT
+# ===================================================================
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         if sys.argv[1] == "--enforce":
@@ -518,7 +1366,10 @@ if __name__ == "__main__":
             print(json.dumps(report(), indent=2))
         elif sys.argv[1] == "--bump":
             result = bump_version()
-            print(json.dumps(result, indent=2))
+            print(json.dumps(result, indent=2, default=str))
             sys.exit(0 if result.get("status") == "success" else 1)
+        elif sys.argv[1] == "--scan":
+            scan_stats = scan_project()
+            print(json.dumps(scan_stats, indent=2, default=str))
     else:
         enforce()
