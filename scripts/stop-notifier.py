@@ -31,8 +31,8 @@ VOICE TRIGGERS (3 flag files, checked in priority order):
 HOW IT WORKS (v4.0.0 - simplified):
   1. Fires on every Claude 'Stop' event (after each AI response)
   2. Checks for any voice flag files (in priority order)
-  3. If flag EXISTS: reads original message, calls OpenRouter LLM
-  4. If LLM fails: uses static fallback (NEVER speaks raw JSON/garbage)
+  3. If flag EXISTS: reads original message, calls local Ollama LLM
+  4. If Ollama unavailable: uses static fallback (NEVER speaks raw JSON/garbage)
   5. Always deletes flag after speaking (no retry accumulation)
   6. For work_done: loads session summary for rich context in voice
   7. If no flags: stays completely silent (most responses)
@@ -42,9 +42,9 @@ PERSONALITY: Boss-assistant style
   - Professional but warm Indian English
   - Short, clear, natural updates
 
-LLM: OpenRouter API (REQUIRED for dynamic voice)
-API Key: ~/.claude/config/openrouter-api-key
-Setup: https://openrouter.ai -> Create API key -> paste in file
+LLM: Local Ollama (http://127.0.0.1:11434) - NO cloud dependency
+Setup: ollama pull granite4:3b
+No API key required - all processing local
 
 Windows-Safe: ASCII only (no Unicode/emojis in print statements)
 """
@@ -358,7 +358,7 @@ def get_session_summary_for_voice():
 
 
 # =============================================================================
-# LLM MESSAGE GENERATION (OpenRouter)
+# LLM MESSAGE GENERATION (Local Ollama)
 # =============================================================================
 
 def generate_dynamic_message(event_type, context=''):
@@ -565,7 +565,7 @@ def main():
            b. .task-complete-voice-{PID}  -> task completion notification
            c. .session-work-done-{PID}    -> all work done wrap-up
       4. Falls back to legacy shared flag paths for backward compatibility.
-      5. Generates voice messages via OpenRouter LLM or static defaults.
+      5. Generates voice messages via local Ollama LLM or static defaults.
       6. Launches voice-notifier.py as a detached background process.
 
     Always exits 0.  Errors in any phase are caught and logged to
