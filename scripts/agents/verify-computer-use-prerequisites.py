@@ -38,33 +38,36 @@ class PreFlightChecker:
         """Check that all 25 policies executed successfully"""
         print("\n=== 1. POLICY EXECUTION CHECK ===\n")
 
-        # Get latest session
+        # Get latest session with valid flow-trace
         sessions_dir = self.logs_dir / "sessions"
         if not sessions_dir.exists():
             self.check("Sessions directory", False, "No sessions directory found")
             return False
 
         latest_session = None
-        latest_time = None
 
-        for session_dir in sessions_dir.iterdir():
-            if session_dir.is_dir():
-                try:
-                    mtime = session_dir.stat().st_mtime
-                    if latest_time is None or mtime > latest_time:
-                        latest_time = mtime
-                        latest_session = session_dir
-                except Exception:
-                    pass
+        # Look for the most recent session with a valid flow-trace.json containing steps
+        for session_dir in sorted(sessions_dir.iterdir(), reverse=True):
+            if not session_dir.is_dir():
+                continue
+            flow_trace = session_dir / "flow-trace.json"
+            if not flow_trace.exists():
+                continue
+            try:
+                with open(flow_trace) as f:
+                    data = json.load(f)
+                pipeline = data.get("pipeline", [])
+                if len(pipeline) > 0:
+                    latest_session = session_dir
+                    break
+            except Exception:
+                continue
 
         if not latest_session:
-            self.check("Latest session found", False, "No recent sessions")
+            self.check("Latest session found", False, "No recent sessions with flow data")
             return False
 
         flow_trace = latest_session / "flow-trace.json"
-        if not flow_trace.exists():
-            self.check("Flow trace file", False, f"{flow_trace}")
-            return False
 
         try:
             with open(flow_trace) as f:
@@ -187,25 +190,25 @@ class PreFlightChecker:
         # Check sessions API
         try:
             result = subprocess.run(
-                ["curl", "-s", f"{dashboard_url}/api/sessions"],
+                ["curl", "-s", f"{dashboard_url}/api/3level-flow/sessions"],
                 capture_output=True,
                 timeout=5,
                 text=True
             )
             if result.returncode == 0:
                 data = json.loads(result.stdout)
-                session_count = data.get("total_sessions", 0)
+                session_count = len(data.get("sessions", []))
                 self.check(
-                    "Dashboard /api/sessions",
+                    "Dashboard /api/3level-flow/sessions",
                     session_count > 0,
                     f"Sessions found: {session_count}"
                 )
             else:
-                self.check("Dashboard /api/sessions", False, "API call failed")
+                self.check("Dashboard /api/3level-flow/sessions", False, "API call failed")
                 checks_passed = False
 
         except Exception as e:
-            self.check("Dashboard /api/sessions", False, str(e))
+            self.check("Dashboard /api/3level-flow/sessions", False, str(e))
             checks_passed = False
 
         return checks_passed
