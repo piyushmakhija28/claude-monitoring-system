@@ -1,22 +1,23 @@
-# Claude Insight v5.1.0
+# Claude Insight v5.2.0
 
-**Real-time Monitoring Dashboard for the Claude Memory System (3-Level Architecture + Policy Enforcement)**
+**Real-time Monitoring Dashboard for the Claude Memory System (3-Level Architecture + Policy Enforcement + Computer Use E2E Testing)**
 
 [![GitHub](https://img.shields.io/badge/GitHub-claude--insight-blue?logo=github)](https://github.com/piyushmakhija28/claude-insight)
 [![Python](https://img.shields.io/badge/Python-3.8+-blue?logo=python)](https://www.python.org/)
 [![Flask](https://img.shields.io/badge/Flask-3.0-green?logo=flask)](https://flask.palletsprojects.com/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-5.1.0-brightgreen)](VERSION)
+[![Version](https://img.shields.io/badge/Version-5.2.0-brightgreen)](VERSION)
 
 Claude Insight is a Python Flask dashboard that monitors how Claude Code follows the **3-Level Architecture enforcement policies** in real-time. It tracks policy execution, session analytics, skill/agent usage, context optimization, and provides complete audit trails of all decisions.
 
-**Latest Version (v5.1.0) - AI-Powered Task Detection:**
-- **NEW:** AI-based task type detector using local Ollama (Design, API Creation, Auth, Database, Bug Fix, Refactoring, Security, Testing, Documentation)
-- **NEW:** Intelligent decision engine with LLM-powered model/agent selection
-- **IMPROVED:** Switched from external Trybonsai API to local Ollama (no external dependencies)
-- **FIXED:** Complete 3-level enforcement flow working end-to-end (all 25 policies passing)
-- **FIXED:** Task closure workflow - TaskCreate → Execute → TaskUpdate(completed) sequence properly implemented
-- All hook scripts synced to ~/.claude/scripts/ for proper policy enforcement
+**Latest Version (v5.2.0) - Computer Use E2E Testing:**
+- **NEW:** Complete Computer Use E2E Testing System with real Anthropic SDK integration
+- **NEW:** Dummy project data seeder generating 10 realistic sessions with full 25-step flows
+- **NEW:** Task management dashboard page (`/tasks`) with session progress tracking
+- **NEW:** Real browser automation via pyautogui + real screenshot capture via mss
+- **ADDED:** 4 test scenarios (Dashboard Login, 3-Level Flow, Sessions, Policies)
+- **ADDED:** Pre-flight verification system (8 comprehensive checks)
+- **ADDED:** JSON test reports with screenshot paths and detailed metrics
 
 ---
 
@@ -133,6 +134,50 @@ python run.py
 
 ---
 
+## Computer Use E2E Testing
+
+Claude Insight includes a complete **Computer Use E2E Testing System** that uses Anthropic's Computer Use feature to automate end-to-end testing of the dashboard.
+
+### Quick Start: E2E Testing
+
+```bash
+# 1. Seed dummy project data (10 sessions with 25-step flows)
+python scripts/agents/dummy-project-seeder.py
+
+# 2. Verify all prerequisites are met
+python scripts/agents/verify-computer-use-prerequisites.py
+
+# 3. Start the dashboard
+python run.py &
+
+# 4. Run Computer Use tests (requires ANTHROPIC_API_KEY)
+export ANTHROPIC_API_KEY=sk-ant-...
+python scripts/agents/computer-use-agent.py --run-tests
+```
+
+### What Gets Tested
+
+The Computer Use agent performs **4 real-world test scenarios** using actual browser automation and screenshot capture:
+
+| Test | Scenario | Verifies |
+|------|----------|----------|
+| **Dashboard Login** | Opens browser, enters credentials, logs in | Authentication flow, session creation |
+| **3-Level Flow History** | Navigates to `/3level-flow-history` page | Policy execution timeline display |
+| **Sessions Page** | Views `/sessions` with session metadata | Session list, model/agent tracking |
+| **Policies Page** | Views `/policies` with all 32 policies | Policy enforcement metrics |
+
+### Output
+
+- **Screenshots:** Real PNG files saved to `~/.claude/memory/logs/computer-use-tests/`
+- **Test Report:** JSON with all results and metadata
+- **Success Rate:** Reports pass/fail for each scenario
+
+### New Dashboard Pages
+
+- **`/tasks`** - Task management page showing session progress, task list, and execution metrics
+
+---
+
 ## 3-Level Architecture Overview
 
 Claude Insight enforces a **3-level policy architecture** that ensures Claude Code follows best practices:
@@ -227,10 +272,22 @@ Claude Insight enforces a **3-level policy architecture** that ensures Claude Co
 |---------|-------------|
 | **Real-time Updates** | Live WebSocket data via SocketIO |
 | **Session Search** | Search and filter session history |
+| **Task Management** | `/tasks` page with session progress tracking |
 | **Export Options** | Generate CSV, Excel, PDF reports |
 | **Multi-language** | English, Hindi, Spanish, French, German |
 | **Custom Dashboards** | Build personalized metric views |
 | **Dark/Light Themes** | Multiple UI themes |
+
+### E2E Testing
+
+| Feature | Description |
+|---------|-------------|
+| **Computer Use Agent** | Real browser automation using Anthropic's Computer Use API |
+| **Dummy Project Seeder** | Generate 10 realistic project sessions with full 25-step flows |
+| **Screenshot Capture** | Real desktop screenshots saved to disk via mss |
+| **Test Scenarios** | 4 automated test scenarios covering dashboard features |
+| **Pre-Flight Verification** | 8-check validation system for testing prerequisites |
+| **JSON Test Report** | Detailed results with screenshots, timings, and metrics |
 
 ### Enterprise Features
 

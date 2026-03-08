@@ -1,3 +1,56 @@
+## [5.2.0] - 2026-03-08
+### Added
+- **Complete Computer Use E2E Testing System**
+  - Real Anthropic SDK integration with Computer Use beta header (computer-use-2025-11-24)
+  - Browser automation using pyautogui + mss for real screenshot capture
+  - Four test scenarios: Dashboard Login, 3-Level Flow History, Sessions Page, Policies Page
+  - File: `scripts/agents/computer-use-agent.py` (400 lines, fully rebuilt)
+
+- **Dummy Project Data Seeder**
+  - Generate 10 realistic project sessions with complete lifecycle
+  - Each session: 25-step flow-trace.json, session-summary.json, task flags
+  - Seeds session-progress.json and policy-hits.log automatically
+  - File: `scripts/agents/dummy-project-seeder.py` (180 lines)
+
+- **Task Management Dashboard Page**
+  - New `/tasks` route in Flask app
+  - Displays session progress with summary cards and session list
+  - File: `templates/tasks.html` (100 lines)
+
+- **Required Dependencies**
+  - anthropic>=0.50.0 (Anthropic SDK for Computer Use)
+  - mss>=9.0.0 (Cross-platform screenshot library)
+  - pyautogui>=0.9.54 (Mouse and keyboard automation)
+
+### Features
+- **Real Screenshot Capture:** mss library captures actual desktop screenshots (not fake)
+- **Real Browser Automation:** pyautogui clicks, types, and navigates real browser
+- **Pre-Flight Verification:** 8-check validation system (policy execution, files, freshness)
+- **JSON Test Reports:** Complete results with screenshot paths, timings, pass/fail status
+- **Test Output Directory:** ~/.claude/memory/logs/computer-use-tests/ with all artifacts
+
+### Verification
+- 10 dummy sessions created with exactly 25 steps per session
+- All policies in flow-trace.json marked as PASSED
+- Pre-flight checker: 7/8 checks PASS (API auth check requires token)
+- Flask route registration verified in app.url_map
+- All Python files pass syntax validation
+
+### Testing Workflow
+```bash
+# Seed data
+python scripts/agents/dummy-project-seeder.py
+
+# Verify pre-flight
+python scripts/agents/verify-computer-use-prerequisites.py
+
+# Run tests
+export ANTHROPIC_API_KEY=sk-ant-...
+python scripts/agents/computer-use-agent.py --run-tests
+```
+
+---
+
 ## [5.1.0] - 2026-03-08
 ### Added
 - **AI-Powered Task Type Detector using Local Ollama**
