@@ -424,7 +424,7 @@ def generate_dynamic_message(event_type, context=''):
             headers={'Content-Type': 'application/json'},
             method='POST'
         )
-        with urllib_request.urlopen(req, timeout=20) as resp:
+        with urllib_request.urlopen(req, timeout=60) as resp:
             result = json.loads(resp.read().decode('utf-8'))
             message = result.get('choices', [{}])[0].get('message', {}).get('content', '').strip()
             if message:

@@ -1299,7 +1299,7 @@ def main():
                                     _env['WORK_DONE_SUMMARY'] = summary_text
                                     _sr = _subprocess.run(
                                         [sys.executable, _stop_script],
-                                        timeout=30, capture_output=True, env=_env
+                                        timeout=90, capture_output=True, env=_env
                                     )
                                     if _sr.returncode == 0:
                                         sys.stdout.write('[VOICE] Voice notification triggered with task summary\n')
