@@ -1,0 +1,169 @@
+{
+  "test_suite": "Claude Insight Computer Use E2E Testing",
+  "version": "5.1.0",
+  "requires": {
+    "anthropic_sdk": ">=0.25.0",
+    "claude_model": "claude-opus-4-6 or claude-sonnet-4-6",
+    "beta_header": "computer-use-2025-11-24",
+    "dashboard": "http://localhost:5000"
+  },
+  "test_scenarios": [
+    {
+      "id": "test_01_dashboard_login",
+      "name": "Dashboard Login",
+      "description": "Test authentication and dashboard access",
+      "steps": [
+        {
+          "step": 1,
+          "action": "Navigate to dashboard homepage",
+          "expect": "Login form visible"
+        },
+        {
+          "step": 2,
+          "action": "Click username field and type 'admin'",
+          "expect": "Username entered"
+        },
+        {
+          "step": 3,
+          "action": "Click password field and type 'admin'",
+          "expect": "Password masked in field"
+        },
+        {
+          "step": 4,
+          "action": "Click login button",
+          "expect": "Dashboard loads with session authenticated"
+        }
+      ],
+      "screenshots_per_step": true,
+      "expected_result": "PASSED",
+      "timeout_seconds": 30
+    },
+    {
+      "id": "test_02_task_breakdown_flow",
+      "name": "Task Breakdown Flow",
+      "description": "Verify task breakdown detection and UI update",
+      "steps": [
+        {
+          "step": 1,
+          "action": "From Claude prompt, send: 'commit and push changes'",
+          "expect": "3-level-flow detects task breakdown needed"
+        },
+        {
+          "step": 2,
+          "action": "Monitor dashboard for task list update",
+          "expect": "Task breakdown items appear in UI"
+        },
+        {
+          "step": 3,
+          "action": "Verify task count matches (should be 2)",
+          "expect": "Two tasks visible in dashboard"
+        },
+        {
+          "step": 4,
+          "action": "Confirm blocking is active (Edit tools disabled)",
+          "expect": "No Edit/Write tool calls allowed"
+        }
+      ],
+      "screenshots_per_step": true,
+      "expected_result": "PASSED",
+      "timeout_seconds": 60
+    },
+    {
+      "id": "test_03_task_closure_workflow",
+      "name": "Task Closure Workflow",
+      "description": "Test complete task lifecycle",
+      "steps": [
+        {
+          "step": 1,
+          "action": "TaskCreate to acknowledge 2 tasks",
+          "expect": "Tasks created in system"
+        },
+        {
+          "step": 2,
+          "action": "Monitor dashboard - tasks show 'pending'",
+          "expect": "Task list updates with status"
+        },
+        {
+          "step": 3,
+          "action": "Execute work (do commits, version bump, etc)",
+          "expect": "Task status changes to 'in_progress'"
+        },
+        {
+          "step": 4,
+          "action": "Call TaskUpdate(completed) for all tasks",
+          "expect": "Tasks marked completed in UI"
+        },
+        {
+          "step": 5,
+          "action": "Verify completion notifications trigger",
+          "expect": "Voice notification plays, summary shows"
+        }
+      ],
+      "screenshots_per_step": true,
+      "expected_result": "PASSED",
+      "timeout_seconds": 120
+    },
+    {
+      "id": "test_04_3level_flow_execution",
+      "name": "3-Level Flow Execution",
+      "description": "Monitor all enforcement policy execution",
+      "steps": [
+        {
+          "step": 1,
+          "action": "Navigate to Flow History section",
+          "expect": "3-level flow trace visible"
+        },
+        {
+          "step": 2,
+          "action": "Expand Level -1 (Auto-Fix)",
+          "expect": "Shows 7 auto-fix checks - all PASSED"
+        },
+        {
+          "step": 3,
+          "action": "Expand Level 1 (Sync System)",
+          "expect": "Shows 6 sync steps - all PASSED"
+        },
+        {
+          "step": 4,
+          "action": "Expand Level 2 (Standards)",
+          "expect": "Shows 2 standard checks - all PASSED"
+        },
+        {
+          "step": 5,
+          "action": "Expand Level 3 (Execution)",
+          "expect": "Shows all 12 execution steps - all PASSED"
+        },
+        {
+          "step": 6,
+          "action": "Verify summary section",
+          "expect": "Total: 25/25 policies PASSED"
+        }
+      ],
+      "screenshots_per_step": true,
+      "expected_result": "PASSED",
+      "timeout_seconds": 90
+    }
+  ],
+  "verification_checklist": {
+    "dashboard_responsiveness": "Dashboard loads within 2 seconds",
+    "screenshot_quality": "All screenshots are clear, readable, >=1024x768",
+    "task_flow_accuracy": "All task status transitions correct",
+    "policy_execution": "All 25 policies show PASSED status",
+    "notifications": "Voice notification triggers on task completion",
+    "ui_consistency": "All UI elements match expected states",
+    "error_handling": "No unexpected errors in dashboard logs"
+  },
+  "expected_artifacts": {
+    "screenshots": "100+ high-quality PNG screenshots",
+    "test_report": "test-report.json with complete results",
+    "video_demo": "demo-video.gif showing full workflow",
+    "documentation": "visual-test-documentation.md"
+  },
+  "success_criteria": {
+    "all_tests_passed": true,
+    "screenshot_count_minimum": 50,
+    "average_step_duration_ms": "<1000ms",
+    "dashboard_uptime": "100%",
+    "no_critical_errors": true
+  }
+}
