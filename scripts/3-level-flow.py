@@ -3293,7 +3293,7 @@ Work to complete: Execute phase {i} of the identified work breakdown.
             with _llm_tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False, encoding='utf-8') as _llm_tf:
                 json.dump(llm_context, _llm_tf)
                 _llm_tf_path = _llm_tf.name
-            llm_out, llm_err, llm_rc, llm_dur = run_script(llm_engine_script, [_llm_tf_path], timeout=25)
+            llm_out, llm_err, llm_rc, llm_dur = run_script(llm_engine_script, [_llm_tf_path], timeout=45)
             try:
                 os.unlink(_llm_tf_path)
             except OSError:

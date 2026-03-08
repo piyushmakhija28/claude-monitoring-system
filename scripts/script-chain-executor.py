@@ -58,7 +58,7 @@ def chain_execute(scripts, initial_context=None, mode="pre-tool"):
                 text=True,
                 encoding='utf-8',
                 errors='replace',
-                timeout=60
+                timeout=90
             )
 
             stdout = result.stdout.strip() if result.stdout else ""
