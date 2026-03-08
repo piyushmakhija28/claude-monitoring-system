@@ -98,8 +98,9 @@ class AiTaskTypeDetector:
                 "  3. Pass --api-key parameter: python ... --api-key \"your-key\""
             )
 
-        # Trybonsai API endpoint (note: domain is trybons.ai, not trybonsai.com)
-        self.api_endpoint = "https://api.trybons.ai/v1/chat/completions"
+        # Trybonsai API endpoint using Anthropic message format
+        # Correct endpoint: go.trybons.ai/v1/messages (not api.trybons.ai/v1/chat/completions)
+        self.api_endpoint = "https://go.trybons.ai/v1/messages"
 
         # System prompt for classification
         self.system_prompt = """You are a task classifier. Analyze the user's request and determine the task type.
@@ -148,16 +149,13 @@ Return ONLY the JSON object, no other text."""
         return result
 
     def _call_api(self, user_message: str) -> str:
-        """Call Trybonsai API and return response."""
+        """Call Trybonsai API and return response (Anthropic message format)."""
 
-        # Request payload
+        # Request payload using Anthropic's message format
         payload = {
-            "model": "claude-sonnet",  # Uses latest available via Trybonsai
+            "model": "anthropic/claude-sonnet-4.5",  # From techdeveloper scheduler config
+            "system": self.system_prompt,  # Anthropic uses 'system' field separately
             "messages": [
-                {
-                    "role": "system",
-                    "content": self.system_prompt
-                },
                 {
                     "role": "user",
                     "content": user_message
@@ -167,10 +165,12 @@ Return ONLY the JSON object, no other text."""
             "max_tokens": 200
         }
 
-        # HTTP request
+        # HTTP request headers (Anthropic API format used by Trybonsai)
         headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json"
+            "x-api-key": self.api_key,  # Anthropic uses x-api-key, not Bearer token
+            "anthropic-version": "2023-06-01",  # Required Anthropic API version
+            "Content-Type": "application/json",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"  # Bypass Cloudflare
         }
 
         request = urllib.request.Request(
@@ -190,15 +190,21 @@ Return ONLY the JSON object, no other text."""
             raise Exception(f"API connection failed: {e.reason}")
 
     def _parse_response(self, response_text: str) -> Dict:
-        """Parse Trybonsai API response."""
+        """Parse Trybonsai API response (Anthropic message format)."""
         try:
             response_json = json.loads(response_text)
 
-            # Extract content from response
-            if "choices" not in response_json:
-                raise ValueError("Invalid response format")
+            # Extract content from Anthropic response format
+            # Anthropic returns: {"content": [{"type": "text", "text": "..."}], ...}
+            if "content" not in response_json:
+                raise ValueError("Invalid response format: missing 'content' field")
 
-            content = response_json["choices"][0]["message"]["content"].strip()
+            # Get the text content
+            content_blocks = response_json.get("content", [])
+            if not content_blocks or content_blocks[0].get("type") != "text":
+                raise ValueError("Invalid response format: no text content")
+
+            content = content_blocks[0].get("text", "").strip()
 
             # Parse the JSON from content
             classification = json.loads(content)
@@ -213,7 +219,7 @@ Return ONLY the JSON object, no other text."""
                 "confidence": float(classification.get("confidence", 0.5)),
                 "reasoning": classification.get("reasoning", "")
             }
-        except (json.JSONDecodeError, KeyError, IndexError) as e:
+        except (json.JSONDecodeError, KeyError, IndexError, TypeError) as e:
             raise ValueError(f"Failed to parse API response: {str(e)}")
 
     @staticmethod
