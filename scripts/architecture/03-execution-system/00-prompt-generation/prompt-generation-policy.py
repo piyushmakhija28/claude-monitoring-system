@@ -242,15 +242,19 @@ class PromptGenerator:
         if any(kw in message_lower for kw in ui_keywords):
             return "UI/UX"
 
-        # Standard keyword mapping
+        # Standard keyword mapping (includes Hinglish verbs)
         keywords_map = {
             "API Creation": ["create api", "rest api", "endpoint", "crud"],
             "Authentication": ["auth", "login", "jwt", "token"],
             "Authorization": ["role", "permission", "access control"],
             "Database": ["database", "table", "schema", "entity"],
-            "Configuration": ["config", "setup", "settings"],
-            "Bug Fix": ["fix", "bug", "error", "issue"],
-            "Refactoring": ["refactor", "improve", "optimize"],
+            "Configuration": ["config", "setup", "settings",
+                            "rakhle", "rakh do", "rakho", "sirf local", "only local"],
+            "Bug Fix": ["fix", "bug", "error", "issue",
+                       "thik karo", "sahi karo", "kaam karo", "fix kar"],
+            "Refactoring": ["refactor", "improve", "optimize",
+                           "hata de", "hata do", "hata hi", "hatao",
+                           "badal do", "badal de", "change kar", "remove kar"],
             "Security": ["security", "encrypt", "vulnerability"],
             "Testing": ["test", "unit test", "pytest"],
             "Documentation": ["document", "readme", "comment"]

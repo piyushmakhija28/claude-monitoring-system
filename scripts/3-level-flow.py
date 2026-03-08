@@ -3273,33 +3273,18 @@ Work to complete: Execute phase {i} of the identified work breakdown.
     step_3_1_output["tasks_created"] = len(tasks_created)
     step_3_1_output["tasks"] = tasks_created
 
-    # Auto-clear task-breakdown flag after successful task breakdown
-    # The flag was written earlier (write_task_breakdown_flag) to block coding
-    # before tasks exist. Since 3-level-flow itself creates the task plan,
-    # clear the flag immediately - no need to wait for Claude's TaskCreate.
+    # Store tasks_planned in session-progress.json for visibility
+    # (not tasks_created, to avoid poisoning post-tool-tracker completion checks)
+    # Flag stays alive until Claude calls TaskCreate → post-tool-tracker clears it
     if tasks_created and session_id:
-        try:
-            flag_path = task_breakdown_flag_path(session_id)
-            if flag_path.exists():
-                flag_path.unlink()
-                try:
-                    emit_flag_lifecycle('task_breakdown', 'clear',
-                                        session_id=session_id,
-                                        reason='auto-cleared after 3-level-flow task breakdown')
-                except Exception:
-                    pass
-        except Exception:
-            pass
-        # Also update tasks_created in session-progress.json so post-tool-tracker
-        # L3.8 check sees tasks exist (prevents Edit/Write blocking)
         try:
             _sp_file = MEMORY_BASE / 'logs' / 'session-progress.json'
             _sp_data = {}
             if _sp_file.exists():
                 with open(_sp_file, 'r', encoding='utf-8') as _f:
                     _sp_data = json.load(_f)
-            _sp_data['tasks_created'] = max(
-                _sp_data.get('tasks_created', 0), len(tasks_created)
+            _sp_data['tasks_planned'] = max(
+                _sp_data.get('tasks_planned', 0), len(tasks_created)
             )
             with open(_sp_file, 'w', encoding='utf-8') as _f:
                 json.dump(_sp_data, _f, indent=2)
