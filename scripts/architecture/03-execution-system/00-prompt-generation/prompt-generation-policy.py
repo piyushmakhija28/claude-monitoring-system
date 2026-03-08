@@ -210,15 +210,33 @@ class PromptGenerator:
         return analysis
 
     def detect_task_type(self, message: str) -> str:
-        """Classify a message into a task type using keyword matching.
+        """Classify a message into a task type using AI detection with keyword fallback.
+
+        STRATEGY:
+        1. Try AI-based detection via Trybonsai API (intelligent, handles varied inputs)
+        2. Fall back to keyword matching if API unavailable or fails
+        3. Return task type with confidence
 
         Args:
-            message (str): Lowercased user message.
+            message (str): User message (original or lowercased).
 
         Returns:
-            str: Task type label (e.g., 'API Creation', 'Bug Fix', 'General Task').
+            str: Task type label (e.g., 'Design', 'API Creation', 'Bug Fix', 'General Task').
         """
-        message_lower = message.lower()
+        # Try AI detection first (if API key available)
+        try:
+            from ai_task_type_detector import AiTaskTypeDetector
+            if AiTaskTypeDetector.is_available():
+                detector = AiTaskTypeDetector()
+                result = detector.detect(message)
+                # Return AI-detected task type (with high confidence)
+                if result.get("confidence", 0) >= 0.6:
+                    return result.get("task_type", "General Task")
+        except Exception:
+            pass  # Fall back to keyword matching if AI fails
+
+        # Fallback: Keyword-based detection
+        message_lower = message.lower() if isinstance(message, str) else message
 
         # System/Meta tasks - highest priority
         system_keywords = [
@@ -236,11 +254,6 @@ class PromptGenerator:
         # Frontend framework
         if any(kw in message_lower for kw in ["react", "angular", "vue", "component"]):
             return "Frontend"
-
-        # UI/UX
-        ui_keywords = ["design", "layout", "interface", "responsive", "alignment"]
-        if any(kw in message_lower for kw in ui_keywords):
-            return "UI/UX"
 
         # Standard keyword mapping (includes Hinglish verbs)
         keywords_map = {
