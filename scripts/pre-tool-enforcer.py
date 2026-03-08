@@ -340,19 +340,26 @@ def find_session_flag(pattern_prefix, current_session_id):
     Returns (flag_path, flag_data) or (None, None) if not found.
     Auto-cleans stale flags (>60 min).
 
-    Flag naming: .{prefix}-{SESSION_ID}.json (no PID in filename).
-    Session ID is unique per conversation window, providing natural
-    multi-window isolation without PID-based matching.
+    v4.4.0: Flags now live inside the session folder:
+      ~/.claude/memory/logs/sessions/{SESSION_ID}/flags/{name}.json
+    Also checks legacy ~/.claude/ location for backward compat.
+
+    Args:
+        pattern_prefix: Flag name prefix (e.g. '.task-breakdown-pending').
+        current_session_id: Active session ID string.
 
     Returns:
         (flag_path, flag_data) or (None, None) if not found/expired.
     """
-    # Direct path: session-only flag (new format, no PID)
-    flag_path = FLAG_DIR / '{}-{}.json'.format(pattern_prefix, current_session_id)
+    # v4.4.0: Check session folder first (new location)
+    # Convert prefix like '.task-breakdown-pending' to filename 'task-breakdown-pending.json'
+    flag_name = pattern_prefix.lstrip('.') + '.json'
+    memory_base = Path.home() / '.claude' / 'memory'
+    session_flag_path = memory_base / 'logs' / 'sessions' / current_session_id / 'flags' / flag_name
 
-    if flag_path.exists():
+    if session_flag_path.exists():
         try:
-            with open(flag_path, 'r', encoding='utf-8') as f:
+            with open(session_flag_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
 
             # Auto-expire stale flags (>60 min)
@@ -362,16 +369,38 @@ def find_session_flag(pattern_prefix, current_session_id):
                     created_at = datetime.fromisoformat(created_at_str)
                     age = datetime.now() - created_at
                     if age > timedelta(minutes=CHECKPOINT_MAX_AGE_MINUTES):
-                        flag_path.unlink(missing_ok=True)
+                        session_flag_path.unlink(missing_ok=True)
                         return (None, None)
                 except Exception:
                     pass
 
-            return (flag_path, data)
+            return (session_flag_path, data)
         except Exception:
             pass
 
-    # Fallback: check for legacy PID-based flags (backwards compat)
+    # Legacy fallback: check ~/.claude/ for old-format flags
+    legacy_path = FLAG_DIR / '{}-{}.json'.format(pattern_prefix, current_session_id)
+    if legacy_path.exists():
+        try:
+            with open(legacy_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+
+            created_at_str = data.get('created_at', '')
+            if created_at_str:
+                try:
+                    created_at = datetime.fromisoformat(created_at_str)
+                    age = datetime.now() - created_at
+                    if age > timedelta(minutes=CHECKPOINT_MAX_AGE_MINUTES):
+                        legacy_path.unlink(missing_ok=True)
+                        return (None, None)
+                except Exception:
+                    pass
+
+            return (legacy_path, data)
+        except Exception:
+            pass
+
+    # Legacy fallback: PID-based flags
     import glob as _flag_glob
     legacy_pattern = str(FLAG_DIR / '{}-{}-*.json'.format(pattern_prefix, current_session_id))
     legacy_files = _flag_glob.glob(legacy_pattern)

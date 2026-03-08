@@ -886,9 +886,20 @@ def main():
             if prev_context:
                 print(prev_context)
 
-            # Clear ALL enforcement flags from ALL sessions - /clear = fresh start
-            # Loophole #11: flags are now session-specific, use glob to find all
+            # Clear ALL enforcement flags - /clear = fresh start
+            # v4.4.0: Flags now in session folders + legacy cleanup
             import glob as _glob
+            # New location: session folder flags
+            sessions_dir = MEMORY_BASE / 'logs' / 'sessions'
+            if sessions_dir.exists():
+                for flags_dir in sessions_dir.glob('SESSION-*/flags'):
+                    for flag_file in flags_dir.glob('*.json'):
+                        try:
+                            flag_file.unlink()
+                            log_event(f"Flag cleared on /clear: {flag_file.name}")
+                        except Exception:
+                            pass
+            # Legacy location: ~/.claude/
             for pattern, flag_name in [
                 ('.checkpoint-pending-*.json', 'Checkpoint'),
                 ('.task-breakdown-pending-*.json', 'Task-breakdown'),
@@ -897,7 +908,7 @@ def main():
                 for flag_file in _glob.glob(str(FLAG_DIR / pattern)):
                     try:
                         Path(flag_file).unlink()
-                        log_event(f"{flag_name} flag cleared on /clear: {Path(flag_file).name}")
+                        log_event(f"{flag_name} legacy flag cleared: {Path(flag_file).name}")
                     except Exception:
                         pass
 

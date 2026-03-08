@@ -257,25 +257,30 @@ def _clear_session_flags(pattern_prefix, session_id):
     """
     Clear session-specific flag file(s) for the given session.
 
-    Uses session ID only (no PID) for flag matching. Also cleans up
-    any legacy PID-based flags for backwards compatibility.
-
-    Pattern: .{prefix}-{SESSION_ID}.json (primary)
-             .{prefix}-{SESSION_ID}-*.json (legacy cleanup)
+    v4.4.0: Flags now live in session folder. Also cleans legacy locations.
 
     Args:
         pattern_prefix: Flag type prefix (e.g., '.task-breakdown-pending')
         session_id: Session ID
     """
     if session_id:
-        # Primary: session-only flag (new format)
-        flag_path = FLAG_DIR / f'{pattern_prefix}-{session_id}.json'
-        if flag_path.exists():
+        # v4.4.0: Clear from session folder (new location)
+        flag_name = pattern_prefix.lstrip('.') + '.json'
+        memory_base = Path.home() / '.claude' / 'memory'
+        session_flag = memory_base / 'logs' / 'sessions' / session_id / 'flags' / flag_name
+        if session_flag.exists():
             try:
-                flag_path.unlink()
+                session_flag.unlink()
             except Exception:
                 pass
-        # Legacy cleanup: remove any PID-based flags for this session
+
+        # Legacy cleanup: old-style flags in ~/.claude/
+        legacy_path = FLAG_DIR / f'{pattern_prefix}-{session_id}.json'
+        if legacy_path.exists():
+            try:
+                legacy_path.unlink()
+            except Exception:
+                pass
         import glob as _flag_glob
         for old_flag in _flag_glob.glob(str(FLAG_DIR / f'{pattern_prefix}-{session_id}-*.json')):
             try:
@@ -1065,7 +1070,11 @@ def main():
                 # Loophole #16 fix: verify invoked skill/agent matches required
                 should_clear = True
                 if sid:
-                    flag_path = FLAG_DIR / f'.skill-selection-pending-{sid}.json'
+                    # v4.4.0: Check session folder first, then legacy
+                    _mem = Path.home() / '.claude' / 'memory'
+                    flag_path = _mem / 'logs' / 'sessions' / sid / 'flags' / 'skill-selection-pending.json'
+                    if not flag_path.exists():
+                        flag_path = FLAG_DIR / f'.skill-selection-pending-{sid}.json'
                     if flag_path.exists():
                         with open(flag_path, 'r', encoding='utf-8') as f:
                             flag_data = json.load(f)

@@ -246,66 +246,66 @@ def load_policy_rules() -> dict:
         return policies
 
 
-def checkpoint_flag_path(session_id):
-    """Build the session-specific checkpoint flag file path.
+def _session_flag_dir(session_id):
+    """Get the flags directory inside a session's log folder.
 
-    Pattern: .checkpoint-pending-{SESSION_ID}.json
-
-    NO PID in filename. Each hook runs as a separate subprocess with a
-    different PID, so PID-based matching breaks the create/check/clear chain.
-    Session ID is already unique per conversation window.
-
-    This naming contract MUST stay in sync with:
-      - pre-tool-enforcer.py: find_session_flag()
-      - post-tool-tracker.py: _clear_session_flags()
+    v4.4.0: Flags are now stored INSIDE the session folder for perfect
+    per-window isolation. No more scattered flags in ~/.claude/.
 
     Args:
         session_id (str): Active session identifier.
 
     Returns:
-        Path: Absolute path to the checkpoint flag file in FLAG_DIR.
+        Path: ~/.claude/memory/logs/sessions/{session_id}/flags/
     """
-    return FLAG_DIR / f'.checkpoint-pending-{session_id}.json'
+    d = MEMORY_BASE / 'logs' / 'sessions' / session_id / 'flags'
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def checkpoint_flag_path(session_id):
+    """Build the session-specific checkpoint flag file path.
+
+    v4.4.0: Now inside session folder, not ~/.claude/.
+    Pattern: .../sessions/{SESSION_ID}/flags/checkpoint-pending.json
+
+    Args:
+        session_id (str): Active session identifier.
+
+    Returns:
+        Path: Absolute path to the checkpoint flag file.
+    """
+    return _session_flag_dir(session_id) / 'checkpoint-pending.json'
 
 
 def task_breakdown_flag_path(session_id):
     """Build the session-specific task-breakdown flag file path.
 
-    Pattern: .task-breakdown-pending-{SESSION_ID}.json
-
-    NO PID in filename. Session ID provides window isolation.
-
-    This naming contract MUST stay in sync with:
-      - pre-tool-enforcer.py: find_session_flag()
-      - post-tool-tracker.py: _clear_session_flags()
+    v4.4.0: Now inside session folder, not ~/.claude/.
+    Pattern: .../sessions/{SESSION_ID}/flags/task-breakdown-pending.json
 
     Args:
         session_id (str): Active session identifier.
 
     Returns:
-        Path: Absolute path to the task-breakdown flag file in FLAG_DIR.
+        Path: Absolute path to the task-breakdown flag file.
     """
-    return FLAG_DIR / f'.task-breakdown-pending-{session_id}.json'
+    return _session_flag_dir(session_id) / 'task-breakdown-pending.json'
 
 
 def skill_selection_flag_path(session_id):
     """Build the session-specific skill-selection flag file path.
 
-    Pattern: .skill-selection-pending-{SESSION_ID}.json
-
-    NO PID in filename. Session ID provides window isolation.
-
-    This naming contract MUST stay in sync with:
-      - pre-tool-enforcer.py: find_session_flag()
-      - post-tool-tracker.py: _clear_session_flags()
+    v4.4.0: Now inside session folder, not ~/.claude/.
+    Pattern: .../sessions/{SESSION_ID}/flags/skill-selection-pending.json
 
     Args:
         session_id (str): Active session identifier.
 
     Returns:
-        Path: Absolute path to the skill-selection flag file in FLAG_DIR.
+        Path: Absolute path to the skill-selection flag file.
     """
-    return FLAG_DIR / f'.skill-selection-pending-{session_id}.json'
+    return _session_flag_dir(session_id) / 'skill-selection-pending.json'
 
 # Short approval words that clear the checkpoint flag
 # MUST be <= 30 chars total
@@ -424,10 +424,7 @@ def is_mid_session_continuation(session_id):
 def clear_all_enforcement_flags(reason=''):
     """Delete ALL enforcement flags on user approval.
 
-    Removes checkpoint, task-breakdown, and skill-selection flag files from
-    FLAG_DIR.  Called when the user sends an approval message such as 'ok',
-    'proceed', or 'haan' so that pre-tool-enforcer unblocks code-modification
-    tools for subsequent tool calls.
+    v4.4.0: Clears flags from session folder AND legacy ~/.claude/ location.
 
     Args:
         reason: Human-readable label logged alongside the count of cleared flags.
@@ -436,21 +433,34 @@ def clear_all_enforcement_flags(reason=''):
         import glob as _glob
         cleared = 0
         cleared_types = []
-        for pattern, flag_type in [
-            ('.checkpoint-pending-*.json', 'checkpoint'),
-            ('.task-breakdown-pending-*.json', 'task_breakdown'),
-            ('.skill-selection-pending-*.json', 'skill_selection'),
+
+        # v4.4.0: Clear flags from ALL session folders
+        sessions_dir = MEMORY_BASE / 'logs' / 'sessions'
+        if sessions_dir.exists():
+            for flags_dir in sessions_dir.glob('SESSION-*/flags'):
+                for flag_file in flags_dir.glob('*.json'):
+                    try:
+                        flag_file.unlink()
+                        cleared += 1
+                    except Exception:
+                        pass
+
+        # Legacy cleanup: also clear old-style flags from ~/.claude/
+        for pattern in [
+            '.checkpoint-pending-*.json',
+            '.task-breakdown-pending-*.json',
+            '.skill-selection-pending-*.json',
         ]:
             for flag_file in _glob.glob(str(FLAG_DIR / pattern)):
-                Path(flag_file).unlink()
-                cleared += 1
-                if flag_type not in cleared_types:
-                    cleared_types.append(flag_type)
+                try:
+                    Path(flag_file).unlink()
+                    cleared += 1
+                except Exception:
+                    pass
+
         if cleared > 0:
             print(f'[ENFORCEMENT] {cleared} flag(s) cleared - {reason}')
-        else:
-            print(f'[ENFORCEMENT] No flags to clear - {reason}')
-        # Emit metrics for each flag type cleared
+
         try:
             for ft in cleared_types:
                 emit_flag_lifecycle(ft, 'clear', reason=reason)
@@ -461,24 +471,15 @@ def clear_all_enforcement_flags(reason=''):
 
 
 def clear_current_session_flags(session_id, reason=''):
-    """
-    Delete enforcement flags for the CURRENT session.
+    """Delete enforcement flags for the CURRENT session.
 
-    Uses session ID only (no PID) for flag matching. Different Claude Code
-    windows have different session IDs, so session-only matching provides
-    correct window isolation without the PID mismatch problem.
-
-    Flag naming contract (MUST match flag writers in this file):
-      .checkpoint-pending-{SESSION_ID}.json
-      .task-breakdown-pending-{SESSION_ID}.json
-      .skill-selection-pending-{SESSION_ID}.json
+    v4.4.0: Flags are now in session folder. Also cleans legacy ~/.claude/ flags.
 
     Args:
         session_id: Current session identifier (e.g. SESSION-20260305-123456-ABCD).
         reason:     Human-readable label logged alongside cleared flag count.
     """
     if not session_id or session_id == "UNKNOWN":
-        _clear_flags_for_pid(reason)
         return
 
     try:
@@ -486,24 +487,26 @@ def clear_current_session_flags(session_id, reason=''):
         cleared = 0
         cleared_types = []
 
-        # Session-specific flags (no PID in filename)
-        for fname, flag_type in [
-            (f".checkpoint-pending-{session_id}.json", "checkpoint"),
-            (f".task-breakdown-pending-{session_id}.json", "task_breakdown"),
-            (f".skill-selection-pending-{session_id}.json", "skill_selection"),
-        ]:
-            flag_path = FLAG_DIR / fname
-            if flag_path.exists():
-                flag_path.unlink()
-                cleared += 1
-                if flag_type not in cleared_types:
-                    cleared_types.append(flag_type)
+        # v4.4.0: Clear flags from session folder
+        flags_dir = MEMORY_BASE / 'logs' / 'sessions' / session_id / 'flags'
+        if flags_dir.exists():
+            for flag_type, fname in [
+                ("checkpoint", "checkpoint-pending.json"),
+                ("task_breakdown", "task-breakdown-pending.json"),
+                ("skill_selection", "skill-selection-pending.json"),
+            ]:
+                flag_path = flags_dir / fname
+                if flag_path.exists():
+                    flag_path.unlink()
+                    cleared += 1
+                    if flag_type not in cleared_types:
+                        cleared_types.append(flag_type)
 
-        # Also clean up any legacy PID-based flags for this session
+        # Legacy cleanup: also clear old-style flags from ~/.claude/
         for pattern in [
-            f".checkpoint-pending-{session_id}-*.json",
-            f".task-breakdown-pending-{session_id}-*.json",
-            f".skill-selection-pending-{session_id}-*.json",
+            f".checkpoint-pending-{session_id}*.json",
+            f".task-breakdown-pending-{session_id}*.json",
+            f".skill-selection-pending-{session_id}*.json",
         ]:
             for old_flag in _glob.glob(str(FLAG_DIR / pattern)):
                 try:
@@ -523,33 +526,6 @@ def clear_current_session_flags(session_id, reason=''):
                 emit_flag_lifecycle(ft, "clear", reason=reason)
         except Exception:
             pass
-    except Exception:
-        pass
-
-
-def _clear_flags_for_pid(reason=""):
-    """
-    Fallback: clear flags matching THIS process PID only (session ID not yet known).
-
-    Used when session_id is UNKNOWN on the very first message before session
-    management has run.
-    """
-    try:
-        import glob as _glob
-        pid = os.getpid()
-        cleared = 0
-        for pattern in [
-            f".checkpoint-pending-*-{pid}.json",
-            f".task-breakdown-pending-*-{pid}.json",
-            f".skill-selection-pending-*-{pid}.json",
-        ]:
-            for flag_file in _glob.glob(str(FLAG_DIR / pattern)):
-                Path(flag_file).unlink()
-                cleared += 1
-        if cleared > 0:
-            print(f"[ENFORCEMENT] {cleared} flag(s) cleared (PID: {pid}) - {reason}")
-        else:
-            print(f"[ENFORCEMENT] No flags to clear (PID: {pid}) - {reason}")
     except Exception:
         pass
 
