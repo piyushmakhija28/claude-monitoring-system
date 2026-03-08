@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Intelligent Decision Engine (v1.1.0) - LLM-Powered Level 3 Decisions
+Intelligent Decision Engine (v1.2.0) - LLM-Powered Level 3 Decisions
 
 Replaces keyword-based guessing with local LLM for ALL Level 3 decisions:
   - Task Type classification
@@ -71,10 +71,12 @@ OPENROUTER_MODELS = [
 
 # =============================================================================
 # AVAILABLE SKILLS & AGENTS REGISTRY
-# This is the COMPLETE list that LLM can choose from
+# v1.2.0: Dynamically loaded from actual agent.md / skill.md files
+# Extracts description + responsibilities + boundaries for informed LLM selection
 # =============================================================================
 
-AVAILABLE_AGENTS = {
+# Fallback static registry (used if file reading fails)
+_FALLBACK_AGENTS = {
     "spring-boot-microservices": "Java/Spring Boot backend, REST APIs, microservices, JPA, security",
     "ui-ux-designer": "UI/UX design, HTML/CSS, layouts, dashboards, admin panels, responsive design",
     "angular-engineer": "Angular/TypeScript frontend, components, routing, RxJS",
@@ -89,7 +91,7 @@ AVAILABLE_AGENTS = {
     "python-backend-engineer": "Python backend, Flask, Django, FastAPI, SQLAlchemy",
 }
 
-AVAILABLE_SKILLS = {
+_FALLBACK_SKILLS = {
     "java-spring-boot-microservices": "Spring Boot patterns, configurations, best practices",
     "spring-boot-design-patterns-core": "Java design patterns for Spring Boot applications",
     "java-design-patterns-core": "Core Java design patterns (GoF, SOLID)",
@@ -104,6 +106,146 @@ AVAILABLE_SKILLS = {
     "python-system-scripting": "Python scripting, automation, system tools",
     "adaptive-skill-intelligence": "System/meta tasks about Claude memory system itself",
 }
+
+
+def _extract_md_sections(filepath, max_chars=400):
+    """Read agent.md or skill.md and extract key sections for LLM context.
+
+    Extracts: description (frontmatter), core responsibilities, boundaries.
+    Returns a concise multi-line summary the LLM can use for selection.
+
+    Args:
+        filepath: Path to the .md file.
+        max_chars: Maximum characters to return (default 400).
+
+    Returns:
+        str: Extracted summary, or empty string on failure.
+    """
+    try:
+        content = Path(filepath).read_text(encoding='utf-8')
+    except Exception:
+        return ''
+
+    lines = content.split('\n')
+    desc = ''
+    responsibilities = []
+    boundaries = []
+
+    # Extract description from frontmatter
+    in_frontmatter = False
+    for line in lines:
+        stripped = line.strip()
+        if stripped == '---':
+            in_frontmatter = not in_frontmatter
+            continue
+        if in_frontmatter and stripped.startswith('description:'):
+            desc = stripped.split('description:', 1)[1].strip()
+
+    # Extract core responsibilities and boundaries
+    in_resp = False
+    in_bound = False
+    for line in lines:
+        stripped = line.strip()
+
+        if 'Core Responsibilities' in stripped or 'core responsibilities' in stripped:
+            in_resp = True
+            in_bound = False
+            continue
+        if 'does not' in stripped.lower() or 'Does NOT' in stripped or 'Boundaries' in stripped:
+            in_bound = True
+            in_resp = False
+            continue
+        if stripped.startswith('#'):
+            in_resp = False
+            in_bound = False
+
+        if in_resp and stripped.startswith('-'):
+            responsibilities.append(stripped.lstrip('- '))
+        if in_bound and stripped.startswith('-'):
+            boundaries.append(stripped.lstrip('- '))
+
+    # Build concise summary
+    parts = []
+    if desc:
+        parts.append(desc)
+    if responsibilities:
+        parts.append('Does: ' + '; '.join(responsibilities[:6]))
+    if boundaries:
+        parts.append('NOT: ' + '; '.join(boundaries[:3]))
+
+    result = ' | '.join(parts)
+    return result[:max_chars] if result else ''
+
+
+def _load_agents_from_disk():
+    """Load agent descriptions from ~/.claude/agents/*/agent.md files.
+
+    Reads each agent.md, extracts description + responsibilities + boundaries.
+    Falls back to static registry if files are missing.
+
+    Returns:
+        dict: {agent_name: rich_description_string}
+    """
+    agents_dir = Path.home() / '.claude' / 'agents'
+    if not agents_dir.exists():
+        return dict(_FALLBACK_AGENTS)
+
+    result = {}
+    for agent_dir in sorted(agents_dir.iterdir()):
+        if not agent_dir.is_dir():
+            continue
+        agent_md = agent_dir / 'agent.md'
+        name = agent_dir.name
+        if agent_md.exists():
+            extracted = _extract_md_sections(agent_md)
+            if extracted:
+                result[name] = extracted
+            elif name in _FALLBACK_AGENTS:
+                result[name] = _FALLBACK_AGENTS[name]
+        elif name in _FALLBACK_AGENTS:
+            result[name] = _FALLBACK_AGENTS[name]
+
+    # Ensure all fallback agents are present
+    for name, desc in _FALLBACK_AGENTS.items():
+        if name not in result:
+            result[name] = desc
+
+    return result
+
+
+def _load_skills_from_disk():
+    """Load skill descriptions from ~/.claude/skills/**/skill.md files.
+
+    Reads each skill.md, extracts description + responsibilities.
+    Falls back to static registry if files are missing.
+
+    Returns:
+        dict: {skill_name: rich_description_string}
+    """
+    skills_dir = Path.home() / '.claude' / 'skills'
+    if not skills_dir.exists():
+        return dict(_FALLBACK_SKILLS)
+
+    result = {}
+    for skill_md in skills_dir.glob('**/skill.md'):
+        name = skill_md.parent.name
+        extracted = _extract_md_sections(skill_md, max_chars=300)
+        if extracted:
+            result[name] = extracted
+        elif name in _FALLBACK_SKILLS:
+            result[name] = _FALLBACK_SKILLS[name]
+
+    # Ensure all fallback skills are present
+    for name, desc in _FALLBACK_SKILLS.items():
+        if name not in result:
+            result[name] = desc
+
+    return result
+
+
+# Load registries at module import (cached for session lifetime)
+AVAILABLE_AGENTS = _load_agents_from_disk()
+AVAILABLE_SKILLS = _load_skills_from_disk()
 
 MODELS_INFO = {
     "HAIKU": "Fastest, cheapest ($1/$5 MTok). Best for: simple tasks, file reading, status checks, documentation, small bug fixes",
@@ -166,6 +308,11 @@ MODEL SELECTION GUIDE:
 - HAIKU: Simple tasks like file reading, status checks, small fixes, documentation, config changes. Complexity < 5.
 - SONNET: Most coding tasks - API creation, feature implementation, UI work, moderate bugs, testing. Complexity 5-19.
 - OPUS: Architecture design, complex refactoring, plan mode tasks, security-critical work, multi-service coordination. Complexity >= 20.
+
+AGENT SELECTION GUIDE (critical distinctions):
+- ui-ux-designer: For DESIGN tasks - theme redesign, color changes, layout design, visual hierarchy, hover effects, shadows, gradients, typography. Use this when the user wants to CHANGE HOW THINGS LOOK.
+- angular-engineer: For IMPLEMENTATION tasks - component logic, state management, routing, API integration, feature building IN Angular. Use when adding NEW FUNCTIONALITY, not redesigning visuals.
+- The tech stack (Angular, React, etc.) does NOT determine the agent. A UI redesign in Angular still needs ui-ux-designer first, not angular-engineer.
 
 TASK TYPE VALUES (pick the most accurate one):
 API Creation, Authentication, Authorization, Security, Database, Dashboard, Frontend, UI/UX,
@@ -358,6 +505,7 @@ def _call_ollama(user_prompt):
             ],
             "max_tokens": 300,
             "temperature": 0.1,
+            "response_format": {"type": "json_object"},
         }).encode('utf-8')
 
         req = urllib_request.Request(
@@ -367,7 +515,7 @@ def _call_ollama(user_prompt):
             method='POST'
         )
 
-        with urllib_request.urlopen(req, timeout=30) as resp:
+        with urllib_request.urlopen(req, timeout=60) as resp:
             result = json.loads(resp.read().decode('utf-8'))
             msg = result.get('choices', [{}])[0].get('message', {})
             content = (msg.get('content') or '').strip()
@@ -377,7 +525,7 @@ def _call_ollama(user_prompt):
                 decision['llm_model_used'] = f"ollama/{model}"
                 decision['llm_source'] = 'local'
                 decision['llm_attempt'] = 1
-                decision['engine_version'] = '1.1.0'
+                decision['engine_version'] = '1.2.0'
                 log(f"[OLLAMA] SUCCESS: task={decision['task_type']}, "
                     f"model={decision['model']}, agent={decision['agent_name']}")
                 return decision
@@ -443,7 +591,7 @@ def _call_openrouter(user_prompt):
                     decision['llm_model_used'] = model
                     decision['llm_source'] = 'openrouter'
                     decision['llm_attempt'] = attempt
-                    decision['engine_version'] = '1.1.0'
+                    decision['engine_version'] = '1.2.0'
                     log(f"[OPENROUTER] SUCCESS ({model}): task={decision['task_type']}, "
                         f"model={decision['model']}, agent={decision['agent_name']}")
                     return decision
