@@ -1312,7 +1312,7 @@ def _slugify(text, max_len=40):
 
 def create_issue_branch(issue_number, subject, issue_type=None):
     """
-    Create and checkout a git branch named {label}/{issueId}.
+    Create and checkout a git branch named {label}/{issueId} WITH COMPREHENSIVE ERROR HANDLING.
     Examples: fix/42, feature/123, refactor/99, docs/55, enhancement/78
 
     IMPORTANT: Must include issue ID for auto-close policy to work!
@@ -1320,6 +1320,9 @@ def create_issue_branch(issue_number, subject, issue_type=None):
 
     Only creates if currently on main/master.
     Stores branch name in github-issues.json under 'session_branch'.
+
+    Logs ALL steps to branch-creation-debug.log for troubleshooting.
+    Blocks with error message if critical failure (prevents silent failures).
 
     Args:
         issue_number: GitHub issue number (int)
@@ -1329,34 +1332,56 @@ def create_issue_branch(issue_number, subject, issue_type=None):
     Returns:
         Branch name string on success, None on failure.
     """
+    debug_log = []
+    branch_name = None
+
     try:
         repo_root = _get_repo_root()
         if not repo_root:
+            error_msg = "[BRANCH-CREATE] CRITICAL ERROR: Not in a git repository"
+            debug_log.append(error_msg)
+            _log_branch_debug(debug_log, error_msg)
+            sys.stdout.write(f"\n{error_msg}\n\n")
+            sys.stdout.flush()
             return None
 
-        # Check current branch - only create from main/master
+        # STEP 1: Determine current branch
+        debug_log.append(f"[BRANCH-CREATE] STEP 1: Reading current branch...")
         result = subprocess.run(
             ['git', 'rev-parse', '--abbrev-ref', 'HEAD'],
             capture_output=True, text=True, timeout=5,
             cwd=repo_root
         )
         if result.returncode != 0:
+            error_msg = f"[BRANCH-CREATE] STEP 1 FAILED: Could not read current branch"
+            debug_log.append(f"  Error: {result.stderr}")
+            _log_branch_debug(debug_log, error_msg)
+            sys.stdout.write(f"\n[GH ERROR] {error_msg}\n\n")
+            sys.stdout.flush()
             return None
 
         current_branch = result.stdout.strip()
+        debug_log.append(f"[BRANCH-CREATE] STEP 1 OK: Current branch = {current_branch}")
+
+        # Check if we're already on a feature branch
         if current_branch not in ('main', 'master'):
-            # Already on a feature branch - don't create another
+            info_msg = f"[BRANCH-CREATE] INFO: Already on {current_branch}, skipping branch creation"
+            debug_log.append(info_msg)
+            _log_branch_debug(debug_log, info_msg)
             return None
 
-        # Determine the label prefix for branch naming
+        # STEP 2: Detect issue type
+        debug_log.append(f"[BRANCH-CREATE] STEP 2: Detecting issue type from subject...")
         if not issue_type:
             issue_type = _detect_issue_type(subject)
+        debug_log.append(f"[BRANCH-CREATE] STEP 2 OK: Issue type = {issue_type}")
 
-        # Build branch name: {label}/{issueId}
-        # KEEP THIS FORMAT - Required by github-branch-pr-policy.md for auto-close!
+        # STEP 3: Build branch name
         branch_name = issue_type + '/' + str(issue_number)
+        debug_log.append(f"[BRANCH-CREATE] STEP 3: Branch name = {branch_name}")
 
-        # Create and checkout new branch
+        # STEP 4: Create and checkout new branch
+        debug_log.append(f"[BRANCH-CREATE] STEP 4: Creating branch (git checkout -b {branch_name})...")
         result = subprocess.run(
             ['git', 'checkout', '-b', branch_name],
             capture_output=True, text=True, timeout=10,
@@ -1364,30 +1389,113 @@ def create_issue_branch(issue_number, subject, issue_type=None):
         )
 
         if result.returncode == 0:
-            # Store branch name in mapping
+            debug_log.append(f"[BRANCH-CREATE] STEP 4 OK: Branch created and checked out")
+
+            # STEP 5: Verify we're on the branch
+            verify_result = subprocess.run(
+                ['git', 'rev-parse', '--abbrev-ref', 'HEAD'],
+                capture_output=True, text=True, timeout=5,
+                cwd=repo_root
+            )
+            if verify_result.returncode == 0:
+                verified_branch = verify_result.stdout.strip()
+                debug_log.append(f"[BRANCH-CREATE] STEP 5 VERIFY: Confirmed on {verified_branch}")
+
+            # STEP 6: Store branch name in mapping
+            debug_log.append(f"[BRANCH-CREATE] STEP 6: Saving to github-issues.json...")
             mapping = _load_issues_mapping()
             mapping['session_branch'] = branch_name
             mapping['branch_created_at'] = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
             mapping['branch_from_issue'] = issue_number
             mapping['branch_type'] = issue_type
             _save_issues_mapping(mapping)
+            debug_log.append(f"[BRANCH-CREATE] STEP 6 OK: Branch info saved")
+
+            success_msg = f"[BRANCH-CREATE] ✅ SUCCESS: {branch_name}"
+            debug_log.append(success_msg)
+            _log_branch_debug(debug_log, success_msg)
+            sys.stdout.write(f"[GH] Branch: {branch_name} (created + checked out)\n")
+            sys.stdout.flush()
             return branch_name
+
         else:
-            # Branch might already exist - try checkout
+            # STEP 4b: Branch might already exist - try checkout
+            debug_log.append(f"[BRANCH-CREATE] STEP 4 FAILED: Create failed with code {result.returncode}")
+            debug_log.append(f"  stderr: {result.stderr[:300]}")
+            debug_log.append(f"[BRANCH-CREATE] STEP 4b: Attempting checkout on existing branch...")
+
             result = subprocess.run(
                 ['git', 'checkout', branch_name],
                 capture_output=True, text=True, timeout=10,
                 cwd=repo_root
             )
             if result.returncode == 0:
+                debug_log.append(f"[BRANCH-CREATE] STEP 4b OK: Existing branch checked out")
                 mapping = _load_issues_mapping()
                 mapping['session_branch'] = branch_name
+                mapping['branch_checked_out_at'] = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
                 _save_issues_mapping(mapping)
+                success_msg = f"[BRANCH-CREATE] ✅ SUCCESS: {branch_name} (existing)"
+                debug_log.append(success_msg)
+                _log_branch_debug(debug_log, success_msg)
+                sys.stdout.write(f"[GH] Branch: {branch_name} (existing, checked out)\n")
+                sys.stdout.flush()
                 return branch_name
+            else:
+                # CRITICAL: Both create AND checkout failed
+                error_msg = f"[BRANCH-CREATE] 🔴 CRITICAL FAILURE: Cannot create or checkout {branch_name}"
+                debug_log.append(f"[BRANCH-CREATE] STEP 4b FAILED: Checkout failed with code {result.returncode}")
+                debug_log.append(f"  stderr: {result.stderr[:300]}")
+                debug_log.append(error_msg)
+                debug_log.append(f"[BRANCH-CREATE] ACTION REQUIRED: Fix git manually or try again")
+                _log_branch_debug(debug_log, error_msg)
 
+                # BLOCKING: Print prominent error so user sees it
+                sys.stdout.write(f"\n{'='*70}\n")
+                sys.stdout.write(f"[GH ERROR] Branch creation FAILED: {branch_name}\n")
+                sys.stdout.write(f"  Cannot create new branch: {result.stderr[:150]}\n")
+                sys.stdout.write(f"  Cannot checkout existing: {result.stderr[:150]}\n")
+                sys.stdout.write(f"  ACTION: Check git status and fix manually\n")
+                sys.stdout.write(f"  DEBUG: See ~/.claude/memory/logs/branch-creation-debug.log\n")
+                sys.stdout.write(f"{'='*70}\n\n")
+                sys.stdout.flush()
+                return None
+
+    except subprocess.TimeoutExpired:
+        error_msg = f"[BRANCH-CREATE] TIMEOUT: git command exceeded timeout (repo_root={repo_root})"
+        debug_log.append(error_msg)
+        _log_branch_debug(debug_log, error_msg)
+        sys.stdout.write(f"\n[GH ERROR] Branch creation timeout: {branch_name}\n\n")
+        sys.stdout.flush()
+        return None
+
+    except Exception as e:
+        error_msg = f"[BRANCH-CREATE] EXCEPTION: {type(e).__name__}: {str(e)}"
+        debug_log.append(error_msg)
+        _log_branch_debug(debug_log, error_msg)
+        sys.stdout.write(f"\n[GH ERROR] Branch creation exception: {str(e)[:150]}\n\n")
+        sys.stdout.flush()
+        return None
+
+
+def _log_branch_debug(debug_log, final_msg):
+    """Write comprehensive branch creation debug log to file."""
+    try:
+        log_dir = Path.home() / '.claude' / 'memory' / 'logs'
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log_file = log_dir / 'branch-creation-debug.log'
+
+        with open(log_file, 'a', encoding='utf-8') as f:
+            ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
+            f.write(f"\n{'═'*70}\n")
+            f.write(f"[{ts}] Branch Creation Debug Log\n")
+            f.write(f"{'═'*70}\n")
+            for line in debug_log:
+                f.write(f"{line}\n")
+            f.write(f"{'═'*70}\n")
+            f.write(f"[{ts}] FINAL: {final_msg}\n\n")
     except Exception:
-        pass
-    return None
+        pass  # Logging errors should never block
 
 
 def get_session_branch():

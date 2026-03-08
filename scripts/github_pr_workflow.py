@@ -1048,6 +1048,21 @@ def _bump_and_push_on_main(repo_root: str, session_summary: dict,
         _log(f"Bump on main error: {e}")
 
 
+def _print_workflow_step(step_num, step_name, status='IN_PROGRESS'):
+    """Print formatted workflow step to user."""
+    status_symbol = {'IN_PROGRESS': '⏳', 'OK': '✅', 'SKIP': '⊘', 'ERROR': '❌', 'WARN': '⚠️'}
+    symbol = status_symbol.get(status, '?')
+
+    if step_num == -1:
+        sys.stdout.write(f"\n{'═'*70}\n")
+        sys.stdout.write(f"[PR WORKFLOW] Starting 7-step GitHub workflow\n")
+        sys.stdout.write(f"{'═'*70}\n")
+    else:
+        sys.stdout.write(f"[{step_num}] {symbol} {step_name}\n")
+
+    sys.stdout.flush()
+
+
 def run_pr_workflow(session_id=None):
     """
     Main PR workflow orchestrator. Runs the full flow:
@@ -1056,6 +1071,7 @@ def run_pr_workflow(session_id=None):
       2. Push branch to remote
       3. Create PR with session summary body + Closes #N
       4. Post auto-review comment with session metrics
+      4.5. Smart code review (safety check before merge)
       5. Merge PR (fallback: leave open)
       6. Switch back to main locally
       7. Version bump + CHANGELOG on main (after merge, on main branch)
@@ -1064,7 +1080,10 @@ def run_pr_workflow(session_id=None):
     Non-blocking: all steps wrapped in try/except, never raises.
     Returns True if PR was merged successfully, False otherwise.
     """
-    _log("=== PR Workflow Starting ===")
+    _log("═"*70)
+    _log("=== PR WORKFLOW v1.1.0 STARTING ===")
+    _log("═"*70)
+    _print_workflow_step(-1, "GitHub PR Workflow")
 
     try:
         # Check prerequisites
@@ -1075,15 +1094,27 @@ def run_pr_workflow(session_id=None):
 
         branch_name = _get_current_branch(repo_root)
         if not branch_name:
-            _log("Could not determine current branch - skipping")
+            error_msg = "CRITICAL: Could not determine current branch - PR workflow BLOCKED"
+            _log(error_msg)
+            sys.stdout.write(f"\n{'='*70}\n")
+            sys.stdout.write(f"[PR-WORKFLOW ERROR] {error_msg}\n")
+            sys.stdout.write(f"  Cannot create PR without knowing which branch you're on\n")
+            sys.stdout.write(f"  ACTION: Verify git repository with 'git status'\n")
+            sys.stdout.write(f"{'='*70}\n\n")
+            sys.stdout.flush()
             return False
 
-        # Only proceed if on an issue branch (not main/master)
+        # CRITICAL CHECK: Only proceed if on an issue branch (not main/master)
         if branch_name in ('main', 'master'):
-            _log(f"On {branch_name} branch - no PR workflow needed")
+            info_msg = f"INFO: On {branch_name} - skipping PR workflow (no feature branch work)"
+            _log(info_msg)
+            sys.stdout.write(f"\n[PR-WORKFLOW] {info_msg}\n")
+            sys.stdout.write(f"  To enable PR workflow, create tasks first (TaskCreate)\n")
+            sys.stdout.write(f"  This creates a feature branch and GitHub issue automatically\n\n")
+            sys.stdout.flush()
             return False
 
-        _log(f"Branch: {branch_name}")
+        _log(f"✅ Branch: {branch_name} (feature branch detected - PR workflow will run)")
 
         # Check if gh CLI is available
         try:
@@ -1102,9 +1133,10 @@ def run_pr_workflow(session_id=None):
         session_summary = _load_session_summary()
         issue_numbers = _get_issue_numbers()
 
-        # Step 0: Build validation (before commit)
+        # STEP 0: Build validation (before commit)
         build_result = None
-        _log("Step 0: Build validation...")
+        _print_workflow_step(0, "Build validation", 'IN_PROGRESS')
+        _log("STEP 0: Running build validation...")
         try:
             script_dir = os.path.dirname(os.path.abspath(__file__))
             if script_dir not in sys.path:
@@ -1112,75 +1144,148 @@ def run_pr_workflow(session_id=None):
             import auto_build_validator
             build_result = auto_build_validator.validate_build(repo_root)
             if build_result['all_passed']:
-                _log("Build OK: " + build_result['summary'])
-                sys.stdout.write("[BUILD] " + build_result['summary'] + "\n")
+                _log("  ✅ Build validation PASSED")
+                _log(f"  Summary: {build_result['summary']}")
+                _print_workflow_step(0, "Build validation", 'OK')
+                sys.stdout.write(f"  ✅ {build_result['summary']}\n")
                 sys.stdout.flush()
             else:
-                _log("Build FAILED: " + build_result['summary'])
-                sys.stdout.write("[BUILD FAILED] " + build_result['summary'] + "\n")
+                _log("  ⚠️  Build validation WARNINGS")
+                _log(f"  Summary: {build_result['summary']}")
+                _print_workflow_step(0, "Build validation", 'WARN')
+                sys.stdout.write(f"  ⚠️  {build_result['summary']}\n")
                 sys.stdout.flush()
-                # Log errors but don't stop the workflow - PR will show build status
+                # Log errors but don't stop - PR will show build status
                 for r in build_result['results']:
                     if not r['passed']:
-                        _log("  " + r['label'] + ": " + r.get('output', '')[:300])
+                        _log(f"    - {r['label']}: {r.get('output', '')[:200]}")
         except Exception as e:
-            _log(f"Build validation error (non-fatal): {e}")
+            _log(f"  ⚠️  Build validation error (non-fatal): {e}")
+            _print_workflow_step(0, "Build validation", 'WARN')
 
-        # Step 1: Commit changes (feature work only, no version bump here)
-        # Pass issue_numbers so commit message includes "Closes #N" (auto-close policy)
-        _log("Step 1: Committing changes...")
-        _commit_session_changes(repo_root, session_summary, issue_numbers)
-
-        # Step 2: Push branch
-        _log("Step 2: Pushing branch...")
-        pushed = _push_branch(repo_root, branch_name)
-        if not pushed:
-            _log("Push failed - cannot create PR without remote branch")
-            return
-
-        # Step 3: Create PR
-        _log("Step 3: Creating PR...")
-        pr_number = _create_pull_request(repo_root, branch_name, issue_numbers, session_summary)
-        if not pr_number:
-            _log("PR creation failed - stopping workflow")
-            return
-
-        # Step 4: Auto-review comment (includes build status)
-        _log("Step 4: Posting auto-review...")
-        _auto_review_pr(repo_root, pr_number, session_summary, build_result)
-
-        # Step 4.5 (NEW): Smart Code Review before merge
-        _log("Step 4.5: Running Smart Code Review (Session-Aware + Skill-Aware)...")
-        flow_trace = _load_flow_trace()
-        safe_to_merge = _smart_code_review(repo_root, pr_number, session_summary, flow_trace)
-
-        if not safe_to_merge:
-            _log("Smart review found critical issues - NOT merging PR")
-            sys.stdout.write("[SMART REVIEW] Critical issues found - PR left for manual review\n")
+        # STEP 1: Commit changes (feature work only, no version bump here)
+        _print_workflow_step(1, "Commit changes", 'IN_PROGRESS')
+        _log("STEP 1: Committing all changes...")
+        try:
+            _commit_session_changes(repo_root, session_summary, issue_numbers)
+            _log("  ✅ Changes committed")
+            _print_workflow_step(1, "Commit changes", 'OK')
+        except Exception as e:
+            _log(f"  ❌ Commit failed: {e}")
+            _print_workflow_step(1, "Commit changes", 'ERROR')
+            sys.stdout.write(f"\n[PR-WORKFLOW ERROR] Commit failed: {str(e)[:100]}\n\n")
             sys.stdout.flush()
             return False
 
-        # Step 5: Merge PR
-        _log("Step 5: Merging PR...")
+        # STEP 2: Push branch to remote
+        _print_workflow_step(2, "Push branch", 'IN_PROGRESS')
+        _log("STEP 2: Pushing branch to remote...")
+        pushed = _push_branch(repo_root, branch_name)
+        if not pushed:
+            _log("  ❌ Push failed - cannot create PR without remote branch")
+            _print_workflow_step(2, "Push branch", 'ERROR')
+            sys.stdout.write(f"\n[PR-WORKFLOW ERROR] Could not push {branch_name} to remote\n")
+            sys.stdout.write(f"  ACTION: Check network and git remote configuration\n\n")
+            sys.stdout.flush()
+            return False
+        _log(f"  ✅ Branch pushed to origin/{branch_name}")
+        _print_workflow_step(2, "Push branch", 'OK')
+
+        # STEP 3: Create PR
+        _print_workflow_step(3, "Create PR", 'IN_PROGRESS')
+        _log("STEP 3: Creating pull request...")
+        pr_number = _create_pull_request(repo_root, branch_name, issue_numbers, session_summary)
+        if not pr_number:
+            _log("  ❌ PR creation failed")
+            _print_workflow_step(3, "Create PR", 'ERROR')
+            sys.stdout.write(f"\n[PR-WORKFLOW ERROR] Could not create PR\n")
+            sys.stdout.write(f"  Check gh CLI authentication with 'gh auth status'\n\n")
+            sys.stdout.flush()
+            return False
+        _log(f"  ✅ PR #{pr_number} created")
+        _print_workflow_step(3, "Create PR", 'OK')
+
+        # STEP 4: Auto-review comment (includes build status)
+        _print_workflow_step(4, "Post auto-review comment", 'IN_PROGRESS')
+        _log("STEP 4: Posting auto-review comment...")
+        try:
+            _auto_review_pr(repo_root, pr_number, session_summary, build_result)
+            _log("  ✅ Auto-review comment posted")
+            _print_workflow_step(4, "Post auto-review comment", 'OK')
+        except Exception as e:
+            _log(f"  ⚠️  Auto-review comment failed (non-fatal): {e}")
+            _print_workflow_step(4, "Post auto-review comment", 'WARN')
+
+        # STEP 4.5: Smart Code Review before merge (CRITICAL)
+        _print_workflow_step(5, "Smart code review", 'IN_PROGRESS')
+        _log("STEP 4.5: Running Smart Code Review (Session-Aware + Skill-Aware)...")
+        try:
+            flow_trace = _load_flow_trace()
+            safe_to_merge = _smart_code_review(repo_root, pr_number, session_summary, flow_trace)
+
+            if not safe_to_merge:
+                _log("  ❌ Smart review found CRITICAL issues - NOT merging")
+                _print_workflow_step(5, "Smart code review", 'ERROR')
+                sys.stdout.write(f"\n[SMART REVIEW] Critical issues detected\n")
+                sys.stdout.write(f"  PR #{pr_number} left open for manual review\n")
+                sys.stdout.write(f"  Check PR comments for details\n\n")
+                sys.stdout.flush()
+                return False
+            _log("  ✅ Smart review PASSED - safe to merge")
+            _print_workflow_step(5, "Smart code review", 'OK')
+        except Exception as e:
+            _log(f"  ⚠️  Smart review error (skipping): {e}")
+            _print_workflow_step(5, "Smart code review", 'WARN')
+
+        # STEP 5: Merge PR
+        _print_workflow_step(6, "Merge PR", 'IN_PROGRESS')
+        _log("STEP 5: Merging PR...")
         merged = _merge_pr(repo_root, pr_number)
 
-        # Step 6: Switch back to main (only if merged)
-        if merged:
-            _log("Step 6: Switching to main...")
-            _switch_to_main(repo_root)
-
-            # Step 7: Version bump on main (AFTER merge, on main branch)
-            # This is the correct place: feature branch work is merged,
-            # we're back on main, now bump version and push.
-            _log("Step 7: Version bump on main...")
-            _bump_and_push_on_main(repo_root, session_summary, issue_numbers)
-
-            _log("=== PR Workflow Complete (MERGED) ===")
-            return True
-        else:
-            _log("Step 6: Skipped (PR not merged, staying on branch)")
-            _log("=== PR Workflow Complete (NOT MERGED) ===")
+        if not merged:
+            _log(f"  ⚠️  Merge failed or blocked (PR #{pr_number} left open)")
+            _print_workflow_step(6, "Merge PR", 'WARN')
+            sys.stdout.write(f"\n[PR-WORKFLOW] PR #{pr_number} could not be auto-merged\n")
+            sys.stdout.write(f"  Likely cause: Branch protection rules require manual review\n")
+            sys.stdout.write(f"  ACTION: Merge manually from GitHub\n\n")
+            sys.stdout.flush()
             return False
+
+        _log(f"  ✅ PR #{pr_number} merged successfully")
+        _print_workflow_step(6, "Merge PR", 'OK')
+
+        # STEP 6: Switch back to main (only if merged)
+        _print_workflow_step(7, "Switch to main", 'IN_PROGRESS')
+        _log("STEP 6: Switching to main branch...")
+        try:
+            _switch_to_main(repo_root)
+            _log("  ✅ Switched to main")
+            _print_workflow_step(7, "Switch to main", 'OK')
+        except Exception as e:
+            _log(f"  ⚠️  Switch to main failed: {e}")
+            _print_workflow_step(7, "Switch to main", 'WARN')
+
+        # STEP 7: Version bump on main (AFTER merge, on main branch)
+        _print_workflow_step(8, "Version bump", 'IN_PROGRESS')
+        _log("STEP 7: Bumping version on main...")
+        try:
+            _bump_and_push_on_main(repo_root, session_summary, issue_numbers)
+            _log("  ✅ Version bumped and pushed")
+            _print_workflow_step(8, "Version bump", 'OK')
+        except Exception as e:
+            _log(f"  ⚠️  Version bump failed (non-fatal): {e}")
+            _print_workflow_step(8, "Version bump", 'WARN')
+
+        _log("═"*70)
+        _log("=== PR WORKFLOW COMPLETED SUCCESSFULLY ===")
+        _log("═"*70)
+        sys.stdout.write(f"\n{'═'*70}\n")
+        sys.stdout.write(f"[PR-WORKFLOW] ✅ COMPLETED SUCCESSFULLY\n")
+        sys.stdout.write(f"  PR #{pr_number} merged into main\n")
+        sys.stdout.write(f"  Version bumped\n")
+        sys.stdout.write(f"{'═'*70}\n\n")
+        sys.stdout.flush()
+        return True
 
     except Exception as e:
         _log(f"PR Workflow error: {e}")
