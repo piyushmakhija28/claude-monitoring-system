@@ -98,8 +98,8 @@ class AiTaskTypeDetector:
                 "  3. Pass --api-key parameter: python ... --api-key \"your-key\""
             )
 
-        # Trybonsai API endpoint
-        self.api_endpoint = "https://api.trybonsai.com/v1/chat/completions"
+        # Trybonsai API endpoint (note: domain is trybons.ai, not trybonsai.com)
+        self.api_endpoint = "https://api.trybons.ai/v1/chat/completions"
 
         # System prompt for classification
         self.system_prompt = """You are a task classifier. Analyze the user's request and determine the task type.
