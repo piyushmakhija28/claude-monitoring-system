@@ -1048,7 +1048,11 @@ def main():
             # GitHub Issues: Create issue for new task
             try:
                 gim = _get_github_issue_manager()
-                if gim:
+                if not gim:
+                    # LOGGING: Why github_issue_manager failed to load
+                    sys.stdout.write('[GH-WORKFLOW] ⚠️ GitHub issue manager not available\n')
+                    sys.stdout.flush()
+                else:
                     # Use task ID from response first, fallback to sequential count
                     task_id = gim.extract_task_id_from_response(tool_response)
                     if not task_id:
@@ -1056,15 +1060,39 @@ def main():
                         task_id = str(state.get('tasks_created', 1))
                     tc_subject = (tool_input or {}).get('subject', '')
                     tc_desc = (tool_input or {}).get('description', '')
-                    if tc_subject and len(tc_subject) >= 5:
+
+                    if not tc_subject:
+                        sys.stdout.write('[GH-WORKFLOW] ⚠️ No task subject - skipping GitHub issue\n')
+                        sys.stdout.flush()
+                    elif len(tc_subject) < 5:
+                        sys.stdout.write(f'[GH-WORKFLOW] ⚠️ Subject too short ({len(tc_subject)} chars, need 5+)\n')
+                        sys.stdout.flush()
+                    else:
+                        # CREATE GITHUB ISSUE
+                        sys.stdout.write(f'[GH-WORKFLOW] Creating GitHub issue for task "{tc_subject[:50]}"...\n')
+                        sys.stdout.flush()
+
                         issue_num = gim.create_github_issue(task_id, tc_subject, tc_desc)
                         if issue_num:
-                            sys.stdout.write('[GH] Issue #' + str(issue_num) + ' created\n')
+                            sys.stdout.write(f'[GH-WORKFLOW] ✅ Issue #{issue_num} created (branch created automatically)\n')
                             sys.stdout.flush()
                             # Branch is now created atomically inside create_github_issue()
-                            # No separate branch creation needed - prevents chain breaks.
-            except Exception:
-                pass  # Never block on GitHub failures
+                        else:
+                            sys.stdout.write(f'[GH-WORKFLOW] ❌ Issue creation returned None - check logs\n')
+                            sys.stdout.flush()
+            except Exception as e:
+                # LOG THE ACTUAL ERROR instead of silent failure
+                sys.stdout.write(f'[GH-WORKFLOW] ❌ EXCEPTION: {type(e).__name__}: {str(e)[:150]}\n')
+                sys.stdout.flush()
+                # Also log to file
+                try:
+                    log_file = Path.home() / '.claude' / 'memory' / 'logs' / 'github-workflow-errors.log'
+                    with open(log_file, 'a', encoding='utf-8') as f:
+                        f.write(f"\n[{datetime.now().isoformat()}] TaskCreate GitHub issue error\n")
+                        f.write(f"  Error: {type(e).__name__}: {str(e)}\n")
+                        f.write(f"  Subject: {tc_subject}\n")
+                except Exception:
+                    pass
 
         # -----------------------------------------------------------------------
         # STEP 3.5 ENFORCEMENT: Clear skill-selection flag when Skill or Task is called
