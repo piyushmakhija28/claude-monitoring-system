@@ -1940,7 +1940,7 @@ def main():
     # Fallback: if policy returned 0%, try session-progress.json (maintained by post-tool-tracker)
     if context_pct == 0:
         try:
-            _sp_file = LOGS_DIR / 'session-progress.json'
+            _sp_file = MEMORY_BASE / 'logs' / 'session-progress.json'
             if _sp_file.exists():
                 with open(_sp_file, 'r', encoding='utf-8') as _spf:
                     _sp_data = json.load(_spf)
@@ -2271,7 +2271,7 @@ def main():
     # (maintained by post-tool-tracker with real tool usage data)
     if completed_tasks_count == 0 and files_modified_count == 0:
         try:
-            _sp_file = LOGS_DIR / 'session-progress.json'
+            _sp_file = MEMORY_BASE / 'logs' / 'session-progress.json'
             if _sp_file.exists():
                 with open(_sp_file, 'r', encoding='utf-8') as _spf:
                     _sp_data = json.load(_spf)
