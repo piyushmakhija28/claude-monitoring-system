@@ -824,15 +824,21 @@ def main():
         is_error = is_error_response(tool_response)
         status = 'error' if is_error else 'success'
 
+        # DEBUG: Log status determination
+        debug_log(f"  is_error={is_error}, status={status}")
+
         # CONTEXT CHAIN: Load flow-trace context from 3-level-flow
         flow_ctx = _load_flow_trace_context()
+        debug_log(f"  flow_ctx loaded")
 
         # NEW (v3.2.0): Level 3.7 - Detect failures in tool result
         failure_info = _detect_result_failure(tool_response)
+        debug_log(f"  failure_info detected")
 
         # Calculate progress delta (v3.1.0: complexity-aware weighting)
         # Policy: task-phase-enforcement-policy.md - higher complexity = more work = smaller increments
         base_delta = 0 if is_error else PROGRESS_DELTA.get(tool_name, 0)
+        debug_log(f"  progress delta calculated: base_delta={base_delta}")
         complexity = flow_ctx.get('complexity', 0)
         if complexity >= 15 and base_delta > 0:
             delta = max(1, base_delta // 4)  # HIGH complexity: 25% of base
@@ -842,12 +848,14 @@ def main():
             delta = base_delta  # LOW complexity: full base delta
 
         # Build log entry (enriched with task context from flow-trace)
+        debug_log(f"  building log entry")
         entry = {
             'ts': datetime.now().strftime('%Y-%m-%dT%H:%M:%S'),
             'tool': tool_name,
             'status': status,
             'progress_delta': delta,
         }
+        debug_log(f"  log entry built, now checking STEP 3.1")
         # Add task context to every entry for full traceability
         if flow_ctx.get('task_type'):
             entry['task_type'] = flow_ctx['task_type']
