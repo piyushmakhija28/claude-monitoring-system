@@ -1937,6 +1937,19 @@ def main():
     context_level = ctx_data.get('context_level', ctx_data.get('level', 'unknown'))
     ctx_recommendations = ctx_data.get('recommendations', [])
 
+    # Fallback: if policy returned 0%, try session-progress.json (maintained by post-tool-tracker)
+    if context_pct == 0:
+        try:
+            _sp_file = LOGS_DIR / 'session-progress.json'
+            if _sp_file.exists():
+                with open(_sp_file, 'r', encoding='utf-8') as _spf:
+                    _sp_data = json.load(_spf)
+                _sp_ctx = _sp_data.get('context_estimate_pct', 0)
+                if _sp_ctx > 0:
+                    context_pct = _sp_ctx
+        except Exception:
+            pass
+
     # Determine action based on context %
     if context_pct >= 90:
         ctx_action = "CRITICAL - Save session, start new session"
@@ -2190,13 +2203,10 @@ def main():
     prefs_dur = 0
     prefs_data = {}
     if prefs_script.exists():
-        prefs_out, _, prefs_rc, prefs_dur = run_script_with_retry(prefs_script, timeout=5, step_name='Level-1.3.Preferences')
+        prefs_out, _, prefs_rc, prefs_dur = run_script_with_retry(prefs_script, ['--enforce'], timeout=5, step_name='Level-1.3.Preferences')
         if prefs_rc == 0 and prefs_out.strip():
-            # Count preferences from output (lines with [CHECK] indicate set preferences)
-            for line in prefs_out.splitlines():
-                if '[CHECK]' in line or 'check' in line.lower():
-                    prefs_loaded += 1
-            prefs_data = {"raw_output_lines": len(prefs_out.splitlines())}
+            prefs_data = safe_json(prefs_out)
+            prefs_loaded = prefs_data.get('preferences_count', 0)
 
     trace["pipeline"].append({
         "step": "LEVEL_1_PREFERENCES",
@@ -2256,6 +2266,25 @@ def main():
     completed_tasks_count = state_summary.get('progress', {}).get('completed_tasks', 0)
     files_modified_count = state_summary.get('progress', {}).get('files_modified', 0)
     pending_work_count = state_summary.get('progress', {}).get('pending_work', 0)
+
+    # Fallback: if session-memory-policy returned 0s, use session-progress.json
+    # (maintained by post-tool-tracker with real tool usage data)
+    if completed_tasks_count == 0 and files_modified_count == 0:
+        try:
+            _sp_file = LOGS_DIR / 'session-progress.json'
+            if _sp_file.exists():
+                with open(_sp_file, 'r', encoding='utf-8') as _spf:
+                    _sp_data = json.load(_spf)
+                completed_tasks_count = _sp_data.get('tasks_completed', 0)
+                _mod_files = _sp_data.get('modified_files_since_commit', [])
+                files_modified_count = len(_mod_files) if isinstance(_mod_files, list) else 0
+                # Count total tools used as a proxy for work done
+                _tc = _sp_data.get('tool_counts', {})
+                _total_tools = sum(_tc.values()) if isinstance(_tc, dict) else 0
+                if pending_work_count == 0 and _total_tools > 0:
+                    pending_work_count = max(0, _total_tools - completed_tasks_count)
+        except Exception:
+            pass
 
     trace["pipeline"].append({
         "step": "LEVEL_1_STATE",
