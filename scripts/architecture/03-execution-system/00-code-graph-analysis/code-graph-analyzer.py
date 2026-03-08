@@ -65,14 +65,32 @@ except ImportError:
 MAX_FILES = 500
 MAX_FILE_SIZE = 100 * 1024  # 100KB
 
-GRAPH_CACHE_DIR = '.claude-graph'
 GRAPH_CACHE_FILE = 'graph-analysis.json'
+
+
+def _get_graph_cache_dir(project_dir):
+    """Get system temp-based cache directory for graph analysis.
+
+    Uses the OS temp directory (e.g. %TEMP% on Windows, /tmp on Unix)
+    with a project-specific subdirectory based on the project folder name.
+    This avoids polluting the project directory with cache files.
+
+    Args:
+        project_dir: Path to the project root.
+
+    Returns:
+        Path: e.g. /tmp/.claude-graph-cache/claude-insight/
+    """
+    import tempfile
+    project_name = Path(project_dir).resolve().name
+    return Path(tempfile.gettempdir()) / '.claude-graph-cache' / project_name
 
 SKIP_DIRS = {
     '.git', 'node_modules', '__pycache__', '.venv', 'venv', 'env',
     'dist', 'build', '.tox', '.eggs', '.mypy_cache', '.pytest_cache',
     '.idea', '.vscode', '.settings', 'target', 'bin', 'obj',
-    '.gradle', '.mvn', 'vendor', 'bower_components', GRAPH_CACHE_DIR,
+    '.gradle', '.mvn', 'vendor', 'bower_components',
+    '.claude-graph',  # legacy cache dir (skip if present)
 }
 
 LANGUAGE_EXTENSIONS = {
@@ -98,14 +116,14 @@ MEMORY_BASE = Path.home() / '.claude' / 'memory'
 # =============================================================================
 
 def get_cache_path(project_dir):
-    """Get the path to the repo-level graph cache file."""
-    return Path(project_dir) / GRAPH_CACHE_DIR / GRAPH_CACHE_FILE
+    """Get the path to the graph cache file in system temp directory."""
+    return _get_graph_cache_dir(project_dir) / GRAPH_CACHE_FILE
 
 
 def load_cached_graph(project_dir):
     """Load cached graph analysis from the repo.
 
-    Cache at {project}/.claude-graph/graph-analysis.json.
+    Cache at {tempdir}/.claude-graph-cache/{project}/graph-analysis.json.
     Returns cached data if file exists and is valid, None otherwise.
     """
     cache_file = get_cache_path(project_dir)
@@ -122,12 +140,13 @@ def load_cached_graph(project_dir):
 
 
 def save_graph_to_repo(project_dir, result_data):
-    """Save graph analysis to {project}/.claude-graph/graph-analysis.json.
+    """Save graph analysis to system temp directory.
 
-    Included in commits so it persists across sessions.
+    Uses OS temp dir (tempfile.gettempdir()) with project-specific subdirectory.
+    E.g. %TEMP%/.claude-graph-cache/claude-insight/graph-analysis.json
     """
     try:
-        cache_dir = Path(project_dir) / GRAPH_CACHE_DIR
+        cache_dir = _get_graph_cache_dir(project_dir)
         cache_dir.mkdir(parents=True, exist_ok=True)
 
         cache_file = cache_dir / GRAPH_CACHE_FILE
@@ -743,9 +762,9 @@ class CodeGraphAnalyzer:
         return self.graph_complexity_score
 
     def save(self):
-        """Save analysis results to the repo-level cache.
+        """Save analysis results to the system temp cache.
 
-        Saves to {project}/.claude-graph/graph-analysis.json.
+        Saves to {tempdir}/.claude-graph-cache/{project}/graph-analysis.json.
         Skips saving if results were loaded from cache (nothing new).
         """
         if self._from_cache:
@@ -767,7 +786,7 @@ class CodeGraphAnalyzer:
 
         saved = save_graph_to_repo(self.project_dir, result)
         if saved:
-            print(f"[GRAPH] Saved to {self.project_dir / GRAPH_CACHE_DIR / GRAPH_CACHE_FILE}")
+            print(f"[GRAPH] Saved to {_get_graph_cache_dir(self.project_dir) / GRAPH_CACHE_FILE}")
         return saved
 
     def build_trace_entry(self):

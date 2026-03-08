@@ -805,12 +805,39 @@ def enforce():
             duration_ms=_op3_duration
         ))
 
+        # Sub-op 4: Load session state (progress data for Level 1.4 display)
+        _op4_start = datetime.now()
+        try:
+            state = SessionState()
+            state_summary = state.get_summary()
+            progress = state_summary.get('progress', {})
+        except Exception:
+            progress = {}
+        _op4_duration = int((datetime.now() - _op4_start).total_seconds() * 1000)
+        try:
+            _sub_operations.append(record_sub_operation(
+                session_id=get_session_id(),
+                policy_name="session-memory-policy",
+                operation_name="load_session_state",
+                input_params={},
+                output_results={"progress": progress},
+                duration_ms=_op4_duration
+            ))
+        except Exception:
+            pass
+
         log_policy_hit("ENFORCE_COMPLETE", f"sessions={len(sessions)}, protected={total_protected}")
         print(f"[session-memory-policy] {len(sessions)} sessions, {total_protected} protected files")
 
         # ===================================================================
         # TRACKING: Record overall execution
         # ===================================================================
+        result = {
+            "status": "success",
+            "sessions": len(sessions),
+            "protected_files": total_protected,
+            "progress": progress,
+        }
         _duration_ms = int((datetime.now() - _track_start_time).total_seconds() * 1000)
         record_policy_execution(
             session_id=get_session_id(),
@@ -818,17 +845,13 @@ def enforce():
             policy_script="session-memory-policy.py",
             policy_type="Policy Script",
             input_params={},
-            output_results={
-                "status": "success",
-                "sessions": len(sessions),
-                "protected_files": total_protected
-            },
+            output_results=result,
             decision=f"Protected {len(sessions)} sessions with {total_protected} files",
             duration_ms=_duration_ms,
             sub_operations=_sub_operations if _sub_operations else None
         )
 
-        return {"status": "success", "sessions": len(sessions), "protected_files": total_protected}
+        return result
     except Exception as e:
         log_policy_hit("ENFORCE_ERROR", str(e))
         print(f"[session-memory-policy] ERROR: {e}")

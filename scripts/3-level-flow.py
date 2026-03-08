@@ -731,9 +731,10 @@ def _call_mod_func(mod, func_name):
             stdout = json.dumps({"status": "success" if result else "error"})
         else:
             stdout = str(result) if result else ''
-        # Append captured print output if the function returned nothing useful
-        if not stdout and captured_text:
-            stdout = captured_text
+        # Always prepend captured print output (policy scripts print parseable
+        # lines like "Common Standards: 7" that callers grep for).
+        if captured_text:
+            stdout = captured_text.rstrip('\n') + '\n' + stdout if stdout else captured_text
         return stdout, '', 0, dur
     except Exception as e:
         sys.stdout = old_stdout
@@ -931,16 +932,38 @@ def _policy_hard_break(step_name, script_name, error_detail, attempts):
 def safe_json(text):
     """Parse a JSON string without raising an exception on malformed input.
 
+    Handles mixed output (print lines + JSON) by finding the last JSON
+    object in the text when direct parsing fails.
+
     Args:
-        text (str): Raw JSON string to parse.
+        text (str): Raw text that may contain a JSON object.
 
     Returns:
         dict: Parsed object, or an empty dict on any parse error.
     """
-    try:
-        return json.loads(text.strip())
-    except Exception:
+    if not text or not text.strip():
         return {}
+    stripped = text.strip()
+    # Fast path: pure JSON
+    try:
+        return json.loads(stripped)
+    except Exception:
+        pass
+    # Slow path: find last JSON object in mixed output
+    last_brace = stripped.rfind('\n{')
+    if last_brace >= 0:
+        try:
+            return json.loads(stripped[last_brace + 1:])
+        except Exception:
+            pass
+    # Try finding first { to end
+    first_brace = stripped.find('{')
+    if first_brace > 0:
+        try:
+            return json.loads(stripped[first_brace:])
+        except Exception:
+            pass
+    return {}
 
 
 def write_json(path, data):
@@ -2120,6 +2143,13 @@ def main():
         and not is_non_coding_message(user_message)
         and not _is_continuation
     )
+
+    # FLAG LIFECYCLE FIX: Clear stale flags from previous prompts BEFORE
+    # creating new ones.  This prevents flag accumulation where old flags
+    # block tools even after the context that created them is gone.
+    if _needs_enforcement and session_id:
+        clear_current_session_flags(session_id, reason='new-prompt-cleanup')
+
     if _needs_enforcement:
         # AUTO_PROCEED v1.0: Checkpoint text shows in trace but does NOT block.
         # User approved auto-proceed (2026-02-23) - trusts Claude's decisions.
@@ -2500,8 +2530,8 @@ def main():
     # LEVEL 2.1: COMMON STANDARDS (always active)
     # ------------------------------------------------------------------
     step_start_2_1 = datetime.now()
-    common_count = 12
-    common_rules = 65
+    common_count = 0
+    common_rules = 0
     common_list = []
     common_dur = 0
 
@@ -2582,8 +2612,8 @@ def main():
 
     if is_spring_boot:
         step_start_2_2 = datetime.now()
-        micro_count = 15
-        micro_rules = 139
+        micro_count = 0
+        micro_rules = 0
 
         # Use coding-standards-enforcement-policy.py for microservices standards
         coding_standards_script = SCRIPT_DIR / 'architecture' / '02-standards-system' / 'coding-standards-enforcement-policy.py'
@@ -3241,7 +3271,125 @@ Work to complete: Execute phase {i} of the identified work breakdown.
         pass
 
     # ------------------------------------------------------------------
+    # STEP 3.3A: INTELLIGENT DECISION ENGINE (LLM-Powered)
+    # Replaces keyword-based guessing with OpenRouter LLM for:
+    #   - Task Type, Model Selection, Skill/Agent Selection, Complexity
+    # This is MANDATORY. If LLM fails, pipeline fails.
+    # ------------------------------------------------------------------
+    step_start_llm = datetime.now()
+    llm_decision = None
+    llm_engine_script = SCRIPT_DIR / 'architecture' / '03-execution-system' / '04-model-selection' / 'intelligent-decision-engine.py'
+    if not llm_engine_script.exists():
+        llm_engine_script = MEMORY_BASE / '03-execution-system' / '04-model-selection' / 'intelligent-decision-engine.py'
+
+    if llm_engine_script.exists():
+        try:
+            import tempfile as _llm_tempfile
+            llm_context = {
+                'user_message': user_message,
+                'keyword_task_type': task_type,
+                'keyword_complexity': adj_complexity,
+                'tech_stack': tech_stack,
+                'keywords': [],
+                'context_pct': context_pct2,
+                'task_count': task_count,
+                'plan_required': plan_required,
+                'project_name': Path.cwd().name,
+            }
+            with _llm_tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False, encoding='utf-8') as _llm_tf:
+                json.dump(llm_context, _llm_tf)
+                _llm_tf_path = _llm_tf.name
+            llm_out, llm_err, llm_rc, llm_dur = run_script(llm_engine_script, [_llm_tf_path], timeout=25)
+            try:
+                os.unlink(_llm_tf_path)
+            except OSError:
+                pass
+            if llm_rc == 0 and llm_out.strip():
+                llm_json = None
+                # Parse JSON from output (may have text before JSON)
+                last_brace = llm_out.rfind('\n{')
+                if last_brace >= 0:
+                    try:
+                        llm_json = json.loads(llm_out[last_brace + 1:])
+                    except json.JSONDecodeError:
+                        pass
+                if llm_json is None and llm_out.strip().startswith('{'):
+                    try:
+                        llm_json = json.loads(llm_out.strip())
+                    except json.JSONDecodeError:
+                        pass
+                if llm_json and 'error' not in llm_json:
+                    llm_decision = llm_json
+                    # Override pipeline variables with LLM decisions
+                    task_type = llm_decision.get('task_type', task_type)
+                    adj_complexity = llm_decision.get('complexity', adj_complexity)
+                    print(f"   [3.3A] LLM Decision Engine: task={task_type}, "
+                          f"complexity={adj_complexity}, model={llm_decision.get('model')}, "
+                          f"agent={llm_decision.get('agent_name')} "
+                          f"(confidence={llm_decision.get('confidence', 0):.1%}, "
+                          f"{llm_decision.get('duration_ms', 0)}ms, "
+                          f"llm={llm_decision.get('llm_model_used', 'unknown')})")
+                else:
+                    err_msg = llm_json.get('error', 'unknown') if llm_json else llm_err[:100]
+                    print(f"   [3.3A] LLM Decision Engine FAILED: {err_msg}")
+            else:
+                print(f"   [3.3A] LLM Decision Engine FAILED: rc={llm_rc}")
+        except Exception as _llm_ex:
+            print(f"   [3.3A] LLM Decision Engine ERROR: {_llm_ex}")
+    else:
+        print(f"   [3.3A] LLM Decision Engine: script not found (skipped)")
+
+    llm_dur_ms = int((datetime.now() - step_start_llm).total_seconds() * 1000)
+    trace["pipeline"].append({
+        "step": "LEVEL_3_STEP_3_3A",
+        "name": "Intelligent Decision Engine (LLM)",
+        "level": 3,
+        "order": 6.5,
+        "is_blocking": True,
+        "status": "PASSED" if llm_decision else "FAILED",
+        "timestamp": step_start_llm.isoformat(),
+        "duration_ms": llm_dur_ms,
+        "input": {
+            "from_previous": "LEVEL_3_STEP_3_2",
+            "user_message_preview": user_message[:100],
+            "keyword_task_type": task_type,
+            "keyword_complexity": adj_complexity,
+            "tech_stack": tech_stack,
+            "context_pct": context_pct2,
+            "purpose": "LLM-powered unified decision for task_type, model, skill/agent"
+        },
+        "policy": {
+            "script": "intelligent-decision-engine.py",
+            "rules_applied": [
+                "llm_replaces_keyword_guessing",
+                "mandatory_pipeline_step",
+                "openrouter_free_models",
+                "plan_mode_forces_opus"
+            ]
+        },
+        "policy_output": llm_decision if llm_decision else {"error": "LLM failed"},
+        "decision": f"LLM decided: task={task_type}, model={llm_decision.get('model') if llm_decision else 'N/A'}" if llm_decision else "LLM failed - using keyword fallback",
+        "passed_to_next": {
+            "llm_decision_available": llm_decision is not None,
+            "overrides_model_selection": llm_decision is not None,
+            "overrides_skill_selection": llm_decision is not None
+        }
+    })
+    try:
+        emit_policy_step('LEVEL_3_STEP_3_3A_LLM_DECISION', level=3,
+                         passed=llm_decision is not None,
+                         duration_ms=llm_dur_ms, session_id=session_id or '',
+                         details={'llm_available': llm_decision is not None,
+                                  'model': llm_decision.get('model') if llm_decision else None,
+                                  'agent': llm_decision.get('agent_name') if llm_decision else None,
+                                  'confidence': llm_decision.get('confidence') if llm_decision else 0})
+    except Exception:
+        pass
+
+    # ------------------------------------------------------------------
     # STEP 3.4: MODEL SELECTION (via intelligent-model-selection-policy.py)
+    # If LLM decision engine succeeded, use its model recommendation.
+    # Otherwise fall back to existing keyword/threshold logic.
     # ------------------------------------------------------------------
     step_start = datetime.now()
     model_script = SCRIPT_DIR / 'architecture' / '03-execution-system' / '04-model-selection' / 'intelligent-model-selection-policy.py'
@@ -3252,6 +3400,13 @@ Work to complete: Execute phase {i} of the identified work breakdown.
     model_reason = ''
     model_overrides = []
     model_script_used = False
+
+    # USE LLM DECISION if available (overrides all keyword-based logic)
+    if llm_decision and llm_decision.get('model') in ('HAIKU', 'SONNET', 'OPUS'):
+        selected_model = llm_decision['model']
+        model_reason = f"[LLM] {llm_decision.get('model_reasoning', 'LLM decision')}"
+        model_script_used = True
+        model_overrides.append('llm_decision_engine_override')
 
     if model_script.exists():
         try:
@@ -3367,7 +3522,15 @@ Work to complete: Execute phase {i} of the identified work breakdown.
     skill_reason = ''
     skill_script_used = False
 
-    if skill_script.exists():
+    # USE LLM DECISION if available (overrides all keyword-based skill selection)
+    if llm_decision and llm_decision.get('agent_name'):
+        skill_agent_name = llm_decision['agent_name']
+        agent_type = llm_decision.get('agent_type', 'agent')
+        supplementary_skills = llm_decision.get('supplementary_skills', [])
+        skill_reason = f"[LLM] {llm_decision.get('agent_reasoning', 'LLM decision')}"
+        skill_script_used = True
+
+    elif skill_script.exists():
         try:
             import tempfile as _tempfile
             task_ctx = {
@@ -3449,7 +3612,7 @@ Work to complete: Execute phase {i} of the identified work breakdown.
             "purpose": "Select skill or agent from registry for this task"
         },
         "policy": {
-            "script": "auto-skill-agent-selection-policy.py" if skill_script_used else "inline 4-layer waterfall",
+            "script": "intelligent-decision-engine.py (LLM)" if (llm_decision and llm_decision.get('agent_name')) else ("auto-skill-agent-selection-policy.py" if skill_script_used else "inline 4-layer waterfall"),
             "rules_applied": [
                 "task_type_registry_checked_FIRST",
                 "ui_ux_task_type_maps_to_ui_ux_designer_agent",
