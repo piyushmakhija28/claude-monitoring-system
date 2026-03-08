@@ -40,7 +40,6 @@ Author: Claude Memory System
 import os
 import sys
 import json
-import hashlib
 import random
 import string
 from datetime import datetime
@@ -91,7 +90,7 @@ class SessionIDGenerator:
         """Initialise paths and create required directories if absent."""
         self.memory_path = Path.home() / '.claude' / 'memory'
         self.sessions_dir = self.memory_path / 'sessions'
-        # Per-project session file for multi-window isolation
+        # Session pointer file (each window gets unique session ID at startup)
         try:
             from project_session import get_project_session_file
             self.current_session_file = get_project_session_file()
