@@ -2243,8 +2243,21 @@ def main():
     trace["meta"]["session_id"] = session_id
     trace["meta"]["log_dir"] = str(session_log_dir)
 
-    # Determine session status and message number (v3.7.1 enrichment)
+    # Store project cwd in session JSON for future chaining
     _sess_json_path = MEMORY_BASE / 'sessions' / f'{session_id}.json'
+    if _sess_json_path.exists():
+        try:
+            _sd = json.loads(_sess_json_path.read_text(encoding='utf-8'))
+            _sd.setdefault('metadata', {})
+            _sd['metadata']['cwd'] = hook_cwd or str(Path.cwd())
+            _sd['metadata']['project'] = hook_cwd or str(Path.cwd())
+            if _prev_session_id:
+                _sd['parent_session'] = _prev_session_id
+            _sess_json_path.write_text(json.dumps(_sd, indent=2), encoding='utf-8')
+        except Exception:
+            pass
+
+    # Determine session status and message number (v3.7.1 enrichment)
     _sess_flow_runs = 0
     _sess_status = "NEW"
     if _sess_json_path.exists():
@@ -2327,7 +2340,7 @@ def main():
             "session_id": session_id,
             "session_id_format": "SESSION-YYYYMMDD-HHMMSS-XXXX",
             "log_dir": str(session_log_dir),
-            "exit_code": sess_rc
+            "exit_code": new_rc
         },
         "decision": f"Session {session_id} active - all logs will reference this ID",
         "passed_to_next": {
