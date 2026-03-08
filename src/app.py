@@ -1737,7 +1737,6 @@ def api_3level_flow_log_files():
 
 
 @app.route('/api/3level-flow/daemon-activity')
-@login_required
 def api_3level_flow_daemon_activity():
     """Return daemon activity summary from policy-hits.log"""
     try:
@@ -1753,7 +1752,6 @@ def api_3level_flow_daemon_activity():
 
 
 @app.route('/api/3level-flow/pipeline/<session_id>')
-@login_required
 def api_3level_flow_pipeline(session_id):
     """Return full pipeline trace for a session (from flow-trace.json, v3.0.0+)"""
     try:
