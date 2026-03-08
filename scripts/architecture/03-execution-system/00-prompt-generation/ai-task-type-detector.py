@@ -90,34 +90,30 @@ Return ONLY the JSON object, no other text."""
 
     def detect(self, user_message: str) -> Dict:
         """
-        Detect task type using Trybonsai API.
+        Detect task type using Trybonsai API (NO FALLBACK).
+
+        API-FIRST approach:
+        - Call Trybonsai API
+        - Return AI classification
+        - Fail explicitly if API unavailable (don't use broken keywords)
+        - User upgrades to paid API if free tier insufficient
 
         Args:
             user_message: User's prompt/request
 
         Returns:
             Dict with keys: task_type, confidence, reasoning
+
+        Raises:
+            Exception: If API call fails (no silent fallback)
         """
-        try:
-            # Call Trybonsai API
-            response = self._call_api(user_message)
+        # Call Trybonsai API (this will raise if API fails)
+        response = self._call_api(user_message)
 
-            # Parse response
-            result = self._parse_response(response)
+        # Parse and return response
+        result = self._parse_response(response)
 
-            return result
-
-        except Exception as e:
-            print(f"[AI-DETECTOR] Error: {str(e)}", file=sys.stderr)
-            # Fallback to keyword detection
-            from prompt_generation_policy import PromptGenerator
-            pg = PromptGenerator()
-            fallback_type = pg.detect_task_type(user_message)
-            return {
-                "task_type": fallback_type,
-                "confidence": 0.5,
-                "reasoning": f"Fallback detection (API failed): {str(e)}"
-            }
+        return result
 
     def _call_api(self, user_message: str) -> str:
         """Call Trybonsai API and return response."""

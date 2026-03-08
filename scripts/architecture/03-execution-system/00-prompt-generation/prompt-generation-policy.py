@@ -210,77 +210,52 @@ class PromptGenerator:
         return analysis
 
     def detect_task_type(self, message: str) -> str:
-        """Classify a message into a task type using AI detection with keyword fallback.
+        """Classify a message into a task type using AI detection ONLY.
 
-        STRATEGY:
-        1. Try AI-based detection via Trybonsai API (intelligent, handles varied inputs)
-        2. Fall back to keyword matching if API unavailable or fails
-        3. Return task type with confidence
+        STRATEGY: API-FIRST, NO FALLBACK
+        - Keyword-based systems are fundamentally broken (proven by YouTube, SEO, etc.)
+        - AI detection is the ONLY correct approach
+        - If API unavailable, fail explicitly (don't silently use broken keywords)
+        - User can upgrade to paid API if free tier insufficient
 
         Args:
             message (str): User message (original or lowercased).
 
         Returns:
-            str: Task type label (e.g., 'Design', 'API Creation', 'Bug Fix', 'General Task').
+            str: Task type label determined by AI (e.g., 'Design', 'API Creation', 'Bug Fix').
+
+        Raises:
+            ValueError: If TRYBONSAI_API_KEY not set or API call fails.
         """
-        # Try AI detection first (if API key available)
         try:
             from ai_task_type_detector import AiTaskTypeDetector
-            if AiTaskTypeDetector.is_available():
-                detector = AiTaskTypeDetector()
-                result = detector.detect(message)
-                # Return AI-detected task type (with high confidence)
-                if result.get("confidence", 0) >= 0.6:
-                    return result.get("task_type", "General Task")
-        except Exception:
-            pass  # Fall back to keyword matching if AI fails
 
-        # Fallback: Keyword-based detection
-        message_lower = message.lower() if isinstance(message, str) else message
+            # Require API key - no silent fallback to broken keyword system
+            if not AiTaskTypeDetector.is_available():
+                raise ValueError(
+                    "TRYBONSAI_API_KEY not set. "
+                    "AI-based task detection requires valid API key. "
+                    "Set environment variable or use --api-key parameter."
+                )
 
-        # System/Meta tasks - highest priority
-        system_keywords = [
-            "hook", "3-level", "prompt-generator", "memory system", "skill", "agent",
-            "auto-fix", "session", "pre-tool", "post-tool", "blocking-policy",
-            "task-auto-analyzer", "plan-mode", "model-selection"
-        ]
-        if any(kw in message_lower for kw in system_keywords):
-            return "System/Script"
+            # Call AI detector
+            detector = AiTaskTypeDetector()
+            result = detector.detect(message)
 
-        # Dashboard specific
-        if any(kw in message_lower for kw in ["dashboard", "admin panel"]):
-            return "Dashboard"
+            # Return detected task type
+            return result.get("task_type", "General Task")
 
-        # Frontend framework
-        if any(kw in message_lower for kw in ["react", "angular", "vue", "component"]):
-            return "Frontend"
-
-        # Standard keyword mapping (includes Hinglish verbs)
-        keywords_map = {
-            "Design": ["design", "redesign", "ui", "ux", "ui/ux", "interface", "layout",
-                      "mockup", "wireframe", "styling", "theme", "color scheme", "component design",
-                      "design system", "figma", "xd", "sketch"],
-            "API Creation": ["create api", "rest api", "endpoint", "crud"],
-            "Authentication": ["auth", "login", "jwt", "token"],
-            "Authorization": ["role", "permission", "access control"],
-            "Database": ["database", "table", "schema", "entity"],
-            "Configuration": ["config", "setup", "settings",
-                            "rakhle", "rakh do", "rakho", "sirf local", "only local"],
-            "Bug Fix": ["fix", "bug", "error", "issue",
-                       "thik karo", "sahi karo", "kaam karo", "fix kar"],
-            "Refactoring": ["refactor", "improve", "optimize",
-                           "hata de", "hata do", "hata hi", "hatao",
-                           "badal do", "badal de", "change kar", "remove kar"],
-            "Security": ["security", "encrypt", "vulnerability"],
-            "Testing": ["test", "unit test", "pytest"],
-            "Documentation": ["document", "readme", "comment"]
-        }
-
-        for task_type, keywords in keywords_map.items():
-            if any(kw in message_lower for kw in keywords):
-                return task_type
-
-        return "General Task"
+        except Exception as e:
+            # Fail explicitly - don't silently use broken keywords
+            error_msg = f"Task type detection failed: {str(e)}"
+            print(f"[ERROR] {error_msg}", file=sys.stderr)
+            # Return General Task as last resort, but log the error
+            sys.stderr.write(
+                "\n[CRITICAL] Keyword-based fallback REMOVED (was broken)\n"
+                "[CRITICAL] Please ensure TRYBONSAI_API_KEY is set\n"
+                "[CRITICAL] Or upgrade to paid API if free tier exhausted\n"
+            )
+            return "General Task"
 
     def extract_entities(self, message: str) -> List[str]:
         """Extract domain entity names from a message string.
