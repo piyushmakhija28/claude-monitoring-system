@@ -190,7 +190,14 @@ def _load_flow_trace_context():
         trace_file = memory_base / 'logs' / 'sessions' / session_id / 'flow-trace.json'
         if trace_file.exists():
             with open(trace_file, 'r', encoding='utf-8') as f:
-                data = json.load(f)
+                raw = json.load(f)
+            # v4.4.0+: array of traces - use latest entry
+            if isinstance(raw, list) and raw:
+                data = raw[-1]
+            elif isinstance(raw, dict):
+                data = raw
+            else:
+                data = {}
             final_decision = data.get('final_decision', {})
             _flow_trace_cache = {
                 'task_type': final_decision.get('task_type', ''),
@@ -547,8 +554,9 @@ def check_skill_selection_pending(tool_name):
 
 def _load_raw_flow_trace():
     """
-    Load the full raw flow-trace.json for the current session.
+    Load the LATEST flow-trace entry from flow-trace.json for the current session.
     Returns the parsed dict, or None if unavailable.
+    Handles both array format (v4.4.0+) and legacy single-dict format.
     Used by Level 1/2 completion checks which need the pipeline array,
     not just the final_decision summary extracted by _load_flow_trace_context().
     """
@@ -561,7 +569,14 @@ def _load_raw_flow_trace():
         if not trace_file.exists():
             return None
         with open(trace_file, 'r', encoding='utf-8') as f:
-            return json.load(f)
+            data = json.load(f)
+        # v4.4.0+: array of traces - return the latest one
+        if isinstance(data, list) and data:
+            return data[-1]
+        # Legacy: single dict
+        if isinstance(data, dict):
+            return data
+        return None
     except Exception:
         return None
 

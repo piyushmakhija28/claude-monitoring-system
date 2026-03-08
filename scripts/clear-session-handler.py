@@ -567,7 +567,15 @@ def get_previous_session_context(session_id):
 
     try:
         with open(flow_trace, 'r', encoding='utf-8') as f:
-            data = json.load(f)
+            raw = json.load(f)
+
+        # v4.4.0+: array of traces - use latest entry
+        if isinstance(raw, list) and raw:
+            data = raw[-1]
+        elif isinstance(raw, dict):
+            data = raw
+        else:
+            data = {}
 
         user_input = data.get('user_input', {})
         final_decision = data.get('final_decision', {})

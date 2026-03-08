@@ -286,7 +286,14 @@ def _get_flow_trace_context():
     try:
         if trace_file.exists():
             with open(trace_file, 'r', encoding='utf-8') as f:
-                data = json.load(f)
+                raw = json.load(f)
+            # v4.4.0+: array of traces - use latest entry
+            if isinstance(raw, list) and raw:
+                data = raw[-1]
+            elif isinstance(raw, dict):
+                data = raw
+            else:
+                data = {}
             return {
                 'task_type': data.get('task_type', ''),
                 'complexity': data.get('complexity', 0),

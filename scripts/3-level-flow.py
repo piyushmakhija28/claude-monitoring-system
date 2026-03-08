@@ -4692,11 +4692,12 @@ def _build_script_inventory():
 def _save_trace(trace, session_log_dir, flow_start):
     """Save the complete flow-trace JSON to the session log directory.
 
-    Writes the trace dict as flow-trace.json inside session_log_dir and also
-    keeps a latest-flow-trace.json copy at the top-level logs directory for
-    fast access by other hooks.  If session_log_dir is None (session ID was
-    never resolved), falls back to a timestamped file in memory/logs/ so that
-    no trace data is silently lost.
+    APPEND mode (v4.4.0): Each prompt's trace is appended to a JSON array
+    in flow-trace.json, preserving full session history. Individual per-prompt
+    trace files (flow-trace-NNN.json) are also saved for safety.
+
+    Also keeps a latest-flow-trace.json copy at the top-level logs directory
+    for fast access by other hooks.
 
     Args:
         trace: The fully-populated trace dict accumulated during the pipeline.
@@ -4712,11 +4713,67 @@ def _save_trace(trace, session_log_dir, flow_start):
             fname = f"flow-trace-{flow_start.strftime('%Y%m%d-%H%M%S')}.json"
             write_json(fallback_dir / fname, trace)
         else:
-            write_json(session_log_dir / 'flow-trace.json', trace)
-            # Also keep a "latest" copy for easy access
+            # 1. Save individual per-prompt trace file (never overwritten)
+            msg_num = trace.get('meta', {}).get('message_number', 0)
+            per_prompt_file = session_log_dir / f'flow-trace-{msg_num:03d}.json'
+            write_json(per_prompt_file, trace)
+
+            # 2. Append to cumulative flow-trace.json (JSON array)
+            trace_file = session_log_dir / 'flow-trace.json'
+            _append_trace_to_array(trace_file, trace)
+
+            # 3. Keep a "latest" copy for easy access by other hooks
             write_json(MEMORY_BASE / 'logs' / 'latest-flow-trace.json', trace)
     except Exception:
         pass
+
+
+def _append_trace_to_array(trace_file, trace):
+    """Append a trace entry to a JSON array file.
+
+    Reads the existing array (or creates a new one), appends the trace,
+    and writes back. Uses file locking for safety on Windows.
+
+    Args:
+        trace_file: Path to the flow-trace.json file.
+        trace: The trace dict to append.
+    """
+    try:
+        existing = []
+        if trace_file.exists():
+            try:
+                with open(trace_file, 'r', encoding='utf-8') as f:
+                    _lock_file(f)
+                    data = json.load(f)
+                    _unlock_file(f)
+                # Handle both old format (single dict) and new format (array)
+                if isinstance(data, list):
+                    existing = data
+                elif isinstance(data, dict):
+                    # Migrate old single-trace to array format
+                    existing = [data]
+            except (json.JSONDecodeError, Exception):
+                # Corrupted file - start fresh but save backup
+                try:
+                    backup = trace_file.with_suffix('.json.bak')
+                    import shutil
+                    shutil.copy2(trace_file, backup)
+                except Exception:
+                    pass
+                existing = []
+
+        existing.append(trace)
+
+        with open(trace_file, 'w', encoding='utf-8') as f:
+            _lock_file(f)
+            json.dump(existing, f, indent=2, ensure_ascii=False)
+            _unlock_file(f)
+    except Exception:
+        # Last resort: write just the current trace
+        try:
+            write_json(trace_file, [trace])
+        except Exception:
+            pass
 
 
 if __name__ == '__main__':
