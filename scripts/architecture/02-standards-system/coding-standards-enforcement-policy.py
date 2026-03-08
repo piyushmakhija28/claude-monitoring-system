@@ -194,7 +194,9 @@ def enforce():
             pass
 
         log_action("ENFORCE", f"coding-standards-loaded | count={standard_count}")
-        print(f"[coding-standards-enforcement-policy] {standard_count} coding standards loaded")
+        # Output in format 3-level-flow.py parses (Microservices Standards: N)
+        print(f"Microservices Standards: {standard_count}")
+        print(f"Microservices Rules Loaded: {standard_count}")
 
         result = {"status": "success", "standards_count": standard_count}
         try:

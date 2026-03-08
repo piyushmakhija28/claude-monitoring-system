@@ -64,12 +64,10 @@ DEPENDENCY_GRAPH = {
     '3-level-flow.py': [
         'clear-session-handler.py',
         'auto-fix-enforcer.py',
-        'context-monitor-v2.py',
         'session-id-generator.py',
         'session-summary-manager.py',
         'session-chain-manager.py',
         'metrics-emitter.py',
-        'policy-executor.py',
     ],
     'pre-tool-enforcer.py': [
         'metrics-emitter.py',

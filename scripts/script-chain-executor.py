@@ -18,8 +18,14 @@ from pathlib import Path
 from datetime import datetime
 
 def chain_execute(scripts, initial_context=None, mode="pre-tool"):
-    """Execute scripts in sequence with data flow."""
-    
+    """Execute scripts in sequence with data flow.
+
+    Child script stderr is forwarded to parent stderr so the user can
+    see progress/debug messages.  For pre-tool mode, the last script's
+    raw text output (e.g. 3-level-flow checkpoint table) is printed to
+    stdout so Claude Code displays it to the user.
+    """
+
     if not scripts:
         return (0, {})
 
@@ -31,6 +37,8 @@ def chain_execute(scripts, initial_context=None, mode="pre-tool"):
     }
 
     accumulated_output = {}
+    # Store the last script's raw text output for display to the user
+    last_raw_text = ""
 
     for i, script in enumerate(scripts):
         if not os.path.exists(script):
@@ -45,7 +53,8 @@ def chain_execute(scripts, initial_context=None, mode="pre-tool"):
             result = subprocess.run(
                 ["python", script],
                 input=stdin_data,
-                capture_output=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
                 text=True,
                 encoding='utf-8',
                 errors='replace',
@@ -56,12 +65,23 @@ def chain_execute(scripts, initial_context=None, mode="pre-tool"):
             stderr = result.stderr.strip() if result.stderr else ""
             exit_code = result.returncode
 
+            # Forward child stderr to parent stderr (visible to user)
+            if stderr:
+                sys.stderr.write(stderr + "\n")
+
             script_output = {}
+            is_raw_text = False
             if stdout:
                 try:
                     script_output = json.loads(stdout)
                 except (json.JSONDecodeError, ValueError):
-                    script_output = {"raw_output": stdout[:500]}
+                    # Non-JSON output: store FULL text (no truncation)
+                    script_output = {"raw_output": stdout}
+                    is_raw_text = True
+
+            # Track the last raw text output for final display
+            if is_raw_text and stdout:
+                last_raw_text = stdout
 
             step_result = {
                 "script": Path(script).name,
@@ -75,8 +95,9 @@ def chain_execute(scripts, initial_context=None, mode="pre-tool"):
             # BLOCKING enforcement
             if exit_code == 2:
                 sys.stderr.write(f"[CHAIN] BLOCKED: {Path(script).name}\n")
-                if stderr:
-                    sys.stderr.write(f"[CHAIN] Reason: {stderr[:200]}\n")
+                # Print any checkpoint output before blocking
+                if last_raw_text:
+                    print(last_raw_text)
                 return (2, accumulated_output)
 
             if exit_code != 0:
@@ -97,11 +118,15 @@ def chain_execute(scripts, initial_context=None, mode="pre-tool"):
 
     sys.stderr.write(f"[CHAIN] All {len(scripts)} scripts completed successfully\n")
 
-    print(json.dumps({
-        "status": "success",
-        "context": context,
-        "mode": mode
-    }, default=str))
+    # For pre-tool mode: print 3-level-flow checkpoint table (human-readable)
+    # For post-tool mode: print JSON summary (machine-readable)
+    if mode == "pre-tool" and last_raw_text:
+        print(last_raw_text)
+    else:
+        print(json.dumps({
+            "status": "success",
+            "mode": mode
+        }, default=str))
 
     return (0, accumulated_output)
 
@@ -158,16 +183,24 @@ if __name__ == "__main__":
     # Read Claude Code's stdin FIRST (before any script consumes it)
     hook_input = read_claude_stdin()
 
-    # Build initial context WITH the user prompt preserved
+    # Build initial context WITH all Claude Code hook fields preserved
+    # CRITICAL: PostToolUse hooks receive tool_name, tool_input, tool_response
+    # These MUST be at the top level for post-tool-tracker.py to read them.
+    # UserPromptSubmit hooks receive prompt, cwd.
     initial_context = {
         "mode": args.mode,
         "session_id": os.environ.get("CLAUDE_SESSION_ID", ""),
         "timestamp": datetime.now().isoformat(),
         "chain_results": [],
-        # Preserve Claude Code hook fields so child scripts can read them
+        # Preserve ALL Claude Code hook fields at top level
         "prompt": hook_input.get("prompt", ""),
         "message": hook_input.get("prompt", ""),
         "cwd": hook_input.get("cwd", ""),
+        # PostToolUse fields (critical for flag clearing in post-tool-tracker.py)
+        "tool_name": hook_input.get("tool_name", ""),
+        "tool_input": hook_input.get("tool_input", {}),
+        "tool_response": hook_input.get("tool_response", {}),
+        # Full original hook input for any script that needs it
         "hook_input": hook_input,
     }
 

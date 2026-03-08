@@ -823,24 +823,19 @@ def check_python_unicode(content):
 
 
 def check_write_edit(tool_name, tool_input):
-    """Level 3.7: Block Unicode characters in Python files on Windows.
+    """Level 3.6 + 3.7: Tool Optimization and Unicode enforcement for writes.
 
-    Extracts the file content from Write, Edit, or NotebookEdit tool inputs
-    and delegates to check_python_unicode() for any .py target file.  Only
-    .py files are checked; other file types are allowed unconditionally.
-
-    Policy:    policies/03-execution-system/failure-prevention/
-               common-failures-prevention.md
+    Checks:
+      1. (3.7) Block Unicode characters in .py files on Windows
+      2. (3.6) Warn if Write content exceeds 500 lines (suggest Edit instead)
+      3. (3.6) Warn if target file is large (>50KB) and using Write (full overwrite)
 
     Args:
-        tool_name: Name of the tool being called ('Write', 'Edit', or
-                   'NotebookEdit').
-        tool_input: Dict of tool parameters containing file_path/notebook_path
-                    and the new content or new_string/new_source field.
+        tool_name: 'Write', 'Edit', or 'NotebookEdit'.
+        tool_input: Tool parameters dict.
 
     Returns:
-        tuple: (hints, blocks) where blocks is non-empty when dangerous
-               Unicode characters are found in a .py file.
+        tuple: (hints, blocks)
     """
     hints = []
     blocks = []
@@ -851,65 +846,97 @@ def check_write_edit(tool_name, tool_input):
         ''
     )
 
-    if file_path.endswith('.py'):
-        content = (
-            tool_input.get('content', '') or
-            tool_input.get('new_string', '') or
-            tool_input.get('new_source', '') or
-            ''
-        )
-        if content:
-            blocks.extend(check_python_unicode(content))
+    content = (
+        tool_input.get('content', '') or
+        tool_input.get('new_string', '') or
+        tool_input.get('new_source', '') or
+        ''
+    )
+
+    # Level 3.7: Unicode check for .py files
+    if file_path.endswith('.py') and content:
+        blocks.extend(check_python_unicode(content))
+
+    # Level 3.6: Tool Optimization for Write/Edit
+    if content:
+        content_lines = content.count('\n') + 1
+
+        # Write tool with very large content - suggest Edit instead
+        if tool_name == 'Write' and content_lines > 500:
+            hints.append(
+                f'[TOOL-OPT] Write: content is {content_lines} lines. '
+                f'Prefer Edit for targeted changes instead of full file rewrites.'
+            )
+
+        # Write to existing large file - warn about full overwrite
+        if tool_name == 'Write' and file_path:
+            try:
+                import os
+                if os.path.exists(file_path):
+                    file_size = os.path.getsize(file_path)
+                    if file_size > 50 * 1024:  # >50KB
+                        hints.append(
+                            f'[TOOL-OPT] Write: overwriting large file '
+                            f'({file_size // 1024}KB). Use Edit for targeted '
+                            f'changes to save context tokens.'
+                        )
+            except Exception:
+                pass
 
     return hints, blocks
 
 
 def check_grep(tool_input):
-    """Level 3.6: Warn when Grep is called without a head_limit parameter.
+    """Level 3.6: BLOCK Grep content-mode calls without head_limit.
 
-    Reads the current flow-trace context to scale the recommended limit: high
-    complexity tasks (>= 10) receive a tighter suggestion (50) because they
-    are more likely to produce large result sets.
+    When output_mode is 'content', Grep can return thousands of lines and
+    waste the context window.  This check BLOCKS such calls until head_limit
+    is set.  For 'files_with_matches' and 'count' modes, the output is
+    already compact so only a hint is emitted.
 
     Policy: policies/03-execution-system/06-tool-optimization/
             tool-usage-optimization-policy.md
-    KB source: scripts/architecture/03-execution-system/failure-prevention/
-               failure-kb.json (pattern: grep_no_head_limit)
 
     Args:
         tool_input (dict): Tool parameters from the Grep call.
 
     Returns:
-        tuple: (hints, blocks) where hints contains warning strings and blocks
-               is always an empty list (this check never blocks).
+        tuple: (hints, blocks) where blocks is non-empty when output_mode
+               is 'content' and head_limit is missing.
     """
     hints = []
+    blocks = []
     head_limit = tool_input.get('head_limit', 0)
+    output_mode = tool_input.get('output_mode', 'files_with_matches')
 
     if not head_limit:
         ctx = _load_flow_trace_context()
         complexity = ctx.get('complexity', 0)
-        # Higher complexity = more likely to have large search results
-        if complexity and complexity >= 10:
-            hints.append(
-                '[OPTIMIZATION] Grep: Add head_limit=50 (high complexity task - save context). '
-                'Default CLAUDE.md rule: ALWAYS set head_limit on Grep calls.'
+        suggested = 50 if (complexity and complexity >= 10) else 100
+
+        if output_mode == 'content':
+            # BLOCK: content mode without head_limit can flood context
+            blocks.append(
+                f'[TOOL-OPT BLOCKED] Grep output_mode="content" requires head_limit. '
+                f'Add head_limit={suggested} to prevent context overflow. '
+                f'Rule: ALWAYS set head_limit on Grep content-mode calls.'
             )
         else:
+            # HINT only for compact modes (files_with_matches, count)
             hints.append(
-                '[OPTIMIZATION] Grep: Add head_limit=100 to prevent excessive output. '
-                'Default CLAUDE.md rule: ALWAYS set head_limit on Grep calls.'
+                f'[TOOL-OPT] Grep: Consider adding head_limit={suggested} to limit output.'
             )
 
-    return hints, []
+    return hints, blocks
 
 
 def check_read(tool_input):
-    """Level 3.6: Warn when Read is called without offset or limit parameters.
+    """Level 3.6: BLOCK Read on large files without offset/limit.
 
-    Scales the advisory message based on task complexity from the cached
-    flow-trace: high complexity tasks (>= 10) get a stronger hint since
-    unbounded reads waste more of the limited context window.
+    Checks actual file size on disk.  Files larger than 50KB (~500+ lines)
+    are BLOCKED unless offset or limit is provided.  Smaller files pass
+    with a hint.  This prevents accidentally dumping thousands of lines
+    into the context window.
 
     Policy: policies/03-execution-system/06-tool-optimization/
             tool-usage-optimization-policy.md
@@ -918,28 +945,46 @@ def check_read(tool_input):
         tool_input (dict): Tool parameters from the Read call.
 
     Returns:
-        tuple: (hints, blocks) where hints contains advisory strings and blocks
-               is always an empty list (this check never blocks).
+        tuple: (hints, blocks) where blocks is non-empty when file is large
+               and no offset/limit is set.
     """
     hints = []
+    blocks = []
     limit = tool_input.get('limit')
     offset = tool_input.get('offset')
 
     if not limit and not offset:
-        ctx = _load_flow_trace_context()
-        complexity = ctx.get('complexity', 0)
-        if complexity and complexity >= 10:
-            hints.append(
-                '[OPTIMIZATION] Read: No limit/offset set. '
-                'High complexity task - use offset+limit to conserve context window.'
-            )
-        else:
-            hints.append(
-                '[OPTIMIZATION] Read: No limit/offset set. '
-                'For files >500 lines, use offset+limit to save context tokens.'
-            )
+        file_path = tool_input.get('file_path', '')
+        if file_path:
+            try:
+                import os
+                if os.path.exists(file_path):
+                    file_size = os.path.getsize(file_path)
+                    if file_size > 50 * 1024:  # >50KB = likely >500 lines
+                        blocks.append(
+                            f'[TOOL-OPT BLOCKED] Read: file is '
+                            f'{file_size // 1024}KB (>{50}KB limit). '
+                            f'Add limit=200 and offset=0 to read in chunks. '
+                            f'Rule: Use offset+limit for files >500 lines.'
+                        )
+                    elif file_size > 20 * 1024:  # 20-50KB = hint
+                        hints.append(
+                            f'[TOOL-OPT] Read: file is {file_size // 1024}KB. '
+                            f'Consider using offset+limit to save context tokens.'
+                        )
+            except Exception:
+                pass
+        # No file_path or can't stat: generic hint
+        if not blocks and not hints:
+            ctx = _load_flow_trace_context()
+            complexity = ctx.get('complexity', 0)
+            if complexity and complexity >= 10:
+                hints.append(
+                    '[TOOL-OPT] Read: No limit/offset set. '
+                    'High complexity task - use offset+limit to conserve context.'
+                )
 
-    return hints, []
+    return hints, blocks
 
 
 # =============================================================================

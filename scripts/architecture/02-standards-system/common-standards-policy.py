@@ -194,7 +194,9 @@ def enforce():
             pass
 
         log_action("ENFORCE", f"common-standards-loaded | count={standard_count}")
-        print(f"[common-standards-policy] {standard_count} common standards loaded")
+        # Output in format 3-level-flow.py parses (Common Standards: N)
+        print(f"Common Standards: {standard_count}")
+        print(f"Common Rules Loaded: {standard_count}")
 
         result = {"status": "success", "standards_count": standard_count}
         try:
