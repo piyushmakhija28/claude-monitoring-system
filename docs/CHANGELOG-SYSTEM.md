@@ -3,6 +3,9 @@ All notable changes to the Claude Memory System.
 
 ---
 
+- v4.22.1 (2026-03-08): Session updates
+  - Closes: #4, #102
+
 - v4.16.1 (2026-03-07): Session updates
   - Closes: #92
 
