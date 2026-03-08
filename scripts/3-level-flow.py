@@ -3062,6 +3062,24 @@ Work to complete: Execute phase {i} of the identified work breakdown.
     step_3_1_output["tasks_created"] = len(tasks_created)
     step_3_1_output["tasks"] = tasks_created
 
+    # Auto-clear task-breakdown flag after successful task breakdown
+    # The flag was written earlier (write_task_breakdown_flag) to block coding
+    # before tasks exist. Since 3-level-flow itself creates the task plan,
+    # clear the flag immediately - no need to wait for Claude's TaskCreate.
+    if tasks_created and session_id:
+        try:
+            flag_path = task_breakdown_flag_path(session_id)
+            if flag_path.exists():
+                flag_path.unlink()
+                try:
+                    emit_flag_lifecycle('task_breakdown', 'clear',
+                                        session_id=session_id,
+                                        reason='auto-cleared after 3-level-flow task breakdown')
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
     trace["pipeline"].append({
         "step": "LEVEL_3_STEP_3_0",
         "name": "Automatic Task Breakdown",
@@ -4428,17 +4446,14 @@ Work to complete: Execute phase {i} of the identified work breakdown.
     # LOOPHOLE #14 FIX: Skip for non-coding messages (questions/research).
     # v3.1.0 FIX: Skip for mid-session continuations (already approved + invoked).
     # v3.2.0 FIX: Skip for approval messages (user said ok - don't re-create flags!).
-    if _needs_enforcement:
-        # Step 3.5 enforcement: block coding until Skill/Task tool is invoked
-        # SKIP for adaptive-skill-intelligence: suggestion is behavioral (CLAUDE.md),
-        # not hook-enforced. Writing a flag for adaptive creates unresolvable block
-        # because Claude may choose to suggest instead of invoking a tool.
-        if skill_agent_name and skill_agent_name != 'adaptive-skill-intelligence':
-            write_skill_selection_flag(
-                session_id=session_id or 'unknown',
-                required_skill=skill_agent_name,
-                required_type=agent_type
-            )
+    # v4.5.0: Skill-selection flag NO LONGER written.
+    # 3-level-flow already injects the skill/agent context into the prompt
+    # at step 3.5 (prompt re-enhancement). The prompt injection IS the
+    # enforcement - Claude sees the skill instructions and follows them.
+    # Writing a blocking flag on top was redundant and caused false blocks
+    # when Claude had already received the skill context.
+    # The write_skill_selection_flag function is kept for backward compat
+    # but is no longer called from the main flow.
 
     # =========================================================================
     # METRICS: emit hook_execution summary for 3-level-flow

@@ -59,7 +59,16 @@ LOG_FILE = MEMORY_BASE / 'logs' / 'llm-decision-engine.log'
 
 # Primary: Local Ollama (IPEX-LLM on Intel Arc GPU + NPU)
 OLLAMA_URL = "http://127.0.0.1:11434/v1/chat/completions"
-OLLAMA_MODEL = "granite4:3b"
+OLLAMA_TIMEOUT = 120  # seconds - 0 means no timeout (not recommended)
+# Preferred models in order - first available model is used
+OLLAMA_MODELS = [
+    "qwen3:4b",        # Best for structured JSON (if installed)
+    "qwen2.5:7b",      # Great JSON support (if installed)
+    "qwen2.5:3b",      # Smaller but good JSON (if installed)
+    "deepseek-r1:7b",  # Good reasoning but weak JSON (if installed)
+    "granite4:3b",      # Fallback - currently installed
+]
+OLLAMA_MODEL = "granite4:3b"  # Will be auto-detected below
 
 # Fallback: OpenRouter (if Ollama is not running)
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
@@ -108,7 +117,7 @@ _FALLBACK_SKILLS = {
 }
 
 
-def _extract_md_sections(filepath, max_chars=400):
+def _extract_md_sections(filepath, max_chars=200):
     """Read agent.md or skill.md and extract key sections for LLM context.
 
     Extracts: description (frontmatter), core responsibilities, boundaries.
@@ -116,7 +125,7 @@ def _extract_md_sections(filepath, max_chars=400):
 
     Args:
         filepath: Path to the .md file.
-        max_chars: Maximum characters to return (default 400).
+        max_chars: Maximum characters to return (default 200).
 
     Returns:
         str: Extracted summary, or empty string on failure.
@@ -254,6 +263,35 @@ MODELS_INFO = {
 }
 
 
+def _detect_best_ollama_model():
+    """Auto-detect the best available Ollama model from OLLAMA_MODELS list.
+
+    Queries Ollama /api/tags to get installed models, then picks the first
+    match from OLLAMA_MODELS preference order.
+
+    Returns:
+        str: Best available model name, or 'granite4:3b' as fallback.
+    """
+    try:
+        req = urllib_request.Request('http://127.0.0.1:11434/api/tags')
+        with urllib_request.urlopen(req, timeout=3) as resp:
+            data = json.loads(resp.read().decode('utf-8'))
+            installed = {m['name'] for m in data.get('models', [])}
+            for preferred in OLLAMA_MODELS:
+                if preferred in installed:
+                    return preferred
+            # None of the preferred models found, use first installed
+            if installed:
+                return next(iter(installed))
+    except Exception:
+        pass
+    return 'granite4:3b'
+
+
+# Auto-detect best model at module load
+OLLAMA_MODEL = _detect_best_ollama_model()
+
+
 # =============================================================================
 # LOGGING
 # =============================================================================
@@ -309,10 +347,11 @@ MODEL SELECTION GUIDE:
 - SONNET: Most coding tasks - API creation, feature implementation, UI work, moderate bugs, testing. Complexity 5-19.
 - OPUS: Architecture design, complex refactoring, plan mode tasks, security-critical work, multi-service coordination. Complexity >= 20.
 
-AGENT SELECTION GUIDE (critical distinctions):
-- ui-ux-designer: For DESIGN tasks - theme redesign, color changes, layout design, visual hierarchy, hover effects, shadows, gradients, typography. Use this when the user wants to CHANGE HOW THINGS LOOK.
-- angular-engineer: For IMPLEMENTATION tasks - component logic, state management, routing, API integration, feature building IN Angular. Use when adding NEW FUNCTIONALITY, not redesigning visuals.
-- The tech stack (Angular, React, etc.) does NOT determine the agent. A UI redesign in Angular still needs ui-ux-designer first, not angular-engineer.
+AGENT SELECTION GUIDE:
+- Read each agent/skill description carefully. Pick the one whose CORE PURPOSE matches the user's intent.
+- The tech stack alone does NOT determine the agent. Match the NATURE of the task (design vs implementation vs testing etc.) to the agent's specialty.
+- If the task is about HOW THINGS LOOK (colors, themes, layout, visual effects), pick a design-focused agent.
+- If the task is about HOW THINGS WORK (logic, routing, API calls, state), pick an implementation agent.
 
 TASK TYPE VALUES (pick the most accurate one):
 API Creation, Authentication, Authorization, Security, Database, Dashboard, Frontend, UI/UX,
@@ -418,14 +457,45 @@ def _parse_llm_response(content, model_name):
         # Find JSON object in mixed text
         first_brace = content.find('{')
         if first_brace >= 0:
+            # Find matching closing brace
+            depth = 0
+            end_pos = -1
+            for i in range(first_brace, len(content)):
+                if content[i] == '{':
+                    depth += 1
+                elif content[i] == '}':
+                    depth -= 1
+                    if depth == 0:
+                        end_pos = i + 1
+                        break
             try:
-                decision = json.loads(content[first_brace:])
+                decision = json.loads(content[first_brace:end_pos] if end_pos > 0 else content[first_brace:])
             except json.JSONDecodeError:
                 log(f"[LLM] {model_name} JSON parse error")
                 return None
         else:
             log(f"[LLM] {model_name} no JSON found in response")
             return None
+
+    # Normalize keys to lowercase first (small models often use UPPER_CASE)
+    decision = {k.lower(): v for k, v in decision.items()}
+
+    # Normalize field aliases (small models use different names)
+    _aliases = {
+        'agent': 'agent_name',
+        'agent_id': 'agent_name',
+        'recommended_agent': 'agent_name',
+        'task': 'task_type',
+        'type': 'task_type',
+        'skills': 'supplementary_skills',
+        'reasoning': 'agent_reasoning',
+    }
+    for alias, canonical in _aliases.items():
+        if alias in decision and canonical not in decision:
+            decision[canonical] = decision.pop(alias)
+            # If task_type got a dict, extract description
+            if canonical == 'task_type' and isinstance(decision[canonical], dict):
+                decision[canonical] = decision[canonical].get('description', 'General Task')
 
     # Validate required fields
     if not all(k in decision for k in ('task_type', 'model', 'agent_name')):
@@ -515,7 +585,7 @@ def _call_ollama(user_prompt):
             method='POST'
         )
 
-        with urllib_request.urlopen(req, timeout=60) as resp:
+        with urllib_request.urlopen(req, timeout=OLLAMA_TIMEOUT or None) as resp:
             result = json.loads(resp.read().decode('utf-8'))
             msg = result.get('choices', [{}])[0].get('message', {})
             content = (msg.get('content') or '').strip()
