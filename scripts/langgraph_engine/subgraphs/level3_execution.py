@@ -105,6 +105,7 @@ def step0_prompt_generation(state: FlowState) -> dict:
     user_message = state.get("user_message", "")
 
     if DEBUG:
+        print(f"[L3-DEBUG] State keys: {list(state.keys())[:5]}", file=sys.stderr)
         print(f"[L3] → Step 0 user_message: {user_message[:50] if user_message else 'EMPTY'}...", file=sys.stderr)
 
     # Pass user message as argument to script
