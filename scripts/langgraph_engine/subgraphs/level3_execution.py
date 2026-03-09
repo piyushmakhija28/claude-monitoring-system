@@ -143,9 +143,9 @@ def step5_skill_agent_selection(state: FlowState) -> dict:
 
 
 def step6_tool_optimization(state: FlowState) -> dict:
-    """Step 6: Call tool-usage-optimizer.py"""
+    """Step 6: Tool optimization - context-aware hints"""
     context_pct = state.get("context_percentage", 0)
-    result = call_execution_script("tool-usage-optimizer", [f"--context={context_pct}"])
+    result = call_execution_script("tool-optimizer-step", [f"--context={context_pct}"])
     return {
         "step6_tool_hints": result.get("optimization_hints", []),
         "step6_read_optimization": result.get("read_opts", {}),
@@ -154,25 +154,26 @@ def step6_tool_optimization(state: FlowState) -> dict:
 
 
 def step7_auto_recommendations(state: FlowState) -> dict:
-    """Step 7: Call recommendations-policy.py"""
-    result = call_execution_script("recommendations-policy")
+    """Step 7: Auto recommendations with Ollama"""
+    task_type = state.get("step0_prompt", {}).get("task_type", "General")
+    result = call_execution_script("recommendations-step", [task_type])
     return {
         "step7_recommendations": result.get("recommendations", [])
     }
 
 
 def step8_progress_tracking(state: FlowState) -> dict:
-    """Step 8: Call task-progress-tracking-policy.py"""
-    result = call_execution_script("task-progress-tracking-policy")
+    """Step 8: Progress tracking"""
+    result = call_execution_script("progress-step")
     return {
         "step8_progress": result.get("progress", {}),
-        "step8_incomplete_work": result.get("incomplete", [])
+        "step8_incomplete_work": result.get("incomplete_work", [])
     }
 
 
 def step9_git_commit_preparation(state: FlowState) -> dict:
-    """Step 9: Call git-auto-commit-policy.py"""
-    result = call_execution_script("git-auto-commit-policy", ["--prepare"])
+    """Step 9: Git commit preparation"""
+    result = call_execution_script("git-step")
     return {
         "step9_commit_ready": result.get("commit_ready", False),
         "step9_commit_message": result.get("message", ""),
@@ -181,17 +182,17 @@ def step9_git_commit_preparation(state: FlowState) -> dict:
 
 
 def step10_session_save(state: FlowState) -> dict:
-    """Step 10: Call session save operations"""
-    result = call_execution_script("auto-save-session")
+    """Step 10: Session save"""
+    result = call_execution_script("session-step")
     return {
         "step10_session": result.get("session", {}),
-        "step10_archive_needed": result.get("archive", False)
+        "step10_archive_needed": result.get("archive_needed", False)
     }
 
 
 def step11_failure_prevention(state: FlowState) -> dict:
-    """Step 11: Call common-failures-prevention.py"""
-    result = call_execution_script("common-failures-prevention")
+    """Step 11: Failure prevention checks"""
+    result = call_execution_script("failure-step")
     return {
         "failure_prevention": result.get("prevention_checks", {}),
         "failure_prevention_warnings": result.get("warnings", [])
