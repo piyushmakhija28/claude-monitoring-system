@@ -173,7 +173,7 @@ def convert_flow_state_to_trace(state: FlowState) -> Dict[str, Any]:
             "model_selected": state.get("step4_model", "haiku"),
             "skill_or_agent": state.get("step5_skill") or state.get("step5_agent", ""),
             "proceed": state.get("final_status") != "BLOCKED",
-            "summary": f"Status={state.get('final_status')} Context={state.get('context_percentage', 0):.1f}%",
+            "summary": f"Status={state.get('final_status')} Context={(state.get('context_percentage') or 0):.1f}%",
         },
         "work_started": state.get("final_status") != "BLOCKED",
         "status": state.get("final_status", "UNKNOWN"),

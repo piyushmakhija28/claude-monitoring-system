@@ -22,7 +22,8 @@ from typing import Literal
 
 try:
     from langgraph.graph import StateGraph, START, END
-    from langgraph.types import Send, Command
+    # Send not available in LangGraph 0.2.0
+# from langgraph.types import Send, Command
     _LANGGRAPH_AVAILABLE = True
 except ImportError:
     _LANGGRAPH_AVAILABLE = False
