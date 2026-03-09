@@ -56,6 +56,11 @@ class CoreSkillsLoader:
         """
         Load a skill from GitHub BEFORE LLM tries to use it.
 
+        Skill names are organized by category in the repo:
+        - java-spring-boot-microservices → /skills/backend/java-spring-boot-microservices/
+        - react-frontend → /skills/frontend/react-frontend/
+        - docker-devops → /skills/devops/docker-devops/
+
         Returns:
             dict: {'name', 'status', 'loaded', 'path', 'content'}
         """
@@ -68,42 +73,72 @@ class CoreSkillsLoader:
                 'path': self.loaded_skills['skills'][skill_name]['path']
             }
 
-        # Try to load from GitHub
-        url = f"{GLOBAL_LIB_URL}/skills/{skill_name}/skill.md"
+        # Try to load from GitHub (skills are in category subdirectories)
+        import urllib.request
+        import urllib.error
 
-        try:
-            import urllib.request
-            with urllib.request.urlopen(url, timeout=10) as response:
-                content = response.read().decode('utf-8')
+        # Candidates to try
+        urls_to_try = [
+            f"{GLOBAL_LIB_URL}/skills/{skill_name}/skill.md",  # Direct path
+            # Category-based paths (try common categories)
+            f"{GLOBAL_LIB_URL}/skills/backend/{skill_name}/skill.md",
+            f"{GLOBAL_LIB_URL}/skills/frontend/{skill_name}/skill.md",
+            f"{GLOBAL_LIB_URL}/skills/devops/{skill_name}/skill.md",
+            f"{GLOBAL_LIB_URL}/skills/data/{skill_name}/skill.md",
+            f"{GLOBAL_LIB_URL}/skills/ai/{skill_name}/skill.md",
+        ]
 
-                # Save to local cache
-                self.skills_dir.mkdir(parents=True, exist_ok=True)
-                skill_file = self.skills_dir / f"{skill_name}.md"
-                skill_file.write_text(content, encoding='utf-8')
+        for url in urls_to_try:
+            try:
+                with urllib.request.urlopen(url, timeout=10) as response:
+                    content = response.read().decode('utf-8')
 
-                # Update cache
-                self.loaded_skills['skills'][skill_name] = {
-                    'path': str(skill_file),
-                    'loaded_at': datetime.now().isoformat(),
-                    'source': 'github'
-                }
-                self._save_cache()
+                    # Save to local cache
+                    self.skills_dir.mkdir(parents=True, exist_ok=True)
+                    skill_file = self.skills_dir / f"{skill_name}.md"
+                    skill_file.write_text(content, encoding='utf-8')
 
-                return {
-                    'name': skill_name,
-                    'status': 'loaded',
-                    'loaded': True,
-                    'path': str(skill_file),
-                    'bytes': len(content)
-                }
+                    # Update cache
+                    self.loaded_skills['skills'][skill_name] = {
+                        'path': str(skill_file),
+                        'loaded_at': datetime.now().isoformat(),
+                        'source': 'github',
+                        'url': url
+                    }
+                    self._save_cache()
 
-        except Exception as e:
-            return {
-                'name': skill_name,
-                'status': 'failed',
-                'loaded': False,
-                'error': str(e)
-            }
+                    return {
+                        'name': skill_name,
+                        'status': 'loaded',
+                        'loaded': True,
+                        'path': str(skill_file),
+                        'bytes': len(content),
+                        'source_url': url
+                    }
+
+            except urllib.error.HTTPError as e:
+                # 404 - try next URL
+                if e.code == 404:
+                    continue
+                # Other HTTP errors - give up
+                else:
+                    return {
+                        'name': skill_name,
+                        'status': 'failed',
+                        'loaded': False,
+                        'error': str(e)
+                    }
+            except Exception:
+                # Connection or timeout - try next URL
+                continue
+
+        # All URLs failed
+        return {
+            'name': skill_name,
+            'status': 'failed',
+            'loaded': False,
+            'error': f'Skill not found in any category. Tried {len(urls_to_try)} locations.'
+        }
 
     def load_agent(self, agent_name):
         """Load an agent from GitHub BEFORE LLM tries to use it."""
@@ -117,10 +152,12 @@ class CoreSkillsLoader:
             }
 
         # Try to load from GitHub
+        import urllib.request
+        import urllib.error
+
         url = f"{GLOBAL_LIB_URL}/agents/{agent_name}/agent.md"
 
         try:
-            import urllib.request
             with urllib.request.urlopen(url, timeout=10) as response:
                 content = response.read().decode('utf-8')
 
@@ -133,7 +170,8 @@ class CoreSkillsLoader:
                 self.loaded_skills['agents'][agent_name] = {
                     'path': str(agent_file),
                     'loaded_at': datetime.now().isoformat(),
-                    'source': 'github'
+                    'source': 'github',
+                    'url': url
                 }
                 self._save_cache()
 
@@ -142,7 +180,8 @@ class CoreSkillsLoader:
                     'status': 'loaded',
                     'loaded': True,
                     'path': str(agent_file),
-                    'bytes': len(content)
+                    'bytes': len(content),
+                    'source_url': url
                 }
 
         except Exception as e:
