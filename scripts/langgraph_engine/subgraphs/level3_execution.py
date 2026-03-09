@@ -77,86 +77,95 @@ def call_execution_script(script_name: str, args: list = None) -> dict:
 # ============================================================================
 
 
-def step0_prompt_generation(state: FlowState) -> FlowState:
+def step0_prompt_generation(state: FlowState) -> dict:
     """Step 0: Call prompt-generator.py"""
     result = call_execution_script("prompt-generator")
-    state["step0_prompt"] = {
-        "task_type": result.get("task_type", "general"),
-        "complexity": result.get("complexity", 5),
-        "script_output": result
+    return {
+        "step0_prompt": {
+            "task_type": result.get("task_type", "general"),
+            "complexity": result.get("complexity", 5),
+            "script_output": result
+        }
     }
-    return state
 
 
-def step1_task_breakdown(state: FlowState) -> FlowState:
+def step1_task_breakdown(state: FlowState) -> dict:
     """Step 1: Call task-auto-analyzer.py"""
     result = call_execution_script("task-auto-analyzer")
-    state["step1_tasks"] = {
-        "count": result.get("task_count", 1),
-        "script_output": result
+    return {
+        "step1_tasks": {
+            "count": result.get("task_count", 1),
+            "script_output": result
+        },
+        "step1_task_count": result.get("task_count", 1)
     }
-    state["step1_task_count"] = result.get("task_count", 1)
-    return state
 
 
-def step2_plan_mode_decision(state: FlowState) -> FlowState:
+def step2_plan_mode_decision(state: FlowState) -> dict:
     """Step 2: Call auto-plan-mode-suggester.py"""
     result = call_execution_script("auto-plan-mode-suggester", ["--analyze"])
-    state["step2_plan_mode"] = result.get("plan_required", False)
-    state["step2_reasoning"] = result.get("reasoning", "Task analysis complete")
-    return state
+    return {
+        "step2_plan_mode": result.get("plan_required", False),
+        "step2_reasoning": result.get("reasoning", "Task analysis complete")
+    }
 
 
-def step3_context_read_enforcement(state: FlowState) -> FlowState:
+def step3_context_read_enforcement(state: FlowState) -> dict:
     """Step 3: Call context-reader.py"""
     result = call_execution_script("context-reader", ["--check"])
-    state["step3_context_read"] = result.get("check_passed", True)
-    state["step3_enforcement_applies"] = result.get("enforcement_applies", True)
-    return state
+    return {
+        "step3_context_read": result.get("check_passed", True),
+        "step3_enforcement_applies": result.get("enforcement_applies", True)
+    }
 
 
-def step4_model_selection(state: FlowState) -> FlowState:
+def step4_model_selection(state: FlowState) -> dict:
     """Step 4: Call model-auto-selector.py"""
     complexity = state.get("step0_prompt", {}).get("complexity", 5)
     result = call_execution_script("model-auto-selector", [f"--complexity={complexity}"])
-    state["step4_model"] = result.get("selected_model", "haiku")
-    state["step4_reasoning"] = result.get("reason", "Model selected")
-    return state
+    return {
+        "step4_model": result.get("selected_model", "haiku"),
+        "step4_reasoning": result.get("reason", "Model selected")
+    }
 
 
-def step5_skill_agent_selection(state: FlowState) -> FlowState:
+def step5_skill_agent_selection(state: FlowState) -> dict:
     """Step 5: Call auto-skill-agent-selector.py"""
     result = call_execution_script("auto-skill-agent-selector", ["--analyze"])
-    state["step5_skill"] = result.get("selected_skill", "")
-    state["step5_agent"] = result.get("selected_agent", "")
-    state["step5_reasoning"] = result.get("reasoning", "")
-    state["step5_llm_query_needed"] = result.get("llm_needed", False)
-    return state
+    return {
+        "step5_skill": result.get("selected_skill", ""),
+        "step5_agent": result.get("selected_agent", ""),
+        "step5_reasoning": result.get("reasoning", ""),
+        "step5_llm_query_needed": result.get("llm_needed", False)
+    }
 
 
-def step6_tool_optimization(state: FlowState) -> FlowState:
+def step6_tool_optimization(state: FlowState) -> dict:
     """Step 6: Call tool-usage-optimizer.py"""
     context_pct = state.get("context_percentage", 0)
     result = call_execution_script("tool-usage-optimizer", [f"--context={context_pct}"])
-    state["step6_tool_hints"] = result.get("optimization_hints", [])
-    state["step6_read_optimization"] = result.get("read_opts", {})
-    state["step6_grep_optimization"] = result.get("grep_opts", {})
-    return state
+    return {
+        "step6_tool_hints": result.get("optimization_hints", []),
+        "step6_read_optimization": result.get("read_opts", {}),
+        "step6_grep_optimization": result.get("grep_opts", {})
+    }
 
 
-def step7_auto_recommendations(state: FlowState) -> FlowState:
+def step7_auto_recommendations(state: FlowState) -> dict:
     """Step 7: Call recommendations-policy.py"""
     result = call_execution_script("recommendations-policy")
-    state["step7_recommendations"] = result.get("recommendations", [])
-    return state
+    return {
+        "step7_recommendations": result.get("recommendations", [])
+    }
 
 
-def step8_progress_tracking(state: FlowState) -> FlowState:
+def step8_progress_tracking(state: FlowState) -> dict:
     """Step 8: Call task-progress-tracking-policy.py"""
     result = call_execution_script("task-progress-tracking-policy")
-    state["step8_progress"] = result.get("progress", {})
-    state["step8_incomplete_work"] = result.get("incomplete", [])
-    return state
+    return {
+        "step8_progress": result.get("progress", {}),
+        "step8_incomplete_work": result.get("incomplete", [])
+    }
 
 
 def step9_git_commit_preparation(state: FlowState) -> FlowState:

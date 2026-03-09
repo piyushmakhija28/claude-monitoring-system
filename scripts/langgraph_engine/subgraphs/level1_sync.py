@@ -105,127 +105,131 @@ def run_policy_script(script_name: str, args: list = None, timeout: int = 30) ->
 # ============================================================================
 
 
-def node_context_loader(state: FlowState) -> FlowState:
+def node_context_loader(state: FlowState) -> dict:
     """Load context using context-monitor-v2.py script."""
+    updates = {}
     try:
         # Call actual context-monitor-v2.py
         output = run_policy_script("context-monitor-v2", ["--current-status"])
 
         if output.get("status") == "ERROR" or output.get("status") == "NOT_FOUND":
             # Fallback to basic implementation
-            state["context_loaded"] = False
-            state["context_percentage"] = 0.0
-            return state
+            updates["context_loaded"] = False
+            updates["context_percentage"] = 0.0
+            return updates
 
         # Extract context percentage from script output
         context_pct = output.get("percentage", 0.0)
 
-        state["context_loaded"] = True
-        state["context_percentage"] = float(context_pct)
-        state["context_threshold_exceeded"] = context_pct > 85.0
-        state["context_metadata"] = {
+        updates["context_loaded"] = True
+        updates["context_percentage"] = float(context_pct)
+        updates["context_threshold_exceeded"] = context_pct > 85.0
+        updates["context_metadata"] = {
             "source": "context-monitor-v2.py",
             "percentage": context_pct,
             "script_output": output
         }
 
-        return state
+        return updates
 
     except Exception as e:
-        state["context_loaded"] = False
-        state["context_error"] = str(e)
-        return state
+        updates["context_loaded"] = False
+        updates["context_error"] = str(e)
+        return updates
 
 
-def node_session_loader(state: FlowState) -> FlowState:
+def node_session_loader(state: FlowState) -> dict:
     """Load session using session-loader.py script."""
+    updates = {}
     try:
         # Call actual session-loader.py
         output = run_policy_script("session-loader", ["--current"])
 
         if output.get("status") == "ERROR" or output.get("status") == "NOT_FOUND":
-            state["session_chain_loaded"] = False
-            state["session_history"] = []
-            state["session_state_data"] = {}
-            return state
+            updates["session_chain_loaded"] = False
+            updates["session_history"] = []
+            updates["session_state_data"] = {}
+            return updates
 
         # Extract session data
         session_id = output.get("session_id", state.get("session_id"))
         session_history = output.get("session_history", [])
 
-        state["session_chain_loaded"] = True
-        state["session_history"] = session_history
-        state["session_state_data"] = {
+        updates["session_chain_loaded"] = True
+        updates["session_history"] = session_history
+        updates["session_state_data"] = {
             "session_id": session_id,
             "chain_depth": len(session_history),
             "script_output": output
         }
 
-        return state
+        return updates
 
     except Exception as e:
-        state["session_chain_loaded"] = False
-        state["session_error"] = str(e)
-        return state
+        updates["session_chain_loaded"] = False
+        updates["session_error"] = str(e)
+        return updates
 
 
-def node_preferences_loader(state: FlowState) -> FlowState:
+def node_preferences_loader(state: FlowState) -> dict:
     """Load preferences using load-preferences.py script."""
+    updates = {}
     try:
         # Call actual load-preferences.py
         output = run_policy_script("load-preferences", [])
 
         if output.get("status") == "ERROR" or output.get("status") == "NOT_FOUND":
-            state["preferences_loaded"] = False
-            state["preferences_data"] = {}
-            return state
+            updates["preferences_loaded"] = False
+            updates["preferences_data"] = {}
+            return updates
 
         # Extract preferences
         prefs = output.get("preferences", output)
 
-        state["preferences_loaded"] = True
-        state["preferences_data"] = {
+        updates["preferences_loaded"] = True
+        updates["preferences_data"] = {
             "default_model": prefs.get("default_model", "haiku"),
             "use_plan_mode": prefs.get("use_plan_mode", False),
             "parallel_execution": prefs.get("parallel_execution", True),
             "script_output": output
         }
 
-        return state
+        return updates
 
     except Exception as e:
-        state["preferences_loaded"] = False
-        state["preferences_error"] = str(e)
-        return state
+        updates["preferences_loaded"] = False
+        updates["preferences_error"] = str(e)
+        return updates
 
 
-def node_patterns_detector(state: FlowState) -> FlowState:
+def node_patterns_detector(state: FlowState) -> dict:
     """Detect patterns using detect-patterns.py script."""
+    updates = {}
     try:
         # Call actual detect-patterns.py
         project_root = state.get("project_root", ".")
         output = run_policy_script("detect-patterns", [f"--project={project_root}"])
 
         if output.get("status") == "ERROR" or output.get("status") == "NOT_FOUND":
-            state["patterns_detected"] = []
-            state["pattern_metadata"] = {}
-            return state
+            updates["patterns_detected"] = []
+            updates["pattern_metadata"] = {}
+            return updates
 
         # Extract patterns
         patterns = output.get("patterns", [])
 
-        state["patterns_detected"] = patterns
-        state["pattern_metadata"] = {
+        updates["patterns_detected"] = patterns
+        updates["pattern_metadata"] = {
             "total_patterns": len(patterns),
             "script_output": output
         }
 
-        return state
+        return updates
 
     except Exception as e:
-        state["patterns_detected"] = []
-        state["patterns_error"] = str(e)
-        return state
+        updates["patterns_detected"] = []
+        updates["patterns_error"] = str(e)
+        return updates
 
 
 # ============================================================================
