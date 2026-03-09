@@ -169,10 +169,11 @@ def get_invoke_config(session_id: str) -> dict:
         session_id: Unique session identifier
 
     Returns:
-        Dict with "configurable" key for graph.invoke()
+        Dict with "configurable" and "recursion_limit" keys for graph.invoke()
     """
     return {
         "configurable": {
             "thread_id": session_id,
-        }
+        },
+        "recursion_limit": 1000,  # High limit for complex 3-level graph
     }
