@@ -812,6 +812,10 @@ def main():
 
     Exits 2 on policy violations (blocking).  Exits 0 otherwise.
     """
+    # Immediate output to ensure hook gets response
+    sys.stderr.write('[L3.9] Post-tool tracking...\n')
+    sys.stderr.flush()
+
     # ===== DEBUG START =====
     debug_file = Path.home() / '.claude' / 'memory' / 'logs' / 'post-tool-tracker-debug.log'
     debug_enabled = True
