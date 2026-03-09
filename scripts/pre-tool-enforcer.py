@@ -1629,8 +1629,8 @@ def main():
     if not isinstance(tool_input, dict):
         tool_input = {}
 
-    # CRITICAL: PRE-LOAD SKILLS/AGENTS BEFORE INVOCATION (Step 3.5)
-    # Don't let LLM invoke a skill that hasn't been loaded yet!
+    # CRITICAL: VERIFY SKILL/AGENT EXISTS BEFORE INVOCATION (Step 3.5)
+    # LLM has skill definitions → decides to use one → we verify it exists
     if tool_name in ('Skill', 'Agent'):
         try:
             skill_or_agent_name = tool_input.get('skill', tool_input.get('agent', ''))
@@ -1639,7 +1639,7 @@ def main():
                     '03-execution-system' / '05-skill-agent-selection' / 'core-skills-loader.py'
 
                 if skill_loader_script.exists():
-                    # Load the skill/agent BEFORE LLM invokes it
+                    # Verify the skill/agent exists locally
                     result = subprocess.run(
                         [sys.executable, str(skill_loader_script), skill_or_agent_name],
                         capture_output=True,
@@ -1649,9 +1649,18 @@ def main():
                     if result.returncode == 0:
                         try:
                             load_info = json.loads(result.stdout)
-                            if load_info.get('skill_loaded', {}).get('loaded'):
-                                hint = f'[PRELOAD] {skill_or_agent_name}: Loaded and ready'
+                            skill_data = load_info.get('skill_loaded', {})
+                            agent_data = load_info.get('agent_loaded', {})
+
+                            if skill_data.get('loaded') or agent_data.get('loaded'):
+                                hint = f'[VERIFY] {skill_or_agent_name}: Available and ready'
                                 sys.stdout.write(hint + '\n')
+                            elif skill_data.get('status') == 'not_found' or agent_data.get('status') == 'not_found':
+                                # Provide available skills/agents for LLM
+                                available = load_info.get('available_skills', []) or load_info.get('available_agents', [])
+                                if available:
+                                    hint = f'[HINT] {skill_or_agent_name} not found. Available: {", ".join(available[:5])}'
+                                    sys.stdout.write(hint + '\n')
                         except Exception:
                             pass  # Non-critical
         except Exception:
