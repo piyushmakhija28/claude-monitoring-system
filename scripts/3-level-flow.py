@@ -78,8 +78,12 @@ if sys.platform == 'win32':
     except Exception:
         pass
 
-VERSION = "4.3.0"  # v4.3.0: Wire all remaining steps (3.6/3.9/3.10/3.11/3.12) to scripts
+VERSION = "4.4.0"  # v4.4.0: Phase 1 bloat fixes - trace rotation + debug-only prints
 SCRIPT_NAME = "3-level-flow.py"
+
+# Phase 1 bloat fixes
+DEBUG = os.getenv("CLAUDE_DEBUG", "").lower() == "1"  # Set CLAUDE_DEBUG=1 for verbose output
+MAX_TRACE_ENTRIES = 30  # Keep only last 30 pipeline entries to reduce memory (100 KB → ~60 KB)
 
 # Flag auto-expiry configuration (Loophole #10)
 FLAG_EXPIRY_MINUTES = 60   # Auto-delete flags older than 60 minutes
@@ -459,7 +463,7 @@ def clear_all_enforcement_flags(reason=''):
                 except Exception:
                     pass
 
-        if cleared > 0:
+        if cleared > 0 and DEBUG:
             print(f'[ENFORCEMENT] {cleared} flag(s) cleared - {reason}')
 
         try:
@@ -516,7 +520,7 @@ def clear_current_session_flags(session_id, reason=''):
                 except Exception:
                     pass
 
-        if cleared > 0:
+        if cleared > 0 and DEBUG:
             print(
                 f"[ENFORCEMENT] {cleared} flag(s) cleared "
                 f"(session: {session_id[:16]}...) - {reason}"
@@ -818,13 +822,13 @@ def run_script_with_retry(script_path, args=None, timeout=10, step_name='unknown
 
         if rc == 0:
             # Success
-            if attempt > 1:
+            if attempt > 1 and DEBUG:
                 print(f"   [RECOVERED] {step_name} succeeded on attempt {attempt}")
             return stdout, stderr, rc, total_dur
 
         last_stdout, last_stderr, last_rc = stdout, stderr, rc
 
-        if attempt < MAX_RETRIES:
+        if attempt < MAX_RETRIES and DEBUG:
             print(f"   [RETRY {attempt}/{MAX_RETRIES}] {step_name} failed, retrying...")
         else:
             # 3rd failure - HARD BREAK SESSION
@@ -5011,10 +5015,11 @@ def _build_script_inventory():
 
 
 def _save_trace(trace, session_log_dir, flow_start):
-    """Save the flow-trace JSON to the session log directory.
+    """Save the flow-trace JSON to the session log directory with rotation.
 
-    OVERWRITE mode: flow-trace.json always contains ONLY the latest prompt's
-    trace. Each prompt overwrites the previous one. One session = one trace file.
+    ROTATE mode (Phase 1 fix): flow-trace.json keeps only the latest 30 pipeline
+    entries. This reduces memory bloat from 100 KB to ~60 KB per session.
+    Older entries are discarded (not archived - they're logged but not kept).
 
     Also keeps a latest-flow-trace.json copy at the top-level logs directory
     for fast access by other hooks.
@@ -5033,7 +5038,16 @@ def _save_trace(trace, session_log_dir, flow_start):
             fname = f"flow-trace-{flow_start.strftime('%Y%m%d-%H%M%S')}.json"
             write_json(fallback_dir / fname, trace)
         else:
-            # 1. Write flow-trace.json (OVERWRITE - always latest only)
+            # Phase 1 fix: Apply trace rotation (keep last MAX_TRACE_ENTRIES)
+            if "pipeline" in trace and len(trace["pipeline"]) > MAX_TRACE_ENTRIES:
+                total_before = len(trace["pipeline"])
+                trace["pipeline"] = trace["pipeline"][-MAX_TRACE_ENTRIES:]
+                if DEBUG:
+                    sys.stderr.write(
+                        f"[TRACE-ROTATION] Kept last {MAX_TRACE_ENTRIES} of {total_before} entries\n"
+                    )
+
+            # 1. Write flow-trace.json (ROTATE - keep last 30 entries only)
             trace_file = session_log_dir / 'flow-trace.json'
             write_json(trace_file, trace)
 
