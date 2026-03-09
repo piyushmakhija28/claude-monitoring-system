@@ -685,12 +685,12 @@ def check_level_3_11_git_status(tool_name, tool_input):
         msg = (
             '[BLOCKED L3.11] git push blocked - uncommitted changes detected!\n'
             '  Dirty files : ' + str(len(dirty_lines)) + ' file(s) with changes\n'
-            '  Preview     :\n'
+            '  Preview' + ' ' + ': ' + '\n'
             + '\n'.join('    ' + l for l in preview)
             + ('\n    ... and ' + str(more) + ' more' if more else '') + '\n'
-            '  Policy      : git-workflow-policy.md\n'
-            '  Rule        : All changes must be committed before pushing.\n'
-            '  Action      : git add <files> && git commit -m "..." then push again.'
+            '  Policy' + '      : git-workflow-policy.md\n'
+            '  Rule' + '        : All changes must be committed before pushing.\n'
+            '  Action' + '      : git add <files> && git commit -m "..." then push again.'
         )
         return True, msg
     except Exception:
@@ -1351,9 +1351,9 @@ def main():
                         '[POST-TOOL L3.11] Task marked COMPLETED (#'
                         + str(completed_count) + ')!\n'
                         '  PHASE GUARD: Check ALL tasks in current phase.\n'
-                        '  IF no tasks remain in_progress in this phase:\n'
+                        '  IF no tasks remain in_progress in this phase' + ':\n'
                         '    -> Phase is COMPLETE -> git add + git commit + git push IMMEDIATELY.\n'
-                        '  IF tasks still in_progress:\n'
+                        '  IF tasks still in_progress' + ':\n'
                         '    -> Continue working on remaining tasks.\n'
                         '  RULE: Phase completion = ALL tasks done, not just this one.\n'
                         '  RULE: DO NOT skip git commit on phase completion.\n'
