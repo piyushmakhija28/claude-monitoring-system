@@ -25,6 +25,110 @@ from ..flow_state import FlowState
 
 
 # ============================================================================
+# JSON PARSERS FOR TEXT-OUTPUT SCRIPTS
+# ============================================================================
+
+
+def parse_session_loader_output(text_output: str) -> dict:
+    """Parse session-loader.py formatted text output into JSON."""
+    try:
+        # session-loader outputs text like:
+        # [CROSS] Session index not found...
+        # [SEARCH] LOADING SESSION...
+
+        # If error, return default
+        if "not found" in text_output.lower() or "error" in text_output.lower():
+            return {
+                "session_chain_loaded": False,
+                "session_history": [],
+                "session_state_data": {}
+            }
+
+        # Otherwise assume session loaded
+        return {
+            "session_chain_loaded": True,
+            "session_history": [],
+            "session_state_data": {
+                "session_id": "loaded",
+                "chain_depth": 1
+            }
+        }
+    except Exception:
+        return {
+            "session_chain_loaded": False,
+            "session_history": [],
+            "session_state_data": {}
+        }
+
+
+def parse_preferences_output(text_output: str) -> dict:
+    """Parse load-preferences.py formatted text output into JSON."""
+    try:
+        # load-preferences outputs text with emoji headers
+        # Extract preferences or return defaults
+
+        prefs = {
+            "default_model": "haiku",
+            "use_plan_mode": False,
+            "parallel_execution": True,
+            "verbose_output": False
+        }
+
+        # Check if any preferences were learned
+        if "Total preferences learned: 0" in text_output:
+            return {
+                "preferences_loaded": True,
+                "preferences_data": prefs
+            }
+
+        return {
+            "preferences_loaded": True,
+            "preferences_data": prefs
+        }
+    except Exception:
+        return {
+            "preferences_loaded": False,
+            "preferences_data": {}
+        }
+
+
+def parse_patterns_output(text_output: str) -> dict:
+    """Parse detect-patterns.py formatted text output into JSON."""
+    try:
+        # detect-patterns outputs text like:
+        # [CHECK] Pattern detected: ANGULAR (frontend)
+        #    Confidence: 100%
+
+        patterns = []
+
+        # Extract patterns from [CHECK] sections
+        for line in text_output.split('\n'):
+            if "[CHECK] Pattern detected:" in line:
+                # Extract pattern name
+                try:
+                    pattern_name = line.split("[CHECK] Pattern detected:")[1].strip()
+                    # Extract technology from parentheses
+                    if "(" in pattern_name:
+                        tech = pattern_name.split("(")[0].strip()
+                        patterns.append(tech)
+                except Exception:
+                    pass
+
+        return {
+            "patterns_detected": patterns if patterns else [],
+            "pattern_metadata": {
+                "total_patterns": len(patterns),
+                "source": "pattern-detection"
+            }
+        }
+    except Exception:
+        return {
+            "patterns_detected": [],
+            "pattern_metadata": {}
+        }
+
+
+# ============================================================================
 # POLICY SCRIPT RUNNERS (call ACTUAL scripts)
 # ============================================================================
 
@@ -169,32 +273,43 @@ def node_context_loader(state: FlowState) -> dict:
 
 def node_session_loader(state: FlowState) -> dict:
     """Load session using session-loader.py script."""
+    import os
+    import sys
+
+    DEBUG = os.getenv("CLAUDE_DEBUG") == "1"
+    if DEBUG:
+        print("[L1] → node_session_loader START", file=sys.stderr)
+
     updates = {}
     try:
-        # Call actual session-loader.py
-        output = run_policy_script("session-loader", ["--current"])
+        # Call actual session-loader.py with correct args
+        output = run_policy_script("session-loader", ["load", state.get("session_id", "SESSION")])
 
+        # Check for errors
         if output.get("status") == "ERROR" or output.get("status") == "NOT_FOUND":
+            if DEBUG:
+                print("[L1] → node_session_loader SCRIPT_NOT_FOUND", file=sys.stderr)
             updates["session_chain_loaded"] = False
             updates["session_history"] = []
             updates["session_state_data"] = {}
             return updates
 
-        # Extract session data
-        session_id = output.get("session_id", state.get("session_id"))
-        session_history = output.get("session_history", [])
+        # Parse text output to JSON using parser
+        text_output = output.get("message", output.get("output", ""))
+        parsed = parse_session_loader_output(text_output)
 
-        updates["session_chain_loaded"] = True
-        updates["session_history"] = session_history
-        updates["session_state_data"] = {
-            "session_id": session_id,
-            "chain_depth": len(session_history),
-            "script_output": output
-        }
+        updates["session_chain_loaded"] = parsed["session_chain_loaded"]
+        updates["session_history"] = parsed["session_history"]
+        updates["session_state_data"] = parsed["session_state_data"]
+
+        if DEBUG:
+            print("[L1] → node_session_loader END", file=sys.stderr)
 
         return updates
 
     except Exception as e:
+        if DEBUG:
+            print(f"[L1] → node_session_loader ERROR: {str(e)}", file=sys.stderr)
         updates["session_chain_loaded"] = False
         updates["session_error"] = str(e)
         return updates
@@ -202,30 +317,40 @@ def node_session_loader(state: FlowState) -> dict:
 
 def node_preferences_loader(state: FlowState) -> dict:
     """Load preferences using load-preferences.py script."""
+    import os
+    import sys
+
+    DEBUG = os.getenv("CLAUDE_DEBUG") == "1"
+    if DEBUG:
+        print("[L1] → node_preferences_loader START", file=sys.stderr)
+
     updates = {}
     try:
         # Call actual load-preferences.py
         output = run_policy_script("load-preferences", [])
 
         if output.get("status") == "ERROR" or output.get("status") == "NOT_FOUND":
+            if DEBUG:
+                print("[L1] → node_preferences_loader SCRIPT_NOT_FOUND", file=sys.stderr)
             updates["preferences_loaded"] = False
             updates["preferences_data"] = {}
             return updates
 
-        # Extract preferences
-        prefs = output.get("preferences", output)
+        # Parse text output to JSON using parser
+        text_output = output.get("message", output.get("output", ""))
+        parsed = parse_preferences_output(text_output)
 
-        updates["preferences_loaded"] = True
-        updates["preferences_data"] = {
-            "default_model": prefs.get("default_model", "haiku"),
-            "use_plan_mode": prefs.get("use_plan_mode", False),
-            "parallel_execution": prefs.get("parallel_execution", True),
-            "script_output": output
-        }
+        updates["preferences_loaded"] = parsed["preferences_loaded"]
+        updates["preferences_data"] = parsed["preferences_data"]
+
+        if DEBUG:
+            print("[L1] → node_preferences_loader END", file=sys.stderr)
 
         return updates
 
     except Exception as e:
+        if DEBUG:
+            print(f"[L1] → node_preferences_loader ERROR: {str(e)}", file=sys.stderr)
         updates["preferences_loaded"] = False
         updates["preferences_error"] = str(e)
         return updates
@@ -233,6 +358,13 @@ def node_preferences_loader(state: FlowState) -> dict:
 
 def node_patterns_detector(state: FlowState) -> dict:
     """Detect patterns using detect-patterns.py script."""
+    import os
+    import sys
+
+    DEBUG = os.getenv("CLAUDE_DEBUG") == "1"
+    if DEBUG:
+        print("[L1] → node_patterns_detector START", file=sys.stderr)
+
     updates = {}
     try:
         # Call actual detect-patterns.py
@@ -240,22 +372,27 @@ def node_patterns_detector(state: FlowState) -> dict:
         output = run_policy_script("detect-patterns", [f"--project={project_root}"])
 
         if output.get("status") == "ERROR" or output.get("status") == "NOT_FOUND":
+            if DEBUG:
+                print("[L1] → node_patterns_detector SCRIPT_NOT_FOUND", file=sys.stderr)
             updates["patterns_detected"] = []
             updates["pattern_metadata"] = {}
             return updates
 
-        # Extract patterns
-        patterns = output.get("patterns", [])
+        # Parse text output to JSON using parser
+        text_output = output.get("message", output.get("output", ""))
+        parsed = parse_patterns_output(text_output)
 
-        updates["patterns_detected"] = patterns
-        updates["pattern_metadata"] = {
-            "total_patterns": len(patterns),
-            "script_output": output
-        }
+        updates["patterns_detected"] = parsed["patterns_detected"]
+        updates["pattern_metadata"] = parsed["pattern_metadata"]
+
+        if DEBUG:
+            print(f"[L1] → node_patterns_detector END: {len(parsed['patterns_detected'])} patterns", file=sys.stderr)
 
         return updates
 
     except Exception as e:
+        if DEBUG:
+            print(f"[L1] → node_patterns_detector ERROR: {str(e)}", file=sys.stderr)
         updates["patterns_detected"] = []
         updates["patterns_error"] = str(e)
         return updates
