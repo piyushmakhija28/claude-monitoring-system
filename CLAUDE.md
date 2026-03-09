@@ -223,7 +223,6 @@ claude-insight/
 ├── scripts/                        <- All Executable Scripts (40 total, main hooks)
 │   ├── setup-global-claude.sh      <- Unix automatic setup
 │   ├── setup-global-claude.ps1     <- Windows automatic setup
-│   ├── global-claude-md-template.md <- Public CLAUDE.md template
 │   ├── 3-level-flow.py             <- Main hook entry script
 │   ├── clear-session-handler.py    <- Session state hook
 │   ├── pre-tool-enforcer.py        <- Tool validation hook
@@ -255,7 +254,9 @@ claude-insight/
 │   ├── 02-standards-system/
 │   └── 03-execution-system/
 │
-├── docs/                           <- Architecture docs (no operational reports)
+├── docs/                           <- Architecture docs & templates (no operational reports)
+│   ├── templates/                  <- Setup templates
+│   │   └── global-claude-md-template.md <- Public CLAUDE.md template for installation
 │   └── archive/                    <- Archived operational reports (11 files)
 ├── config/                         <- Runtime configuration JSONs
 └── tests/                          <- Test suite (16+ test files)

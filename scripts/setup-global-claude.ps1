@@ -83,7 +83,7 @@ Write-Host "[OK] $copied scripts copied, $skipped skipped"
 # Step 3: Install global CLAUDE.md
 Write-Host "[3/5] Installing global CLAUDE.md..."
 
-$template = Join-Path $ScriptDir "global-claude-md-template.md"
+$template = Join-Path $ScriptDir ".." "docs" "templates" "global-claude-md-template.md"
 
 if (Test-Path $GlobalClaudeMd) {
     Write-Host "  [INFO] Existing ~/.claude/CLAUDE.md found"

@@ -100,7 +100,7 @@ echo "[OK] $COPIED scripts copied, $SKIPPED skipped"
 # Step 3: Install global CLAUDE.md
 echo "[3/5] Installing global CLAUDE.md..."
 
-TEMPLATE="$SCRIPT_DIR/global-claude-md-template.md"
+TEMPLATE="$SCRIPT_DIR/../docs/templates/global-claude-md-template.md"
 
 if [ -f "$GLOBAL_CLAUDE_MD" ]; then
     echo "  [INFO] Existing ~/.claude/CLAUDE.md found"
