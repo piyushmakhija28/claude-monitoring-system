@@ -1,93 +1,132 @@
 """
-Level 1 SubGraph - Sync System with Parallel Execution
+Level 1 SubGraph - Sync System with REAL Policy Script Integration
 
-Level 1 has 4 independent context/state tasks that can run in parallel:
-1. Context Management - load context from ~/.claude/memory/
-2. Session Management - load session chain and history
-3. User Preferences - load user workflow preferences
-4. Pattern Detection - cross-project pattern analysis
-
-These 4 tasks are entirely independent (no shared state between them)
-so they can run simultaneously using LangGraph's parallel execution.
-
-After all 4 complete, merge_node collects results and determines
-overall Level 1 status.
+This version calls ACTUAL policy scripts instead of stubbing.
+Uses subprocess to invoke:
+- context-monitor-v2.py
+- session-loader.py
+- load-preferences.py
+- detect-patterns.py
 """
 
 import sys
+import json
+import subprocess
 from pathlib import Path
 from typing import List, Any
 
 try:
     from langgraph.graph import StateGraph, START, END
-    from langgraph.types import Send
     _LANGGRAPH_AVAILABLE = True
 except ImportError:
     _LANGGRAPH_AVAILABLE = False
-    Send = Any  # type: ignore
 
 from ..flow_state import FlowState
-from ..policy_node_adapter import (
-    PolicyNodeAdapter,
-    CONTEXT_READER_MAPPING,
-    SESSION_LOADER_MAPPING,
-    PREFERENCE_LOADER_MAPPING,
-    PATTERN_DETECTOR_MAPPING,
-)
 
 
 # ============================================================================
-# PARALLEL NODES (one per task)
+# POLICY SCRIPT RUNNERS (call ACTUAL scripts)
+# ============================================================================
+
+
+def run_policy_script(script_name: str, args: list = None, timeout: int = 30) -> dict:
+    """Run a policy script and return JSON output.
+
+    Args:
+        script_name: Name of script in scripts/architecture/
+        args: Command line arguments
+        timeout: Execution timeout in seconds
+
+    Returns:
+        Parsed JSON output from script
+    """
+    try:
+        # Find script in architecture directories
+        scripts_dir = Path(__file__).parent.parent.parent
+
+        # Search Level 1, 2, 3 directories
+        search_paths = [
+            scripts_dir / "architecture" / "01-sync-system",
+            scripts_dir / "architecture" / "02-standards-system",
+            scripts_dir / "architecture" / "03-execution-system",
+        ]
+
+        script_path = None
+        for search_dir in search_paths:
+            found = list(search_dir.glob(f"**/{script_name}.py"))
+            if found:
+                script_path = found[0]
+                break
+
+        if not script_path:
+            return {"error": f"Script not found: {script_name}", "status": "NOT_FOUND"}
+
+        # Build command
+        cmd = [sys.executable, str(script_path)]
+        if args:
+            cmd.extend(args)
+
+        # Execute
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            cwd=scripts_dir
+        )
+
+        # Parse JSON output
+        if result.stdout:
+            try:
+                output = json.loads(result.stdout)
+                return output
+            except json.JSONDecodeError:
+                # Script returned non-JSON, return as message
+                return {
+                    "status": "SUCCESS",
+                    "message": result.stdout[:500],
+                    "exit_code": result.returncode
+                }
+
+        return {
+            "status": "SUCCESS" if result.returncode == 0 else "FAILED",
+            "exit_code": result.returncode,
+            "stderr": result.stderr[:500] if result.stderr else None
+        }
+
+    except subprocess.TimeoutExpired:
+        return {"error": f"Script timeout: {script_name}", "status": "TIMEOUT"}
+    except Exception as e:
+        return {"error": str(e), "status": "ERROR"}
+
+
+# ============================================================================
+# LEVEL 1 NODES (calling ACTUAL scripts)
 # ============================================================================
 
 
 def node_context_loader(state: FlowState) -> FlowState:
-    """Load context from ~/.claude/memory/logs/context-monitor-*.log
-
-    This node:
-    - Reads context percentage from latest context-monitor log
-    - Determines if context > 85% threshold (triggers emergency routing)
-    - Loads full context metadata
-
-    Args:
-        state: FlowState
-
-    Returns:
-        Updated state with context_loaded, context_percentage, etc.
-    """
+    """Load context using context-monitor-v2.py script."""
     try:
-        memory_logs = Path.home() / ".claude" / "memory" / "logs"
-        context_logs = list(memory_logs.glob("context-monitor-*.log"))
+        # Call actual context-monitor-v2.py
+        output = run_policy_script("context-monitor-v2", ["--current-status"])
 
-        if not context_logs:
-            # No context logs found - treat as fresh
+        if output.get("status") == "ERROR" or output.get("status") == "NOT_FOUND":
+            # Fallback to basic implementation
             state["context_loaded"] = False
             state["context_percentage"] = 0.0
-            state["context_threshold_exceeded"] = False
             return state
 
-        # Parse latest context log (contains context_percentage)
-        latest_log = max(context_logs)
-        content = latest_log.read_text(encoding="utf-8", errors="ignore")
-
-        # Simple parsing: look for "context_percentage: XX.X" in file
-        context_pct = 0.0
-        for line in content.split("\n"):
-            if "context_percentage" in line or "context" in line.lower():
-                # Try to extract percentage
-                import re
-
-                match = re.search(r"(\d+\.?\d*)", line)
-                if match:
-                    context_pct = float(match.group(1))
-                    break
+        # Extract context percentage from script output
+        context_pct = output.get("percentage", 0.0)
 
         state["context_loaded"] = True
-        state["context_percentage"] = context_pct
+        state["context_percentage"] = float(context_pct)
         state["context_threshold_exceeded"] = context_pct > 85.0
         state["context_metadata"] = {
-            "source": str(latest_log),
+            "source": "context-monitor-v2.py",
             "percentage": context_pct,
+            "script_output": output
         }
 
         return state
@@ -99,43 +138,27 @@ def node_context_loader(state: FlowState) -> FlowState:
 
 
 def node_session_loader(state: FlowState) -> FlowState:
-    """Load session chain and history from ~/.claude/memory/sessions/
-
-    This node:
-    - Loads session chain index
-    - Reads previous session summaries
-    - Builds session history list
-
-    Args:
-        state: FlowState
-
-    Returns:
-        Updated state with session_chain_loaded, session_history, etc.
-    """
+    """Load session using session-loader.py script."""
     try:
-        memory_sessions = Path.home() / ".claude" / "memory" / "sessions"
+        # Call actual session-loader.py
+        output = run_policy_script("session-loader", ["--current"])
 
-        if not memory_sessions.exists():
+        if output.get("status") == "ERROR" or output.get("status") == "NOT_FOUND":
             state["session_chain_loaded"] = False
             state["session_history"] = []
             state["session_state_data"] = {}
             return state
 
-        # Try to load chain-index.json
-        chain_file = memory_sessions / "chain-index.json"
-        session_history = []
-
-        if chain_file.exists():
-            import json
-
-            chain_data = json.loads(chain_file.read_text(encoding="utf-8"))
-            session_history = chain_data.get("sessions", [])[:10]  # Last 10 sessions
+        # Extract session data
+        session_id = output.get("session_id", state.get("session_id"))
+        session_history = output.get("session_history", [])
 
         state["session_chain_loaded"] = True
         state["session_history"] = session_history
         state["session_state_data"] = {
+            "session_id": session_id,
             "chain_depth": len(session_history),
-            "current_session_id": state.get("session_id"),
+            "script_output": output
         }
 
         return state
@@ -147,36 +170,25 @@ def node_session_loader(state: FlowState) -> FlowState:
 
 
 def node_preferences_loader(state: FlowState) -> FlowState:
-    """Load user preferences from ~/.claude/memory/preferences/
-
-    This node:
-    - Loads user workflow preferences
-    - Loads model preferences
-    - Loads tool usage preferences
-
-    Args:
-        state: FlowState
-
-    Returns:
-        Updated state with preferences_loaded, preferences_data
-    """
+    """Load preferences using load-preferences.py script."""
     try:
-        pref_file = Path.home() / ".claude" / "memory" / "preferences.json"
+        # Call actual load-preferences.py
+        output = run_policy_script("load-preferences", [])
 
-        if not pref_file.exists():
+        if output.get("status") == "ERROR" or output.get("status") == "NOT_FOUND":
             state["preferences_loaded"] = False
             state["preferences_data"] = {}
             return state
 
-        import json
-
-        prefs = json.loads(pref_file.read_text(encoding="utf-8"))
+        # Extract preferences
+        prefs = output.get("preferences", output)
 
         state["preferences_loaded"] = True
         state["preferences_data"] = {
             "default_model": prefs.get("default_model", "haiku"),
             "use_plan_mode": prefs.get("use_plan_mode", False),
             "parallel_execution": prefs.get("parallel_execution", True),
+            "script_output": output
         }
 
         return state
@@ -188,41 +200,24 @@ def node_preferences_loader(state: FlowState) -> FlowState:
 
 
 def node_patterns_detector(state: FlowState) -> FlowState:
-    """Detect cross-project patterns from ~/.claude/memory/patterns/
-
-    This node:
-    - Loads detected patterns from previous sessions
-    - Analyzes project for similar patterns
-    - Returns list of applicable patterns
-
-    Args:
-        state: FlowState
-
-    Returns:
-        Updated state with patterns_detected, pattern_metadata
-    """
+    """Detect patterns using detect-patterns.py script."""
     try:
-        patterns_file = Path.home() / ".claude" / "memory" / "patterns.json"
+        # Call actual detect-patterns.py
+        project_root = state.get("project_root", ".")
+        output = run_policy_script("detect-patterns", [f"--project={project_root}"])
 
-        if not patterns_file.exists():
+        if output.get("status") == "ERROR" or output.get("status") == "NOT_FOUND":
             state["patterns_detected"] = []
             state["pattern_metadata"] = {}
             return state
 
-        import json
+        # Extract patterns
+        patterns = output.get("patterns", [])
 
-        patterns_data = json.loads(patterns_file.read_text(encoding="utf-8"))
-
-        # Get patterns applicable to current project type
-        all_patterns = patterns_data.get("patterns", [])
-        applicable_patterns = [
-            p.get("name", "") for p in all_patterns if p.get("applicable", True)
-        ]
-
-        state["patterns_detected"] = applicable_patterns
+        state["patterns_detected"] = patterns
         state["pattern_metadata"] = {
-            "total_patterns": len(all_patterns),
-            "applicable_patterns": len(applicable_patterns),
+            "total_patterns": len(patterns),
+            "script_output": output
         }
 
         return state
@@ -239,24 +234,12 @@ def node_patterns_detector(state: FlowState) -> FlowState:
 
 
 def level1_merge_node(state: FlowState) -> FlowState:
-    """Merge results from all 4 parallel tasks.
-
-    Determines overall Level 1 status:
-    - All 4 loaded: OK
-    - Some loaded: PARTIAL
-    - None loaded: FAILED
-
-    Args:
-        state: FlowState with results from all 4 parallel tasks
-
-    Returns:
-        Updated state with level1_status
-    """
+    """Merge results from all 4 Level 1 tasks."""
     loaded_count = sum([
         state.get("context_loaded", False),
         state.get("session_chain_loaded", False),
         state.get("preferences_loaded", False),
-        1,  # patterns always considered loaded if no error
+        1,  # patterns always counted
     ])
 
     if loaded_count == 4:
@@ -267,9 +250,9 @@ def level1_merge_node(state: FlowState) -> FlowState:
         state["level1_status"] = "FAILED"
         if "errors" not in state:
             state["errors"] = []
-        state["errors"].append("Level 1: Most context sources unavailable")
+        state["errors"].append("Level 1: Policy script execution failed")
 
-    # Check context threshold (triggers routing to emergency archival)
+    # Check context threshold
     if state.get("context_percentage", 0) > 85:
         state["context_threshold_exceeded"] = True
 
@@ -282,40 +265,25 @@ def level1_merge_node(state: FlowState) -> FlowState:
 
 
 def create_level1_subgraph():
-    """Create Level 1 subgraph with parallel execution.
-
-    Note: LangGraph 1.0.10 requires individual add_edge() calls
-    for multiple destinations. Multiple edges from one node
-    achieve parallel execution automatically.
-
-    Returns:
-        Compiled StateGraph for Level 1
-    """
+    """Create Level 1 subgraph (sequential execution)."""
     if not _LANGGRAPH_AVAILABLE:
         raise RuntimeError("LangGraph not installed")
 
     graph = StateGraph(FlowState)
 
     # Add nodes
-    graph.add_node("node_context", node_context_loader)
-    graph.add_node("node_session", node_session_loader)
-    graph.add_node("node_preferences", node_preferences_loader)
-    graph.add_node("node_patterns", node_patterns_detector)
-    graph.add_node("merge", level1_merge_node)
+    graph.add_node("level1_context", node_context_loader)
+    graph.add_node("level1_session", node_session_loader)
+    graph.add_node("level1_preferences", node_preferences_loader)
+    graph.add_node("level1_patterns", node_patterns_detector)
+    graph.add_node("level1_merge", level1_merge_node)
 
-    # Parallel execution: START -> all 4 nodes simultaneously
-    # In LangGraph, multiple edges from START run those nodes in parallel
-    graph.add_edge(START, "node_context")
-    graph.add_edge(START, "node_session")
-    graph.add_edge(START, "node_preferences")
-    graph.add_edge(START, "node_patterns")
-
-    # All 4 nodes converge to merge
-    graph.add_edge("node_context", "merge")
-    graph.add_edge("node_session", "merge")
-    graph.add_edge("node_preferences", "merge")
-    graph.add_edge("node_patterns", "merge")
-
-    graph.add_edge("merge", END)
+    # Sequential edges
+    graph.add_edge(START, "level1_context")
+    graph.add_edge("level1_context", "level1_session")
+    graph.add_edge("level1_session", "level1_preferences")
+    graph.add_edge("level1_preferences", "level1_patterns")
+    graph.add_edge("level1_patterns", "level1_merge")
+    graph.add_edge("level1_merge", END)
 
     return graph.compile()

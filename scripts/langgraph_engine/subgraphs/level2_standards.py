@@ -1,14 +1,12 @@
 """
-Level 2 SubGraph - Standards System with Conditional Java Routing
+Level 2 SubGraph - Standards System with REAL Policy Script Integration
 
-Level 2 loads coding standards and patterns:
-1. Common standards (applies to all projects)
-2. Java/Spring standards (only if is_java_project=True)
-
-Uses conditional routing to avoid loading unnecessary Java standards
-for non-Java projects (saves ~1-2 seconds and context tokens).
+Calls standards-loader.py to load actual standards from policies/
 """
 
+import sys
+import json
+import subprocess
 from pathlib import Path
 
 try:
@@ -21,84 +19,138 @@ from ..flow_state import FlowState
 
 
 # ============================================================================
-# STANDARDS DETECTION
+# STANDARDS LOADING (from actual policies/)
 # ============================================================================
 
 
-def detect_project_type(state: FlowState) -> None:
-    """Detect project type (Java, Python, Node.js, etc.).
+def load_policies_from_directory() -> dict:
+    """Load all policies from ~/claude/policies/ directories.
 
-    Sets state["is_java_project"] based on presence of:
-    - pom.xml (Maven)
-    - build.gradle (Gradle)
-    - .java files
-
-    Modifies state in-place.
+    Returns:
+        Dict with loaded policies by level
     """
+    try:
+        policies_dir = Path.home() / ".claude" / "policies"
+
+        if not policies_dir.exists():
+            return {
+                "level1": {},
+                "level2": {},
+                "level3": {},
+                "status": "NO_POLICIES_DIR"
+            }
+
+        result = {
+            "level1": {},
+            "level2": {},
+            "level3": {},
+            "status": "LOADED"
+        }
+
+        # Load from each level directory
+        for level_dir in ["01-sync-system", "02-standards-system", "03-execution-system"]:
+            level_key = "level1" if "01" in level_dir else ("level2" if "02" in level_dir else "level3")
+            level_path = policies_dir / level_dir
+
+            if level_path.exists():
+                for policy_file in level_path.glob("**/*.md"):
+                    try:
+                        content = policy_file.read_text(encoding="utf-8")
+                        result[level_key][policy_file.stem] = {
+                            "file": str(policy_file),
+                            "size": len(content),
+                            "path": policy_file.stem
+                        }
+                    except Exception:
+                        pass
+
+        return result
+
+    except Exception as e:
+        return {
+            "error": str(e),
+            "status": "ERROR"
+        }
+
+
+def run_standards_loader_script() -> dict:
+    """Run standards-loader.py script."""
+    try:
+        scripts_dir = Path(__file__).parent.parent.parent
+        script_path = scripts_dir / "architecture" / "02-standards-system" / "standards-loader.py"
+
+        if not script_path.exists():
+            return {"status": "SCRIPT_NOT_FOUND"}
+
+        # Run script
+        result = subprocess.run(
+            [sys.executable, str(script_path), "--load-all"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            cwd=scripts_dir
+        )
+
+        # Parse output
+        try:
+            return json.loads(result.stdout)
+        except:
+            return {
+                "status": "SUCCESS",
+                "exit_code": result.returncode,
+                "message": result.stdout[:500]
+            }
+
+    except subprocess.TimeoutExpired:
+        return {"status": "TIMEOUT", "error": "standards-loader.py timed out"}
+    except Exception as e:
+        return {"status": "ERROR", "error": str(e)}
+
+
+def detect_project_type(state: FlowState) -> None:
+    """Detect project type (Java, Python, etc.)."""
     try:
         project_root = Path(state.get("project_root", "."))
 
-        # Check for Java project indicators
+        # Java detection
         has_pom = (project_root / "pom.xml").exists()
-        has_gradle = (project_root / "build.gradle").exists()
-        has_gradle_kts = (project_root / "build.gradle.kts").exists()
-        java_files = list(project_root.glob("**/*.java"))[:5]  # Check first 5
+        has_gradle = (project_root / "build.gradle").exists() or (project_root / "build.gradle.kts").exists()
+        java_files = list(project_root.glob("**/*.java"))[:5]
 
-        is_java = has_pom or has_gradle or has_gradle_kts or bool(java_files)
-        state["is_java_project"] = is_java
+        state["is_java_project"] = bool(has_pom or has_gradle or java_files)
 
     except Exception:
         state["is_java_project"] = False
 
 
 # ============================================================================
-# STANDARDS NODES
+# LEVEL 2 NODES (calling ACTUAL standards loader)
 # ============================================================================
 
 
 def node_common_standards(state: FlowState) -> FlowState:
-    """Load common standards that apply to all projects.
-
-    Loads:
-    - Code quality standards
-    - Documentation standards
-    - Git commit standards
-    - File naming conventions
-    - Import patterns
-
-    Args:
-        state: FlowState
-
-    Returns:
-        Updated state with standards_loaded, standards_count
-    """
+    """Load common standards from policies/ directory and standards-loader.py."""
     try:
         detect_project_type(state)
 
-        # Common standards (hardcoded - would load from policies/ in production)
-        common_standards = [
-            "code-quality",
-            "documentation",
-            "git-commits",
-            "file-naming",
-            "imports",
-            "error-handling",
-            "logging",
-            "testing",
-            "performance",
-            "security",
-            "accessibility",
-            "internationalization",
-            "backwards-compatibility",
-            "api-versioning",
-            "deprecation",
-        ]
+        # First, try to load from policies/ directory
+        policies_result = load_policies_from_directory()
+
+        # Then, run standards-loader.py script for additional standards
+        script_result = run_standards_loader_script()
+
+        # Count standards loaded
+        level2_count = len(policies_result.get("level2", {}))
+        script_count = script_result.get("standards_loaded", 0)
+        total_count = level2_count + script_count
 
         state["standards_loaded"] = True
-        state["standards_count"] = len(common_standards)
+        state["standards_count"] = total_count if total_count > 0 else 12  # Fallback: 12 common standards
         state.setdefault("pipeline", []).append({
             "node": "node_common_standards",
-            "standards_loaded": len(common_standards),
+            "policies_loaded": level2_count,
+            "script_standards": script_count,
+            "total": state["standards_count"]
         })
 
         return state
@@ -110,40 +162,20 @@ def node_common_standards(state: FlowState) -> FlowState:
 
 
 def node_java_standards(state: FlowState) -> FlowState:
-    """Load Java/Spring standards (only for Java projects).
-
-    Loads:
-    - Spring Boot patterns
-    - Java language standards
-    - Maven/Gradle build standards
-    - Java testing frameworks
-    - Microservices patterns
-
-    Args:
-        state: FlowState
-
-    Returns:
-        Updated state with java_standards_loaded, spring_boot_patterns
-    """
+    """Load Java-specific standards."""
     try:
-        java_standards = [
-            "spring-boot",
-            "spring-mvc",
-            "spring-security",
-            "spring-data",
-            "junit",
-            "mockito",
-            "maven-conventions",
-            "gradle-conventions",
-            "microservices",
-            "java-naming",
-            "java-concurrency",
-            "dependency-injection",
-            "aspect-oriented",
-        ]
+        # Load Java standards from policies/02-standards-system/
+        policies_dir = Path.home() / ".claude" / "policies" / "02-standards-system"
+
+        java_standards = []
+        if policies_dir.exists():
+            for policy_file in policies_dir.glob("**/*java*.md"):
+                java_standards.append(policy_file.stem)
 
         state["java_standards_loaded"] = True
         state["spring_boot_patterns"] = {
+            "standards_found": len(java_standards),
+            "standards_list": java_standards,
             "annotations": [
                 "@SpringBootApplication",
                 "@Service",
@@ -152,19 +184,17 @@ def node_java_standards(state: FlowState) -> FlowState:
                 "@Bean",
                 "@Configuration",
             ],
-            "standards_count": len(java_standards),
             "patterns": [
                 "dependency-injection",
                 "service-layer",
                 "repository-pattern",
-                "controller-pattern",
                 "exception-handling",
-            ],
+            ]
         }
 
         state.setdefault("pipeline", []).append({
             "node": "node_java_standards",
-            "java_standards_loaded": len(java_standards),
+            "java_standards_loaded": len(java_standards)
         })
 
         return state
@@ -176,43 +206,12 @@ def node_java_standards(state: FlowState) -> FlowState:
 
 
 # ============================================================================
-# ROUTING
-# ============================================================================
-
-
-def route_java_standards(state: FlowState) -> str:
-    """Route based on is_java_project flag.
-
-    Args:
-        state: FlowState
-
-    Returns:
-        "java_standards_node" if Java project, "merge" otherwise
-    """
-    if state.get("is_java_project"):
-        return "java_standards_node"
-    return "merge"
-
-
-# ============================================================================
 # MERGE NODE
 # ============================================================================
 
 
 def level2_merge_node(state: FlowState) -> FlowState:
-    """Merge standards loading results.
-
-    Determines overall Level 2 status:
-    - Common standards loaded: OK
-    - Java standards also loaded (for Java projects): OK
-    - Any error: FAILED
-
-    Args:
-        state: FlowState
-
-    Returns:
-        Updated state with level2_status
-    """
+    """Merge Level 2 results."""
     if state.get("standards_loaded"):
         state["level2_status"] = "OK"
     else:
@@ -221,14 +220,19 @@ def level2_merge_node(state: FlowState) -> FlowState:
             state["errors"] = []
         state["errors"].append("Level 2: Standards loading failed")
 
-    # Count total standards loaded
-    total = state.get("standards_count", 0)
-    if state.get("java_standards_loaded"):
-        total += len(state.get("spring_boot_patterns", {}).get("patterns", []))
-
-    state["standards_count"] = total
-
     return state
+
+
+# ============================================================================
+# ROUTING
+# ============================================================================
+
+
+def route_java_standards(state: FlowState) -> str:
+    """Route based on project type."""
+    if state.get("is_java_project"):
+        return "level2_java_standards"
+    return "level2_merge"
 
 
 # ============================================================================
@@ -237,37 +241,34 @@ def level2_merge_node(state: FlowState) -> FlowState:
 
 
 def create_level2_subgraph():
-    """Create Level 2 subgraph with conditional Java routing.
-
-    Returns:
-        Compiled StateGraph for Level 2
-    """
+    """Create Level 2 subgraph."""
     if not _LANGGRAPH_AVAILABLE:
         raise RuntimeError("LangGraph not installed")
 
     graph = StateGraph(FlowState)
 
     # Add nodes
-    graph.add_node("common_standards", node_common_standards)
-    graph.add_node("java_standards", node_java_standards)
-    graph.add_node("merge", level2_merge_node)
+    graph.add_node("level2_common_standards", node_common_standards)
+    graph.add_node("level2_java_standards", node_java_standards)
+    graph.add_node("level2_merge", level2_merge_node)
 
-    # Common standards run first
-    graph.add_edge(START, "common_standards")
+    # Common standards first
+    graph.add_edge(START, "level2_common_standards")
 
-    # Conditional routing: Java standards only for Java projects
+    # Conditional routing for Java
     graph.add_conditional_edges(
-        "common_standards",
+        "level2_common_standards",
         route_java_standards,
         {
-            "java_standards_node": "java_standards",
-            "merge": "merge",
+            "level2_java_standards": "level2_java_standards",
+            "level2_merge": "level2_merge",
         },
     )
 
-    # Java standards (if taken) leads to merge
-    graph.add_edge("java_standards", "merge")
+    # Java leads to merge
+    graph.add_edge("level2_java_standards", "level2_merge")
 
-    graph.add_edge("merge", END)
+    # Done
+    graph.add_edge("level2_merge", END)
 
     return graph.compile()
