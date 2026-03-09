@@ -148,6 +148,8 @@ def run_langgraph_engine(session_id: str = "", project_root: str = "", user_mess
 
 def main():
     """Main entry point."""
+    global DEBUG  # Allow modifying global DEBUG variable
+
     try:
         # Check if LangGraph is available
         if not _LANGGRAPH_AVAILABLE:
