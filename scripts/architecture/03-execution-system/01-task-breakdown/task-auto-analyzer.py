@@ -382,7 +382,7 @@ def main():
     import os
 
     ollama_endpoint = os.getenv("OLLAMA_ENDPOINT", "http://localhost:11434/api/generate")
-    ollama_model = os.getenv("OLLAMA_MODEL", "mistral")
+    ollama_model = os.getenv("OLLAMA_MODEL", "qwen2.5:7b")
 
     if len(sys.argv) < 2:
         output = {
