@@ -75,10 +75,9 @@ from .subgraphs.level3_execution import (
 # ============================================================================
 
 
-def route_after_level_minus1(state: FlowState) -> Literal["output_node", "level1_unicode"]:
+def route_after_level_minus1(state: FlowState) -> Literal["output_node", "level1_context"]:
     """Route based on Level -1 blocking status."""
     if state.get("level_minus1_status") == "BLOCKED":
-        state["final_status"] = "BLOCKED"
         return "output_node"
     return "level1_context"
 
@@ -90,12 +89,12 @@ def route_context_threshold(state: FlowState) -> Literal["emergency_archive", "l
     return "level2_common_standards"
 
 
-def route_standards_loading(state: FlowState) -> Literal["level2_java_standards", "level3_step0"]:
+def route_standards_loading(state: FlowState) -> Literal["level2_java_standards", "level2_merge"]:
     """Route based on project type (Java detection)."""
     detect_project_type(state)
     if state.get("is_java_project"):
         return "level2_java_standards"
-    return "level3_step0"
+    return "level2_merge"
 
 
 # ============================================================================
@@ -103,28 +102,30 @@ def route_standards_loading(state: FlowState) -> Literal["level2_java_standards"
 # ============================================================================
 
 
-def emergency_archive(state: FlowState) -> FlowState:
+def emergency_archive(state: FlowState) -> dict:
     """Emergency archival when context threshold exceeded."""
-    if "warnings" not in state:
-        state["warnings"] = []
-    state["warnings"].append(
+    updates = {}
+    existing_warnings = state.get("warnings") or []
+    warnings = list(existing_warnings) + [
         f"Context usage high ({state.get('context_percentage', 0):.1f}%) - "
         "archive recommended"
-    )
-    return state
+    ]
+    updates["warnings"] = warnings
+    return updates
 
 
-def output_node(state: FlowState) -> FlowState:
+def output_node(state: FlowState) -> dict:
     """Final output node - determines completion status."""
-    if state.get("final_status") == "pending":
-        if state.get("errors"):
-            state["final_status"] = "FAILED"
-        elif state.get("warnings"):
-            state["final_status"] = "PARTIAL"
-        else:
-            state["final_status"] = "OK"
-
-    return state
+    # If final_status not yet set, determine it now
+    # Check for blocking conditions
+    if state.get("level_minus1_status") == "BLOCKED":
+        return {"final_status": "BLOCKED"}
+    elif state.get("errors"):
+        return {"final_status": "FAILED"}
+    elif state.get("warnings"):
+        return {"final_status": "PARTIAL"}
+    else:
+        return {"final_status": "OK"}
 
 
 # ============================================================================
@@ -222,14 +223,12 @@ def create_flow_graph():
         route_standards_loading,
         {
             "level2_java_standards": "level2_java_standards",
-            "level3_step0": "level3_step0",
+            "level2_merge": "level2_merge",
         },
     )
 
     # Java standards merge
     graph.add_edge("level2_java_standards", "level2_merge")
-    # Common-only path merges too
-    graph.add_edge("level2_common_standards", "level2_merge")
 
     # Merge to Level 3
     graph.add_edge("level2_merge", "level3_step0")
@@ -272,14 +271,9 @@ def create_flow_graph():
     graph.add_edge("level3_merge", "output_node")
     graph.add_edge("output_node", END)
 
-    # Compile with checkpointer (optional for LangGraph 1.0.10)
-    try:
-        from .checkpointer import CheckpointerManager
-        checkpointer = CheckpointerManager.get_default_checkpointer(use_sqlite=False)
-        compiled_graph = graph.compile(checkpointer=checkpointer)
-    except Exception:
-        # Fallback: compile without checkpointer
-        compiled_graph = graph.compile()
+    # Compile graph WITHOUT checkpointer to avoid session_id conflicts
+    # TODO: Add checkpointer support after fixing state merge issues
+    compiled_graph = graph.compile()
     return compiled_graph
 
 
@@ -301,54 +295,14 @@ def create_initial_state(session_id: str = "", project_root: str = "") -> FlowSt
     if not project_root:
         project_root = str(Path.cwd())
 
+    # ONLY initialize immutable fields (with _keep_first_value reducer)
+    # All other fields will be created/updated by nodes
     return FlowState(
+        # Immutable session info only
         session_id=session_id,
         timestamp=datetime.now().isoformat(),
         project_root=project_root,
-        is_java_project=False,
-        is_fresh_project=False,
-        # Level -1
-        level_minus1_status="pending",
-        unicode_check=False,
-        encoding_check=False,
-        windows_path_check=False,
-        auto_fix_applied=[],
-        # Level 1
-        context_loaded=False,
-        context_percentage=0.0,
-        context_threshold_exceeded=False,
-        session_chain_loaded=False,
-        session_history=[],
-        preferences_loaded=False,
-        preferences_data={},
-        patterns_detected=[],
-        level1_status="pending",
-        # Level 2
-        standards_loaded=False,
-        standards_count=0,
-        java_standards_loaded=False,
-        level2_status="pending",
-        # Level 3
-        step0_prompt={},
-        step1_tasks={},
-        step2_plan_mode=False,
-        step3_context_read=False,
-        step4_model="haiku",
-        step5_skill="",
-        step5_agent="",
-        step6_tool_hints=[],
-        step7_recommendations=[],
-        step8_progress={},
-        step9_commit_ready=False,
-        step10_session={},
-        failure_prevention={},
-        # Output
-        final_status="pending",
-        pipeline=[],
-        errors=[],
-        warnings=[],
-        execution_time_ms=0,
-        level_durations={},
+        # Other fields will be added by nodes as needed
     )
 
 
@@ -371,6 +325,8 @@ def invoke_flow(
     from .checkpointer import get_invoke_config
 
     config = get_invoke_config(initial_state["session_id"])
+    # Set very high recursion limit to debug infinite loops
+    config["recursion_limit"] = 1000
 
     result = graph.invoke(initial_state, config=config)
     return result

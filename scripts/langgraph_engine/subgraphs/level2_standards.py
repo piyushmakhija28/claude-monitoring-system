@@ -128,8 +128,9 @@ def detect_project_type(state: FlowState) -> None:
 # ============================================================================
 
 
-def node_common_standards(state: FlowState) -> FlowState:
+def node_common_standards(state: FlowState) -> dict:
     """Load common standards from policies/ directory and standards-loader.py."""
+    updates = {}
     try:
         detect_project_type(state)
 
@@ -144,25 +145,28 @@ def node_common_standards(state: FlowState) -> FlowState:
         script_count = script_result.get("standards_loaded", 0)
         total_count = level2_count + script_count
 
-        state["standards_loaded"] = True
-        state["standards_count"] = total_count if total_count > 0 else 12  # Fallback: 12 common standards
-        state.setdefault("pipeline", []).append({
+        updates["standards_loaded"] = True
+        updates["standards_count"] = total_count if total_count > 0 else 12  # Fallback: 12 common standards
+
+        existing_pipeline = state.get("pipeline") or []
+        updates["pipeline"] = list(existing_pipeline) + [{
             "node": "node_common_standards",
             "policies_loaded": level2_count,
             "script_standards": script_count,
-            "total": state["standards_count"]
-        })
+            "total": updates["standards_count"]
+        }]
 
-        return state
+        return updates
 
     except Exception as e:
-        state["standards_loaded"] = False
-        state["standards_error"] = str(e)
-        return state
+        updates["standards_loaded"] = False
+        updates["standards_error"] = str(e)
+        return updates
 
 
-def node_java_standards(state: FlowState) -> FlowState:
+def node_java_standards(state: FlowState) -> dict:
     """Load Java-specific standards."""
+    updates = {}
     try:
         # Load Java standards from policies/02-standards-system/
         policies_dir = Path.home() / ".claude" / "policies" / "02-standards-system"
@@ -172,8 +176,8 @@ def node_java_standards(state: FlowState) -> FlowState:
             for policy_file in policies_dir.glob("**/*java*.md"):
                 java_standards.append(policy_file.stem)
 
-        state["java_standards_loaded"] = True
-        state["spring_boot_patterns"] = {
+        updates["java_standards_loaded"] = True
+        updates["spring_boot_patterns"] = {
             "standards_found": len(java_standards),
             "standards_list": java_standards,
             "annotations": [
@@ -192,17 +196,18 @@ def node_java_standards(state: FlowState) -> FlowState:
             ]
         }
 
-        state.setdefault("pipeline", []).append({
+        existing_pipeline = state.get("pipeline") or []
+        updates["pipeline"] = list(existing_pipeline) + [{
             "node": "node_java_standards",
             "java_standards_loaded": len(java_standards)
-        })
+        }]
 
-        return state
+        return updates
 
     except Exception as e:
-        state["java_standards_loaded"] = False
-        state["java_standards_error"] = str(e)
-        return state
+        updates["java_standards_loaded"] = False
+        updates["java_standards_error"] = str(e)
+        return updates
 
 
 # ============================================================================
@@ -210,17 +215,17 @@ def node_java_standards(state: FlowState) -> FlowState:
 # ============================================================================
 
 
-def level2_merge_node(state: FlowState) -> FlowState:
+def level2_merge_node(state: FlowState) -> dict:
     """Merge Level 2 results."""
+    updates = {}
     if state.get("standards_loaded"):
-        state["level2_status"] = "OK"
+        updates["level2_status"] = "OK"
     else:
-        state["level2_status"] = "FAILED"
-        if "errors" not in state:
-            state["errors"] = []
-        state["errors"].append("Level 2: Standards loading failed")
+        updates["level2_status"] = "FAILED"
+        existing_errors = state.get("errors") or []
+        updates["errors"] = list(existing_errors) + ["Level 2: Standards loading failed"]
 
-    return state
+    return updates
 
 
 # ============================================================================
