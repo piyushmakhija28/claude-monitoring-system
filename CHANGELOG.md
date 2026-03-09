@@ -1,3 +1,11 @@
+## [4.23.1] - 2026-03-10
+### Changed
+- Version bump to 4.23.1
+- Project: 508 files, 206 Python, ~105670 lines
+- Dependencies: 42, Tests: 29, Templates: 46
+- Updated README.md, SYSTEM_REQUIREMENTS_SPECIFICATION.md
+- Auto-updated via version-release-policy.py v5.0
+
 ## [5.2.0] - 2026-03-08
 ### Added
 - **Complete Computer Use E2E Testing System**
