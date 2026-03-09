@@ -32,6 +32,17 @@ try:
     from metrics_emitter import (emit_hook_execution, emit_policy_step,
                                   emit_flag_lifecycle, emit_enforcement_event)
     _METRICS_AVAILABLE = True
+except Exception:
+    # Define no-ops so call sites never need guards
+    def emit_hook_execution(*a, **kw):
+        """No-op fallback when metrics_emitter is unavailable."""
+    def emit_policy_step(*a, **kw):
+        """No-op fallback when metrics_emitter is unavailable."""
+    def emit_flag_lifecycle(*a, **kw):
+        """No-op fallback when metrics_emitter is unavailable."""
+    def emit_enforcement_event(*a, **kw):
+        """No-op fallback when metrics_emitter is unavailable."""
+    _METRICS_AVAILABLE = False
 
 # Phase 2: Lazy loading APIs
 try:
@@ -44,17 +55,6 @@ except ImportError:
         if 'pipeline' in trace and len(trace['pipeline']) > max_entries:
             trace['pipeline'] = trace['pipeline'][-max_entries:]
         return trace
-except Exception:
-    # Define no-ops so call sites never need guards
-    def emit_hook_execution(*a, **kw):
-        """No-op fallback when metrics_emitter is unavailable."""
-    def emit_policy_step(*a, **kw):
-        """No-op fallback when metrics_emitter is unavailable."""
-    def emit_flag_lifecycle(*a, **kw):
-        """No-op fallback when metrics_emitter is unavailable."""
-    def emit_enforcement_event(*a, **kw):
-        """No-op fallback when metrics_emitter is unavailable."""
-    _METRICS_AVAILABLE = False
 
 
 def _lock_file(f):
