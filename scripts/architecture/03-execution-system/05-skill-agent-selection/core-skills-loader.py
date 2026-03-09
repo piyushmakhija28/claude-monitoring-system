@@ -25,9 +25,9 @@ import os
 from pathlib import Path
 from datetime import datetime
 
-MEMORY_BASE = Path.home() / '.claude' / 'memory'
-SKILLS_LOCAL = MEMORY_BASE / 'skills'  # Local skill definitions
-AGENTS_LOCAL = MEMORY_BASE / 'agents'  # Local agent definitions
+CLAUDE_BASE = Path.home() / '.claude'
+SKILLS_LOCAL = CLAUDE_BASE / 'skills'  # ~/.claude/skills/ (organized by category)
+AGENTS_LOCAL = CLAUDE_BASE / 'agents'  # ~/.claude/agents/
 
 
 class CoreSkillsLoader:
@@ -39,19 +39,34 @@ class CoreSkillsLoader:
         self.agents_local = AGENTS_LOCAL
 
     def list_available_skills(self):
-        """List all available skills from local directory."""
+        """List all available skills from local directory.
+
+        Skills are organized by category:
+        ~/.claude/skills/backend/java-spring-boot/skill.md
+        ~/.claude/skills/frontend/react/skill.md
+        ~/.claude/skills/devops/docker/skill.md
+        etc.
+        """
         if not self.skills_local.exists():
             return []
 
         try:
-            # Look for skill.md files in skill directories
             skills = []
-            for skill_dir in self.skills_local.iterdir():
-                if skill_dir.is_dir():
-                    skill_file = skill_dir / 'skill.md'
-                    if skill_file.exists():
-                        skills.append(skill_dir.name)
-            return sorted(skills)
+            # Iterate through categories (backend, frontend, devops, etc.)
+            for category_dir in self.skills_local.iterdir():
+                if category_dir.is_dir() and category_dir.name not in ('__pycache__', '.git'):
+                    # Iterate through skill directories within category
+                    for skill_dir in category_dir.iterdir():
+                        if skill_dir.is_dir():
+                            skill_file = skill_dir / 'skill.md'
+                            if skill_file.exists():
+                                # Store as "category/skill_name" for clarity
+                                skills.append({
+                                    'name': skill_dir.name,
+                                    'category': category_dir.name,
+                                    'full_name': f'{category_dir.name}/{skill_dir.name}'
+                                })
+            return sorted(skills, key=lambda x: x['name'])
         except Exception:
             return []
 
@@ -76,44 +91,82 @@ class CoreSkillsLoader:
         """
         Load skill definition from LOCAL disk.
 
-        LLM needs the full skill.md content to make informed decisions.
+        Skills are organized by category in ~/.claude/skills/:
+        - backend/java-spring-boot/skill.md
+        - frontend/react/skill.md
+        - devops/docker/skill.md
+
+        skill_name can be:
+        - Full path: "backend/java-spring-boot"
+        - Just name: "java-spring-boot" (searches all categories)
 
         Args:
-            skill_name: Skill directory name (e.g., 'docker', 'java-spring-boot')
+            skill_name: Skill name or "category/skill_name"
 
         Returns:
-            dict: {'name', 'status', 'loaded', 'path', 'content', 'size_bytes'}
+            dict: {'name', 'status', 'loaded', 'path', 'content', 'size_bytes', 'category'}
         """
-        skill_dir = self.skills_local / skill_name
-        skill_file = skill_dir / 'skill.md'
+        # Check if skill_name includes category prefix
+        if '/' in skill_name:
+            category, skill = skill_name.split('/', 1)
+            skill_file = self.skills_local / category / skill / 'skill.md'
+            if skill_file.exists():
+                try:
+                    content = skill_file.read_text(encoding='utf-8')
+                    return {
+                        'name': skill,
+                        'category': category,
+                        'status': 'loaded',
+                        'loaded': True,
+                        'path': str(skill_file),
+                        'content': content,
+                        'size_bytes': len(content),
+                        'source': 'local'
+                    }
+                except Exception as e:
+                    return {
+                        'name': skill_name,
+                        'status': 'failed',
+                        'loaded': False,
+                        'error': f'Could not read skill: {str(e)}'
+                    }
+        else:
+            # Search across all categories
+            for category_dir in self.skills_local.iterdir():
+                if not category_dir.is_dir() or category_dir.name in ('__pycache__', '.git'):
+                    continue
+                skill_file = category_dir / skill_name / 'skill.md'
+                if skill_file.exists():
+                    try:
+                        content = skill_file.read_text(encoding='utf-8')
+                        return {
+                            'name': skill_name,
+                            'category': category_dir.name,
+                            'status': 'loaded',
+                            'loaded': True,
+                            'path': str(skill_file),
+                            'content': content,
+                            'size_bytes': len(content),
+                            'source': 'local'
+                        }
+                    except Exception as e:
+                        return {
+                            'name': skill_name,
+                            'status': 'failed',
+                            'loaded': False,
+                            'error': f'Could not read skill: {str(e)}'
+                        }
 
-        if not skill_file.exists():
-            return {
-                'name': skill_name,
-                'status': 'not_found',
-                'loaded': False,
-                'error': f'Skill "{skill_name}" not found in {self.skills_local}',
-                'available_skills': self.list_available_skills()
-            }
-
-        try:
-            content = skill_file.read_text(encoding='utf-8')
-            return {
-                'name': skill_name,
-                'status': 'loaded',
-                'loaded': True,
-                'path': str(skill_file),
-                'content': content,  # Full definition for LLM
-                'size_bytes': len(content),
-                'source': 'local'
-            }
-        except Exception as e:
-            return {
-                'name': skill_name,
-                'status': 'failed',
-                'loaded': False,
-                'error': f'Could not read skill: {str(e)}'
-            }
+        # Not found in any category
+        available = self.list_available_skills()
+        available_names = [s['name'] for s in available]
+        return {
+            'name': skill_name,
+            'status': 'not_found',
+            'loaded': False,
+            'error': f'Skill "{skill_name}" not found. Available: {", ".join(available_names[:10])}',
+            'available_skills': available
+        }
 
     def load_agent(self, agent_name):
         """
