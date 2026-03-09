@@ -331,13 +331,16 @@ class ContextReader:
             pid = os.getpid()
             flag_file = flag_dir / f'.context-read-{session_id}-{pid}.json'
 
+            is_new = self.metadata.get('is_new_project', True)
             flag_data = {
                 'session_id': session_id,
                 'pid': pid,
                 'timestamp': datetime.now().isoformat(),
                 'status': 'completed',
+                'is_new_project': is_new,
                 'project_detected': self.detect_project(),
-                'files_found': list(k for k, v in self.files_found.items() if v.get('exists'))
+                'files_found': list(k for k, v in self.files_found.items() if v.get('exists')),
+                'enforcement_applies': not is_new
             }
 
             flag_file.write_text(json.dumps(flag_data, indent=2), encoding='utf-8')

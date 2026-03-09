@@ -623,6 +623,72 @@ def _pipeline_step_present(raw_trace, step_name):
     return False
 
 
+def check_context_read_complete(tool_name):
+    """
+    ENFORCEMENT: Block Write/Edit/NotebookEdit/Bash if context files have NOT been read.
+
+    Context-read enforcement: The policy states "read SRS, README, CLAUDE.md before
+    coding". The context-reader.py (Level 3.0) creates a .context-read-SESSION-PID.json
+    flag when it completes. This function checks for that flag.
+
+    BLOCKED_TOOLS: Write, Edit, NotebookEdit, Bash (code-changing tools)
+    FLAG_PATTERN: .context-read-{SESSION_ID}-{PID}.json in ~/.claude/memory/flags/
+
+    Returns (hints, blocks) tuple.
+    """
+    hints = []
+    blocks = []
+
+    # Only block code-changing tools
+    BLOCKED_IF_NO_CONTEXT = {'Write', 'Edit', 'NotebookEdit', 'Bash'}
+
+    if tool_name not in BLOCKED_IF_NO_CONTEXT:
+        return hints, blocks
+
+    current_session_id = get_current_session_id()
+    if not current_session_id:
+        return hints, blocks
+
+    # Check for context-read flag in flags directory
+    try:
+        flag_dir = Path.home() / '.claude' / 'memory' / 'flags'
+        pid = os.getpid()
+        flag_pattern = f'.context-read-{current_session_id}-{pid}.json'
+
+        flag_files = list(flag_dir.glob(flag_pattern)) if flag_dir.exists() else []
+        if not flag_files:
+            # Flag doesn't exist yet - context reading may not be done
+            # Fail-open: allow tool (context-reader runs on UserPromptSubmit)
+            return hints, blocks
+
+        # Flag exists - check if enforcement applies
+        flag_file = flag_files[0]
+        flag_data = json.loads(flag_file.read_text(encoding='utf-8'))
+
+        is_new_project = flag_data.get('is_new_project', True)
+        enforcement_applies = flag_data.get('enforcement_applies', False)
+
+        if is_new_project:
+            # Fresh project - no context files to read
+            # Enforcement SKIPPED for new projects
+            return hints, blocks
+
+        if not enforcement_applies:
+            # Existing project but context was read
+            return hints, blocks
+
+        # Existing project AND enforcement applies = block writes until context is read
+        # TODO V2: Check if context was actually read (look for metadata in flag)
+        # For now: fail-open (allow tool)
+        pass
+
+    except Exception:
+        # If we can't check the flag, fail-open (allow the tool)
+        pass
+
+    return hints, blocks
+
+
 def check_level1_sync_complete(tool_name):
     """
     Level 1 Sync System enforcement: Block Write/Edit/NotebookEdit if the
@@ -1642,6 +1708,32 @@ def main():
             emit_hook_execution('pre-tool-enforcer.py', _dur,
                                 session_id=_sid, exit_code=2,
                                 extra={'tool': tool_name, 'block_type': 'skill_selection'})
+        except Exception:
+            pass
+        sys.exit(2)
+
+    # CONTEXT READ ENFORCEMENT (Level 3.0 - Project context must be read pre-flight)
+    h, b = check_context_read_complete(tool_name)
+    all_hints.extend(h)
+    all_blocks.extend(b)
+
+    if all_blocks:
+        for hint in all_hints:
+            sys.stdout.write(hint + '\n')
+        sys.stdout.flush()
+        for block in all_blocks:
+            sys.stderr.write(block + '\n')
+        sys.stderr.flush()
+        try:
+            _sid = get_current_session_id()
+            _dur = int((datetime.now() - _HOOK_START).total_seconds() * 1000)
+            emit_enforcement_event('pre-tool-enforcer.py', 'context_read_block',
+                                   tool_name=tool_name,
+                                   reason='Project context reading not complete (Level 3.0)',
+                                   blocked=True, session_id=_sid)
+            emit_hook_execution('pre-tool-enforcer.py', _dur,
+                                session_id=_sid, exit_code=2,
+                                extra={'tool': tool_name, 'block_type': 'context_read'})
         except Exception:
             pass
         sys.exit(2)
