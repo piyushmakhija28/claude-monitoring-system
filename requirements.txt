@@ -58,6 +58,12 @@ langgraph>=0.2.0            # StateGraph orchestration for parallel + conditiona
 langchain-core>=0.3.0       # Core primitives (TypedDict, Annotated)
 
 # ============================================================================
+# GITHUB AUTOMATION & GIT OPERATIONS
+# ============================================================================
+PyGithub>=2.1.1             # GitHub API wrapper for issue/PR management
+GitPython>=3.1.40           # (Optional) Git operations (we use CLI instead)
+
+# ============================================================================
 # SYSTEM MONITORING & ANALYTICS
 # ============================================================================
 numpy>=1.24.3
@@ -119,3 +125,4 @@ safety>=2.3.5
 # ============================================================================
 toons>=0.5.3
 loguru>=0.7.0
+rich>=13.0.0                # Beautiful terminal output (progress bars, colors, tables)
