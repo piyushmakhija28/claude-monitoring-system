@@ -247,7 +247,12 @@ app.register_blueprint(monitor_bp)
 app.register_blueprint(settings_bp)
 
 # Initialize SocketIO for real-time updates
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
+try:
+    socketio = SocketIO(app, cors_allowed_origins="*", ping_timeout=10, ping_interval=5)
+except ValueError:
+    # Fallback if async_mode detection fails
+    socketio = None
+    print("[WARN] SocketIO real-time disabled - use REST API polling instead")
 
 # Initialize Swagger for API documentation
 swagger_config = {
