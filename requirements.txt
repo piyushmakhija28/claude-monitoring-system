@@ -117,3 +117,4 @@ safety>=2.3.5
 # 5. Always use virtual environment: python -m venv venv
 # 6. Python 3.8+ required
 # ============================================================================
+toons>=0.5.3

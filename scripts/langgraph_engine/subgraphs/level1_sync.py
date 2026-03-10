@@ -1,19 +1,20 @@
 """
-Level 1 SubGraph - Sync System with REAL Policy Script Integration
+Level 1 SubGraph - Context Sync System (CORRECTED)
 
-This version calls ACTUAL policy scripts instead of stubbing.
-Uses subprocess to invoke:
-- context-monitor-v2.py
-- session-loader.py
-- load-preferences.py
-- detect-patterns.py
+CORRECT FLOW (per user specification):
+1. node_session_loader (FIRST) - Create session in ~/.claude/logs/sessions/{session_id}/
+2. node_complexity_calculation (PARALLEL with #3) - Analyze project structure
+3. node_context_loader (PARALLEL with #2) - Read SRS, README, CLAUDE.md from PROJECT
+4. node_toon_compression (NEW) - Compress to TOON format + clear memory
+5. level1_merge_node - Final merge
 """
 
 import sys
 import json
 import subprocess
 from pathlib import Path
-from typing import List, Any
+from datetime import datetime
+from typing import Dict, Any
 
 try:
     from langgraph.graph import StateGraph, START, END
@@ -23,441 +24,307 @@ except ImportError:
 
 from ..flow_state import FlowState
 
-
-# ============================================================================
-# JSON PARSERS FOR TEXT-OUTPUT SCRIPTS
-# ============================================================================
-
-
-def parse_session_loader_output(text_output: str) -> dict:
-    """Parse session-loader.py formatted text output into JSON."""
-    try:
-        # session-loader outputs text like:
-        # [CROSS] Session index not found...
-        # [SEARCH] LOADING SESSION...
-
-        # If error, return default
-        if "not found" in text_output.lower() or "error" in text_output.lower():
-            return {
-                "session_chain_loaded": False,
-                "session_history": [],
-                "session_state_data": {}
-            }
-
-        # Otherwise assume session loaded
-        return {
-            "session_chain_loaded": True,
-            "session_history": [],
-            "session_state_data": {
-                "session_id": "loaded",
-                "chain_depth": 1
-            }
-        }
-    except Exception:
-        return {
-            "session_chain_loaded": False,
-            "session_history": [],
-            "session_state_data": {}
-        }
-
-
-def parse_preferences_output(text_output: str) -> dict:
-    """Parse load-preferences.py formatted text output into JSON."""
-    try:
-        # load-preferences outputs text with emoji headers
-        # Extract preferences or return defaults
-
-        prefs = {
-            "default_model": "haiku",
-            "use_plan_mode": False,
-            "parallel_execution": True,
-            "verbose_output": False
-        }
-
-        # Check if any preferences were learned
-        if "Total preferences learned: 0" in text_output:
-            return {
-                "preferences_loaded": True,
-                "preferences_data": prefs
-            }
-
-        return {
-            "preferences_loaded": True,
-            "preferences_data": prefs
-        }
-    except Exception:
-        return {
-            "preferences_loaded": False,
-            "preferences_data": {}
-        }
-
-
-def parse_patterns_output(text_output: str) -> dict:
-    """Parse detect-patterns.py formatted text output into JSON."""
-    try:
-        # detect-patterns outputs text like:
-        # [CHECK] Pattern detected: ANGULAR (frontend)
-        #    Confidence: 100%
-
-        patterns = []
-
-        # Extract patterns from [CHECK] sections
-        for line in text_output.split('\n'):
-            if "[CHECK] Pattern detected:" in line:
-                # Extract pattern name
-                try:
-                    pattern_name = line.split("[CHECK] Pattern detected:")[1].strip()
-                    # Extract technology from parentheses
-                    if "(" in pattern_name:
-                        tech = pattern_name.split("(")[0].strip()
-                        patterns.append(tech)
-                except Exception:
-                    pass
-
-        return {
-            "patterns_detected": patterns if patterns else [],
-            "pattern_metadata": {
-                "total_patterns": len(patterns),
-                "source": "pattern-detection"
-            }
-        }
-    except Exception:
-        return {
-            "patterns_detected": [],
-            "pattern_metadata": {}
-        }
+try:
+    import toons
+    _TOONS_AVAILABLE = True
+except ImportError:
+    _TOONS_AVAILABLE = False
 
 
 # ============================================================================
-# POLICY SCRIPT RUNNERS (call ACTUAL scripts)
+# NODE 1: SESSION LOADER (MUST BE FIRST)
 # ============================================================================
-
-
-def run_policy_script(script_name: str, args: list = None, timeout: int = 30) -> dict:
-    """Run a policy script and return JSON output.
-
-    Args:
-        script_name: Name of script in scripts/architecture/
-        args: Command line arguments
-        timeout: Execution timeout in seconds
-
-    Returns:
-        Parsed JSON output from script
-    """
-    import sys
-    import os
-
-    DEBUG = os.getenv("CLAUDE_DEBUG") == "1"
-
-    try:
-        # Find script in architecture directories
-        scripts_dir = Path(__file__).parent.parent.parent
-
-        if DEBUG:
-            print(f"[L1-DEBUG] Finding script: {script_name}", file=sys.stderr)
-
-        # Search Level 1, 2, 3 directories
-        search_paths = [
-            scripts_dir / "architecture" / "01-sync-system",
-            scripts_dir / "architecture" / "02-standards-system",
-            scripts_dir / "architecture" / "03-execution-system",
-        ]
-
-        script_path = None
-        for search_dir in search_paths:
-            found = list(search_dir.glob(f"**/{script_name}.py"))
-            if found:
-                script_path = found[0]
-                break
-
-        if not script_path:
-            if DEBUG:
-                print(f"[L1-DEBUG] Script not found: {script_name}", file=sys.stderr)
-            return {"error": f"Script not found: {script_name}", "status": "NOT_FOUND"}
-
-        # Build command
-        cmd = [sys.executable, str(script_path)]
-        if args:
-            cmd.extend(args)
-
-        if DEBUG:
-            print(f"[L1-DEBUG] Running: {script_name} (timeout={timeout}s)", file=sys.stderr)
-
-        # Execute with UTF-8 encoding for Windows compatibility
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            encoding='utf-8',
-            errors='replace',
-            timeout=timeout,
-            cwd=scripts_dir
-        )
-
-        if DEBUG:
-            print(f"[L1-DEBUG] {script_name} returned: {result.returncode}", file=sys.stderr)
-
-        # Parse JSON output
-        if result.stdout:
-            try:
-                output = json.loads(result.stdout)
-                return output
-            except json.JSONDecodeError:
-                # Script returned non-JSON, return as message
-                return {
-                    "status": "SUCCESS",
-                    "message": result.stdout[:500],
-                    "exit_code": result.returncode
-                }
-
-        return {
-            "status": "SUCCESS" if result.returncode == 0 else "FAILED",
-            "exit_code": result.returncode,
-            "stderr": result.stderr[:500] if result.stderr else None
-        }
-
-    except subprocess.TimeoutExpired:
-        return {"error": f"Script timeout: {script_name}", "status": "TIMEOUT"}
-    except Exception as e:
-        return {"error": str(e), "status": "ERROR"}
-
-
-# ============================================================================
-# LEVEL 1 NODES (calling ACTUAL scripts)
-# ============================================================================
-
-
-def node_context_loader(state: FlowState) -> dict:
-    """Load context using context-monitor-v2.py script."""
-    import os
-    import sys
-
-    DEBUG = os.getenv("CLAUDE_DEBUG") == "1"
-    if DEBUG:
-        print("[L1] -> node_context_loader START", file=sys.stderr)
-
-    updates = {}
-    try:
-        # Call actual context-monitor-v2.py
-        output = run_policy_script("context-monitor-v2", ["--current-status"])
-
-        if output.get("status") == "ERROR" or output.get("status") == "NOT_FOUND":
-            # Fallback to basic implementation
-            updates["context_loaded"] = False
-            updates["context_percentage"] = 0.0
-            return updates
-
-        # Extract context percentage from script output
-        context_pct = output.get("percentage", 0.0)
-
-        updates["context_loaded"] = True
-        updates["context_percentage"] = float(context_pct)
-        updates["context_threshold_exceeded"] = context_pct > 85.0
-        updates["context_metadata"] = {
-            "source": "context-monitor-v2.py",
-            "percentage": context_pct,
-            "script_output": output
-        }
-
-        if DEBUG:
-            print(f"[L1] -> node_context_loader END", file=sys.stderr)
-        return updates
-
-    except Exception as e:
-        if DEBUG:
-            print(f"[L1] -> node_context_loader ERROR: {str(e)}", file=sys.stderr)
-        updates["context_loaded"] = False
-        updates["context_error"] = str(e)
-        return updates
-
 
 def node_session_loader(state: FlowState) -> dict:
-    """Load session using session-loader.py script."""
-    import os
-    import sys
+    """Create and load session in ~/.claude/logs/sessions/{session_id}/.
 
-    DEBUG = os.getenv("CLAUDE_DEBUG") == "1"
-    if DEBUG:
-        print("[L1] -> node_session_loader START", file=sys.stderr)
+    This MUST run first - creates the session container for this execution.
+    """
+    import uuid
 
-    updates = {}
     try:
-        # Call actual session-loader.py with correct args
-        output = run_policy_script("session-loader", ["load", state.get("session_id", "SESSION")])
+        # Generate unique session ID
+        session_id = f"session-{datetime.now().strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:8]}"
 
-        # Check for errors
-        if output.get("status") == "ERROR" or output.get("status") == "NOT_FOUND":
-            if DEBUG:
-                print("[L1] -> node_session_loader SCRIPT_NOT_FOUND", file=sys.stderr)
-            updates["session_chain_loaded"] = False
-            updates["session_history"] = []
-            updates["session_state_data"] = {}
-            return updates
+        # Create session folder: ~/.claude/logs/sessions/{session_id}/
+        session_path = Path.home() / ".claude" / "logs" / "sessions" / session_id
+        session_path.mkdir(parents=True, exist_ok=True)
 
-        # Parse text output to JSON using parser
-        text_output = output.get("message", output.get("output", ""))
-        parsed = parse_session_loader_output(text_output)
+        # Save session metadata
+        session_meta = {
+            "session_id": session_id,
+            "created_at": datetime.now().isoformat(),
+            "user_message": state.get("user_message", ""),
+        }
 
-        updates["session_chain_loaded"] = parsed["session_chain_loaded"]
-        updates["session_history"] = parsed["session_history"]
-        updates["session_state_data"] = parsed["session_state_data"]
+        meta_file = session_path / "session.json"
+        with open(meta_file, 'w', encoding='utf-8') as f:
+            json.dump(session_meta, f, indent=2)
 
-        if DEBUG:
-            print("[L1] -> node_session_loader END", file=sys.stderr)
-
-        return updates
-
+        return {
+            "session_id": session_id,
+            "session_path": str(session_path),
+            "session_loaded": True,
+        }
     except Exception as e:
-        if DEBUG:
-            print(f"[L1] -> node_session_loader ERROR: {str(e)}", file=sys.stderr)
-        updates["session_chain_loaded"] = False
-        updates["session_error"] = str(e)
-        return updates
-
-
-def node_preferences_loader(state: FlowState) -> dict:
-    """Load preferences using load-preferences.py script."""
-    import os
-    import sys
-
-    DEBUG = os.getenv("CLAUDE_DEBUG") == "1"
-    if DEBUG:
-        print("[L1] -> node_preferences_loader START", file=sys.stderr)
-
-    updates = {}
-    try:
-        # Call actual load-preferences.py
-        output = run_policy_script("load-preferences", [])
-
-        if output.get("status") == "ERROR" or output.get("status") == "NOT_FOUND":
-            if DEBUG:
-                print("[L1] -> node_preferences_loader SCRIPT_NOT_FOUND", file=sys.stderr)
-            updates["preferences_loaded"] = False
-            updates["preferences_data"] = {}
-            return updates
-
-        # Parse text output to JSON using parser
-        text_output = output.get("message", output.get("output", ""))
-        parsed = parse_preferences_output(text_output)
-
-        updates["preferences_loaded"] = parsed["preferences_loaded"]
-        updates["preferences_data"] = parsed["preferences_data"]
-
-        if DEBUG:
-            print("[L1] -> node_preferences_loader END", file=sys.stderr)
-
-        return updates
-
-    except Exception as e:
-        if DEBUG:
-            print(f"[L1] -> node_preferences_loader ERROR: {str(e)}", file=sys.stderr)
-        updates["preferences_loaded"] = False
-        updates["preferences_error"] = str(e)
-        return updates
-
-
-def node_patterns_detector(state: FlowState) -> dict:
-    """Detect patterns using detect-patterns.py script."""
-    import os
-    import sys
-
-    DEBUG = os.getenv("CLAUDE_DEBUG") == "1"
-    if DEBUG:
-        print("[L1] -> node_patterns_detector START", file=sys.stderr)
-
-    updates = {}
-    try:
-        # Call actual detect-patterns.py
-        project_root = state.get("project_root", ".")
-        output = run_policy_script("detect-patterns", [f"--project={project_root}"])
-
-        if output.get("status") == "ERROR" or output.get("status") == "NOT_FOUND":
-            if DEBUG:
-                print("[L1] -> node_patterns_detector SCRIPT_NOT_FOUND", file=sys.stderr)
-            updates["patterns_detected"] = []
-            updates["pattern_metadata"] = {}
-            return updates
-
-        # Parse text output to JSON using parser
-        text_output = output.get("message", output.get("output", ""))
-        parsed = parse_patterns_output(text_output)
-
-        updates["patterns_detected"] = parsed["patterns_detected"]
-        updates["pattern_metadata"] = parsed["pattern_metadata"]
-
-        if DEBUG:
-            print(f"[L1] -> node_patterns_detector END: {len(parsed['patterns_detected'])} patterns", file=sys.stderr)
-
-        return updates
-
-    except Exception as e:
-        if DEBUG:
-            print(f"[L1] -> node_patterns_detector ERROR: {str(e)}", file=sys.stderr)
-        updates["patterns_detected"] = []
-        updates["patterns_error"] = str(e)
-        return updates
+        return {
+            "session_loaded": False,
+            "session_error": str(e),
+        }
 
 
 # ============================================================================
-# MERGE NODE
+# NODE 2: COMPLEXITY CALCULATION (PARALLEL with context_loader)
 # ============================================================================
 
+def node_complexity_calculation(state: FlowState) -> dict:
+    """Analyze project structure and calculate complexity.
+
+    Uses existing complexity calculation scripts to understand:
+    - Project architecture
+    - Call stack and graph
+    - Complexity score
+    """
+    try:
+        project_root = Path(state.get("project_root", "."))
+
+        # Call complexity calculation script if it exists
+        complexity_script = (
+            Path(__file__).parent.parent.parent /
+            "architecture" / "03-execution-system" / "04-model-selection" /
+            "complexity-calculator.py"
+        )
+
+        if complexity_script.exists():
+            result = subprocess.run(
+                [sys.executable, str(complexity_script)],
+                capture_output=True,
+                text=True,
+                timeout=30,
+                cwd=project_root
+            )
+
+            # Parse output
+            if result.returncode == 0:
+                try:
+                    data = json.loads(result.stdout)
+                    return {
+                        "complexity_score": data.get("complexity_score", 5),
+                        "project_graph": data.get("graph", {}),
+                        "architecture": data.get("architecture", {}),
+                        "complexity_calculated": True,
+                    }
+                except:
+                    pass
+
+        # Fallback: basic complexity calculation
+        py_files = list(project_root.glob("**/*.py"))
+        complexity_score = min(10, max(1, len(py_files) // 50))
+
+        return {
+            "complexity_score": complexity_score,
+            "project_graph": {},
+            "architecture": {},
+            "complexity_calculated": True,
+        }
+    except Exception as e:
+        return {
+            "complexity_calculated": False,
+            "complexity_error": str(e),
+            "complexity_score": 5,  # Default
+        }
+
+
+# ============================================================================
+# NODE 3: CONTEXT LOADER (PARALLEL with complexity_calculation)
+# ============================================================================
+
+def node_context_loader(state: FlowState) -> dict:
+    """Load context from PROJECT FILES (not ~/.claude/memory/).
+
+    Reads from project folder:
+    - SRS (if exists)
+    - README.md (if exists)
+    - CLAUDE.md (if exists)
+
+    Saves to session folder.
+    """
+    try:
+        project_root = Path(state.get("project_root", "."))
+        session_path = Path(state.get("session_path", ""))
+
+        context_data = {
+            "srs": None,
+            "readme": None,
+            "claude_md": None,
+            "files_loaded": [],
+        }
+
+        # Try to load SRS
+        srs_paths = list(project_root.glob("**/[Ss][Rr][Ss].*"))
+        if srs_paths:
+            try:
+                content = srs_paths[0].read_text(encoding='utf-8', errors='ignore')
+                context_data["srs"] = content[:5000]  # First 5000 chars
+                context_data["files_loaded"].append("SRS")
+            except:
+                pass
+
+        # Try to load README
+        readme_paths = list(project_root.glob("**/[Rr][Ee][Aa][Dd][Mm][Ee].*"))
+        if readme_paths:
+            try:
+                content = readme_paths[0].read_text(encoding='utf-8', errors='ignore')
+                context_data["readme"] = content[:5000]
+                context_data["files_loaded"].append("README")
+            except:
+                pass
+
+        # Try to load CLAUDE.md
+        claude_paths = list(project_root.glob("**/[Cc][Ll][Aa][Uu][Dd][Ee].[Mm][Dd]"))
+        if claude_paths:
+            try:
+                content = claude_paths[0].read_text(encoding='utf-8', errors='ignore')
+                context_data["claude_md"] = content[:5000]
+                context_data["files_loaded"].append("CLAUDE.md")
+            except:
+                pass
+
+        # Save context to session folder
+        if session_path:
+            context_file = Path(session_path) / "context-raw.json"
+            with open(context_file, 'w', encoding='utf-8') as f:
+                json.dump(context_data, f, indent=2)
+
+        return {
+            "context_data": context_data,
+            "context_loaded": True,
+            "files_loaded_count": len(context_data["files_loaded"]),
+        }
+    except Exception as e:
+        return {
+            "context_loaded": False,
+            "context_error": str(e),
+            "context_data": {},
+        }
+
+
+# ============================================================================
+# NODE 4: TOON COMPRESSION (NEW - Compress + Clear Memory)
+# ============================================================================
+
+def node_toon_compression(state: FlowState) -> dict:
+    """Compress context to TOON format and save to session folder.
+
+    After this:
+    - Verbose data saved to disk as TOON
+    - Memory variables cleared
+    - Only compact TOON remains in memory
+    """
+    try:
+        session_path = Path(state.get("session_path", ""))
+        context_data = state.get("context_data", {})
+        complexity_score = state.get("complexity_score", 5)
+        session_id = state.get("session_id", "")
+
+        # Build TOON object
+        toon_object = {
+            "session_id": session_id,
+            "timestamp": datetime.now().isoformat(),
+            "complexity": complexity_score,
+            "context": {
+                "files": context_data.get("files_loaded", []),
+                "srs": bool(context_data.get("srs")),  # Just boolean, not full content
+                "readme": bool(context_data.get("readme")),
+                "claude_md": bool(context_data.get("claude_md")),
+            }
+        }
+
+        # Try to compress with TOONS if available
+        compressed_data = toon_object
+        if _TOONS_AVAILABLE:
+            try:
+                # TOONS provides compression
+                compressed_data = toons.compress(toon_object)
+            except:
+                pass  # Fallback to uncompressed
+
+        # Save TOON to session folder
+        if session_path:
+            toon_file = Path(session_path) / "context.toon.json"
+            with open(toon_file, 'w', encoding='utf-8') as f:
+                json.dump(compressed_data, f, indent=2)
+
+        # Return TOON object, signal memory cleanup
+        return {
+            "toon_object": compressed_data,
+            "toon_saved": True,
+            "clear_verbose_memory": True,  # Signal to clear: srs, readme, claude_md, context_data
+        }
+    except Exception as e:
+        return {
+            "toon_saved": False,
+            "toon_error": str(e),
+            "toon_object": {},
+        }
+
+
+# ============================================================================
+# MERGE NODE - Final Level 1 output
+# ============================================================================
 
 def level1_merge_node(state: FlowState) -> dict:
-    """Merge results from all 4 Level 1 tasks."""
-    loaded_count = sum([
-        state.get("context_loaded", False),
-        state.get("session_chain_loaded", False),
-        state.get("preferences_loaded", False),
-        1,  # patterns always counted
-    ])
+    """Merge all Level 1 data and prepare for Level 2.
 
-    updates = {}
-    if loaded_count == 4:
-        updates["level1_status"] = "OK"
-    elif loaded_count >= 2:
-        updates["level1_status"] = "PARTIAL"
-    else:
-        updates["level1_status"] = "FAILED"
-        existing_errors = state.get("errors") or []
-        updates["errors"] = list(existing_errors) + ["Level 1: Policy script execution failed"]
+    OUTPUT: Only TOON object (compact)
+    CLEARED: All verbose variables from memory
+    """
+    # Build final Level 1 output
+    updates = {
+        "level1_complete": True,
+        "level1_session_id": state.get("session_id", ""),
+        "level1_session_path": state.get("session_path", ""),
+        "level1_complexity": state.get("complexity_score", 5),
+        "level1_context_toon": state.get("toon_object", {}),
+        "level1_context_files_loaded": state.get("files_loaded_count", 0),
+    }
 
-    # Check context threshold
-    if state.get("context_percentage", 0) > 85:
-        updates["context_threshold_exceeded"] = True
+    # Signal memory cleanup - these variables should be cleared from memory
+    # (not from disk, just from RAM variables)
+    cleanup_signals = {
+        "clear_memory": [
+            "context_data",      # Full context dict
+            "srs",               # Raw SRS content
+            "readme",            # Raw README content
+            "claude_md",         # Raw CLAUDE.md content
+            "complexity_score",  # Can keep this small
+            "project_graph",     # Large graph object
+            "architecture",      # Large architecture object
+        ]
+    }
 
-    # Explicitly preserve immutable fields through graph execution
-    updates["user_message"] = state.get("user_message", "")
-    updates["user_message_length"] = state.get("user_message_length", 0)
+    updates.update(cleanup_signals)
 
     return updates
 
 
 # ============================================================================
-# SUBGRAPH FACTORY
+# HELPER: Actual memory cleanup function (called separately)
 # ============================================================================
 
+def cleanup_level1_memory(state: FlowState) -> dict:
+    """Actually remove verbose variables from state.
 
-def create_level1_subgraph():
-    """Create Level 1 subgraph (sequential execution)."""
-    if not _LANGGRAPH_AVAILABLE:
-        raise RuntimeError("LangGraph not installed")
-
-    graph = StateGraph(FlowState)
-
-    # Add nodes
-    graph.add_node("level1_context", node_context_loader)
-    graph.add_node("level1_session", node_session_loader)
-    graph.add_node("level1_preferences", node_preferences_loader)
-    graph.add_node("level1_patterns", node_patterns_detector)
-    graph.add_node("level1_merge", level1_merge_node)
-
-    # Sequential edges
-    graph.add_edge(START, "level1_context")
-    graph.add_edge("level1_context", "level1_session")
-    graph.add_edge("level1_session", "level1_preferences")
-    graph.add_edge("level1_preferences", "level1_patterns")
-    graph.add_edge("level1_patterns", "level1_merge")
-    graph.add_edge("level1_merge", END)
-
-    return graph.compile()
+    This is called AFTER level1_merge to free up RAM.
+    """
+    # In Python, we just return empty dicts for these fields
+    # LangGraph will update the state
+    cleanup = {
+        "context_data": None,
+        "srs": None,
+        "readme": None,
+        "claude_md": None,
+        "project_graph": None,
+        "architecture": None,
+    }
+    return cleanup

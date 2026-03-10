@@ -39,10 +39,11 @@ from .subgraphs.level_minus1 import (
 )
 
 from .subgraphs.level1_sync import (
-    node_context_loader,
     node_session_loader,
-    node_preferences_loader,
-    node_patterns_detector,
+    node_complexity_calculation,
+    node_context_loader,
+    node_toon_compression,
+    cleanup_level1_memory,
     level1_merge_node,
 )
 
@@ -82,11 +83,11 @@ def route_after_level_minus1(state: FlowState) -> Literal["ask_level_minus1_fix"
     return "level1_context"
 
 
-def route_after_level_minus1_user_choice(state: FlowState) -> Literal["fix_level_minus1", "level1_context"]:
+def route_after_level_minus1_user_choice(state: FlowState) -> Literal["fix_level_minus1", "level1_session"]:
     """Route based on user choice for Level -1 failures.
 
     - 'auto-fix': Attempt fixes and retry Level -1
-    - 'skip': Continue to Level 1 anyway
+    - 'skip': Continue to Level 1 (session_loader) anyway
     - default: Skip (user will fix manually)
     """
     choice = state.get("level_minus1_user_choice", "skip")
@@ -97,8 +98,8 @@ def route_after_level_minus1_user_choice(state: FlowState) -> Literal["fix_level
         if retry_count < 3:
             return "fix_level_minus1"
 
-    # Default: continue to Level 1
-    return "level1_context"
+    # Default: continue to Level 1 (start with session loader)
+    return "level1_session"
 
 
 def route_after_level_minus1_fix(state: FlowState) -> Literal["level_minus1_unicode", "ask_level_minus1_fix"]:
@@ -574,13 +575,13 @@ def create_flow_graph():
         },
     )
 
-    # After user choice, route to fix or continue
+    # After user choice, route to fix or continue to Level 1
     graph.add_conditional_edges(
         "ask_level_minus1_fix",
         route_after_level_minus1_user_choice,
         {
             "fix_level_minus1": "fix_level_minus1",
-            "level1_context": "level1_context",
+            "level1_session": "level1_session",  # Go to Level 1 session loader
         },
     )
 
@@ -595,35 +596,37 @@ def create_flow_graph():
     )
 
     # ========================================================================
-    # LEVEL 1: SYNC SYSTEM (4 parallel context tasks)
+    # LEVEL 1: CONTEXT SYNC (CORRECTED FLOW)
     # ========================================================================
-    graph.add_node("level1_context", node_context_loader)
+    # Step 1: Session loader MUST be first (creates session container)
     graph.add_node("level1_session", node_session_loader)
-    graph.add_node("level1_preferences", node_preferences_loader)
-    graph.add_node("level1_patterns", node_patterns_detector)
+    # Edge from fix_level_minus1 node (after it retries and succeeds or gives up)
+    graph.add_edge("fix_level_minus1", "level1_session")
+
+    # Step 2: Parallel - Complexity calculation + Context loader
+    graph.add_node("level1_complexity", node_complexity_calculation)
+    graph.add_node("level1_context", node_context_loader)
+
+    # Both can run after session is created
+    graph.add_edge("level1_session", "level1_complexity")
+    graph.add_edge("level1_session", "level1_context")
+
+    # Step 3: TOON compression (after both complexity and context complete)
+    graph.add_node("level1_toon_compression", node_toon_compression)
+    graph.add_edge("level1_complexity", "level1_toon_compression")
+    graph.add_edge("level1_context", "level1_toon_compression")
+
+    # Step 4: Merge Level 1 results
     graph.add_node("level1_merge", level1_merge_node)
+    graph.add_edge("level1_toon_compression", "level1_merge")
 
-    # Sequential execution: Level 1 tasks run one after another
-    # (LangGraph 1.0.10 doesn't support true parallel from one source)
-    # Still efficient: each node is independent, just sequential
-    graph.add_edge("level1_context", "level1_session")
-    graph.add_edge("level1_session", "level1_preferences")
-    graph.add_edge("level1_preferences", "level1_patterns")
-    graph.add_edge("level1_patterns", "level1_merge")
+    # Step 5: Memory cleanup (clear verbose variables)
+    graph.add_node("level1_cleanup", cleanup_level1_memory)
+    graph.add_edge("level1_merge", "level1_cleanup")
 
-    # Optimize context after Level 1 (compress for Level 2 consumption)
-    graph.add_node("optimize_after_level1", optimize_context_after_level1)
-    graph.add_edge("level1_merge", "optimize_after_level1")
-
-    # Route based on context threshold - from optimized context node
-    graph.add_conditional_edges(
-        "optimize_after_level1",
-        route_context_threshold,
-        {
-            "emergency_archive": "emergency_archive",
-            "level2_common_standards": "level2_common_standards",
-        },
-    )
+    # Route from Level 1 cleanup to Level 2
+    # (Skip optimize_after_level1 - TOON compression already done)
+    graph.add_edge("level1_cleanup", "level2_common_standards")
 
     # ========================================================================
     # LEVEL 2: STANDARDS SYSTEM (conditional Java routing)
