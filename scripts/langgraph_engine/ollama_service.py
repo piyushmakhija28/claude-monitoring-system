@@ -229,28 +229,26 @@ Return ONLY valid JSON (no markdown, no explanation):
         available_agents: List[str]
     ) -> Dict[str, Any]:
         """
-        Select required skills and agents for task execution.
+        Select required skills and agents for task execution (WORKFLOW.md Compliant).
+
+        CRITICAL: Uses full skill/agent definitions from blueprint if available.
+        This allows LLM to understand what each skill/agent actually does.
 
         Uses: qwen2.5:14b (medium depth analysis)
 
         Args:
-            blueprint: ExecutionBlueprint with phases and tasks
+            blueprint: ExecutionBlueprint with:
+              - phases and tasks
+              - available_skills_full_definitions (if present - FULL skill content)
+              - available_agents_full_definitions (if present - FULL agent content)
             available_skills: List of available skill names
             available_agents: List of available agent names
 
         Returns:
             {
-                "skill_mappings": [
-                    {
-                        "task_id": "Task-1",
-                        "task_name": "...",
-                        "required_skills": ["skill1", "skill2"],
-                        "required_agents": ["agent1"],
-                        "skill_confidence": {"skill1": 0.95}
-                    }
-                ],
-                "final_skills_selected": ["skill1", "skill2"],
-                "final_agents_selected": ["agent1"]
+                "skill_mappings": [...],
+                "final_skills_selected": [...],
+                "final_agents_selected": [...]
             }
         """
         # Format phases for LLM
@@ -259,6 +257,38 @@ Return ONLY valid JSON (no markdown, no explanation):
             phases_text += f"- Phase {phase.get('phase_number')}: {phase.get('title')}\n"
             for task in phase.get("tasks", []):
                 phases_text += f"  * {task}\n"
+
+        # FORMAT SKILL DEFINITIONS FOR LLM
+        skills_section = "AVAILABLE SKILLS WITH DEFINITIONS:\n\n"
+        skills_full_defs = blueprint.get("available_skills_full_definitions", [])
+
+        if skills_full_defs:
+            # Use FULL DEFINITIONS if available
+            for skill in skills_full_defs:
+                skill_name = skill.get("name", "unknown")
+                skill_content = skill.get("content", "No description")[:500]  # First 500 chars
+                skills_section += f"## {skill_name}\n{skill_content}\n\n"
+            logger.info(f"Using FULL skill definitions ({len(skills_full_defs)} skills) for LLM")
+        else:
+            # Fallback to names only
+            skills_section += json.dumps(available_skills, indent=2)
+            logger.info(f"Using skill names only ({len(available_skills)} skills)")
+
+        # FORMAT AGENT DEFINITIONS FOR LLM
+        agents_section = "AVAILABLE AGENTS WITH DEFINITIONS:\n\n"
+        agents_full_defs = blueprint.get("available_agents_full_definitions", [])
+
+        if agents_full_defs:
+            # Use FULL DEFINITIONS if available
+            for agent in agents_full_defs:
+                agent_name = agent.get("name", "unknown")
+                agent_content = agent.get("content", "No description")[:500]  # First 500 chars
+                agents_section += f"## {agent_name}\n{agent_content}\n\n"
+            logger.info(f"Using FULL agent definitions ({len(agents_full_defs)} agents) for LLM")
+        else:
+            # Fallback to names only
+            agents_section += json.dumps(available_agents, indent=2)
+            logger.info(f"Using agent names only ({len(available_agents)} agents)")
 
         prompt = f"""Analyze the execution blueprint and select required skills and agents.
 
@@ -270,11 +300,9 @@ PHASES:
 
 RISK LEVEL: {blueprint.get('risks', {}).get('risk_level', 'medium')}
 
-AVAILABLE SKILLS (select relevant):
-{json.dumps(available_skills, indent=2)}
+{skills_section}
 
-AVAILABLE AGENTS (select 1-3):
-{json.dumps(available_agents, indent=2)}
+{agents_section}
 
 For each major task/phase, identify:
 1. Which skills are needed

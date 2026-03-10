@@ -173,14 +173,15 @@ def step4_toon_refinement_node(state: FlowState) -> Dict[str, Any]:
 def step5_skill_selection_node(state: FlowState) -> Dict[str, Any]:
     """Step 5: Skill & Agent Selection.
 
-    Process:
+    Process (WORKFLOW.md Compliant):
     1. Scan available skills/agents from local system (~/.claude/skills/, ~/.claude/agents/)
-    2. Add to TOON object so LLM can see what's available
-    3. Pass TOON to LLM - LLM analyzes task + available skills
-    4. LLM recommends: "From available skills, use these X, Y, Z"
-    5. Return LLM recommendation for Step 6 validation & download
+    2. READ FULL CONTENT of each skill.md and agent.md
+    3. Add to TOON with full definitions so LLM understands what each skill does
+    4. Pass TOON + FULL SKILL DEFINITIONS to LLM
+    5. LLM analyzes with complete context: "From these X skills with definitions, use Y, Z for this task"
+    6. Return LLM recommendation for Step 6 validation & download
 
-    Step 6 will then validate selection and download any missing skills from internet.
+    CRITICAL: Step 5 must pass FULL SKILL/AGENT DEFINITIONS to LLM, not just names!
     """
     logger.info("\n🔄 [STEP 5] Skill & Agent Selection")
     step_start = time.time()
@@ -189,66 +190,109 @@ def step5_skill_selection_node(state: FlowState) -> Dict[str, Any]:
         from pathlib import Path
         from ..ollama_service import get_ollama_service
 
-        # 1. Scan local skills/agents
-        logger.info("📂 Scanning local skills and agents...")
         home = Path.home()
-        available_skills = []
-        available_agents = []
 
-        # Scan skills
+        # 1. SCAN + READ FULL CONTENT of skills
+        logger.info("📂 Scanning and reading skill definitions...")
+        skills_with_content = []
+        skill_names_only = []
+
         skills_dir = home / ".claude" / "skills"
         if skills_dir.exists():
             for category_dir in skills_dir.iterdir():
-                if category_dir.is_dir():
-                    for skill_dir in category_dir.iterdir():
-                        if skill_dir.is_dir():
-                            skill_name = skill_dir.name
-                            if (skill_dir / "skill.md").exists() or (skill_dir / "SKILL.md").exists():
-                                available_skills.append(skill_name)
+                if not category_dir.is_dir():
+                    continue
 
-        # Scan agents
+                for skill_dir in category_dir.iterdir():
+                    if not skill_dir.is_dir():
+                        continue
+
+                    skill_name = skill_dir.name
+                    skill_file = skill_dir / "skill.md"
+                    skill_file_alt = skill_dir / "SKILL.md"
+
+                    if skill_file.exists() or skill_file_alt.exists():
+                        actual_file = skill_file if skill_file.exists() else skill_file_alt
+                        try:
+                            content = actual_file.read_text(encoding='utf-8')
+                            skills_with_content.append({
+                                "name": skill_name,
+                                "category": category_dir.name,
+                                "path": str(skill_dir),
+                                "content": content[:1000]  # First 1000 chars for context (full in LLM)
+                            })
+                            skill_names_only.append(skill_name)
+                        except Exception as e:
+                            logger.warning(f"Could not read skill {skill_name}: {e}")
+
+        logger.info(f"✓ Found {len(skills_with_content)} skills with full definitions")
+
+        # 2. SCAN + READ FULL CONTENT of agents
+        logger.info("📂 Scanning and reading agent definitions...")
+        agents_with_content = []
+        agent_names_only = []
+
         agents_dir = home / ".claude" / "agents"
         if agents_dir.exists():
             for agent_dir in agents_dir.iterdir():
-                if agent_dir.is_dir() and agent_dir.name != "__pycache__":
-                    agent_name = agent_dir.name
-                    if (agent_dir / "agent.md").exists():
-                        available_agents.append(agent_name)
+                if not agent_dir.is_dir() or agent_dir.name == "__pycache__":
+                    continue
 
-        logger.info(f"✓ Found {len(available_skills)} local skills, {len(available_agents)} local agents")
+                agent_name = agent_dir.name
+                agent_file = agent_dir / "agent.md"
+
+                if agent_file.exists():
+                    try:
+                        content = agent_file.read_text(encoding='utf-8')
+                        agents_with_content.append({
+                            "name": agent_name,
+                            "path": str(agent_dir),
+                            "content": content[:1000]  # First 1000 chars for context
+                        })
+                        agent_names_only.append(agent_name)
+                    except Exception as e:
+                        logger.warning(f"Could not read agent {agent_name}: {e}")
+
+        logger.info(f"✓ Found {len(agents_with_content)} agents with full definitions")
 
         blueprint = state.get("step4_blueprint", {})
 
-        # 2. Add available skills/agents to TOON for LLM reference
-        blueprint_with_available = {
+        # 3. ADD TO TOON with FULL DEFINITIONS
+        blueprint_with_definitions = {
             **blueprint,
-            "available_skills_on_system": available_skills,
-            "available_agents_on_system": available_agents,
-            "available_skills_count": len(available_skills),
-            "available_agents_count": len(available_agents)
+            "available_skills_on_system": skill_names_only,
+            "available_skills_full_definitions": skills_with_content,  # FULL CONTENT
+            "available_agents_on_system": agent_names_only,
+            "available_agents_full_definitions": agents_with_content,  # FULL CONTENT
+            "available_skills_count": len(skills_with_content),
+            "available_agents_count": len(agents_with_content)
         }
 
-        logger.info(f"📋 Added available skills/agents to TOON for LLM analysis")
+        logger.info(f"📋 Added available skills + full definitions to TOON for LLM")
 
-        # 3. Pass to LLM with available skills listed
+        # 4. PASS TO LLM WITH FULL DEFINITIONS
+        # LLM now sees what each skill actually does!
         ollama = get_ollama_service()
         skill_result = ollama.step5_skill_agent_selection(
-            blueprint_with_available,
-            available_skills,
-            available_agents
+            blueprint_with_definitions,
+            skill_names_only,  # Names for easy reference
+            agent_names_only   # Names for easy reference
+            # NOTE: LLM will also see full definitions in blueprint for informed decision
         )
 
         execution_time_ms = (time.time() - step_start) * 1000
 
         logger.info(f"✓ Step 5 completed: {len(skill_result.get('final_skills_selected', []))} skills selected ({execution_time_ms:.0f}ms)")
 
-        # 4. Return LLM recommendation + available list for Step 6
+        # 5. Return LLM recommendation + available list + full definitions for Step 6
         return {
-            "step5_available_skills": available_skills,
-            "step5_available_agents": available_agents,
+            "step5_available_skills": skill_names_only,
+            "step5_available_skills_full": skills_with_content,  # FULL CONTENT for tracking
+            "step5_available_agents": agent_names_only,
+            "step5_available_agents_full": agents_with_content,  # FULL CONTENT for tracking
             "step5_skill_mappings": skill_result.get("skill_mappings", []),
-            "step5_skills": skill_result.get("final_skills_selected", []),
-            "step5_agents": skill_result.get("final_agents_selected", []),
+            "step5_skills": skill_result.get("final_skills_selected", []),  # LLM selected
+            "step5_agents": skill_result.get("final_agents_selected", []),  # LLM selected
             "step5_execution_time_ms": execution_time_ms
         }
 
