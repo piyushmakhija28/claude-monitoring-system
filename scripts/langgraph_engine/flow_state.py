@@ -211,10 +211,86 @@ class FlowState(TypedDict, total=False):
 # WORKFLOW CONTEXT OPTIMIZER - Smart context compression for LLM efficiency
 # ==============================================================================
 
+class ToonObject:
+    """TOON Format - Tokenized Object-Oriented Notation.
+
+    Compact, semantic-preserving data format for workflow context.
+    - Stores data in compressed "essential" form
+    - Maintains reference to full data in workflow_memory
+    - Includes schema for smart reconstruction
+    - Preserves deep semantic meaning in minimal space
+
+    Example:
+    {
+        "_toon": True,
+        "_schema": "task_list",
+        "_version": "1.0",
+        "essential": {"count": 5, "critical": ["auth", "db"]},
+        "metadata": {"original_size_kb": 45, "compressed_size_kb": 2},
+        "_memory_key": "step1_output"
+    }
+    """
+
+    @staticmethod
+    def create(schema: str, essential_data: Dict, full_data: Dict = None, memory_key: str = "") -> Dict:
+        """Create a TOON object.
+
+        Args:
+            schema: Type of data (e.g., "task_list", "context_status")
+            essential_data: Minimal representation of data
+            full_data: Full data (for size calculation)
+            memory_key: Reference to where full data is stored
+
+        Returns:
+            TOON-formatted dict
+        """
+        full_size = len(str(full_data).encode()) / 1024 if full_data else 0
+        essential_size = len(str(essential_data).encode()) / 1024
+
+        return {
+            "_toon": True,
+            "_schema": schema,
+            "_version": "1.0",
+            "essential": essential_data,
+            "metadata": {
+                "original_size_kb": round(full_size, 2),
+                "compressed_size_kb": round(essential_size, 2),
+                "compression_ratio": round(full_size / (essential_size or 1), 1)
+            },
+            "_memory_key": memory_key,  # Reference to full data in workflow_memory
+        }
+
+    @staticmethod
+    def is_toon(obj: Any) -> bool:
+        """Check if object is TOON format."""
+        return isinstance(obj, dict) and obj.get("_toon") is True
+
+    @staticmethod
+    def extract(toon_obj: Dict) -> Dict:
+        """Extract essential data from TOON object."""
+        if ToonObject.is_toon(toon_obj):
+            return toon_obj.get("essential", {})
+        return toon_obj
+
+    @staticmethod
+    def get_schema(toon_obj: Dict) -> str:
+        """Get schema of TOON object."""
+        if ToonObject.is_toon(toon_obj):
+            return toon_obj.get("_schema", "unknown")
+        return "unknown"
+
+    @staticmethod
+    def get_memory_reference(toon_obj: Dict) -> str:
+        """Get reference to full data in workflow_memory."""
+        if ToonObject.is_toon(toon_obj):
+            return toon_obj.get("_memory_key", "")
+        return ""
+
+
 class WorkflowContextOptimizer:
     """Optimizes context passing between workflow steps.
 
-    Keeps full outputs in workflow_memory, but sends only necessary data to LLM.
+    Keeps full outputs in workflow_memory, but sends TOON-formatted data to LLM.
     Uses smart filtering and compression to minimize tokens while maintaining info flow.
     """
 
@@ -250,33 +326,38 @@ class WorkflowContextOptimizer:
 
     @staticmethod
     def compress_task_list(tasks: List[Dict]) -> Dict:
-        """Compress task list for Step 1→2 transition.
+        """Compress task list for Step 1→2 transition using TOON format.
 
         Full: [{"id": 1, "name": "x", "description": "...", "dependencies": []}]
-        Optimized: {"count": N, "summary": "Task types detected", "critical": [...]}
+        TOON: {"_toon": true, "essential": {"count": N, "critical": [...]}}
         """
         if not tasks:
-            return {"count": 0, "summary": "No tasks"}
+            essential = {"count": 0, "summary": "No tasks"}
+            return ToonObject.create("task_list", essential, memory_key="step1_tasks")
 
-        return {
+        essential = {
             "count": len(tasks),
             "summary": f"{len(tasks)} tasks identified",
             "critical_tasks": [t.get("name", "Unknown") for t in tasks[:3]],
             "task_types": list(set(t.get("type", "unknown") for t in tasks))
         }
 
+        return ToonObject.create("task_list", essential, tasks, memory_key="step1_tasks")
+
     @staticmethod
     def compress_context_status(context_data: Dict) -> Dict:
-        """Compress context status for Level 1→2 transition.
+        """Compress context status for Level 1→2 transition using TOON format.
 
         Full: {"metadata": {...}, "loaded_files": [...], ...}
-        Optimized: {"status": "OK", "pct": 85, "threshold": false}
+        TOON: {"_toon": true, "essential": {"status": "OK", "pct": 85, ...}}
         """
-        return {
+        essential = {
             "status": "OK" if context_data.get("context_loaded") else "PENDING",
             "usage_pct": context_data.get("context_percentage", 0),
             "threshold_exceeded": context_data.get("context_threshold_exceeded", False)
         }
+
+        return ToonObject.create("context_status", essential, context_data, memory_key="level1_context")
 
     @staticmethod
     def build_optimized_context(state: "FlowState") -> Dict:
