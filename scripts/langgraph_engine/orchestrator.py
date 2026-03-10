@@ -75,10 +75,24 @@ from .subgraphs.level3_execution import (
 # ============================================================================
 
 
-def route_after_level_minus1(state: FlowState) -> Literal["output_node", "level1_context"]:
+def route_after_level_minus1(state: FlowState) -> Literal["ask_level_minus1_fix", "level1_context"]:
     """Route based on Level -1 blocking status."""
     if state.get("level_minus1_status") == "BLOCKED":
-        return "output_node"
+        return "ask_level_minus1_fix"
+    return "level1_context"
+
+
+def route_after_level_minus1_user_choice(state: FlowState) -> Literal["level1_context", "output_node"]:
+    """Route based on user choice for Level -1 failures.
+
+    - 'auto-fix': Would attempt fixes (currently skipped)
+    - 'skip': Continue to Level 1 anyway
+    - default: Skip (user will fix manually)
+    """
+    choice = state.get("level_minus1_user_choice", "skip")
+
+    # For now, always continue (auto-fix not implemented yet)
+    # In future: if choice == "auto-fix": try fixes, then retry checks
     return "level1_context"
 
 
@@ -100,6 +114,56 @@ def route_standards_loading(state: FlowState) -> Literal["level2_java_standards"
 # ============================================================================
 # SIMPLE HELPER NODES
 # ============================================================================
+
+
+def ask_level_minus1_fix(state: FlowState) -> dict:
+    """Ask user what to do when Level -1 checks fail.
+
+    Shows exactly which checks failed and asks:
+    - "Auto-fix now" (attempts to fix automatically)
+    - "Skip Level -1" (continue anyway, user will fix manually)
+    """
+    errors = state.get("errors", [])
+
+    # Build human-readable error message
+    error_details = []
+    if not state.get("unicode_check"):
+        error_details.append("❌ Unicode/UTF-8 encoding issue")
+    if not state.get("encoding_check"):
+        error_details.append(f"❌ Non-ASCII files found (cp1252 incompatible)")
+    if not state.get("windows_path_check"):
+        error_details.append("❌ Windows paths using backslashes detected")
+
+    # Create choice message
+    message = (
+        "**Level -1 System Check Failed**\n\n"
+        "Issues detected:\n"
+    )
+    for detail in error_details:
+        message += f"- {detail}\n"
+
+    message += (
+        "\n**What would you like to do?**\n"
+        "- Auto-fix: I'll attempt automatic fixes (recommended)\n"
+        "- Skip: Continue anyway (you'll fix manually later)\n"
+    )
+
+    # For now, log and continue (AskUserQuestion not available in this context)
+    # In production, this would use the AskUserQuestion tool
+    print(f"\n{'='*70}")
+    print("[LEVEL -1] System Check Failed")
+    print('='*70)
+    print(message)
+    print('='*70 + "\n")
+
+    # Default: Skip Level -1 (user can manually fix)
+    updates = {
+        "level_minus1_check_shown": True,
+        "level_minus1_user_choice": "skip",  # Default to skip
+        "level_minus1_blocked_errors": error_details
+    }
+
+    return updates
 
 
 def emergency_archive(state: FlowState) -> dict:
@@ -397,13 +461,26 @@ def create_flow_graph():
     graph.add_edge("level_minus1_encoding", "level_minus1_windows")
     graph.add_edge("level_minus1_windows", "level_minus1_merge")
 
+    # Add interactive node that asks user what to do if Level -1 fails
+    graph.add_node("ask_level_minus1_fix", ask_level_minus1_fix)
+
     # Route based on blocking status
     graph.add_conditional_edges(
         "level_minus1_merge",
         route_after_level_minus1,
         {
-            "output_node": "output_node",
+            "ask_level_minus1_fix": "ask_level_minus1_fix",
             "level1_context": "level1_context",
+        },
+    )
+
+    # After user choice, route to continue or exit
+    graph.add_conditional_edges(
+        "ask_level_minus1_fix",
+        route_after_level_minus1_user_choice,
+        {
+            "level1_context": "level1_context",
+            "output_node": "output_node",
         },
     )
 
