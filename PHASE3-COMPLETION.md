@@ -10,12 +10,13 @@
 ## What Was Built in Phase 3
 
 ### 1. LangGraph Integration ✅
-**File:** `scripts/langgraph_engine/subgraphs/level3_execution_v2.py` (561 lines)
+**File:** `scripts/langgraph_engine/subgraphs/level3_execution_v2.py` (545 lines)
 
-Complete 14-step Level 3 pipeline integrated with LangGraph StateGraph
+Complete 13-step Level 3 pipeline integrated with LangGraph StateGraph
 
 **Key Features:**
-- 14 discrete step nodes with proper wrapping
+- 13 discrete step nodes with proper wrapping
+- Step 6 (skill validation) removed - skills fetched from Claude Code (internet-available)
 - Conditional routing: Step 1 → (Step 2 if plan) OR (Step 3 if direct)
 - Sequential pipeline for remaining steps
 - Full integration with all service modules
@@ -36,9 +37,7 @@ START
   ↓
 [Step 4: TOON Refinement]
   ↓
-[Step 5: Skill Selection]
-  ↓
-[Step 6: Skill Validation]
+[Step 5: Skill Selection] (with Claude Code internet-available skills)
   ↓
 [Step 7: Final Prompt]
   ↓
@@ -61,13 +60,15 @@ START
 END
 ```
 
-**Step Nodes:**
+**Note:** Step 6 (Skill Validation) removed - skills now fetched from internet-available Claude Code
+
+**Step Nodes (13 Total):**
 1. `step1_plan_mode_decision_node` - Ollama decision
 2. `step2_plan_execution_node` - Ollama planning
 3. `step3_task_breakdown_node` - Task decomposition
 4. `step4_toon_refinement_node` - TOON compression
-5. `step5_skill_selection_node` - Ollama skill selection
-6. `step6_skill_validation_node` - Local skill validation
+5. `step5_skill_selection_node` - Ollama skill selection (with Claude Code internet-available skills)
+6. ~~`step6_skill_validation_node`~~ - REMOVED (skills now from Claude Code)
 7. `step7_final_prompt_node` - Ollama prompt generation
 8. `step8_github_issue_node` - Issue creation
 9. `step9_branch_creation_node` - Branch creation
@@ -123,12 +124,12 @@ scripts/langgraph_engine/
     ├── level_minus1.py              (Auto-fix)
     ├── level1_sync.py               (Parallel context)
     ├── level2_standards.py          (Conditional standards)
-    └── level3_execution_v2.py       (14-step pipeline) ✅ NEW
+    └── level3_execution_v2.py       (13-step pipeline, Step 6 removed) ✅ NEW
 ```
 
 ---
 
-## Feature Complete 14-Step Pipeline
+## Feature Complete 13-Step Pipeline
 
 | # | Step | Function | Module | Status |
 |---|------|----------|--------|--------|
@@ -136,8 +137,8 @@ scripts/langgraph_engine/
 | 2 | Plan Execution | Deep planning | level3_remaining_steps + ollama | ✅ |
 | 3 | Task Breakdown | Decompose tasks | level3_remaining_steps | ✅ |
 | 4 | TOON Refinement | Compress state | level3_remaining_steps + toon_models | ✅ |
-| 5 | Skill Selection | Select skills/agents | ollama_service | ✅ |
-| 6 | Skill Validation | Check skills exist | level3_remaining_steps | ✅ |
+| 5 | Skill Selection | Select skills/agents from Claude Code | ollama_service | ✅ |
+| 6 | ~~Skill Validation~~ | ~~Check skills exist~~ | ~~level3_remaining_steps~~ | ✅ Removed |
 | 7 | Prompt Generation | Create prompt | ollama_service | ✅ |
 | 8 | GitHub Issue | Create issue | level3_steps8to12_github | ✅ |
 | 9 | Branch Creation | Create branch | level3_steps8to12_github + git_operations | ✅ |
@@ -147,7 +148,7 @@ scripts/langgraph_engine/
 | 13 | Docs Update | Update README/SRS | level3_remaining_steps | ✅ |
 | 14 | Final Summary | Narrative + voice | level3_remaining_steps | ✅ |
 
-**All 14 steps fully implemented ✅**
+**All 13 steps fully implemented ✅** (Step 6 removed - skills from internet-available Claude Code)
 
 ---
 
@@ -246,7 +247,7 @@ f8d35f8 docs: Phase 3 testing and integration guide
 
 | Metric | Status | Notes |
 |--------|--------|-------|
-| Code Completeness | ✅ 100% | All 14 steps implemented |
+| Code Completeness | ✅ 100% | All 13 steps implemented (Step 6 removed) |
 | Type Safety | ✅ 100% | Full type hints everywhere |
 | Error Handling | ✅ 100% | All paths have fallbacks |
 | Documentation | ✅ 100% | Docstrings + guides |
@@ -404,7 +405,7 @@ f8d35f8 docs: Phase 3 testing and integration guide
 - Complete error handling
 
 ### Phase 3: LangGraph Integration ✅
-- Full 14-step subgraph
+- Full 13-step subgraph (Step 6 removed)
 - Conditional routing
 - Service module integration
 - Comprehensive testing guide
