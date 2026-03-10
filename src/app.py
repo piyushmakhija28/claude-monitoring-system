@@ -12,13 +12,9 @@ Key Flask Blueprints registered:
 
 Core services instantiated at module level:
     MetricsCollector, LogParser, PolicyChecker, SessionTracker,
-    MemorySystemMonitor, PerformanceProfiler, AutomationTracker,
-    SkillAgentTracker, OptimizationTracker, PolicyExecutionTracker,
+    MemorySystemMonitor, SkillAgentTracker, PolicyExecutionTracker,
     ThreeLevelFlowTracker, IndividualPolicyTracker, ArchitectureModuleMonitor,
-    PolicyComplianceAnalyzer, AnomalyDetector, PredictiveAnalytics,
-    BottleneckAnalyzer, CommunityWidgetsManager, WidgetVersionManager,
-    WidgetCommentsManager, CollaborationSessionManager, TrendingCalculator,
-    NotificationManager, AlertSender, AlertRoutingEngine, HistoryTracker.
+    NotificationManager, AlertSender, AlertRoutingEngine.
 
 SocketIO is used for real-time dashboard metric broadcasts.
 Flasgger (Swagger) provides API documentation at /apidocs/.
@@ -50,22 +46,14 @@ from services.monitoring.log_parser import LogParser
 from services.monitoring.policy_checker import PolicyChecker
 from services.monitoring.session_tracker import SessionTracker
 from services.monitoring.memory_system_monitor import MemorySystemMonitor
-from services.monitoring.performance_profiler import PerformanceProfiler
-from services.monitoring.automation_tracker import AutomationTracker
 from services.monitoring.skill_agent_tracker import SkillAgentTracker
-from services.monitoring.optimization_tracker import OptimizationTracker
 from services.monitoring.policy_execution_tracker import PolicyExecutionTracker
 from services.monitoring.three_level_flow_tracker import ThreeLevelFlowTracker
 from services.monitoring.individual_policy_tracker import IndividualPolicyTracker, POLICY_REGISTRY
 from services.monitoring.architecture_module_monitor import ArchitectureModuleMonitor
 from services.monitoring.policy_compliance_analyzer import PolicyComplianceAnalyzer
 
-# Import AI services
-from services.ai.anomaly_detector import AnomalyDetector
-from services.ai.predictive_analytics import PredictiveAnalytics
-from services.ai.bottleneck_analyzer import BottleneckAnalyzer
-
-# Import widget services
+# Import notification services
 from services.widgets.community_manager import CommunityWidgetsManager
 from services.widgets.version_manager import WidgetVersionManager
 from services.widgets.comments_manager import WidgetCommentsManager
@@ -285,25 +273,13 @@ session_tracker = SessionTracker()
 history_tracker = HistoryTracker()
 notification_manager = NotificationManager()
 alert_sender = AlertSender()
-community_widgets_manager = CommunityWidgetsManager()
-anomaly_detector = AnomalyDetector()
-predictive_analytics = PredictiveAnalytics()
 alert_routing = AlertRoutingEngine()
 memory_system_monitor = MemorySystemMonitor()
-widget_version_manager = WidgetVersionManager()
-widget_comments_manager = WidgetCommentsManager()
-collaboration_manager = CollaborationSessionManager()
-trending_calculator = TrendingCalculator()
-performance_profiler = PerformanceProfiler()
-bottleneck_analyzer = BottleneckAnalyzer()
-automation_tracker = AutomationTracker()
 skill_agent_tracker = SkillAgentTracker()
-optimization_tracker = OptimizationTracker()
 policy_execution_tracker = PolicyExecutionTracker()
 three_level_flow_tracker = ThreeLevelFlowTracker()
 individual_policy_tracker = IndividualPolicyTracker()
 architecture_module_monitor = ArchitectureModuleMonitor()
-policy_compliance_analyzer = PolicyComplianceAnalyzer()
 
 # User database (in production, use a proper database)
 # Password: 'admin' (hashed with bcrypt)
