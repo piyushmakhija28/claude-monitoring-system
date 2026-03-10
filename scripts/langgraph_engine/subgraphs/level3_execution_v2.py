@@ -1,15 +1,15 @@
 """
-Level 3 SubGraph v2 - Integrated 13-Step Execution Pipeline
+Level 3 SubGraph v2 - Integrated 14-Step Execution Pipeline
 
 Integrates all new modules:
 - Ollama service (Steps 1, 5, 7)
-- Git operations (Steps 8, 10)
-- GitHub integration (Steps 8, 10, 11)
+- Git operations (Steps 9, 11)
+- GitHub integration (Steps 8, 9, 11, 12)
 - Session management and logging
 - TOON object persistence
 
-All 13 steps implemented with proper LangGraph routing.
-Skills/agents fetched from Claude Code (internet-available, no validation needed).
+All 14 steps implemented with proper LangGraph routing.
+Step 6: Enhanced skill validation with local scanning + internet download capability.
 """
 
 import sys
@@ -219,6 +219,60 @@ def step5_skill_selection_node(state: FlowState) -> Dict[str, Any]:
     except Exception as e:
         logger.error(f"Step 5 failed: {e}")
         return {"step5_error": str(e)}
+
+
+def step6_skill_validation_node(state: FlowState) -> Dict[str, Any]:
+    """Step 6: Skill Validation & Selection with Download.
+
+    Process:
+    1. Scan available skills/agents on local system
+    2. Add to TOON for LLM reference
+    3. Use LLM recommendation to select which to use
+    4. Download missing skills from internet if needed
+    5. Return selected skills ready to use
+    """
+    logger.info("\n🔄 [STEP 6] Skill Validation & Selection with Download")
+    step_start = time.time()
+
+    try:
+        session_dir = state.get("session_dir", ".")
+        toon_analysis = state.get("level1_context_toon", {})
+
+        # Get LLM recommendation from Step 5
+        llm_recommendation = {
+            "final_skills_selected": state.get("step5_skills", []),
+            "final_agents_selected": state.get("step5_agents", []),
+            "missing_but_prefer": []
+        }
+
+        steps = Level3RemainingSteps(session_dir)
+        validation_result = steps.step6_skill_validation_and_selection(
+            toon_analysis,
+            llm_recommendation
+        )
+
+        execution_time_ms = (time.time() - step_start) * 1000
+
+        if validation_result.get("success"):
+            logger.info(f"✓ Step 6 completed: {len(validation_result.get('final_skills', []))} skills selected, "
+                       f"{len(validation_result.get('downloaded', []))} downloaded ({execution_time_ms:.0f}ms)")
+
+            return {
+                "step6_selected_skills": validation_result.get("selected_skills", []),
+                "step6_selected_agents": validation_result.get("selected_agents", []),
+                "step6_final_skills": validation_result.get("final_skills", []),
+                "step6_final_agents": validation_result.get("final_agents", []),
+                "step6_downloaded": validation_result.get("downloaded", []),
+                "step6_toon_enhanced": validation_result.get("toon_enhanced", {}),
+                "step6_execution_time_ms": execution_time_ms
+            }
+        else:
+            logger.error(f"Step 6 failed: {validation_result.get('error')}")
+            return {"step6_error": validation_result.get("error")}
+
+    except Exception as e:
+        logger.error(f"Step 6 failed: {e}")
+        return {"step6_error": str(e)}
 
 
 def step7_final_prompt_node(state: FlowState) -> Dict[str, Any]:
@@ -493,21 +547,26 @@ def level3_merge_node(state: FlowState) -> Dict[str, Any]:
 
 
 def create_level3_execution_subgraph_v2():
-    """Create Level 3 execution subgraph with full 13-step pipeline.
+    """Create Level 3 execution subgraph with full 14-step pipeline.
 
-    Note: Step 6 (skill validation) removed - skills fetched from Claude Code (internet-available).
+    Step 6: Enhanced skill validation that:
+    - Scans available skills/agents on local system
+    - Lets LLM select which ones to use for task
+    - Downloads missing skills from internet (Claude Code GitHub)
+    - Returns selected skills ready for use
     """
     if not _LANGGRAPH_AVAILABLE:
         raise RuntimeError("LangGraph not installed")
 
     graph = StateGraph(FlowState)
 
-    # Add all 13 step nodes
+    # Add all 14 step nodes
     graph.add_node("step1_plan_decision", step1_plan_mode_decision_node)
     graph.add_node("step2_plan_execution", step2_plan_execution_node)
     graph.add_node("step3_task_breakdown", step3_task_breakdown_node)
     graph.add_node("step4_toon_refinement", step4_toon_refinement_node)
     graph.add_node("step5_skill_selection", step5_skill_selection_node)
+    graph.add_node("step6_skill_validation", step6_skill_validation_node)
     graph.add_node("step7_final_prompt", step7_final_prompt_node)
     graph.add_node("step8_github_issue", step8_github_issue_node)
     graph.add_node("step9_branch_creation", step9_branch_creation_node)
@@ -542,7 +601,8 @@ def create_level3_execution_subgraph_v2():
     # Rest of the pipeline (sequential)
     graph.add_edge("step3_task_breakdown", "step4_toon_refinement")
     graph.add_edge("step4_toon_refinement", "step5_skill_selection")
-    graph.add_edge("step5_skill_selection", "step7_final_prompt")
+    graph.add_edge("step5_skill_selection", "step6_skill_validation")
+    graph.add_edge("step6_skill_validation", "step7_final_prompt")
     graph.add_edge("step7_final_prompt", "step8_github_issue")
     graph.add_edge("step8_github_issue", "step9_branch_creation")
     graph.add_edge("step9_branch_creation", "step10_implementation")

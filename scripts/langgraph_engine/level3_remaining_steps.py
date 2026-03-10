@@ -323,9 +323,254 @@ Be very specific and actionable."""
 
     # ===== STEP 6: SKILL VALIDATION =====
 
+    def _scan_available_skills(self) -> List[Dict[str, Any]]:
+        """Scan ~/.claude/skills/ and return all available skills with metadata."""
+        home = Path.home()
+        skills_dir = home / ".claude" / "skills"
+        available = []
+
+        if not skills_dir.exists():
+            logger.warning(f"Skills directory not found: {skills_dir}")
+            return []
+
+        try:
+            for category_dir in skills_dir.iterdir():
+                if not category_dir.is_dir():
+                    continue
+
+                category = category_dir.name
+                for skill_dir in category_dir.iterdir():
+                    if not skill_dir.is_dir():
+                        continue
+
+                    skill_name = skill_dir.name
+                    skill_file = skill_dir / "skill.md"
+                    skill_file_alt = skill_dir / "SKILL.md"
+
+                    if skill_file.exists() or skill_file_alt.exists():
+                        file_to_read = skill_file if skill_file.exists() else skill_file_alt
+                        try:
+                            content = file_to_read.read_text(encoding='utf-8')
+                            available.append({
+                                "name": skill_name,
+                                "category": category,
+                                "path": str(skill_dir),
+                                "file": str(file_to_read),
+                                "content_preview": content[:200]
+                            })
+                        except Exception as e:
+                            logger.debug(f"Could not read {skill_name}: {e}")
+
+            logger.info(f"✓ Found {len(available)} available skills on system")
+            return available
+
+        except Exception as e:
+            logger.error(f"Error scanning skills: {e}")
+            return []
+
+    def _scan_available_agents(self) -> List[Dict[str, Any]]:
+        """Scan ~/.claude/agents/ and return all available agents with metadata."""
+        home = Path.home()
+        agents_dir = home / ".claude" / "agents"
+        available = []
+
+        if not agents_dir.exists():
+            logger.warning(f"Agents directory not found: {agents_dir}")
+            return []
+
+        try:
+            for agent_dir in agents_dir.iterdir():
+                if not agent_dir.is_dir() or agent_dir.name == "__pycache__":
+                    continue
+
+                agent_name = agent_dir.name
+                agent_file = agent_dir / "agent.md"
+
+                if agent_file.exists():
+                    try:
+                        content = agent_file.read_text(encoding='utf-8')
+                        available.append({
+                            "name": agent_name,
+                            "path": str(agent_dir),
+                            "file": str(agent_file),
+                            "content_preview": content[:200]
+                        })
+                    except Exception as e:
+                        logger.debug(f"Could not read agent {agent_name}: {e}")
+
+            logger.info(f"✓ Found {len(available)} available agents on system")
+            return available
+
+        except Exception as e:
+            logger.error(f"Error scanning agents: {e}")
+            return []
+
+    def _download_skill_from_internet(self, skill_name: str, category: str = "backend") -> bool:
+        """Download a skill from Claude Code GitHub repository if not available locally."""
+        home = Path.home()
+        skills_dir = home / ".claude" / "skills" / category / skill_name
+
+        if skills_dir.exists():
+            logger.info(f"Skill {skill_name} already exists locally")
+            return True
+
+        try:
+            # Try to download from Claude Code GitHub
+            github_url = (
+                f"https://raw.githubusercontent.com/piyushmakhija28/claude-global-library/main/"
+                f"skills/{category}/{skill_name}/skill.md"
+            )
+
+            import urllib.request
+            logger.info(f"Downloading skill {skill_name} from {github_url}")
+
+            # Create directory
+            skills_dir.mkdir(parents=True, exist_ok=True)
+            skill_file = skills_dir / "skill.md"
+
+            urllib.request.urlretrieve(github_url, skill_file)
+            logger.info(f"✓ Downloaded {skill_name} to {skill_file}")
+            return True
+
+        except Exception as e:
+            logger.warning(f"Could not download {skill_name}: {e}")
+            return False
+
+    def step6_skill_validation_and_selection(
+        self,
+        toon: Dict[str, Any],
+        llm_recommendation: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        ENHANCED Step 6: Validate, select, and download skills/agents.
+
+        Process:
+        1. Scan available skills/agents on system
+        2. Add to TOON for LLM reference
+        3. Use LLM recommendation to select which to use
+        4. Download missing skills from internet if needed
+        5. Return selected skills with full content
+
+        Args:
+            toon: TOON object with task context
+            llm_recommendation: From Step 5 - LLM's skill recommendations
+
+        Returns:
+            {
+                "success": bool,
+                "selected_skills": List[Dict],
+                "selected_agents": List[Dict],
+                "downloaded": List[str],
+                "final_skills": List[Dict] with full content,
+                "final_agents": List[Dict] with full content
+            }
+        """
+        logger.info("=" * 60)
+        logger.info("LEVEL 3 - STEP 6: SKILL VALIDATION & SELECTION")
+        logger.info("=" * 60)
+
+        step_start = time.time()
+
+        try:
+            # 1. Scan available skills and agents
+            logger.info("📂 Scanning local skills and agents...")
+            available_skills = self._scan_available_skills()
+            available_agents = self._scan_available_agents()
+
+            # 2. Enhance TOON with available list
+            toon_enhanced = {
+                **toon,
+                "available_skills_on_system": [
+                    {"name": s["name"], "category": s["category"]} for s in available_skills
+                ],
+                "available_agents_on_system": [
+                    {"name": a["name"]} for a in available_agents
+                ],
+                "available_skills_count": len(available_skills),
+                "available_agents_count": len(available_agents)
+            }
+
+            logger.info(f"Found {len(available_skills)} skills, {len(available_agents)} agents")
+
+            # 3. Get LLM selection based on available skills
+            selected_skills = llm_recommendation.get("final_skills_selected", [])
+            selected_agents = llm_recommendation.get("final_agents_selected", [])
+            missing_preferences = llm_recommendation.get("missing_but_prefer", [])
+
+            # 4. Check if selected skills exist, download if missing
+            downloaded = []
+            final_skills = []
+            final_agents = []
+
+            # Process selected skills
+            for skill_name in selected_skills:
+                # Find in available skills
+                skill_found = None
+                for skill in available_skills:
+                    if skill["name"] == skill_name:
+                        skill_found = skill
+                        break
+
+                if skill_found:
+                    final_skills.append(skill_found)
+                else:
+                    # Try to download from internet
+                    logger.info(f"Skill {skill_name} not available locally, attempting download...")
+                    if self._download_skill_from_internet(skill_name):
+                        downloaded.append(skill_name)
+                        # Re-scan to get the downloaded skill
+                        updated_skills = self._scan_available_skills()
+                        for skill in updated_skills:
+                            if skill["name"] == skill_name:
+                                final_skills.append(skill)
+                                break
+
+            # Process selected agents
+            for agent_name in selected_agents:
+                agent_found = None
+                for agent in available_agents:
+                    if agent["name"] == agent_name:
+                        agent_found = agent
+                        break
+
+                if agent_found:
+                    final_agents.append(agent_found)
+
+            # 5. Handle missing but preferred skills
+            for skill_name in missing_preferences:
+                if not any(s["name"] == skill_name for s in final_skills):
+                    logger.info(f"Preferred skill {skill_name} missing, attempting download...")
+                    if self._download_skill_from_internet(skill_name):
+                        downloaded.append(skill_name)
+
+            logger.info(f"✓ Selected {len(final_skills)} skills, {len(final_agents)} agents")
+            if downloaded:
+                logger.info(f"✓ Downloaded {len(downloaded)} missing skills: {downloaded}")
+
+            return {
+                "success": True,
+                "selected_skills": selected_skills,
+                "selected_agents": selected_agents,
+                "final_skills": final_skills,
+                "final_agents": final_agents,
+                "downloaded": downloaded,
+                "toon_enhanced": toon_enhanced,
+                "execution_time_ms": (time.time() - step_start) * 1000,
+                "timestamp": datetime.now().isoformat()
+            }
+
+        except Exception as e:
+            logger.error(f"Step 6 failed: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "execution_time_ms": (time.time() - step_start) * 1000
+            }
+
     def step6_validate_skills(self, skill_mappings: List[Dict]) -> Dict[str, Any]:
         """
-        Validate selected skills exist in ~/.claude/skills/.
+        Legacy Step 6: Validate selected skills exist in ~/.claude/skills/.
+        (Kept for backward compatibility)
 
         Args:
             skill_mappings: Skill mappings from Step 5
@@ -334,13 +579,12 @@ Be very specific and actionable."""
             {"success": bool, "valid_skills": List[str], "warnings": List[str]}
         """
         logger.info("=" * 60)
-        logger.info("LEVEL 3 - STEP 6: SKILL VALIDATION")
+        logger.info("LEVEL 3 - STEP 6: SKILL VALIDATION (Legacy)")
         logger.info("=" * 60)
 
         step_start = time.time()
 
         try:
-            from pathlib import Path
             home = Path.home()
             skills_dir = home / ".claude" / "skills"
 
@@ -384,7 +628,8 @@ Be very specific and actionable."""
         for category_dir in skills_dir.iterdir():
             if category_dir.is_dir():
                 skill_path = category_dir / skill_name / "skill.md"
-                if skill_path.exists():
+                skill_path_alt = category_dir / skill_name / "SKILL.md"
+                if skill_path.exists() or skill_path_alt.exists():
                     return True
         return False
 
