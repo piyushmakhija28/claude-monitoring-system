@@ -30,6 +30,5 @@ if __name__ == '__main__':
         app,
         debug=config.DEBUG,
         host='0.0.0.0',
-        port=5000,
-        allow_unsafe_werkzeug=True  # For development only
+        port=5000
     )

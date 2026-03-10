@@ -34,7 +34,11 @@ def login_required(f):
 @dashboard_bp.route('/dashboard')
 @login_required
 def dashboard():
-    """Main dashboard page with real-time metrics."""
+    """Main dashboard page with real-time metrics from monitoring services."""
+    from src.services.monitoring.metrics_collector import MetricsCollector
+    from src.services.monitoring.policy_checker import PolicyChecker
+    from src.services.monitoring.three_level_flow_tracker import ThreeLevelFlowTracker
+
     # Widget preferences (all widgets enabled by default)
     widget_preferences = {
         'system_health': True,
@@ -44,32 +48,41 @@ def dashboard():
         'performance_metrics': True,
     }
 
-    # Summary statistics
-    summary_stats = {
-        'avg_health_score': 92,
-        'trend': 'up',
-        'total_errors': 0,
-        'total_policy_hits': 0,
-        'avg_context_usage': 42,
-    }
+    try:
+        # Get real data from monitoring services
+        metrics = MetricsCollector()
+        policy_checker = PolicyChecker()
+        flow_tracker = ThreeLevelFlowTracker()
 
-    # Latest flow data (3-level execution status)
-    flow_latest = {
-        'session_id': 'SESSION-CURRENT',
-        'overall_status': 'OK',
-        'level_minus_1': {'status': 'PASS'},
-        'level_1': {'context_pct': 42, 'status': 'OK'},
-        'level_2': {'standards': 12, 'rules': 65, 'status': 'OK'},
-        'level_3': {
-            'status': 'OK',
-            'model': 'claude-sonnet',
-            'skill_agent': 'python-backend-engineer',
-            'task_type': 'General',
-            'tasks': 0,
-            'complexity': 5,
-            'execution_mode': 'sequential',
-        },
-    }
+        # Get real health metrics
+        health = metrics.get_system_health()
+        policy_status = policy_checker.get_detailed_policy_status()
+
+        # Summary statistics - REAL DATA
+        summary_stats = {
+            'avg_health_score': int(health.get('health_score', 0)),
+            'trend': 'up' if health.get('health_score', 0) > 70 else 'down',
+            'total_errors': health.get('error_count', 0),
+            'total_policy_hits': policy_status.get('policy_hits', 0),
+            'avg_context_usage': int(health.get('context_usage', 0)),
+        }
+
+        # Latest flow data from actual tracker
+        flow_latest = flow_tracker.get_latest_flow_summary()
+        if not flow_latest:
+            flow_latest = {
+                'session_id': 'No active session',
+                'overall_status': 'IDLE',
+                'level_minus_1': {'status': 'N/A'},
+                'level_1': {'context_pct': 0, 'status': 'N/A'},
+                'level_2': {'standards': 0, 'rules': 0, 'status': 'N/A'},
+                'level_3': {'status': 'N/A'},
+            }
+
+    except Exception as e:
+        print(f"Error loading dashboard data: {e}")
+        summary_stats = {'avg_health_score': 0, 'trend': 'unknown', 'total_errors': 0, 'total_policy_hits': 0, 'avg_context_usage': 0}
+        flow_latest = {}
 
     # Time series data for charts
     selected_days = 7
