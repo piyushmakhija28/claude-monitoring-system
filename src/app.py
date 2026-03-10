@@ -255,6 +255,9 @@ class NoOpSocketIO:
         return decorator
     def emit(self, *args, **kwargs):
         pass
+    def run(self, app, *args, **kwargs):
+        """Run Flask app without SocketIO"""
+        app.run(*args, **kwargs)
 
 try:
     socketio = SocketIO(app, cors_allowed_origins="*", ping_timeout=10, ping_interval=5)
