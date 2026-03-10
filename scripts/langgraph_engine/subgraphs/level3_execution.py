@@ -271,11 +271,35 @@ def step10_session_save(state: FlowState) -> dict:
 
 
 def step11_failure_prevention(state: FlowState) -> dict:
-    """Step 11: Failure prevention checks"""
+    """Step 11: Code Review & CI/CD Integration
+
+    Enhanced checks for:
+    - Merge conflicts in PR
+    - CI/CD pipeline status
+    - Code quality metrics
+    - Memory usage
+    """
     result = call_execution_script("failure-step")
+
+    # Extract data from enhanced result
+    merge_conflicts = result.get("merge_conflicts", {})
+    github_ci = result.get("github_ci", {})
+    code_quality = result.get("code_quality", {})
+    blocking_issues = result.get("blocking_issues", [])
+    warnings = result.get("warnings", [])
+
+    # Add blocking issue for merge conflicts if present
+    if merge_conflicts.get("has_conflicts"):
+        blocking_issues.append(f"Merge conflicts: {', '.join(merge_conflicts.get('conflict_files', []))}")
+
     return {
-        "failure_prevention": result.get("prevention_checks", {}),
-        "failure_prevention_warnings": result.get("warnings", [])
+        "step11_merge_conflicts": merge_conflicts,
+        "step11_ci_status": github_ci,
+        "step11_code_quality": code_quality,
+        "step11_warnings": warnings,
+        "step11_blocking_issues": blocking_issues,
+        "step11_can_merge": result.get("can_proceed_to_merge", True),
+        "step11_status": result.get("status", "OK"),
     }
 
 
