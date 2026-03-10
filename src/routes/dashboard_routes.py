@@ -68,7 +68,7 @@ def dashboard():
         }
 
         # Latest flow data from actual tracker
-        flow_latest = flow_tracker.get_latest_flow_summary()
+        flow_latest = flow_tracker.get_latest_execution()
         if not flow_latest:
             flow_latest = {
                 'session_id': 'No active session',

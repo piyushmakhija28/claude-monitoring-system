@@ -87,15 +87,26 @@ except Exception:
 # ===================================================================
 # NEW: POLICY TRACKING INTEGRATION
 # ===================================================================
-# Policy tracking - mandatory (find helper by walking up to scripts root)
+# Policy tracking - find helper by walking up to scripts root
 _scripts_root = Path(__file__).resolve().parent
-while _scripts_root != _scripts_root.parent:
-    if (_scripts_root / 'policy_tracking_helper.py').exists():
-        if str(_scripts_root) not in sys.path:
-            sys.path.insert(0, str(_scripts_root))
-        break
-    _scripts_root = _scripts_root.parent
-from policy_tracking_helper import record_policy_execution, record_sub_operation, get_session_id
+_policy_tracking_available = False
+try:
+    while _scripts_root != _scripts_root.parent:
+        if (_scripts_root / 'policy_tracking_helper.py').exists():
+            if str(_scripts_root) not in sys.path:
+                sys.path.insert(0, str(_scripts_root))
+            break
+        _scripts_root = _scripts_root.parent
+    from policy_tracking_helper import record_policy_execution, record_sub_operation, get_session_id
+    _policy_tracking_available = True
+except ImportError:
+    def record_policy_execution(*a, **kw):
+        """No-op fallback when policy_tracking_helper is unavailable."""
+    def record_sub_operation(*a, **kw):
+        """No-op fallback when policy_tracking_helper is unavailable."""
+    def get_session_id(*a, **kw):
+        """No-op fallback when policy_tracking_helper is unavailable."""
+        return None
 
 # ===================================================================
 # NEW: FAILURE DETECTION INTEGRATION (3.7 Middleware)

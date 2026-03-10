@@ -453,46 +453,30 @@ class MetricsCollector:
 
             # Cost per optimization (estimated)
             COST_PER_CONTEXT_OPT = 0.05  # $0.05 saved per context optimization
-            COST_PER_FAILURE = 0.02  # $0.02 saved per failure prevention
-            COST_PER_MODEL_SEL = 0.03  # $0.03 saved per Haiku selection
 
-            # Read logs and group by date
-            log_files = [
-                ('tool-optimization.log', COST_PER_CONTEXT_OPT),
-                ('model-selection.log', COST_PER_MODEL_SEL),
-                ('failures.log', COST_PER_FAILURE)
-            ]
-
-            for log_file, cost_per_opt in log_files:
-                log_path = self.memory_dir / 'logs' / log_file
-                if not log_path.exists():
-                    continue
-
-                with open(log_path, 'r', encoding='utf-8') as f:
+            # Read from tool-tracker.jsonl (actual log file with optimization data)
+            tracker_path = self.memory_dir / 'logs' / 'tool-tracker.jsonl'
+            if tracker_path.exists():
+                with open(tracker_path, 'r', encoding='utf-8') as f:
                     for line in f:
                         try:
                             if line.startswith('#'):
                                 continue
 
                             data = json.loads(line.strip())
-                            timestamp = datetime.fromisoformat(data['timestamp'].replace('Z', '+00:00'))
+                            timestamp_str = data.get('timestamp', '')
+                            if timestamp_str:
+                                timestamp = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
 
-                            if timestamp < cutoff_date:
-                                continue
+                                if timestamp < cutoff_date:
+                                    continue
 
-                            # Get date string
-                            date_key = timestamp.strftime('%Y-%m-%d')
+                                # Get date string
+                                date_key = timestamp.strftime('%Y-%m-%d')
 
-                            # Count optimizations
-                            if log_file == 'tool-optimization.log':
-                                if data.get('optimized', False):
-                                    daily_optimizations[date_key] += cost_per_opt
-                            elif log_file == 'model-selection.log':
-                                if data.get('model') == 'haiku':
-                                    daily_optimizations[date_key] += cost_per_opt
-                            elif log_file == 'failures.log':
-                                if data.get('warnings'):
-                                    daily_optimizations[date_key] += cost_per_opt * len(data['warnings'])
+                                # Count optimizations from tool-tracker fields
+                                if data.get('optimized', False) or data.get('model') == 'haiku':
+                                    daily_optimizations[date_key] += COST_PER_CONTEXT_OPT
                         except:
                             continue
 
@@ -724,7 +708,7 @@ class MetricsCollector:
             return records
 
     def get_enforcement_stats(self, hours=24):
-        """Aggregate enforcement event counts from metrics.jsonl.
+        """Aggregate enforcement event counts from metrics.jsonl or policy-hits.log.
 
         Args:
             hours: look-back window in hours (default 24)
@@ -746,6 +730,26 @@ class MetricsCollector:
             by_type = {}
             by_tool = {}
             recent_blocks = []
+
+            # Fallback to policy-hits.log if metrics.jsonl is empty
+            if not records:
+                policy_log = self.memory_dir / 'logs' / 'policy-hits.log'
+                if policy_log.exists():
+                    try:
+                        with open(policy_log, 'r', encoding='utf-8') as f:
+                            for line in f:
+                                if line.startswith('[') and ']' in line:
+                                    try:
+                                        timestamp_str = line.split('[')[1].split(']')[0]
+                                        ts = datetime.strptime(timestamp_str, '%Y-%m-%d %H:%M:%S')
+                                        ts = ts.replace(tzinfo=timezone.utc)
+                                        if ts >= cutoff:
+                                            total_blocks += 1
+                                            by_type['policy_hit'] = by_type.get('policy_hit', 0) + 1
+                                    except (ValueError, IndexError):
+                                        continue
+                    except Exception:
+                        pass
 
             for rec in records:
                 try:
