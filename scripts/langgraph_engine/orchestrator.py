@@ -236,26 +236,118 @@ def verify_prompt_integrity(state: FlowState) -> bool:
     return True
 
 
+def synthesize_prompt_with_flow_data(state: FlowState) -> dict:
+    """Synthesize comprehensive prompt using all collected 3-level flow data.
+
+    SYNTHESIS PROCESS:
+    1. Collect data from all levels
+    2. Call PromptGenerator.synthesize_with_flow_data()
+    3. Create comprehensive prompt
+    4. Return synthesized prompt for actual work
+    """
+    try:
+        from pathlib import Path
+        import sys
+        import importlib.util
+
+        # Import PromptGenerator from prompt-generation-policy.py
+        scripts_path = Path(__file__).parent.parent / "architecture" / "03-execution-system" / "00-prompt-generation"
+        spec = importlib.util.spec_from_file_location(
+            "prompt_generation_policy",
+            scripts_path / "prompt-generation-policy.py"
+        )
+        pg_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(pg_module)
+
+        generator = pg_module.PromptGenerator()
+
+        # Prepare flow data for synthesis
+        flow_data = {
+            "level_minus1": {
+                "unicode_check": state.get("unicode_check", False),
+                "encoding_check": state.get("encoding_check", False),
+                "windows_path_check": state.get("windows_path_check", False),
+            },
+            "level1": {
+                "context_percentage": state.get("context_percentage", 0),
+                "session_chain_loaded": state.get("session_chain_loaded", False),
+                "patterns_detected": state.get("patterns_detected", []),
+                "project_type": "Unknown",
+            },
+            "level2": {
+                "standards_count": state.get("standards_count", 0),
+                "is_java_project": state.get("is_java_project", False),
+                "java_standards_loaded": state.get("java_standards_loaded", False),
+            },
+            "level3": {
+                "task_type": state.get("step0_prompt", {}).get("task_type", "General"),
+                "complexity": state.get("step0_prompt", {}).get("complexity", 5),
+                "suggested_model": state.get("step4_model", "sonnet"),
+                "plan_mode_suggested": state.get("step2_plan_mode", False),
+            }
+        }
+
+        # SYNTHESIS: Create comprehensive prompt
+        # Priority: user_message > user_message_original > env var CURRENT_USER_MESSAGE
+        import os
+        user_msg = (
+            state.get("user_message")
+            or state.get("user_message_original")
+            or os.environ.get("CURRENT_USER_MESSAGE", "")
+        )
+        synthesis_result = generator.synthesize_with_flow_data(
+            user_msg,
+            flow_data
+        )
+
+        return {
+            "synthesized_prompt": synthesis_result.get("synthesized_prompt", ""),
+            "synthesis_metadata": {
+                "original_message": synthesis_result.get("original_message"),
+                "context_level": synthesis_result.get("context_level"),
+                "data_used": synthesis_result.get("data_used"),
+            }
+        }
+
+    except Exception as e:
+        import sys
+        print(f"[WARNING] Prompt synthesis failed: {e}", file=sys.stderr)
+        # Fallback: return original message
+        return {
+            "synthesized_prompt": state.get("user_message", ""),
+            "synthesis_metadata": {"status": "fallback"}
+        }
+
+
 def output_node(state: FlowState) -> dict:
-    """Final output node - determines completion status."""
+    """Final output node - determines completion status and synthesizes final prompt."""
     # Verify prompt integrity before finishing
     if not verify_prompt_integrity(state):
         # Log but don't block - prompt should never be modified
         pass
 
+    # SYNTHESIS: Create comprehensive prompt from all flow data
+    synthesis = synthesize_prompt_with_flow_data(state)
+
     # Save workflow memory before finishing
     save_workflow_memory(state)
 
-    # If final_status not yet set, determine it now
-    # Check for blocking conditions
+    # Determine final status based on execution results
     if state.get("level_minus1_status") == "BLOCKED":
-        return {"final_status": "BLOCKED"}
+        final_status = "BLOCKED"
     elif state.get("errors"):
-        return {"final_status": "FAILED"}
+        final_status = "FAILED"
     elif state.get("warnings"):
-        return {"final_status": "PARTIAL"}
+        final_status = "PARTIAL"
     else:
-        return {"final_status": "OK"}
+        final_status = "OK"
+
+    # Return synthesis result with proper status
+    return {
+        "final_status": final_status,
+        "synthesized_prompt": synthesis.get("synthesized_prompt", ""),
+        "synthesis_metadata": synthesis.get("synthesis_metadata", {}),
+    }
 
 
 # ============================================================================

@@ -210,6 +210,12 @@ class FlowState(TypedDict, total=False):
     execution_time_ms: int             # Total execution time in milliseconds
     level_durations: Dict[str, int]    # Duration per level in milliseconds
 
+    # ===========================================================================
+    # SYNTHESIS OUTPUT (3-PHASE PROMPT SYNTHESIS)
+    # ===========================================================================
+    synthesized_prompt: str            # Comprehensive prompt created from 3-level flow data
+    synthesis_metadata: Dict[str, Any] # Metadata about synthesis (context_level, data_used, etc.)
+
 
 # ==============================================================================
 # WORKFLOW CONTEXT OPTIMIZER - Smart context compression for LLM efficiency

@@ -177,6 +177,14 @@ def convert_flow_state_to_trace(state: FlowState) -> Dict[str, Any]:
         },
         "work_started": state.get("final_status") != "BLOCKED",
         "status": state.get("final_status", "UNKNOWN"),
+        "synthesis": {
+            "synthesized_prompt": state.get("synthesized_prompt", ""),
+            "synthesis_metadata": state.get("synthesis_metadata", {}),
+            "context_optimization": {
+                "workflow_memory_size_kb": state.get("workflow_memory_size_kb", 0),
+                "step_optimization_stats": state.get("step_optimization_stats", {}),
+            }
+        },
     }
 
     return trace

@@ -96,6 +96,112 @@ class PromptGenerator:
         self.docs = self.memory_dir / "docs"
         self.generation_log = []
 
+    def synthesize_with_flow_data(self, user_message: str, flow_data: Dict[str, Any]) -> Dict[str, Any]:
+        """SYNTHESIS ENGINE: Take user message + all 3-level flow data, create comprehensive prompt.
+
+        This is the CORE of the system:
+        1. User sends simple prompt
+        2. 3-level flow collects data from all levels
+        3. THIS method synthesizes all data into detailed, structured prompt
+        4. Synthesized prompt used for actual work
+
+        Args:
+            user_message: Original user prompt (simple direction)
+            flow_data: All data from 3-level flow execution
+                {
+                  "level_minus1": {...},  # Auto-fix checks
+                  "level1": {...},         # Context, session, patterns
+                  "level2": {...},         # Standards, rules
+                  "level3": {...}          # Task analysis, complexity
+                }
+
+        Returns:
+            Comprehensive synthesized prompt with all context
+        """
+        # Extract flow data by level
+        level_minus1 = flow_data.get("level_minus1", {})
+        level1 = flow_data.get("level1", {})
+        level2 = flow_data.get("level2", {})
+        level3 = flow_data.get("level3", {})
+
+        # Build comprehensive context
+        context_parts = []
+
+        # LEVEL -1: System Setup
+        context_parts.append(f"SYSTEM SETUP (Level -1):")
+        context_parts.append(f"  - Unicode handling: {level_minus1.get('unicode_check', False)}")
+        context_parts.append(f"  - Encoding validated: {level_minus1.get('encoding_check', False)}")
+        context_parts.append(f"  - Path resolution: {level_minus1.get('windows_path_check', False)}")
+
+        # LEVEL 1: Context & Session
+        context_parts.append(f"\nCONTEXT & SESSION (Level 1):")
+        context_parts.append(f"  - Context usage: {level1.get('context_percentage', 0):.1f}%")
+        context_parts.append(f"  - Session loaded: {level1.get('session_chain_loaded', False)}")
+        context_parts.append(f"  - Patterns detected: {len(level1.get('patterns_detected', []))} patterns")
+        if level1.get('patterns_detected'):
+            context_parts.append(f"    Patterns: {', '.join(level1['patterns_detected'][:3])}")
+
+        # LEVEL 2: Standards & Rules
+        context_parts.append(f"\nSTANDARDS & RULES (Level 2):")
+        context_parts.append(f"  - Standards active: {level2.get('standards_count', 0)}")
+        context_parts.append(f"  - Java/Spring detected: {level2.get('is_java_project', False)}")
+        if level2.get('java_standards_loaded'):
+            context_parts.append(f"  - Java standards loaded: Spring Boot patterns available")
+
+        # LEVEL 3: Task Analysis
+        context_parts.append(f"\nTASK ANALYSIS (Level 3):")
+        context_parts.append(f"  - Task type: {level3.get('task_type', 'Unknown')}")
+        context_parts.append(f"  - Complexity: {level3.get('complexity', 5)}/10")
+        context_parts.append(f"  - Suggested model: {level3.get('suggested_model', 'sonnet')}")
+        context_parts.append(f"  - Plan mode needed: {level3.get('plan_mode_suggested', False)}")
+
+        # BUILD COMPREHENSIVE PROMPT
+        comprehensive_prompt = f"""TASK: {user_message}
+
+SYSTEM CONTEXT COLLECTED FROM 3-LEVEL FLOW:
+
+{chr(10).join(context_parts)}
+
+INSTRUCTIONS FOR EXECUTION:
+1. Use the context above to understand the full scope
+2. Follow the standards and rules defined in Level 2
+3. Leverage the detected patterns from Level 1
+4. Consider complexity level: {level3.get('complexity', 5)}/10
+5. Approach: {self._get_approach(level3.get('task_type', 'Unknown'))}
+
+EXECUTION REQUIREMENTS:
+- Project context: {level1.get('project_type', 'Unknown')}
+- Standards to follow: {level2.get('standards_count', 0)} active standards
+- Context window available: {100 - level1.get('context_percentage', 0):.1f}%
+
+ORIGINAL USER REQUEST: {user_message}
+
+Now execute this task with full context awareness."""
+
+        return {
+            "original_message": user_message,
+            "synthesized_prompt": comprehensive_prompt,
+            "context_level": "full_3level_synthesis",
+            "data_used": {
+                "level_minus1": bool(level_minus1),
+                "level1": bool(level1),
+                "level2": bool(level2),
+                "level3": bool(level3),
+            }
+        }
+
+    def _get_approach(self, task_type: str) -> str:
+        """Suggest approach based on task type."""
+        approaches = {
+            "Bug Fix": "Debug systematically, find root cause, apply targeted fix",
+            "New Feature": "Plan architecture, implement step-by-step, test thoroughly",
+            "Refactoring": "Preserve functionality, improve structure, add tests",
+            "Testing": "Write comprehensive tests, achieve good coverage",
+            "Documentation": "Clear, complete, with examples",
+            "API Creation": "RESTful design, proper validation, documentation"
+        }
+        return approaches.get(task_type, "Analyze carefully, execute methodically, test comprehensively")
+
     def think_about_request(self, user_message: str) -> Dict:
         """Phase 1: Understand the request intent and plan the information search.
 
