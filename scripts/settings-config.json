@@ -10,7 +10,7 @@
           {
             "type": "command",
             "command": "python.exe C:/Users/techd/.claude/scripts/3-level-flow.py",
-            "timeout": 30,
+            "timeout": 75,
             "statusMessage": "🔒 FULL POLICY ENFORCEMENT: Level -1 → Level 1 → Level 2 → Level 3 (All 15 steps)",
             "async": false
           }
