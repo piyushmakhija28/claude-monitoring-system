@@ -226,7 +226,7 @@ def write_flow_trace_json(state: FlowState, session_dir: Optional[Path] = None) 
 
 
 def print_flow_checkpoint(state: FlowState, verbose: bool = False) -> None:
-    """Print flow checkpoint summary (same format as before).
+    """Print flow checkpoint summary with synthesized prompt integration.
 
     Args:
         state: Completed FlowState
@@ -236,12 +236,24 @@ def print_flow_checkpoint(state: FlowState, verbose: bool = False) -> None:
     session_id = state.get("session_id", "SESSION-UNKNOWN")
     context_pct = state.get("context_percentage", 0)
     model = state.get("step4_model", "haiku")
+    synthesized_prompt = state.get("synthesized_prompt", "")
 
     print(f"\n[FLOW CHECKPOINT]")
     print(f"  Status: {status}")
     print(f"  Session: {session_id}")
     print(f"  Context: {context_pct:.1f}%")
     print(f"  Model: {model}")
+
+    # Save synthesized prompt for Claude to access
+    if synthesized_prompt:
+        try:
+            synthesis_file = Path.home() / ".claude" / "memory" / "current-synthesis.txt"
+            synthesis_file.parent.mkdir(parents=True, exist_ok=True)
+            synthesis_file.write_text(synthesized_prompt, encoding="utf-8")
+            print(f"  Synthesis: Generated ({len(synthesized_prompt)} chars)")
+            print(f"  Location: {synthesis_file}")
+        except Exception:
+            pass
 
     if verbose:
         if state.get("errors"):
