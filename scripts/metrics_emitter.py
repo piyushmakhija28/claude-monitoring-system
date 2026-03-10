@@ -96,12 +96,13 @@ def emit_flag_lifecycle(flag_name, action, value=None):
     _write_metric(record)
 
 
-def emit_context_sample(context_usage, token_count):
+def emit_context_sample(context_usage, token_count, session_id=None):
     """Emit context usage sample.
 
     Args:
         context_usage (float): Context usage percentage (0-100)
         token_count (int): Total tokens used in session
+        session_id (str, optional): Session identifier
     """
     record = {
         'type': 'context_sample',
@@ -109,4 +110,6 @@ def emit_context_sample(context_usage, token_count):
         'context_usage_pct': context_usage,
         'token_count': token_count,
     }
+    if session_id:
+        record['session_id'] = session_id
     _write_metric(record)
