@@ -17,10 +17,11 @@ os.environ["OLLAMA_ENDPOINT"] = "http://localhost:11434/api/generate"
 script_path = os.path.join(os.path.dirname(__file__), "3-level-flow.py")
 
 try:
-    # Run the main script, preserving stdin
+    # Run the main script with no stdin (hook doesn't have proper stdin)
+    # This prevents script from hanging waiting for user message
     result = subprocess.run(
         [sys.executable, script_path],
-        stdin=sys.stdin,
+        stdin=subprocess.DEVNULL,
         stdout=sys.stdout,
         stderr=sys.stderr,
     )
