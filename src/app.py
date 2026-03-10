@@ -1429,9 +1429,10 @@ def api_policy_history():
 @login_required
 def api_system_info():
     """API endpoint for system information - REAL DATA"""
-    try:
-        from pathlib import Path
+    from pathlib import Path
+    from datetime import datetime as dt
 
+    try:
         system_health = metrics.get_system_health()
         daemon_status = metrics.get_daemon_status()
 
@@ -1451,9 +1452,8 @@ def api_system_info():
                     state = json.load(f)
                     session_start = state.get('session_start_time')
                     if session_start:
-                        from datetime import datetime
-                        start_time = datetime.fromisoformat(session_start)
-                        now = datetime.now()
+                        start_time = dt.fromisoformat(session_start)
+                        now = dt.now()
                         delta = now - start_time
                         hours = int(delta.total_seconds() / 3600)
                         minutes = int((delta.total_seconds() % 3600) / 60)
@@ -1465,7 +1465,7 @@ def api_system_info():
             'success': True,
             'status': 'Operational' if health_score >= 90 else ('Healthy' if health_score >= 70 else 'Degraded'),
             'memory_path': str(memory_path),
-            'last_update': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'last_update': dt.now().strftime('%Y-%m-%d %H:%M:%S'),
             'uptime': uptime_str,
             'health_score': health_score,
             'daemons_running': daemons_running,
