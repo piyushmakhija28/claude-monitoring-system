@@ -234,7 +234,6 @@ ENDPOINT_TO_SECTION = {
     'policy_compliance_report': 'policies',
     'policy_impact_analysis': 'policies',
     'settings': 'settings',
-    'claude_credentials.credentials_page': 'settings',
     'twofa_settings': 'settings',
 }
 
