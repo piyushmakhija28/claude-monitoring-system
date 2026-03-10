@@ -13,8 +13,9 @@ import subprocess
 os.environ["OLLAMA_MODEL"] = "qwen2.5:7b"
 os.environ["OLLAMA_ENDPOINT"] = "http://localhost:11434/api/generate"
 
-# Get path to 3-level-flow.py
-script_path = os.path.join(os.path.dirname(__file__), "3-level-flow.py")
+# Use quick version for hooks (Level -1 only, fast)
+# Full 3-level execution happens during actual prompt processing
+script_path = os.path.join(os.path.dirname(__file__), "3-level-flow-quick.py")
 
 try:
     # Run the main script with no stdin (hook doesn't have proper stdin)
