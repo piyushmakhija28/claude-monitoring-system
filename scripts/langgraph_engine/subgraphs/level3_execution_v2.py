@@ -173,43 +173,79 @@ def step4_toon_refinement_node(state: FlowState) -> Dict[str, Any]:
 def step5_skill_selection_node(state: FlowState) -> Dict[str, Any]:
     """Step 5: Skill & Agent Selection.
 
-    Skills and agents are fetched from Claude Code (internet-available).
-    No validation needed - Claude Code skills are dynamically available.
+    Process:
+    1. Scan available skills/agents from local system (~/.claude/skills/, ~/.claude/agents/)
+    2. Add to TOON object so LLM can see what's available
+    3. Pass TOON to LLM - LLM analyzes task + available skills
+    4. LLM recommends: "From available skills, use these X, Y, Z"
+    5. Return LLM recommendation for Step 6 validation & download
+
+    Step 6 will then validate selection and download any missing skills from internet.
     """
     logger.info("\n🔄 [STEP 5] Skill & Agent Selection")
     step_start = time.time()
 
     try:
+        from pathlib import Path
         from ..ollama_service import get_ollama_service
+
+        # 1. Scan local skills/agents
+        logger.info("📂 Scanning local skills and agents...")
+        home = Path.home()
+        available_skills = []
+        available_agents = []
+
+        # Scan skills
+        skills_dir = home / ".claude" / "skills"
+        if skills_dir.exists():
+            for category_dir in skills_dir.iterdir():
+                if category_dir.is_dir():
+                    for skill_dir in category_dir.iterdir():
+                        if skill_dir.is_dir():
+                            skill_name = skill_dir.name
+                            if (skill_dir / "skill.md").exists() or (skill_dir / "SKILL.md").exists():
+                                available_skills.append(skill_name)
+
+        # Scan agents
+        agents_dir = home / ".claude" / "agents"
+        if agents_dir.exists():
+            for agent_dir in agents_dir.iterdir():
+                if agent_dir.is_dir() and agent_dir.name != "__pycache__":
+                    agent_name = agent_dir.name
+                    if (agent_dir / "agent.md").exists():
+                        available_agents.append(agent_name)
+
+        logger.info(f"✓ Found {len(available_skills)} local skills, {len(available_agents)} local agents")
 
         blueprint = state.get("step4_blueprint", {})
 
-        # Claude Code internet-available skills (comprehensive list)
-        available_skills = [
-            "python-backend-engineer", "java-spring-boot-microservices", "docker",
-            "kubernetes", "jenkins-pipeline", "devops-engineer", "angular-engineer",
-            "swift-backend-engineer", "swiftui-designer", "android-backend-engineer",
-            "android-ui-designer", "orchestrator-agent", "spring-boot-microservices"
-        ]
+        # 2. Add available skills/agents to TOON for LLM reference
+        blueprint_with_available = {
+            **blueprint,
+            "available_skills_on_system": available_skills,
+            "available_agents_on_system": available_agents,
+            "available_skills_count": len(available_skills),
+            "available_agents_count": len(available_agents)
+        }
 
-        # Claude Code internet-available agents (comprehensive list)
-        available_agents = [
-            "spring-boot-microservices", "orchestrator-agent", "python-backend-engineer",
-            "devops-engineer", "android-backend-engineer", "angular-engineer",
-            "swift-backend-engineer", "qa-testing-agent", "dynamic-seo-agent",
-            "static-seo-agent"
-        ]
+        logger.info(f"📋 Added available skills/agents to TOON for LLM analysis")
 
-        logger.info(f"Available {len(available_skills)} skills and {len(available_agents)} agents from Claude Code")
-
+        # 3. Pass to LLM with available skills listed
         ollama = get_ollama_service()
-        skill_result = ollama.step5_skill_agent_selection(blueprint, available_skills, available_agents)
+        skill_result = ollama.step5_skill_agent_selection(
+            blueprint_with_available,
+            available_skills,
+            available_agents
+        )
 
         execution_time_ms = (time.time() - step_start) * 1000
 
         logger.info(f"✓ Step 5 completed: {len(skill_result.get('final_skills_selected', []))} skills selected ({execution_time_ms:.0f}ms)")
 
+        # 4. Return LLM recommendation + available list for Step 6
         return {
+            "step5_available_skills": available_skills,
+            "step5_available_agents": available_agents,
             "step5_skill_mappings": skill_result.get("skill_mappings", []),
             "step5_skills": skill_result.get("final_skills_selected", []),
             "step5_agents": skill_result.get("final_agents_selected", []),
@@ -222,48 +258,63 @@ def step5_skill_selection_node(state: FlowState) -> Dict[str, Any]:
 
 
 def step6_skill_validation_node(state: FlowState) -> Dict[str, Any]:
-    """Step 6: Skill Validation & Selection with Download.
+    """Step 6: Skill Validation & Download.
 
     Process:
-    1. Scan available skills/agents on local system
-    2. Add to TOON for LLM reference
-    3. Use LLM recommendation to select which to use
-    4. Download missing skills from internet if needed
-    5. Return selected skills ready to use
+    1. Get LLM recommendation from Step 5 (which skills to use)
+    2. Get available skills list from Step 5
+    3. Validate: Check if selected skills exist locally
+    4. Download: Fetch any missing skills from Claude Code GitHub
+    5. Return: Selected skills with full content ready to use
+
+    Note: Step 5 already analyzed TOON with available skills and LLM selected from that list.
+    Step 6 just validates and downloads if needed.
     """
-    logger.info("\n🔄 [STEP 6] Skill Validation & Selection with Download")
+    logger.info("\n🔄 [STEP 6] Skill Validation & Download")
     step_start = time.time()
 
     try:
         session_dir = state.get("session_dir", ".")
-        toon_analysis = state.get("level1_context_toon", {})
 
-        # Get LLM recommendation from Step 5
+        # Get from Step 5
+        available_skills = state.get("step5_available_skills", [])
+        available_agents = state.get("step5_available_agents", [])
+        llm_selected_skills = state.get("step5_skills", [])
+        llm_selected_agents = state.get("step5_agents", [])
+
+        logger.info(f"📋 Validating {len(llm_selected_skills)} skills selected by LLM...")
+        logger.info(f"📋 Available on system: {len(available_skills)} skills, {len(available_agents)} agents")
+
+        # Use enhanced Step 6 function from Level3RemainingSteps
         llm_recommendation = {
-            "final_skills_selected": state.get("step5_skills", []),
-            "final_agents_selected": state.get("step5_agents", []),
+            "final_skills_selected": llm_selected_skills,
+            "final_agents_selected": llm_selected_agents,
             "missing_but_prefer": []
         }
 
         steps = Level3RemainingSteps(session_dir)
         validation_result = steps.step6_skill_validation_and_selection(
-            toon_analysis,
+            {"available_skills": available_skills, "available_agents": available_agents},
             llm_recommendation
         )
 
         execution_time_ms = (time.time() - step_start) * 1000
 
         if validation_result.get("success"):
-            logger.info(f"✓ Step 6 completed: {len(validation_result.get('final_skills', []))} skills selected, "
-                       f"{len(validation_result.get('downloaded', []))} downloaded ({execution_time_ms:.0f}ms)")
+            downloaded = validation_result.get("downloaded", [])
+            download_msg = f", {len(downloaded)} downloaded" if downloaded else ""
+            logger.info(f"✓ Step 6 completed: {len(validation_result.get('final_skills', []))} skills ready{download_msg} ({execution_time_ms:.0f}ms)")
+
+            if downloaded:
+                logger.info(f"  Downloaded: {downloaded}")
 
             return {
-                "step6_selected_skills": validation_result.get("selected_skills", []),
-                "step6_selected_agents": validation_result.get("selected_agents", []),
+                "step6_available_on_system": available_skills,
+                "step6_llm_selected_skills": llm_selected_skills,
+                "step6_llm_selected_agents": llm_selected_agents,
                 "step6_final_skills": validation_result.get("final_skills", []),
                 "step6_final_agents": validation_result.get("final_agents", []),
-                "step6_downloaded": validation_result.get("downloaded", []),
-                "step6_toon_enhanced": validation_result.get("toon_enhanced", {}),
+                "step6_downloaded": downloaded,
                 "step6_execution_time_ms": execution_time_ms
             }
         else:
