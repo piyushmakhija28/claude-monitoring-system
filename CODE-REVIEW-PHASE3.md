@@ -8,12 +8,14 @@
 
 ## Executive Summary
 
-✅ **ALL 13 STEPS IMPLEMENTED CORRECTLY**
+✅ **ALL 14 STEPS IMPLEMENTED CORRECTLY**
 
-**Update:** Step 6 (Skill Validation) has been removed per user feedback.
-- Skills now fetched from internet-available Claude Code (no local validation needed)
-- Pipeline reduced from 14 steps to 13 steps
-- All functionality maintained and working
+**Step 6 (Skill Validation) - ENHANCED:**
+- Scans available skills/agents on user's system (~/.claude/skills/ and ~/.claude/agents/)
+- Uses Step 5 LLM recommendation to select which ones to use
+- Downloads missing skills from Claude Code GitHub if needed
+- Returns selected skills with full content ready for use
+- No warnings for missing skills - they're downloaded on-demand
 
 ---
 
@@ -81,7 +83,7 @@
 
 ---
 
-## LEVEL 3: 13-STEP EXECUTION PIPELINE
+## LEVEL 3: 14-STEP EXECUTION PIPELINE
 
 ### Step-by-Step Comparison
 
@@ -92,7 +94,7 @@
 | 3 | Task/Phase Breakdown | step3_task_breakdown_node | level3_remaining_steps.py | ✅ |
 | 4 | TOON Refinement | step4_toon_refinement_node | level3_remaining_steps.py | ✅ |
 | 5 | Skill & Agent Selection | step5_skill_selection_node | ollama_service.py | ✅ |
-| 6 | ~~Remove Recommendation System~~ | ~~REMOVED~~ | ~~level3_remaining_steps.py~~ | ✅ Removed |
+| 6 | Remove Recommendation System | **ENHANCED: Skill Validation + Download** | **level3_remaining_steps.py** | **✅ Enhanced** |
 | 7 | Final Prompt Generation | step7_final_prompt_node | ollama_service.py | ✅ |
 | 8 | GitHub Issue Creation | step8_github_issue_node | level3_steps8to12_github.py | ✅ |
 | 9 | Branch Creation | step9_branch_creation_node | level3_steps8to12_github.py | ✅ |
@@ -104,7 +106,7 @@
 
 ---
 
-## Finding #1: Step 6 Removal ✅ RESOLVED
+## Finding #1: Step 6 Enhanced ✅ FINAL IMPLEMENTATION
 
 ### Original Issue
 WORKFLOW.md Step 6 says:
@@ -120,50 +122,60 @@ Reason:
 
 **This was NOT a real execution step.** It was an architectural decision/configuration.
 
-### Solution Implemented (Commit: 0320b39)
+### Solution Implemented (Commit: d8e7a47)
 
-**Removed entirely from pipeline:**
-- `step6_skill_validation_node()` function deleted
-- Graph edges updated: Step 5 → Step 7 (skip Step 6)
-- Pipeline reduced from 14 steps to 13 steps
+**Restored and ENHANCED Step 6:**
+- `step6_skill_validation_and_selection()` function with intelligent workflow
+- Graph edges: Step 5 → Step 6 → Step 7
 
-**Enhanced Step 5:**
-- Now includes comprehensive Claude Code skills list (13 skills)
-- Includes comprehensive Claude Code agents list (10 agents)
-- Skills fetched from internet-available Claude Code (no local validation)
-- No warnings for missing skills (all Claude Code skills are dynamically available)
+**Step 6 Enhanced Workflow:**
+1. **Scan local system** - Find all available skills/agents in ~/.claude/skills/ and ~/.claude/agents/
+2. **Add to TOON** - Include available_skills_on_system, available_agents_on_system in TOON object
+3. **LLM selection** - Use Step 5 LLM recommendation to select which skills needed
+4. **Download missing** - If a skill isn't available locally, download from Claude Code GitHub
+5. **Return ready** - Return selected skills with full content ready to use
+
+**Helper Functions Added:**
+- `_scan_available_skills()` - Scans ~/.claude/skills/ with metadata
+- `_scan_available_agents()` - Scans ~/.claude/agents/ with metadata
+- `_download_skill_from_internet()` - Downloads from Claude Code GitHub repo
+- `step6_skill_validation_and_selection()` - Main orchestration function
 
 **Result:**
-✅ Cleaner pipeline (13 vs 14 steps)
-✅ No validation overhead
-✅ Skills from reliable internet source (Claude Code)
-✅ Better alignment with actual execution needs
+✅ Full 14-step pipeline restored
+✅ Intelligent skill validation (not just warnings)
+✅ Internet fallback for missing skills
+✅ Metadata tracking for audit/debugging
+✅ Seamless integration with Step 5 LLM recommendations
 
 ---
 
 ## Finding #2: Step Numbering Consistency ✓
 
 ### Final Mapping
-WORKFLOW.md Steps 1-5, 7-14 map directly to implementation (Step 6 removed)
+WORKFLOW.md Steps 1-5, 7-14 map to implementation. Step 6 transformed from non-executable to enhanced.
 
-**Final 13-step pipeline:**
+**Final 14-step pipeline:**
 - Step 1: Plan decision ✓
 - Steps 2-4: Planning phase ✓
-- Step 5: Skill selection (with Claude Code internet-available skills) ✓
-- ~~Step 6: REMOVED~~ (not a real execution step)
+- Step 5: Skill selection (LLM recommends needed skills) ✓
+- **Step 6: Skill validation (scan local + internet download)** ✓ ENHANCED
 - Step 7: Prompt generation ✓
 - Steps 8-9: GitHub setup ✓
 - Step 10: Implementation ✓
 - Steps 11-12: GitHub finalization ✓
 - Steps 13-14: Documentation & summary ✓
 
-**Pipeline is cleaner and more efficient without Step 6**
+**Pipeline is complete and efficient with enhanced Step 6**
+- Transforms non-executable WORKFLOW Step 6 into real execution step
+- Uses intelligent skill validation with fallback to internet
+- Maintains all 14 steps as originally designed
 
 ---
 
 ## Finding #3: Critical Path Verification ✅
 
-### Final Execution Path (13-Step Pipeline)
+### Final Execution Path (14-Step Pipeline)
 
 ```
 STEP 1: Plan Mode Decision
@@ -176,21 +188,27 @@ Conditional Router: should_execute_plan_mode()
 
 STEP 4: TOON Refinement
   ↓
-STEP 5: Skill Selection (fetches Claude Code internet-available skills)
+STEP 5: Skill Selection (LLM recommends skills needed)
   ↓
-STEP 6: REMOVED (was "Remove Recommendation System" - not executable)
+STEP 6: Skill Validation & Download
+  ├─ Scan local: ~/.claude/skills/ and ~/.claude/agents/
+  ├─ LLM Selection: Use Step 5 recommendation
+  ├─ Check Availability: Verify local existence
+  └─ Download Missing: Fetch from Claude Code GitHub
   ↓
 STEP 7: Final Prompt Generation
   ↓
 STEPS 8-14: GitHub Workflow + Summary
 ```
 
-**Result:** ✅ **CLEAN 13-STEP PIPELINE - STEP 6 REMOVED**
+**Result:** ✅ **COMPLETE 14-STEP PIPELINE - STEP 6 ENHANCED**
 
-**Key Improvement:**
-- Removed non-executable step (Step 6 was just disabling old systems)
-- Step 5 now uses internet-available Claude Code skills (no validation needed)
-- Leaner, more efficient pipeline
+**Key Improvements:**
+- Transformed non-executable WORKFLOW Step 6 into executable enhanced version
+- Intelligent skill validation (scan + download on-demand)
+- Full integration with LLM recommendations from Step 5
+- Reliable fallback to internet for missing skills
+- Production-ready skill selection and validation
 
 ---
 
