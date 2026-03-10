@@ -40,7 +40,6 @@ import qrcode
 import base64
 import secrets
 import json
-import os
 # Load .env file first so FLASK_ENV is set before app creation
 from dotenv import load_dotenv
 env_file = Path(__file__).parent.parent / '.env'
@@ -1223,7 +1222,7 @@ def analyze_logs():
 def api_log_files():
     """API endpoint to list available log files"""
     try:
-        log_files = log_parser.get_log_files()
+        log_files = log_parser.get_available_logs()
         return jsonify({
             'success': True,
             'log_files': log_files,
