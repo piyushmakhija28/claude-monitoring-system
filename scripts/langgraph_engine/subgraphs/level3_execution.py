@@ -220,28 +220,6 @@ def step6_tool_optimization(state: FlowState) -> dict:
     }
 
 
-def step7_auto_recommendations(state: FlowState) -> dict:
-    """Step 7: Auto recommendations with Ollama based on task type"""
-    task_type = state.get("step0_prompt", {}).get("task_type", "General")
-    user_message = state.get("user_message", "")
-    complexity = state.get("step0_prompt", {}).get("complexity", 5)
-
-    args = [
-        f"--task-type={task_type}",
-        f"--complexity={complexity}"
-    ]
-    if user_message:
-        args.append(f"--context={user_message[:200]}")  # Pass first 200 chars as context
-
-    result = call_execution_script("recommendations-step", args)
-
-    return {
-        "step7_recommendations": result.get("recommendations", []),
-        "step7_best_practices": result.get("best_practices", []),
-        "step7_warnings": result.get("warnings", [])
-    }
-
-
 def step8_progress_tracking(state: FlowState) -> dict:
     """Step 8: Progress tracking"""
     result = call_execution_script("progress-step")
@@ -343,7 +321,6 @@ def create_level3_subgraph():
     graph.add_node("step4_model", step4_model_selection)
     graph.add_node("step5_skill", step5_skill_agent_selection)
     graph.add_node("step6_tools", step6_tool_optimization)
-    graph.add_node("step7_recs", step7_auto_recommendations)
     graph.add_node("step8_progress", step8_progress_tracking)
     graph.add_node("step9_commit", step9_git_commit_preparation)
     graph.add_node("step10_session", step10_session_save)
@@ -358,8 +335,7 @@ def create_level3_subgraph():
     graph.add_edge("step3_context", "step4_model")
     graph.add_edge("step4_model", "step5_skill")
     graph.add_edge("step5_skill", "step6_tools")
-    graph.add_edge("step6_tools", "step7_recs")
-    graph.add_edge("step7_recs", "step8_progress")
+    graph.add_edge("step6_tools", "step8_progress")
     graph.add_edge("step8_progress", "step9_commit")
     graph.add_edge("step9_commit", "step10_session")
     graph.add_edge("step10_session", "step11_prevention")
