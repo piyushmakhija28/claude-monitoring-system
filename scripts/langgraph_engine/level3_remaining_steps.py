@@ -112,12 +112,20 @@ Respond with ONLY the model name (haiku, sonnet, or opus). No explanation needed
         project_root: Optional[str] = None
     ) -> Dict[str, Any]:
         """
-        Execute detailed planning phase with code exploration.
+        Execute detailed planning phase with tool-optimized code exploration.
 
         Only runs if Step 1 returned plan_required=True.
 
-        WORKFLOW.md SPEC: Use OPUS + exploration tools (Read, Grep, Search)
-        This implementation grounds plans in actual codebase analysis.
+        WORKFLOW.md SPEC: Use exploration tools (Read, Grep, Search) with optimization
+        - Read: offset/limit (max 500 lines per file)
+        - Grep: head_limit (max 50 matches)
+        - Search: max_results optimization (max 10 results)
+
+        This implementation:
+        1. Uses tool-like methods for exploration (_tool_read, _tool_grep, _tool_search)
+        2. Enforces optimization rules explicitly
+        3. Grounds planning in actual codebase analysis
+        4. Follows WORKFLOW.md specification for tool usage
 
         Args:
             toon: TOON object from Level 1
@@ -130,19 +138,21 @@ Respond with ONLY the model name (haiku, sonnet, or opus). No explanation needed
                 "files_affected": List[str],
                 "phases": List[Dict],
                 "risks": Dict,
-                "code_context": str,  # Code snippets used for planning
+                "code_context": str,  # Code snippets from tool-optimized exploration
+                "selected_model": str,  # Model used (haiku/sonnet/opus)
                 "success": bool
             }
         """
         logger.info("=" * 60)
-        logger.info("LEVEL 3 - STEP 2: PLAN EXECUTION (with code exploration)")
+        logger.info("LEVEL 3 - STEP 2: PLAN EXECUTION (with tool-optimized exploration)")
         logger.info("=" * 60)
+        logger.info("WORKFLOW.md SPEC: Using Read (offset/limit), Grep (head_limit), Search (optimization)")
 
         step_start = time.time()
 
         try:
-            # EXPLORATION PHASE: Analyze codebase before planning
-            logger.info("→ Analyzing codebase structure...")
+            # EXPLORATION PHASE: Use tool-optimized methods (Read, Grep, Search)
+            logger.info("→ Running tool-optimized codebase exploration...")
             code_context = self._explore_codebase(user_requirement, project_root)
 
             # Build enriched prompt with code analysis
@@ -279,19 +289,158 @@ Be very specific and actionable - mention actual file paths and existing functio
             "mitigation": mitigation
         }
 
+    # ===== TOOL-OPTIMIZED EXPLORATION (WORKFLOW.md: Read, Grep, Search) =====
+
+    def _tool_read(self, file_path: str, offset: int = 0, limit: int = 500) -> str:
+        """Simulate Claude's Read tool with offset/limit optimization.
+
+        WORKFLOW.md SPEC: Read (with offset/limit for large files)
+
+        Args:
+            file_path: Path to file relative to project root
+            offset: Starting line number (0-indexed)
+            limit: Maximum lines to read (max 500)
+
+        Returns:
+            File contents from offset to offset+limit
+        """
+        try:
+            # Enforce limit (max 500 lines)
+            if limit > 500:
+                logger.warning(f"Read limit {limit} exceeds max 500, using 500")
+                limit = 500
+
+            full_path = self.session_dir.parent / file_path
+            if not full_path.exists():
+                return f"File not found: {file_path}"
+
+            with open(full_path, 'r', encoding='utf-8', errors='ignore') as f:
+                lines = f.readlines()
+
+            # Apply offset and limit
+            start = min(offset, len(lines))
+            end = min(start + limit, len(lines))
+            selected_lines = lines[start:end]
+
+            result = f"=== {file_path} (lines {start}-{end}) ===\n"
+            result += "".join(selected_lines)
+            return result
+
+        except Exception as e:
+            return f"Error reading {file_path}: {e}"
+
+    def _tool_grep(self, pattern: str, glob_pattern: str = "**/*.py", head_limit: int = 20) -> str:
+        """Simulate Claude's Grep tool with head_limit optimization.
+
+        WORKFLOW.md SPEC: Grep (with head_limit)
+
+        Args:
+            pattern: Regex pattern to search for
+            glob_pattern: File glob pattern (e.g., "**/*.py")
+            head_limit: Maximum matches to return (max 50)
+
+        Returns:
+            List of matching files and lines
+        """
+        try:
+            # Enforce head_limit (max 50)
+            if head_limit > 50:
+                logger.warning(f"Grep head_limit {head_limit} exceeds max 50, using 50")
+                head_limit = 50
+
+            root = self.session_dir.parent
+            matches = []
+            match_count = 0
+
+            for file_path in root.glob(glob_pattern):
+                if not file_path.is_file():
+                    continue
+
+                try:
+                    with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                        for line_num, line in enumerate(f, 1):
+                            if pattern.lower() in line.lower():
+                                rel_path = file_path.relative_to(root)
+                                matches.append(f"{rel_path}:{line_num}: {line.strip()}")
+                                match_count += 1
+                                if match_count >= head_limit:
+                                    break
+                except Exception:
+                    pass
+
+                if match_count >= head_limit:
+                    break
+
+            result = f"=== Grep: {pattern} ({match_count} matches, limit {head_limit}) ===\n"
+            result += "\n".join(matches[:head_limit])
+            return result
+
+        except Exception as e:
+            return f"Error in grep: {e}"
+
+    def _tool_search(self, query: str, max_results: int = 10) -> str:
+        """Simulate Claude's Search tool with optimization.
+
+        WORKFLOW.md SPEC: Search (with optimization)
+
+        Args:
+            query: Search query
+            max_results: Maximum results to return
+
+        Returns:
+            List of relevant files and context
+        """
+        try:
+            # Limit results
+            max_results = min(max_results, 10)
+
+            root = self.session_dir.parent
+            keywords = query.lower().split()[:5]  # Take first 5 keywords
+            results = {}
+
+            # Search for files matching keywords
+            for file_path in root.rglob("*.py"):
+                if not file_path.is_file():
+                    continue
+
+                try:
+                    with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                        content = f.read()
+
+                    # Count keyword matches
+                    matches = sum(content.lower().count(kw) for kw in keywords)
+                    if matches > 0:
+                        rel_path = file_path.relative_to(root)
+                        results[str(rel_path)] = matches
+
+                except Exception:
+                    pass
+
+            # Sort by match count and return top results
+            sorted_results = sorted(results.items(), key=lambda x: x[1], reverse=True)
+            result = f"=== Search: {query} ({len(sorted_results)} matches) ===\n"
+            result += "\n".join(f"{path}: {count} matches" for path, count in sorted_results[:max_results])
+            return result
+
+        except Exception as e:
+            return f"Error in search: {e}"
+
     def _explore_codebase(self, user_requirement: str, project_root: Optional[str] = None) -> str:
         """
-        Explore codebase to ground planning in actual code.
+        Explore codebase using tool-optimized methods (Read, Grep, Search).
 
         WORKFLOW.md SPEC: Use exploration tools (Read, Grep, Search)
-        This method analyzes the codebase structure and finds relevant code.
+        This method uses tool-like calls with optimization rules:
+        - Read: offset/limit (max 500 lines per file)
+        - Grep: head_limit (max 50 matches)
+        - Search: max_results optimization
 
         Args:
             user_requirement: User's requirement to search for related code
             project_root: Root directory to explore (defaults to session_dir)
 
         Returns:
-            String containing analysis of codebase structure and relevant code snippets
+            String containing exploration results from tool calls
         """
         if project_root is None:
             project_root = str(self.session_dir)
@@ -299,37 +448,42 @@ Be very specific and actionable - mention actual file paths and existing functio
         try:
             analysis_parts = []
 
-            # 1. Analyze directory structure
-            analysis_parts.append("=== PROJECT STRUCTURE ===")
-            structure = self._analyze_directory_structure(project_root)
-            analysis_parts.append(structure)
+            # 1. Search for relevant files (TOOL: Search)
+            logger.info("→ Searching for relevant files...")
+            analysis_parts.append("=== SEARCH RESULTS ===")
+            search_result = self._tool_search(user_requirement, max_results=10)
+            analysis_parts.append(search_result)
 
-            # 2. Find relevant files based on requirement keywords
-            analysis_parts.append("\n=== RELEVANT FILES FOR THIS REQUIREMENT ===")
-            relevant_files = self._find_relevant_files(user_requirement, project_root)
-            if relevant_files:
-                for file_path in relevant_files[:5]:  # Limit to top 5
-                    analysis_parts.append(f"- {file_path}")
+            # 2. Grep for keyword matches (TOOL: Grep with head_limit)
+            logger.info("→ Finding code patterns...")
+            analysis_parts.append("\n=== CODE PATTERNS (Grep with head_limit=20) ===")
+            keywords = user_requirement.lower().split()[:3]
+            if keywords:
+                for keyword in keywords:
+                    grep_result = self._tool_grep(keyword, glob_pattern="**/*.py", head_limit=20)
+                    analysis_parts.append(grep_result)
             else:
-                analysis_parts.append("(No specific matches found)")
+                analysis_parts.append("(No keywords to search)")
 
-            # 3. Analyze project patterns
-            analysis_parts.append("\n=== PROJECT PATTERNS ===")
-            patterns = self._detect_project_patterns(project_root)
-            analysis_parts.append(patterns)
-
-            # 4. Find key architectural files
-            analysis_parts.append("\n=== KEY ARCHITECTURAL FILES ===")
+            # 3. Read key files (TOOL: Read with offset/limit)
+            logger.info("→ Reading key file contents...")
+            analysis_parts.append("\n=== KEY FILE CONTENTS (Read with limit=500) ===")
             key_files = self._find_key_files(project_root)
             for file_type, files in key_files.items():
                 if files:
-                    analysis_parts.append(f"{file_type}: {', '.join(files[:3])}")
+                    for file_path in files[:2]:  # Read first 2 key files
+                        try:
+                            read_result = self._tool_read(file_path, offset=0, limit=500)
+                            analysis_parts.append(f"\n{read_result}")
+                        except Exception as e:
+                            logger.debug(f"Could not read {file_path}: {e}")
 
-            # 5. Extract code snippets from relevant files
-            analysis_parts.append("\n=== CODE CONTEXT FROM RELEVANT FILES ===")
-            code_snippets = self._extract_code_snippets(relevant_files, max_files=3)
-            analysis_parts.append(code_snippets)
+            # 4. Project structure (informational)
+            analysis_parts.append("\n=== PROJECT STRUCTURE ===")
+            structure = self._analyze_directory_structure(project_root)
+            analysis_parts.append(structure)
 
+            logger.info("✓ Codebase exploration completed with tool-optimized methods")
             return "\n".join(analysis_parts)
 
         except Exception as e:
