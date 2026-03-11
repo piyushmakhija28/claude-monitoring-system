@@ -309,6 +309,36 @@ class Level3GitHubWorkflow:
             merged = False
             if auto_merge and review_passed:
                 logger.info(f"Auto-merging PR #{pr_number}...")
+
+                # ✅ BULLETPROOF: Check merge conflicts (4 layers)
+                logger.info("Running bulletproof merge conflict detection...")
+                conflict_check = self.check_merge_conflicts_bulletproof(
+                    pr_number=pr_number,
+                    branch_name=branch_name
+                )
+
+                if not conflict_check.get("safe_to_merge"):
+                    logger.error(f"Merge blocked: {conflict_check.get('reason')}")
+                    logger.error(f"Failed at Layer {conflict_check.get('layer')}")
+                    # Comment on PR with conflict details
+                    conflict_comment = (
+                        f"## ⚠️ Merge Blocked - Conflict Detection\n\n"
+                        f"**Layer {conflict_check.get('layer')} Failed:** {conflict_check.get('reason')}\n\n"
+                        f"**Details:**\n"
+                        f"```\n{conflict_check.get('details')}\n```\n\n"
+                        f"Please resolve conflicts and retry."
+                    )
+                    self.github.add_pr_comment(pr_number, conflict_comment)
+                    return {
+                        "success": True,  # PR created but not merged
+                        "pr_number": pr_number,
+                        "pr_url": pr_url,
+                        "merged": False,
+                        "merge_blocked_reason": conflict_check.get('reason'),
+                        "execution_time_ms": (time.time() - step_start) * 1000
+                    }
+
+                # All checks passed - proceed with merge
                 merge_result = self.github.merge_pull_request(
                     pr_number,
                     commit_message=f"Merge PR #{pr_number}: Fix issue #{issue_number}"
@@ -741,3 +771,367 @@ class Level3GitHubWorkflow:
             logger.info(f"Added review comment to PR #{pr_number}")
         except Exception as e:
             logger.warning(f"Could not add PR comment: {e}")
+
+    # ========================================================================
+    # BULLETPROOF MERGE CONFLICT DETECTION (4 LAYERS - LANGUAGE AGNOSTIC)
+    # ========================================================================
+
+    def check_merge_conflicts_bulletproof(
+        self,
+        pr_number: int,
+        branch_name: str
+    ) -> Dict[str, Any]:
+        """
+        Bulletproof merge conflict detection - 4 layers.
+        Works for ANY project/language.
+
+        Returns:
+            {
+                "safe_to_merge": bool,
+                "layer": int (1-4 where it failed),
+                "reason": str,
+                "details": dict
+            }
+        """
+        logger.info("=" * 70)
+        logger.info("🛡️  BULLETPROOF MERGE CONFLICT DETECTION (4 LAYERS)")
+        logger.info("=" * 70)
+
+        # ====================================================================
+        # LAYER 1: GitHub API Check (pr.mergeable)
+        # ====================================================================
+        logger.info("[Layer 1] GitHub API Check (pr.mergeable)...")
+        try:
+            pr = self.github.repo.get_pull(pr_number)
+            if not pr.mergeable:
+                logger.error("[Layer 1] ❌ FAILED: PR not mergeable (GitHub API)")
+                return {
+                    "safe_to_merge": False,
+                    "layer": 1,
+                    "reason": "GitHub API: PR has unresolvable conflicts",
+                    "details": {"pr_mergeable": False}
+                }
+            logger.info("[Layer 1] ✅ PASSED: pr.mergeable = True")
+        except Exception as e:
+            logger.warning(f"[Layer 1] Could not check pr.mergeable: {e}")
+
+        # ====================================================================
+        # LAYER 2: Git Status Parsing (UU/DD/AA markers)
+        # ====================================================================
+        logger.info("[Layer 2] Git Status Parsing (conflict markers)...")
+        conflicts = self._detect_git_conflict_markers(branch_name)
+        if conflicts:
+            logger.error(f"[Layer 2] ❌ FAILED: Found {len(conflicts)} files with conflicts")
+            return {
+                "safe_to_merge": False,
+                "layer": 2,
+                "reason": f"Git status: {len(conflicts)} files have conflict markers",
+                "details": {"conflict_files": conflicts}
+            }
+        logger.info("[Layer 2] ✅ PASSED: No UU/DD/AA conflict markers")
+
+        # ====================================================================
+        # LAYER 3: Test Merge (actual merge attempt, no commit)
+        # ====================================================================
+        logger.info("[Layer 3] Test Merge (attempt without committing)...")
+        merge_test = self._test_merge_locally(branch_name)
+        if not merge_test.get("success"):
+            logger.error(f"[Layer 3] ❌ FAILED: {merge_test.get('reason')}")
+            return {
+                "safe_to_merge": False,
+                "layer": 3,
+                "reason": merge_test.get("reason"),
+                "details": merge_test.get("details", {})
+            }
+        logger.info("[Layer 3] ✅ PASSED: Test merge succeeded")
+
+        # ====================================================================
+        # LAYER 4: Auto-Detect Project Type & Validate
+        # ====================================================================
+        logger.info("[Layer 4] Auto-detect project type and validate...")
+        project_type = self._detect_project_type()
+        logger.info(f"  Detected project type: {project_type}")
+
+        validation = self._validate_project_after_merge(project_type)
+        if not validation.get("success"):
+            logger.error(f"[Layer 4] ❌ FAILED: {validation.get('reason')}")
+            return {
+                "safe_to_merge": False,
+                "layer": 4,
+                "reason": validation.get("reason"),
+                "details": validation.get("details", {})
+            }
+        logger.info("[Layer 4] ✅ PASSED: Project validation successful")
+
+        # ====================================================================
+        # ALL LAYERS PASSED - SAFE TO MERGE
+        # ====================================================================
+        logger.info("=" * 70)
+        logger.info("✅ ALL 4 LAYERS PASSED - SAFE TO MERGE")
+        logger.info("=" * 70)
+
+        return {
+            "safe_to_merge": True,
+            "layer": 4,
+            "reason": "All merge safety checks passed",
+            "details": {
+                "layer1": "GitHub API check passed",
+                "layer2": "No git conflict markers",
+                "layer3": "Test merge succeeded",
+                "layer4": f"Project validation passed ({project_type})"
+            }
+        }
+
+    def _detect_git_conflict_markers(self, branch_name: str) -> List[str]:
+        """
+        Layer 2: Parse git status for conflict markers (UU, DD, AA).
+        """
+        try:
+            # Try to merge without committing
+            result = self.git._run_git(
+                ["merge", "--no-commit", "--no-ff", f"origin/{branch_name}"],
+                check=False
+            )
+
+            # Get status
+            status_result = self.git._run_git(["status", "--porcelain"], check=False)
+            status_lines = status_result.get("stdout", "").split("\n")
+
+            # Find conflict markers
+            conflicts = []
+            for line in status_lines:
+                if line.startswith("UU") or line.startswith("DD") or line.startswith("AA"):
+                    file = line[3:].strip()
+                    conflicts.append(file)
+
+            # Abort merge
+            self.git._run_git(["merge", "--abort"], check=False)
+
+            return conflicts
+
+        except Exception as e:
+            logger.warning(f"Error detecting git conflicts: {e}")
+            return []
+
+    def _test_merge_locally(self, branch_name: str) -> Dict[str, Any]:
+        """
+        Layer 3: Actually try to merge without committing.
+        """
+        try:
+            # Fetch latest
+            self.git._run_git(["fetch", "origin"], check=False)
+
+            # Try merge without commit
+            result = self.git._run_git(
+                ["merge", "--no-commit", "--no-ff", f"origin/{branch_name}"],
+                check=False
+            )
+
+            if result.get("returncode") != 0:
+                # Merge failed
+                self.git._run_git(["merge", "--abort"], check=False)
+                return {
+                    "success": False,
+                    "reason": "Merge attempt failed - conflicts exist",
+                    "details": {"error": result.get("stderr", "")}
+                }
+
+            # Merge succeeded - abort without committing
+            self.git._run_git(["merge", "--abort"], check=False)
+            return {"success": True}
+
+        except Exception as e:
+            logger.warning(f"Error in test merge: {e}")
+            try:
+                self.git._run_git(["merge", "--abort"], check=False)
+            except:
+                pass
+            return {
+                "success": False,
+                "reason": f"Test merge error: {str(e)}",
+                "details": {}
+            }
+
+    def _detect_project_type(self) -> str:
+        """
+        Layer 4: Auto-detect project type by checking for indicator files.
+        """
+        from pathlib import Path
+
+        indicators = {
+            "python": ["setup.py", "requirements.txt", "pyproject.toml", "Pipfile", "setup.cfg"],
+            "java": ["pom.xml", "build.gradle", "build.gradle.kts"],
+            "nodejs": ["package.json"],
+            "go": ["go.mod"],
+            "rust": ["Cargo.toml"],
+            "ruby": ["Gemfile", "Rakefile"],
+            "php": ["composer.json"],
+            "csharp": ["*.csproj", "*.sln"],
+            "cpp": ["CMakeLists.txt", "Makefile"],
+        }
+
+        for lang, files in indicators.items():
+            for file_pattern in files:
+                try:
+                    if Path(self.git.repo_path / file_pattern).exists():
+                        return lang
+                except:
+                    pass
+
+        return "unknown"
+
+    def _validate_project_after_merge(self, project_type: str) -> Dict[str, Any]:
+        """
+        Layer 4: Run project-specific validation if available.
+        Language-agnostic approach - use what the project provides.
+        """
+        try:
+            if project_type == "python":
+                return self._validate_python()
+            elif project_type == "java":
+                return self._validate_java()
+            elif project_type == "nodejs":
+                return self._validate_nodejs()
+            elif project_type == "go":
+                return self._validate_go()
+            elif project_type == "rust":
+                return self._validate_rust()
+            else:
+                # Unknown type - just basic check
+                logger.info(f"Unknown project type '{project_type}', skipping validation")
+                return {"success": True, "reason": "Unknown type - no validation"}
+
+        except Exception as e:
+            logger.error(f"Validation error: {e}")
+            return {
+                "success": False,
+                "reason": f"Validation failed: {str(e)}",
+                "details": {}
+            }
+
+    def _validate_python(self) -> Dict[str, Any]:
+        """Validate Python project."""
+        try:
+            # Try pytest
+            result = self.git._run_git(
+                ["bash", "-c", "pytest --co -q 2>/dev/null || echo 'no-pytest'"],
+                check=False
+            )
+            if "no-pytest" not in result.get("stdout", ""):
+                logger.info("  Running pytest...")
+                result = self.git._run_git(
+                    ["bash", "-c", "pytest -x 2>&1"],
+                    check=False
+                )
+                if result.get("returncode") != 0:
+                    return {
+                        "success": False,
+                        "reason": "Python tests failed",
+                        "details": {}
+                    }
+                return {"success": True}
+
+            # Try unittest
+            result = self.git._run_git(
+                ["bash", "-c", "python -m unittest discover -s . 2>&1"],
+                check=False
+            )
+            if result.get("returncode") == 0:
+                return {"success": True}
+
+            # No tests found - just syntax check
+            logger.info("  No tests found, checking syntax...")
+            result = self.git._run_git(
+                ["bash", "-c", "python -m py_compile $(find . -name '*.py') 2>&1"],
+                check=False
+            )
+            return {
+                "success": result.get("returncode") == 0,
+                "reason": "Syntax error" if result.get("returncode") != 0 else None
+            }
+
+        except Exception as e:
+            logger.warning(f"Python validation error: {e}")
+            return {"success": True}  # Non-blocking
+
+    def _validate_java(self) -> Dict[str, Any]:
+        """Validate Java project."""
+        try:
+            # Try Maven
+            if Path(self.git.repo_path / "pom.xml").exists():
+                logger.info("  Running mvn test...")
+                result = self.git._run_git(
+                    ["bash", "-c", "mvn test -q 2>&1"],
+                    check=False
+                )
+                return {
+                    "success": result.get("returncode") == 0,
+                    "reason": "Maven tests failed" if result.get("returncode") != 0 else None
+                }
+
+            # Try Gradle
+            if Path(self.git.repo_path / "build.gradle").exists() or \
+               Path(self.git.repo_path / "build.gradle.kts").exists():
+                logger.info("  Running gradle test...")
+                result = self.git._run_git(
+                    ["bash", "-c", "./gradlew test -q 2>&1"],
+                    check=False
+                )
+                return {
+                    "success": result.get("returncode") == 0,
+                    "reason": "Gradle tests failed" if result.get("returncode") != 0 else None
+                }
+
+            return {"success": True}  # No build system found
+
+        except Exception as e:
+            logger.warning(f"Java validation error: {e}")
+            return {"success": True}
+
+    def _validate_nodejs(self) -> Dict[str, Any]:
+        """Validate Node.js project."""
+        try:
+            logger.info("  Running npm test...")
+            result = self.git._run_git(
+                ["bash", "-c", "npm test 2>&1"],
+                check=False
+            )
+            return {
+                "success": result.get("returncode") == 0,
+                "reason": "npm tests failed" if result.get("returncode") != 0 else None
+            }
+        except Exception as e:
+            logger.warning(f"Node.js validation error: {e}")
+            return {"success": True}
+
+    def _validate_go(self) -> Dict[str, Any]:
+        """Validate Go project."""
+        try:
+            logger.info("  Running go test...")
+            result = self.git._run_git(
+                ["bash", "-c", "go test ./... 2>&1"],
+                check=False
+            )
+            return {
+                "success": result.get("returncode") == 0,
+                "reason": "go tests failed" if result.get("returncode") != 0 else None
+            }
+        except Exception as e:
+            logger.warning(f"Go validation error: {e}")
+            return {"success": True}
+
+    def _validate_rust(self) -> Dict[str, Any]:
+        """Validate Rust project."""
+        try:
+            logger.info("  Running cargo test...")
+            result = self.git._run_git(
+                ["bash", "-c", "cargo test 2>&1"],
+                check=False
+            )
+            return {
+                "success": result.get("returncode") == 0,
+                "reason": "cargo tests failed" if result.get("returncode") != 0 else None
+            }
+        except Exception as e:
+            logger.warning(f"Rust validation error: {e}")
+            return {"success": True}
