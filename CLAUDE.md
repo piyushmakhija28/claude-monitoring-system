@@ -268,7 +268,6 @@ claude-insight/
 │           ├── 04-model-selection/
 │           ├── 05-skill-agent-selection/
 │           ├── 06-tool-optimization/
-│           ├── 07-recommendations/
 │           ├── 08-progress-tracking/
 │           ├── 09-git-commit/
 │           └── failure-prevention/

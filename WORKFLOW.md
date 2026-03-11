@@ -339,19 +339,29 @@ Post-Processing:
   - Keep ONLY final merged TOON
 ```
 
-#### STEP 6: REMOVE RECOMMENDATION SYSTEM
+#### STEP 6: SKILL VALIDATION & DOWNLOAD
 
 ```
 Action:
-  Disable old recommendation scripts
+  1. Get skills selected by Step 5
+  2. Validate: Check if they exist on system
+  3. Download: Fetch missing skills from Claude Code GitHub
+  4. Return: Selected skills with full content ready to use
 
-Reason:
-  Recommendation engines require RAG (not implemented)
+Process:
+  - Scan available skills/agents locally
+  - Validate LLM recommendations from Step 5
+  - Download any missing skills from internet
+  - Prepare skills for Step 7 prompt generation
 
-Affected:
-  - auto-recommendations.py (disabled)
-  - [recommendation related code]
+Output:
+  - final_skills: ["docker", "kubernetes", ...]
+  - final_agents: ["devops-engineer", ...]
+  - downloaded: List of newly downloaded skills
 ```
+
+**Note:** Old recommendation system (requiring RAG) has been completely removed.
+This step replaces it with practical skill validation and download capability.
 
 #### STEP 7: FINAL PROMPT GENERATION
 
