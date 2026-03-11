@@ -79,11 +79,17 @@ from .subgraphs.level3_execution_v2 import (
 # ============================================================================
 
 
-def route_after_level_minus1(state: FlowState) -> Literal["ask_level_minus1_fix", "level1_context"]:
-    """Route based on Level -1 blocking status."""
-    if state.get("level_minus1_status") == "BLOCKED":
+def route_after_level_minus1(state: FlowState) -> Literal["ask_level_minus1_fix", "level1_session"]:
+    """Route based on Level -1 status.
+
+    - If OK: go to Level 1 session loader (level1_session)
+    - If FAILED: ask user for recovery (ask_level_minus1_fix)
+    """
+    status = state.get("level_minus1_status", "FAILED")
+    if status == "OK":
+        return "level1_session"
+    else:
         return "ask_level_minus1_fix"
-    return "level1_context"
 
 
 def route_after_level_minus1_user_choice(state: FlowState) -> Literal["fix_level_minus1", "level1_session"]:
@@ -579,13 +585,13 @@ def create_flow_graph():
     graph.add_node("ask_level_minus1_fix", ask_level_minus1_fix)
     graph.add_node("fix_level_minus1", fix_level_minus1_issues)
 
-    # Route based on blocking status
+    # Route based on Level -1 status
     graph.add_conditional_edges(
         "level_minus1_merge",
         route_after_level_minus1,
         {
             "ask_level_minus1_fix": "ask_level_minus1_fix",
-            "level1_context": "level1_context",
+            "level1_session": "level1_session",  # Session loader is first Level 1 node
         },
     )
 
