@@ -484,7 +484,7 @@ MIT License - see LICENSE file for details
 **Repository:** https://github.com/piyushmakhija28/{context.name}
 **Last Updated:** {datetime.now().strftime('%Y-%m-%d')}
 """
-        file_path.write_text(content)
+        file_path.write_text(content, encoding='utf-8')
         self.logger.info(f"{'Created' if not file_path.exists() else 'Updated'} {file_path.name}")
 
     def update_or_create_claude_md(self, file_path: Path, context: ProjectContext, files_modified: List[str]):
@@ -622,7 +622,7 @@ See environment variables in `.env.example`:
 **Last Updated:** {datetime.now().strftime('%Y-%m-%d')}
 **Next Review:** {datetime.now().strftime('%Y-%m-%d')}
 """
-        file_path.write_text(content)
+        file_path.write_text(content, encoding='utf-8')
         self.logger.info(f"{'Created' if not file_path.exists() else 'Updated'} {file_path.name}")
 
     def update_or_create_sra(self, file_path: Path, context: ProjectContext, files_modified: List[str]):
@@ -876,7 +876,7 @@ The system aims to:
 **Last Modified:** {datetime.now().strftime('%Y-%m-%d')}
 **Status:** Production Ready
 """
-        file_path.write_text(content)
+        file_path.write_text(content, encoding='utf-8')
         self.logger.info(f"{'Created' if not file_path.exists() else 'Updated'} {file_path.name}")
 
     def update_or_create_changelog(self, file_path: Path, context: ProjectContext, files_modified: List[str]):
@@ -935,7 +935,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 [{context.version}]: https://github.com/piyushmakhija28/{context.name}/compare/v0.1.0...v{context.version}
 [0.1.0]: https://github.com/piyushmakhija28/{context.name}/releases/tag/v0.1.0
 """
-        file_path.write_text(content)
+        file_path.write_text(content, encoding='utf-8')
         self.logger.info(f"{'Created' if not file_path.exists() else 'Updated'} {file_path.name}")
 
     def update_or_create_version(self, file_path: Path, context: ProjectContext, files_modified: List[str]):
@@ -973,7 +973,7 @@ Using Semantic Versioning (MAJOR.MINOR.PATCH):
 | {context.version} | Stable | TBD |
 | 0.1.0 | Legacy | 2026-06-01 |
 """
-        file_path.write_text(content)
+        file_path.write_text(content, encoding='utf-8')
         self.logger.info(f"{'Created' if not file_path.exists() else 'Updated'} {file_path.name}")
 
     # Helper methods for formatting
