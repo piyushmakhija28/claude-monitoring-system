@@ -57,7 +57,10 @@ class ExecutionPhase(BaseModel):
 
 
 class ExecutionBlueprint(BaseModel):
-    """Level 3 Refined TOON - Execution blueprint after planning."""
+    """Level 3 Refined TOON - Execution blueprint after planning.
+
+    Enhanced with richer metadata for better planning and execution insights.
+    """
 
     session_id: str
     timestamp: datetime
@@ -69,6 +72,22 @@ class ExecutionBlueprint(BaseModel):
     selected_skills: List[str] = Field(default_factory=list)
     selected_agents: List[str] = Field(default_factory=list)
     execution_strategy: str = "sequential"
+
+    # Richer metadata fields (NEW)
+    project_type: Optional[str] = Field(
+        default=None,
+        description="Detected project type: Java, Python, Node, Go, Rust, etc."
+    )
+    detected_frameworks: List[str] = Field(
+        default_factory=list,
+        description="List of detected frameworks: Spring, Flask, React, Django, etc."
+    )
+    effort_estimate: int = Field(
+        default=5,
+        ge=1,
+        le=10,
+        description="Effort estimate (1=minimal, 10=very high) based on scope and complexity"
+    )
 
     class Config:
         json_encoder = {datetime: lambda v: v.isoformat()}

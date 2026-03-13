@@ -310,27 +310,68 @@ def fix_level_minus1_issues(state: FlowState) -> dict:
         except Exception as e:
             fix_errors.append(f"Could not check encoding: {e}")
 
-    # Fix 3: Windows path handling (report for user to fix)
+    # Fix 3: Windows path handling (convert backslashes to forward slashes)
     if not state.get("windows_path_check") and sys.platform == "win32":
         try:
+            import re
             project_root = Path(state.get("project_root", "."))
+            fixed_files = []
             issues = []
-            for py_file in list(project_root.glob("**/*.py"))[:20]:
+
+            for py_file in list(project_root.glob("**/*.py"))[:50]:
                 try:
                     content = py_file.read_text(encoding="utf-8", errors="ignore")
                     if "\\" in content and ":\\" in content:
-                        issues.append(str(py_file.relative_to(project_root)))
-                except Exception:
-                    pass
+                        # Original content to compare
+                        original_content = content
+
+                        # Pattern 1: Replace Windows drive paths (C:\, D:\, etc.)
+                        # Matches: C:\path\to\file or "C:\\path\\to\\file"
+                        content = re.sub(r'([A-Z]):\\([\\]*)', r'\1:/\2', content)
+                        content = re.sub(r'\\\\([\\]*)', r'/', content)
+
+                        # Pattern 2: Replace standalone backslash paths in strings
+                        # Matches paths that look like Windows paths
+                        lines = content.split('\n')
+                        new_lines = []
+                        for line in lines:
+                            # Replace backslashes with forward slashes in path-like strings
+                            # But be careful not to break escape sequences
+                            if '\\' in line and not line.strip().startswith('#'):
+                                # Replace double backslashes with single forward slash
+                                line = line.replace('\\\\', '/')
+                                # Replace single backslashes that look like path separators
+                                # (but not escape sequences like \n, \t, \r, etc.)
+                                line = re.sub(r'(?<!\\)\\(?![\\ntrv"\'])', '/', line)
+                            new_lines.append(line)
+
+                        content = '\n'.join(new_lines)
+
+                        # Only write back if content changed
+                        if content != original_content:
+                            py_file.write_text(content, encoding="utf-8")
+                            fixed_files.append(str(py_file.relative_to(project_root)))
+                        else:
+                            # File had backslashes but they were all escape sequences
+                            issues.append(str(py_file.relative_to(project_root)))
+                except Exception as e:
+                    fix_errors.append(f"Could not fix {py_file.name}: {e}")
+
+            if fixed_files:
+                fixed_issues.append(
+                    f"✓ Fixed backslash paths in {len(fixed_files)} files: {', '.join(fixed_files[:3])}"
+                )
 
             if issues:
                 fix_errors.append(
-                    f"Backslash paths need manual fix: {', '.join(issues[:2])}"
+                    f"Files with escape sequences only (not path separators): {', '.join(issues[:2])}"
                 )
-            else:
-                fixed_issues.append("✓ All paths use forward slashes")
+
+            if not fixed_files and not issues:
+                fixed_issues.append("✓ All paths already use forward slashes")
+
         except Exception as e:
-            fix_errors.append(f"Could not check paths: {e}")
+            fix_errors.append(f"Could not fix paths: {e}")
 
     return {
         "level_minus1_fixes_applied": fixed_issues,

@@ -19,6 +19,7 @@ from datetime import datetime
 from loguru import logger
 from .github_integration import GitHubIntegration
 from .git_operations import GitOperations
+from .ollama_service import OllamaService
 
 
 class Level3GitHubWorkflow:
@@ -28,6 +29,13 @@ class Level3GitHubWorkflow:
         self.session_dir = session_dir
         self.github = GitHubIntegration(repo_path=repo_path)
         self.git = GitOperations(repo_path=repo_path)
+
+        # Initialize Ollama service for intelligent label detection
+        try:
+            self.ollama = OllamaService()
+        except Exception as e:
+            logger.warning(f"Ollama service not available: {e}. Will use keyword-based label detection.")
+            self.ollama = None
 
     # ===== STEP 8: GITHUB ISSUE CREATION =====
 
@@ -111,19 +119,89 @@ class Level3GitHubWorkflow:
             }
 
     def _determine_issue_label(self, description: str) -> Optional[str]:
-        """Determine issue label from description content."""
+        """Determine issue label using LLM-based intelligent classification.
+
+        First tries Ollama LLM for sophisticated analysis, falls back to keyword matching.
+
+        Returns one of: bug, feature, enhancement, test, documentation, task
+        """
+        # Try LLM-based classification first
+        if self.ollama:
+            try:
+                label = self._classify_with_llm(description)
+                if label:
+                    logger.info(f"LLM classified issue as: {label}")
+                    return label
+            except Exception as e:
+                logger.warning(f"LLM classification failed: {e}. Using keyword fallback.")
+
+        # Fallback to keyword-based classification
+        return self._classify_with_keywords(description)
+
+    def _classify_with_llm(self, description: str) -> Optional[str]:
+        """Use Ollama LLM to intelligently classify issue label.
+
+        Args:
+            description: Issue description text
+
+        Returns:
+            One of: bug, feature, enhancement, test, documentation, task
+        """
+        system_prompt = """You are an expert software engineer analyzing GitHub issue descriptions to classify them.
+
+Classify the issue into ONE of these categories:
+- bug: Something is broken, errors, crashes, not working as expected
+- feature: New functionality, new capability requested
+- enhancement: Improvement to existing feature, optimization, refactoring
+- test: Testing related, unit tests, integration tests, test coverage
+- documentation: Documentation, README, comments, API docs
+- task: General task, chore, maintenance work
+
+IMPORTANT: Respond with ONLY the label name, nothing else. No explanation, no quotes. Just one word."""
+
+        prompt = f"Classify this GitHub issue:\n\n{description}"
+
+        try:
+            messages = [{"role": "user", "content": prompt}]
+            response = self.ollama.chat(
+                messages=messages,
+                model="fast_classification",
+                temperature=0.3,  # Lower temperature for consistent classification
+                system_prompt=system_prompt
+            )
+
+            if "error" in response:
+                logger.warning(f"LLM error: {response['error']}")
+                return None
+
+            label = response.get("message", {}).get("content", "").strip().lower()
+
+            # Validate label is one of expected values
+            valid_labels = ["bug", "feature", "enhancement", "test", "documentation", "task"]
+            if label in valid_labels:
+                return label
+            else:
+                logger.warning(f"LLM returned invalid label: {label}. Using keyword fallback.")
+                return None
+
+        except Exception as e:
+            logger.error(f"LLM classification error: {e}")
+            return None
+
+    def _classify_with_keywords(self, description: str) -> Optional[str]:
+        """Fallback keyword-based classification when LLM unavailable."""
         description_lower = description.lower()
 
-        # Simple keyword matching
-        if any(word in description_lower for word in ["bug", "fix", "broken", "error", "crash"]):
+        # Keyword-based heuristics (ordered by priority)
+        if any(word in description_lower for word in ["bug", "fix", "broken", "error", "crash", "issue", "problem"]):
             return "bug"
-        elif any(word in description_lower for word in ["feature", "new", "add", "implement"]):
+        elif any(word in description_lower for word in ["feature", "new", "add", "implement", "support"]):
             return "feature"
-        elif any(word in description_lower for word in ["enhance", "improve", "optimize"]):
+        elif any(word in description_lower for word in ["enhance", "improve", "optimize", "refactor", "simplify"]):
             return "enhancement"
-        elif any(word in description_lower for word in ["test", "testing", "coverage"]):
+        elif any(word in description_lower for word in ["test", "testing", "coverage", "unit test", "integration test"]):
             return "test"
-        elif any(word in description_lower for word in ["doc", "readme", "documentation"]):
+        elif any(word in description_lower for word in ["doc", "readme", "documentation", "comment", "comment", "guide"]):
             return "documentation"
         else:
             return "task"

@@ -723,9 +723,12 @@ Be very specific and actionable - mention actual file paths and existing functio
         tasks: List[Dict]
     ) -> Dict[str, Any]:
         """
-        Refine TOON to ExecutionBlueprint.
+        Refine TOON to ExecutionBlueprint with enriched metadata.
 
-        Compresses after planning phase.
+        Compresses after planning phase and detects:
+        - Project type (Java, Python, Node, etc.)
+        - Detected frameworks (Spring, Flask, React, etc.)
+        - Effort estimate (1-10 scale)
 
         Args:
             toon_analysis: Original ToonAnalysis from Level 1
@@ -742,17 +745,36 @@ Be very specific and actionable - mention actual file paths and existing functio
         step_start = time.time()
 
         try:
+            # Detect project metadata
+            files_affected = plan.get("files_affected", [])
+            project_type = self._detect_project_type(files_affected)
+            detected_frameworks = self._detect_frameworks(files_affected)
+            complexity_score = toon_analysis.get("complexity_score", 5)
+            effort_estimate = self._calculate_effort_estimate(
+                complexity_score=complexity_score,
+                files_count=len(files_affected),
+                framework_count=len(detected_frameworks)
+            )
+
+            logger.info(f"  Project type: {project_type}")
+            logger.info(f"  Detected frameworks: {detected_frameworks}")
+            logger.info(f"  Effort estimate: {effort_estimate}/10")
+
             blueprint = {
                 "session_id": toon_analysis.get("session_id"),
                 "timestamp": datetime.now().isoformat(),
-                "complexity_score": toon_analysis.get("complexity_score", 5),
+                "complexity_score": complexity_score,
                 "plan": plan.get("plan", ""),
-                "files_affected": plan.get("files_affected", []),
+                "files_affected": files_affected,
                 "phases": plan.get("phases", []),
                 "risks": plan.get("risks", {"risk_level": "medium", "factors": [], "mitigation": []}),
                 "selected_skills": [],  # To be filled in Step 5
                 "selected_agents": [],  # To be filled in Step 5
-                "execution_strategy": "sequential"
+                "execution_strategy": "sequential",
+                # New rich metadata fields
+                "project_type": project_type,
+                "detected_frameworks": detected_frameworks,
+                "effort_estimate": effort_estimate
             }
 
             # Validate with Pydantic
@@ -761,7 +783,7 @@ Be very specific and actionable - mention actual file paths and existing functio
             # Save to session
             self.session_manager.save_execution_blueprint(validated)
 
-            logger.info("✓ TOON refined to ExecutionBlueprint")
+            logger.info("✓ TOON refined to ExecutionBlueprint with enriched metadata")
 
             return {
                 "success": True,
@@ -777,6 +799,116 @@ Be very specific and actionable - mention actual file paths and existing functio
                 "error": str(e),
                 "execution_time_ms": (time.time() - step_start) * 1000
             }
+
+    def _detect_project_type(self, files_affected: List[str]) -> Optional[str]:
+        """Detect project type from file extensions and root files.
+
+        Returns: One of: Java, Python, Node, Go, Rust, C++, TypeScript, etc.
+        """
+        if not files_affected:
+            return None
+
+        # Count file type extensions
+        py_count = sum(1 for f in files_affected if f.endswith('.py'))
+        java_count = sum(1 for f in files_affected if f.endswith('.java'))
+        js_count = sum(1 for f in files_affected if f.endswith('.js'))
+        ts_count = sum(1 for f in files_affected if f.endswith('.ts'))
+        go_count = sum(1 for f in files_affected if f.endswith('.go'))
+        rs_count = sum(1 for f in files_affected if f.endswith('.rs'))
+        cpp_count = sum(1 for f in files_affected if f.endswith(('.cpp', '.cc', '.h')))
+
+        # Determine primary language
+        type_scores = {
+            'Python': py_count,
+            'Java': java_count,
+            'JavaScript': js_count,
+            'TypeScript': ts_count,
+            'Go': go_count,
+            'Rust': rs_count,
+            'C++': cpp_count,
+        }
+
+        detected = max(type_scores, key=type_scores.get) if max(type_scores.values()) > 0 else None
+        if detected:
+            logger.info(f"  Detected project type: {detected}")
+        return detected
+
+    def _detect_frameworks(self, files_affected: List[str]) -> List[str]:
+        """Detect frameworks from file patterns and imports.
+
+        Looks for common framework indicators in file paths and content.
+        """
+        frameworks = set()
+
+        # Framework detection patterns
+        patterns = {
+            'Spring': ['spring-boot', 'pom.xml', '@SpringBootApplication'],
+            'Flask': ['flask', 'requirements.txt'],
+            'Django': ['django', 'manage.py'],
+            'React': ['react', 'package.json', 'jsx', 'tsx'],
+            'Angular': ['angular', '@angular/'],
+            'Vue': ['vue', '.vue'],
+            'FastAPI': ['fastapi', 'uvicorn'],
+            'Express': ['express', 'node_modules'],
+            'Rails': ['rails', 'Gemfile'],
+            'Next.js': ['next', 'pages/', 'app/'],
+            'Svelte': ['svelte', '.svelte'],
+        }
+
+        # Check file paths for framework indicators
+        files_str = ' '.join(files_affected).lower()
+
+        for framework, indicators in patterns.items():
+            if any(indicator.lower() in files_str for indicator in indicators):
+                frameworks.add(framework)
+
+        if frameworks:
+            logger.info(f"  Detected frameworks: {', '.join(sorted(frameworks))}")
+
+        return sorted(list(frameworks))
+
+    def _calculate_effort_estimate(
+        self,
+        complexity_score: int,
+        files_count: int,
+        framework_count: int
+    ) -> int:
+        """Calculate effort estimate (1-10) based on multiple factors.
+
+        Formula:
+        - Base: complexity_score (1-10)
+        - File scale factor: +1 per 10 files (max +3)
+        - Framework complexity: +1 per framework (max +2)
+        - Clamped to 1-10 range
+
+        Args:
+            complexity_score: From Level 1 analysis (1-10)
+            files_count: Number of files affected
+            framework_count: Number of detected frameworks
+
+        Returns:
+            Effort estimate (1-10)
+        """
+        # Start with base complexity
+        effort = float(complexity_score)
+
+        # Add for file count (10 files = +1 effort)
+        file_factor = min(files_count // 10, 3)
+        effort += file_factor
+
+        # Add for framework complexity
+        framework_factor = min(framework_count, 2)
+        effort += framework_factor
+
+        # Clamp to 1-10 range
+        effort = max(1, min(10, int(effort)))
+
+        logger.debug(
+            f"  Effort calculation: "
+            f"base={complexity_score} + files({file_factor}) + frameworks({framework_factor}) = {effort}"
+        )
+
+        return effort
 
     # ===== STEP 6: SKILL VALIDATION =====
 
