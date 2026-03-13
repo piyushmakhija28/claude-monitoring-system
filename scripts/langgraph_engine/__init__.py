@@ -18,10 +18,25 @@ from .flow_state import FlowState
 from .orchestrator import create_flow_graph
 from .policy_node_adapter import PolicyNodeAdapter
 from .hooks_decorator import with_hooks
+from .checkpoint_manager import CheckpointManager, create_checkpoint_manager
+from .metrics_collector import MetricsCollector, create_metrics_collector
+from .recovery_handler import RecoveryHandler, resume_from_checkpoint
+from .error_logger import ErrorLogger, create_logger
+from .backup_manager import BackupManager, create_backup_manager
 
 __all__ = [
     'FlowState',
     'create_flow_graph',
     'PolicyNodeAdapter',
     'with_hooks',
+    'CheckpointManager',
+    'create_checkpoint_manager',
+    'MetricsCollector',
+    'create_metrics_collector',
+    'RecoveryHandler',
+    'resume_from_checkpoint',
+    'ErrorLogger',
+    'create_logger',
+    'BackupManager',
+    'create_backup_manager',
 ]
