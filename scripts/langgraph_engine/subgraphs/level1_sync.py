@@ -41,8 +41,12 @@ def node_session_loader(state: FlowState) -> dict:
     This MUST run first - creates the session container for this execution.
     """
     import uuid
+    import sys
 
     try:
+        # Debug: Check project_root before doing anything
+        print(f"[LEVEL 1 SESSION_LOADER] state['project_root'] at entry: '{state.get('project_root', 'MISSING')}'", file=sys.stderr)
+
         # Generate unique session ID
         session_id = f"session-{datetime.now().strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:8]}"
 
@@ -153,6 +157,12 @@ def node_context_loader(state: FlowState) -> dict:
     print(f"\n[LEVEL 1 CONTEXT LOADER] CALLED!", file=sys.stderr)
     try:
         import os
+        # Debug: Show what's in state
+        print(f"[LEVEL 1 CONTEXT LOADER] State keys: {list(state.keys())}", file=sys.stderr)
+        print(f"[LEVEL 1 CONTEXT LOADER] 'project_root' in state: {'project_root' in state}", file=sys.stderr)
+        if "project_root" in state:
+            print(f"[LEVEL 1 CONTEXT LOADER] state['project_root']: '{state['project_root']}'", file=sys.stderr)
+
         project_root = Path(state.get("project_root", "."))
         session_path = Path(state.get("session_path", ""))
 

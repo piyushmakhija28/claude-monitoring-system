@@ -227,10 +227,12 @@ def fix_level_minus1_issues(state: FlowState) -> dict:
     """
     import subprocess
     import os
+    import sys
 
     DEBUG = os.getenv("CLAUDE_DEBUG") == "1"
     if DEBUG:
         print("[L-1-FIX] Starting auto-fix attempts...", file=__import__('sys').stderr)
+        print(f"[L-1-FIX] state['project_root'] at entry: '{state.get('project_root', 'MISSING')}'", file=sys.stderr)
 
     fixes_applied = []
     fixes_failed = []
@@ -788,8 +790,13 @@ def create_initial_state(session_id: str = "", project_root: str = "", user_mess
     # **CRITICAL FIX**: Set project_root FIRST (before any immutable field is created)
     # project_root is Annotated[_keep_first_value] so once set, it can't change
     # We must set it to the correct value BEFORE creating the state
+    import sys
+    print(f"[CREATE_INITIAL_STATE] Input project_root: '{project_root}'", file=sys.stderr)
     if not project_root:
-        project_root = str(Path.home() / "Documents" / "workspace-spring-tool-suite-4-4.27.0-new" / "claude-insight")
+        hardcoded = str(Path.home() / "Documents" / "workspace-spring-tool-suite-4-4.27.0-new" / "claude-insight")
+        project_root = hardcoded
+        print(f"[CREATE_INITIAL_STATE] Set project_root to hardcoded: {project_root}", file=sys.stderr)
+    print(f"[CREATE_INITIAL_STATE] Final project_root before state creation: {project_root}", file=sys.stderr)
 
     if not session_id:
         import uuid
@@ -799,7 +806,7 @@ def create_initial_state(session_id: str = "", project_root: str = "", user_mess
 
     # ONLY initialize immutable fields (with _keep_first_value reducer)
     # All other fields will be created/updated by nodes
-    return FlowState(
+    initial_state = FlowState(
         # Immutable session info
         session_id=session_id,
         timestamp=datetime.now().isoformat(),
@@ -810,6 +817,11 @@ def create_initial_state(session_id: str = "", project_root: str = "", user_mess
         user_message_length=len(user_message) if user_message else 0,
         # Other fields will be added by nodes as needed
     )
+
+    # Verify project_root was set correctly
+    print(f"[CREATE_INITIAL_STATE] After FlowState creation: project_root='{initial_state.get('project_root', 'MISSING')}'", file=sys.stderr)
+
+    return initial_state
 
 
 def invoke_flow(
