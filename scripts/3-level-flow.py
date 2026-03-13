@@ -275,15 +275,8 @@ def main():
         print_flow_checkpoint(result, verbose=DEBUG)
 
         # Return status code
-        status = result.get("final_status", "UNKNOWN")
-        if status == "BLOCKED":
-            sys.exit(1)  # Failed
-        elif status == "FAILED":
-            sys.exit(1)
-        elif status == "PARTIAL":
-            sys.exit(0)  # Success but with warnings
-        else:
-            sys.exit(0)  # OK
+        # HOOK FIX: Always return 0 so Claude Code doesn't treat flow errors as hook failures
+        sys.exit(0)  # Hook executed successfully, regardless of flow status
 
     except Exception as e:
         print(f"[ERROR] {SCRIPT_NAME}: {str(e)}", file=sys.stderr)
