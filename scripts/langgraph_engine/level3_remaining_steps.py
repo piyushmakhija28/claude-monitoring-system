@@ -6,10 +6,11 @@ Implements:
 - Step 3: Task breakdown
 - Step 4: TOON refinement (compress after planning)
 - Step 6: Skill/agent validation
-- Step 7: Final prompt generation (already in ollama_service.py, wrapper here)
+- Step 7: Final prompt generation (intelligent routing: GPU or NPU)
 - Step 13: Documentation update
 - Step 14: Final summary and voice notification
 
+Uses InferenceRouter for smart GPU/NPU backend selection based on task type.
 Note: Step 10 (Implementation) is handled by Claude directly with tools
 Note: Step 5 (Skill selection) is in ollama_service.py, wrapper here
 """
@@ -25,16 +26,19 @@ from datetime import datetime
 from loguru import logger
 from .toon_models import ExecutionBlueprint, ToonWithSkills
 from .session_manager import SessionManager
-from .ollama_service import get_ollama_service
+from .inference_router import get_inference_router
 
 
 class Level3RemainingSteps:
-    """Implements steps 2-7, 13-14 for Level 3 execution."""
+    """Implements steps 2-7, 13-14 for Level 3 execution with GPU/NPU routing."""
 
     def __init__(self, session_dir: str):
         self.session_dir = Path(session_dir)
         self.session_manager = SessionManager(str(self.session_dir))
-        self.ollama = get_ollama_service()
+        # Use InferenceRouter for smart GPU/NPU backend selection
+        self.inference = get_inference_router()
+        # Keep reference to ollama for compatibility (routes through inference_router)
+        self.ollama = self.inference.ollama
 
     # ===== INTELLIGENT MODEL SELECTION =====
 
@@ -160,9 +164,12 @@ Be very specific and actionable - mention actual file paths and existing functio
             selected_model = self._select_planning_model(toon)
 
             logger.info(f"→ Generating plan with {selected_model} model...")
-            response = self.ollama.chat(
+            # Route to appropriate backend (GPU for planning)
+            response = self.inference.chat(
                 messages=[{"role": "user", "content": prompt}],
-                model=selected_model,  # Use intelligently selected model
+                task_type="planning",  # Complex task → GPU
+                complexity=toon.get("complexity_score", 5),
+                model=selected_model,
                 temperature=0.5
             )
 
