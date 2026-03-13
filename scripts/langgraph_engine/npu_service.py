@@ -54,27 +54,27 @@ class NPUService:
         if not self.models_path.exists():
             raise RuntimeError(f"NPU models directory not found at {self.models_path}")
 
-        # Model catalog - maps model type to filename patterns
+        # Model catalog - maps model type to filename patterns (case-insensitive substring match)
         self.model_catalog = {
             # Ultra-fast models (2B)
             "ultra_fast": {
-                "Gemma-2-2B-Q6_K.gguf": "Gemma 2 2B (ultra-fast, classification)",
-                "DeepSeek-R1-Distill-Qwen-1.5B-Q6_K.gguf": "DeepSeek-R1 1.5B (fast, lightweight)",
+                "gemma-2-2b": "Gemma 2 2B (ultra-fast, classification)",
+                "DeepSeek-R1-Distill-Qwen-1.5B": "DeepSeek-R1 1.5B (fast, lightweight)",
             },
             # Fast models (3-4B)
             "fast": {
-                "Phi-3.5-Mini-Q6_K.gguf": "Phi 3.5 Mini (fast, good quality)",
-                "Llama-3.2-3B-Instruct-Q6_K.gguf": "Llama 3.2 3B (balanced, reasoning)",
+                "Phi-3.5-Mini": "Phi 3.5 Mini (fast, good quality)",
+                "Llama-3.2-3B": "Llama 3.2 3B (balanced, reasoning)",
             },
             # Medium models (7-8B)
             "medium": {
-                "Mistral-7B-Instruct-v0.2-Q4_K_M.gguf": "Mistral 7B (quality reasoning)",
-                "Qwen2.5-7B-Instruct-Q4_K_M.gguf": "Qwen 2.5 7B (coding, agentic)",
-                "DeepSeek-R1-Distill-Qwen-7B-Q4_K_M.gguf": "DeepSeek-R1 7B (powerful, reasoning)",
+                "Mistral-7B-Instruct-v0.2": "Mistral 7B (quality reasoning)",
+                "Qwen2.5-7B": "Qwen 2.5 7B (coding, agentic)",
+                "DeepSeek-R1-Distill-Qwen-7B": "DeepSeek-R1 7B (powerful, reasoning)",
             },
             # Large models (8B+)
             "large": {
-                "Llama-3.1-8B-Instruct-Q4_K_M.gguf": "Llama 3.1 8B (strong reasoning, coding)",
+                "Llama-3.1-8B": "Llama 3.1 8B (strong reasoning, coding)",
             },
         }
 
@@ -126,7 +126,7 @@ class NPUService:
             return []
 
     def _categorize_models(self) -> Dict[str, List[Path]]:
-        """Categorize available models by size/capability."""
+        """Categorize available models by size/capability (case-insensitive matching)."""
         categorized = {
             "ultra_fast": [],
             "fast": [],
@@ -135,10 +135,10 @@ class NPUService:
         }
 
         for model_path in self.available_models:
-            model_name = model_path.name
+            model_name_lower = model_path.name.lower()
             for category, patterns in self.model_catalog.items():
                 for pattern in patterns.keys():
-                    if pattern in model_name:
+                    if pattern.lower() in model_name_lower:
                         categorized[category].append(model_path)
                         break
 
