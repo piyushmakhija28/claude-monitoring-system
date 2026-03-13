@@ -795,10 +795,17 @@ def create_initial_state(session_id: str = "", project_root: str = "", user_mess
         import os
         DEBUG = os.getenv("CLAUDE_DEBUG") == "1"
 
-        cwd = Path.cwd()
-        if DEBUG:
-            print(f"[CREATE_INITIAL_STATE] Project root detection:", file=__import__('sys').stderr)
-            print(f"  cwd: {cwd}", file=__import__('sys').stderr)
+        # **CRITICAL FIX**: Check environment variable first (set by hook wrapper)
+        project_root = os.getenv("CLAUDE_PROJECT_ROOT", "")
+        if DEBUG and project_root:
+            print(f"[CREATE_INITIAL_STATE] Using project_root from CLAUDE_PROJECT_ROOT env var", file=__import__('sys').stderr)
+            print(f"  project_root: {project_root}", file=__import__('sys').stderr)
+
+        if not project_root:
+            cwd = Path.cwd()
+            if DEBUG:
+                print(f"[CREATE_INITIAL_STATE] Project root detection:", file=__import__('sys').stderr)
+                print(f"  cwd: {cwd}", file=__import__('sys').stderr)
 
         # Check if we're already in claude-insight or a subdirectory
         if "claude-insight" in str(cwd):

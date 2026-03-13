@@ -42,7 +42,7 @@ def main():
     # Priority: source location > global location > fallback
     possible_projects = [
         Path.home() / "Documents" / "workspace-spring-tool-suite-4-4.27.0-new" / "claude-insight",
-        Path.home() / ".claude" / "claude-insight",
+        Path.home() / "claude-insight",
     ]
 
     project_path = ""
@@ -51,15 +51,17 @@ def main():
             project_path = str(proj)
             break
 
-    # Run with summary flag and explicit project path
+    # **CRITICAL**: Pass project path via environment variable
+    # This is more reliable than command-line arguments for nested subprocess calls
+    if project_path:
+        env["CLAUDE_PROJECT_ROOT"] = project_path
+
+    # Run with summary flag
     cmd = [
         sys.executable,
         str(script_path),
         "--summary"
     ]
-
-    if project_path:
-        cmd.append(f"--project={project_path}")
 
     # Execute the script
     try:
