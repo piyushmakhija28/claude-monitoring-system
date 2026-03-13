@@ -25,6 +25,13 @@ from ..flow_state import FlowState
 
 
 # ============================================================================
+# CONSTANTS
+# ============================================================================
+
+MAX_LEVEL_MINUS1_ATTEMPTS = 3
+
+
+# ============================================================================
 # AUTO-FIX NODES
 # ============================================================================
 
@@ -200,6 +207,9 @@ def ask_level_minus1_fix(state: FlowState) -> dict:
     - "auto-fix": Attempt to fix issues, retry (max 3 times)
     - "skip": Continue anyway (not recommended)
 
+    IMPORTANT: After 3 attempts, automatically continues to Level 1 with warnings,
+    regardless of check status. This prevents infinite retry loops.
+
     IMPORTANT: When running in hook context (no stdin), automatically defaults
     to "auto-fix" for a seamless experience without hanging.
 
@@ -210,6 +220,19 @@ def ask_level_minus1_fix(state: FlowState) -> dict:
         Updated state with user choice and attempt tracking
     """
     import sys
+
+    # Track attempt count FIRST
+    attempt = state.get("level_minus1_attempt", 0) + 1
+
+    # Check if we've exceeded max attempts
+    if attempt > MAX_LEVEL_MINUS1_ATTEMPTS:
+        print("\n[LEVEL -1] ⚠️  MAX ATTEMPTS REACHED (3/3)")
+        print("[LEVEL -1] Continuing to Level 1 despite unresolved checks...")
+        return {
+            "level_minus1_user_choice": "force_continue",
+            "level_minus1_attempt": attempt,
+            "level_minus1_max_attempts_reached": True,
+        }
 
     # Build list of specific failures
     failed_checks = []
@@ -229,10 +252,10 @@ def ask_level_minus1_fix(state: FlowState) -> dict:
         failed_checks.append("  ✅ Windows path handling: PASS")
 
     # Show message to user
-    message = "\n[LEVEL -1] VALIDATION CHECKS:\n"
+    message = f"\n[LEVEL -1] VALIDATION CHECKS ({attempt}/{MAX_LEVEL_MINUS1_ATTEMPTS}):\n"
     message += "\n".join(failed_checks)
     message += "\n\nOPTIONS:\n"
-    message += "  1. auto-fix   → Attempt repair + retry (max 3 times)\n"
+    message += "  1. auto-fix   → Attempt repair + retry\n"
     message += "  2. skip       → Continue anyway (⚠️  NOT RECOMMENDED)\n"
 
     # Print message to stdout so it reaches user through hook
@@ -261,9 +284,6 @@ def ask_level_minus1_fix(state: FlowState) -> dict:
     # Validate choice
     if user_choice not in ["auto-fix", "skip"]:
         user_choice = "auto-fix"  # Default to auto-fix
-
-    # Track attempt count
-    attempt = state.get("level_minus1_attempt", 0) + 1
 
     return {
         "level_minus1_user_choice": user_choice,
@@ -472,18 +492,23 @@ def route_after_level_minus1_merge(state: FlowState) -> str:
 
 
 def route_after_user_choice(state: FlowState) -> str:
-    """Route after user choice: auto-fix vs skip.
+    """Route after user choice: auto-fix vs skip vs force_continue.
 
     - If "auto-fix": execute fixes and retry
     - If "skip": exit to Level 1 anyway
+    - If "force_continue": max attempts reached, exit to Level 1
     """
     choice = state.get("level_minus1_user_choice", "auto-fix").lower()
     attempt = state.get("level_minus1_attempt", 0)
 
-    if choice == "auto-fix":
-        if attempt >= 3:
-            # Max attempts reached, ask again or give up
-            return "ask_fix_again"
+    if choice == "force_continue":
+        # Max attempts reached, forced progression to Level 1
+        return "end_skip"
+    elif choice == "auto-fix":
+        if attempt > MAX_LEVEL_MINUS1_ATTEMPTS:
+            # This shouldn't happen (ask_fix should have returned force_continue)
+            # but as a safety check, progress to Level 1
+            return "end_skip"
         return "fix_issues"
     else:
         # User chose skip, go to Level 1
@@ -499,7 +524,7 @@ def route_after_fix_attempt(state: FlowState) -> str:
 
 
 def create_level_minus1_subgraph():
-    """Create Level -1 subgraph with interactive recovery.
+    """Create Level -1 subgraph with interactive recovery and max 3 attempts enforcement.
 
     Flow:
     START
@@ -512,12 +537,17 @@ def create_level_minus1_subgraph():
       ↓
     [Merge: Status check]
       ├─ OK → END (Level 1)
-      └─ FAILED → ask_fix (interactive)
-         ├─ "auto-fix" → fix_issues → retry checks (max 3x)
-         │              ├─ All pass → END (Level 1)
-         │              └─ Any fail → ask_fix_again
+      └─ FAILED → ask_fix (interactive, max 3 attempts total)
+         ├─ "auto-fix" (attempt ≤ 3) → fix_issues → retry checks
+         │                             ├─ All pass → END (Level 1)
+         │                             └─ Any fail → ask_fix (increments attempt)
+         │
+         ├─ "auto-fix" (attempt > 3) → force_continue → END (Level 1, with warning)
          │
          └─ "skip" → END (Level 1, not recommended)
+
+    MAX_LEVEL_MINUS1_ATTEMPTS = 3
+    After 3 failed attempts, automatically continues to Level 1 regardless of checks.
 
     Returns:
         Compiled StateGraph for Level -1
@@ -540,7 +570,6 @@ def create_level_minus1_subgraph():
     # ===== RECOVERY NODES =====
     graph.add_node("ask_fix", ask_level_minus1_fix)
     graph.add_node("fix_issues", fix_level_minus1_issues)
-    graph.add_node("ask_fix_again", ask_level_minus1_fix)  # Ask again after max attempts
 
     # ===== EDGES =====
 
@@ -560,29 +589,17 @@ def create_level_minus1_subgraph():
         }
     )
 
-    # After user choice: auto-fix or skip
+    # After user choice: auto-fix, skip, or force_continue (max attempts)
     graph.add_conditional_edges(
         "ask_fix",
         route_after_user_choice,
         {
-            "fix_issues": "fix_issues",    # Execute fixes
-            "ask_fix_again": "ask_fix_again",  # Ask again (max attempts)
-            "end_skip": END,                   # Skip to Level 1
+            "fix_issues": "fix_issues",    # Execute fixes and retry
+            "end_skip": END,               # Skip to Level 1 (user chose skip or max attempts reached)
         }
     )
 
-    # After asking again: auto-fix or skip (2nd+ attempt)
-    graph.add_conditional_edges(
-        "ask_fix_again",
-        route_after_user_choice,
-        {
-            "fix_issues": "fix_issues",
-            "ask_fix_again": "ask_fix_again",  # Can ask multiple times
-            "end_skip": END,
-        }
-    )
-
-    # After fix attempt: retry checks
+    # After fix attempt: retry all checks from start
     graph.add_edge("fix_issues", "node_unicode")  # Go back to check 1 (retry)
 
     return graph.compile()

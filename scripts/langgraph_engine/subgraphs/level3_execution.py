@@ -94,14 +94,22 @@ def call_execution_script(script_name: str, args: list = None) -> dict:
 # ============================================================================
 
 
-def step0_prompt_generation(state: FlowState) -> dict:
-    """Step 0: Call prompt-generator.py with user message + full context from Level 1"""
+def step1_task_analysis_and_breakdown(state: FlowState) -> dict:
+    """Step 1: Combined Task Analysis + Breakdown (consolidates former Step 0 + Step 1).
+
+    Per WORKFLOW.md, Step 0 should not exist. This step performs:
+    1. Task analysis (determine task_type, complexity, reasoning)
+    2. Task breakdown (determine subtasks and phases)
+
+    This consolidation keeps the pipeline compliant with WORKFLOW.md while
+    maintaining all the analysis functionality.
+    """
     import os
     import json
 
     DEBUG = os.getenv("CLAUDE_DEBUG") == "1"
     if DEBUG:
-        print("[L3] -> Step 0 START", file=sys.stderr)
+        print("[L3] -> Step 1 (Combined Analysis + Breakdown) START", file=sys.stderr)
 
     user_message = state.get("user_message", "")
 
@@ -109,6 +117,7 @@ def step0_prompt_generation(state: FlowState) -> dict:
     if not user_message:
         user_message = os.environ.get("CURRENT_USER_MESSAGE", "")
 
+    # ===== PART A: TASK ANALYSIS (former Step 0) =====
     # GATHER FULL CONTEXT FROM LEVEL 1
     context_data = {
         "user_message": user_message,
@@ -132,50 +141,45 @@ def step0_prompt_generation(state: FlowState) -> dict:
 
     if DEBUG:
         print(f"[L3-DEBUG] State keys: {list(state.keys())[:5]}", file=sys.stderr)
-        print(f"[L3] -> Step 0 user_message: {user_message[:50] if user_message else 'EMPTY'}...", file=sys.stderr)
-        print(f"[L3] -> Step 0 context: {json.dumps(context_data, indent=2)}", file=sys.stderr)
+        print(f"[L3] -> Step 1 user_message: {user_message[:50] if user_message else 'EMPTY'}...", file=sys.stderr)
 
-    # Pass user message + context to script
+    # Run task analysis
     args = [user_message] if user_message else []
     args.append(f"--context={json.dumps(context_data)}")
-    result = call_execution_script("prompt-generator", args)
+    analysis_result = call_execution_script("prompt-generator", args)
+
+    task_type = analysis_result.get("task_type", "General Task")
+    complexity = analysis_result.get("complexity", 5)
+    reasoning = analysis_result.get("reasoning", "")
 
     if DEBUG:
-        print(f"[L3] -> Step 0 END: {result.get('task_type')}", file=sys.stderr)
+        print(f"[L3] -> Step 1 Analysis: task_type={task_type}, complexity={complexity}", file=sys.stderr)
 
-    return {
-        "step0_prompt": {
-            "task_type": result.get("task_type", "general"),
-            "complexity": result.get("complexity", 5),
-            "reasoning": result.get("reasoning", ""),
-            "script_output": result
-        }
-    }
-
-
-def step1_task_breakdown(state: FlowState) -> dict:
-    """Step 1: Call task-auto-analyzer.py with task type from step 0"""
-    user_message = state.get("user_message", "")
-    task_type = state.get("step0_prompt", {}).get("task_type", "General Task")
-
+    # ===== PART B: TASK BREAKDOWN (former Step 1) =====
     # Pass both user message and task type for better analysis
     args = [user_message] if user_message else []
     args.extend([f"--task-type={task_type}"])
-    result = call_execution_script("task-auto-analyzer", args)
+    breakdown_result = call_execution_script("task-auto-analyzer", args)
+
+    if DEBUG:
+        print(f"[L3] -> Step 1 Breakdown END: {breakdown_result.get('task_count', 1)} tasks", file=sys.stderr)
 
     return {
+        "step1_task_type": task_type,
+        "step1_complexity": complexity,
+        "step1_reasoning": reasoning,
         "step1_tasks": {
-            "count": result.get("task_count", 1),
-            "tasks": result.get("tasks", []),
-            "script_output": result
+            "count": breakdown_result.get("task_count", 1),
+            "tasks": breakdown_result.get("tasks", []),
+            "script_output": breakdown_result
         },
-        "step1_task_count": result.get("task_count", 1)
+        "step1_task_count": breakdown_result.get("task_count", 1)
     }
 
 
 def step2_plan_mode_decision(state: FlowState) -> dict:
     """Step 2: Call auto-plan-mode-suggester.py with complexity and task count"""
-    complexity = state.get("step0_prompt", {}).get("complexity", 5)
+    complexity = state.get("step1_complexity", 5)
     task_count = state.get("step1_task_count", 1)
 
     args = [
@@ -201,20 +205,80 @@ def step3_context_read_enforcement(state: FlowState) -> dict:
     }
 
 
-def step4_model_selection(state: FlowState) -> dict:
-    """Step 4: Call model-auto-selector.py"""
-    complexity = state.get("step0_prompt", {}).get("complexity", 5)
+def step4_toon_refinement(state: FlowState) -> dict:
+    """Step 4: TOON Refinement - Enhance TOON with task breakdown insights.
+
+    Takes the initial TOON from Level 1 and refines it with:
+    - Task breakdown from Step 1
+    - Complexity analysis
+    - Skill hints
+
+    This prepares TOON for skill/agent selection in Step 5.
+    """
+    import json
+
+    try:
+        # Get initial TOON from Level 1
+        level1_toon = state.get("level1_context_toon", {})
+        if not level1_toon:
+            return {"step4_toon_refined": level1_toon, "step4_refinement_status": "SKIPPED"}
+
+        # Get task breakdown from Step 1
+        tasks = state.get("step1_tasks", {}).get("tasks", [])
+        task_count = len(tasks)
+
+        # Build refinement context
+        refinement_data = {
+            "initial_complexity": level1_toon.get("complexity_score", 5),
+            "task_count": task_count,
+            "files_involved": level1_toon.get("files_loaded_count", 0),
+        }
+
+        # Enhance TOON with refinement
+        refined_toon = dict(level1_toon)
+
+        # Add task insights
+        if tasks:
+            task_files = set()
+            for task in tasks:
+                if isinstance(task, dict):
+                    task_files.update(task.get("files", []))
+            refined_toon["estimated_files"] = len(task_files)
+
+        # Adjust complexity based on task count
+        base_complexity = refined_toon.get("complexity_score", 5)
+        adjusted_complexity = min(10, base_complexity + (task_count - 1) // 2)
+        refined_toon["adjusted_complexity"] = adjusted_complexity
+
+        return {
+            "step4_toon_refined": refined_toon,
+            "step4_refinement_status": "OK",
+            "step4_complexity_adjusted": adjusted_complexity,
+        }
+
+    except Exception as e:
+        return {
+            "step4_toon_refined": state.get("level1_context_toon", {}),
+            "step4_refinement_status": "ERROR",
+            "step4_error": str(e)
+        }
+
+
+def step5_model_selection(state: FlowState) -> dict:
+    """Step 5: Call model-auto-selector.py"""
+    # Use adjusted complexity from Step 4 if available, else use Step 1 complexity
+    complexity = state.get("step4_complexity_adjusted") or state.get("step1_complexity", 5)
     result = call_execution_script("model-auto-selector", [f"--complexity={complexity}"])
     return {
-        "step4_model": result.get("selected_model", "complex_reasoning"),
-        "step4_reasoning": result.get("reason", "Model selected")
+        "step5_model": result.get("selected_model", "complex_reasoning"),
+        "step5_reasoning": result.get("reason", "Model selected")
     }
 
 
-def step5_skill_agent_selection(state: FlowState) -> dict:
-    """Step 5: Call auto-skill-agent-selector.py with task type and complexity"""
-    task_type = state.get("step0_prompt", {}).get("task_type", "General Task")
-    complexity = state.get("step0_prompt", {}).get("complexity", 5)
+def step6_skill_agent_selection(state: FlowState) -> dict:
+    """Step 6: Call auto-skill-agent-selector.py with task type and complexity"""
+    task_type = state.get("step1_task_type", "General Task")
+    complexity = state.get("step1_complexity", 5)
 
     args = [
         "--analyze",
@@ -224,23 +288,23 @@ def step5_skill_agent_selection(state: FlowState) -> dict:
     result = call_execution_script("auto-skill-agent-selector", args)
 
     return {
-        "step5_skill": result.get("selected_skill", ""),
-        "step5_agent": result.get("selected_agent", ""),
-        "step5_reasoning": result.get("reasoning", ""),
-        "step5_confidence": result.get("confidence", 0.5),
-        "step5_alternatives": result.get("alternatives", []),
-        "step5_llm_query_needed": result.get("llm_needed", False)
+        "step6_skill": result.get("selected_skill", ""),
+        "step6_agent": result.get("selected_agent", ""),
+        "step6_reasoning": result.get("reasoning", ""),
+        "step6_confidence": result.get("confidence", 0.5),
+        "step6_alternatives": result.get("alternatives", []),
+        "step6_llm_query_needed": result.get("llm_needed", False)
     }
 
 
-def step6_tool_optimization(state: FlowState) -> dict:
-    """Step 6: Tool optimization - context-aware hints"""
+def step7_tool_optimization(state: FlowState) -> dict:
+    """Step 7: Tool optimization - context-aware hints"""
     context_pct = state.get("context_percentage", 0)
     result = call_execution_script("tool-optimizer-step", [f"--context={context_pct}"])
     return {
-        "step6_tool_hints": result.get("optimization_hints", []),
-        "step6_read_optimization": result.get("read_opts", {}),
-        "step6_grep_optimization": result.get("grep_opts", {})
+        "step7_tool_hints": result.get("optimization_hints", []),
+        "step7_read_optimization": result.get("read_opts", {}),
+        "step7_grep_optimization": result.get("grep_opts", {})
     }
 
 
@@ -331,35 +395,52 @@ def level3_merge_node(state: FlowState) -> dict:
 
 
 def create_level3_subgraph():
-    """Create Level 3 subgraph."""
+    """Create Level 3 subgraph (WORKFLOW.md compliant).
+
+    Implements 11-step execution pipeline per WORKFLOW.md specification:
+    - Step 1: Task Analysis + Breakdown (formerly Step 0 + Step 1 combined)
+    - Step 2: Plan Mode Decision
+    - Step 3: Context Read Enforcement
+    - Step 4: TOON Refinement
+    - Step 5: Model Selection
+    - Step 6: Skill & Agent Selection
+    - Step 7: Tool Optimization
+    - Step 8: Progress Tracking
+    - Step 9: Git Commit Preparation
+    - Step 10: Session Save
+    - Step 11: Failure Prevention & Code Review
+
+    Note: Step 0 (Prompt Generation) is intentionally removed per WORKFLOW.md.
+    Its functionality is integrated into Step 1 for a cleaner pipeline.
+    """
     if not _LANGGRAPH_AVAILABLE:
         raise RuntimeError("LangGraph not installed")
 
     graph = StateGraph(FlowState)
 
-    # Add all 12 step nodes + merge
-    graph.add_node("step0_prompt", step0_prompt_generation)
-    graph.add_node("step1_tasks", step1_task_breakdown)
+    # Add all steps + merge (per WORKFLOW.md, no Step 0)
+    graph.add_node("step1_combined", step1_task_analysis_and_breakdown)
     graph.add_node("step2_plan", step2_plan_mode_decision)
     graph.add_node("step3_context", step3_context_read_enforcement)
-    graph.add_node("step4_model", step4_model_selection)
-    graph.add_node("step5_skill", step5_skill_agent_selection)
-    graph.add_node("step6_tools", step6_tool_optimization)
+    graph.add_node("step4_toon", step4_toon_refinement)
+    graph.add_node("step5_model", step5_model_selection)
+    graph.add_node("step6_skill", step6_skill_agent_selection)
+    graph.add_node("step7_tools", step7_tool_optimization)
     graph.add_node("step8_progress", step8_progress_tracking)
     graph.add_node("step9_commit", step9_git_commit_preparation)
     graph.add_node("step10_session", step10_session_save)
     graph.add_node("step11_prevention", step11_failure_prevention)
     graph.add_node("merge", level3_merge_node)
 
-    # Sequential edges
-    graph.add_edge(START, "step0_prompt")
-    graph.add_edge("step0_prompt", "step1_tasks")
-    graph.add_edge("step1_tasks", "step2_plan")
+    # Sequential edges (per WORKFLOW.md, 11 steps from 1-11)
+    graph.add_edge(START, "step1_combined")
+    graph.add_edge("step1_combined", "step2_plan")
     graph.add_edge("step2_plan", "step3_context")
-    graph.add_edge("step3_context", "step4_model")
-    graph.add_edge("step4_model", "step5_skill")
-    graph.add_edge("step5_skill", "step6_tools")
-    graph.add_edge("step6_tools", "step8_progress")
+    graph.add_edge("step3_context", "step4_toon")
+    graph.add_edge("step4_toon", "step5_model")
+    graph.add_edge("step5_model", "step6_skill")
+    graph.add_edge("step6_skill", "step7_tools")
+    graph.add_edge("step7_tools", "step8_progress")
     graph.add_edge("step8_progress", "step9_commit")
     graph.add_edge("step9_commit", "step10_session")
     graph.add_edge("step10_session", "step11_prevention")
