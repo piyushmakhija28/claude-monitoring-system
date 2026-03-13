@@ -1,6 +1,6 @@
 # 
 
-**Version:** 4.23.3
+**Version:** # Version Information
 **Status:** Active Development
 **Last Updated:** 2026-03-13
 

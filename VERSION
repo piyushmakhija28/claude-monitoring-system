@@ -1,11 +1,11 @@
 # Version Information
 
 ## Current Version
-4.23.3
+# Version Information
 
 ## Release History
 
-### v4.23.3
+### v# Version Information
 - **Release Date:** 2026-03-13
 - **Status:** Stable
 - **Changes:**
@@ -28,5 +28,5 @@ Using Semantic Versioning (MAJOR.MINOR.PATCH):
 
 | Version | Status | End of Support |
 |---------|--------|----------------|
-| 4.23.3 | Stable | TBD |
+| # Version Information | Stable | TBD |
 | 0.1.0 | Legacy | 2026-06-01 |

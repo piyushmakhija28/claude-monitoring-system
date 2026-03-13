@@ -1,7 +1,7 @@
 #  - Claude-Specific Context
 
 **Project:** 
-**Version:** 4.23.3
+**Version:** # Version Information
 **Type:** Django / FastAPI / Flask
 **Last Updated:** 2026-03-13
 
