@@ -235,7 +235,7 @@ def print_flow_checkpoint(state: FlowState, verbose: bool = False) -> None:
     status = state.get("final_status", "UNKNOWN")
     session_id = state.get("session_id", "SESSION-UNKNOWN")
     context_pct = state.get("context_percentage", 0)
-    model = state.get("step4_model", "haiku")
+    model = state.get("step4_model", "complex_reasoning")  # Ollama model (was: haiku for Claude)
     synthesized_prompt = state.get("synthesized_prompt", "")
 
     print(f"\n[FLOW CHECKPOINT]")

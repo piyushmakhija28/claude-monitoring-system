@@ -63,13 +63,23 @@ def main():
         "--summary"
     ]
 
-    # Execute the script
+    # Execute the script with output capture so Claude Code can see all messages
     try:
         result = subprocess.run(
             cmd,
             env=env,
-            timeout=180  # 3 minutes - allows for Ollama processing + all 14 steps
+            timeout=180,  # 3 minutes - allows for Ollama processing + all 14 steps
+            capture_output=True,  # CRITICAL: Capture output so we can forward to Claude Code
+            text=True
         )
+
+        # Forward captured output to Claude Code UI
+        # This is critical for Level -1 error messages to reach the user
+        if result.stdout:
+            print(result.stdout)
+        if result.stderr:
+            print(result.stderr, file=sys.stderr)
+
         sys.exit(result.returncode)
     except subprocess.TimeoutExpired:
         print("ERROR: 3-level-flow execution timed out after 180 seconds", file=sys.stderr)
