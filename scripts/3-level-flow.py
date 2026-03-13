@@ -198,6 +198,8 @@ def run_langgraph_engine(session_id: str = "", project_root: str = "", user_mess
     # LangGraph uses thread_id for session isolation
     # session_id is now immutable and won't cause duplicate update errors
     invoke_config = get_invoke_config(session_id)
+    if DEBUG:
+        print(f"[DEBUG] Before graph.invoke: initial_state['project_root']='{initial_state.get('project_root', 'MISSING')}'", file=sys.stderr)
     result = graph.invoke(initial_state, config=invoke_config)
 
     if DEBUG:
