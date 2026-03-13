@@ -161,21 +161,35 @@ class HybridInferenceManager:
         step: str,
         prompt: str,
         context: Optional[Dict[str, Any]] = None,
+        system_prompt: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Invoke inference with automatic backend routing.
 
         Args:
             step: Step name (e.g., 'step1_plan_mode_decision')
-            prompt: The prompt/query for LLM
-            context: Additional context data
+            prompt: The prompt/query for LLM (or user_message if system_prompt provided)
+            context: Additional context data (DEPRECATED - use system_prompt instead)
+            system_prompt: Optional system prompt (context foundation).
+                          If provided, 'prompt' is treated as user_message
 
         Returns:
             Dict with response and metadata
+
+        Example:
+            # Old way (still works):
+            result = manager.invoke("step0_task_analysis", "Analyze this task...")
+
+            # New way (with system prompt):
+            result = manager.invoke(
+                "step0_task_analysis",
+                user_message="Implement the task",
+                system_prompt="You are a code expert..."
+            )
         """
         if step not in self.STEP_ROUTING:
             logger.warning(f"Unknown step: {step}, using Claude API")
-            return self._invoke_claude(prompt, context)
+            return self._invoke_claude(prompt, context, system_prompt=system_prompt)
 
         routing_info = self.STEP_ROUTING[step]
         step_type = routing_info["type"]
@@ -190,14 +204,14 @@ class HybridInferenceManager:
 
         # Route based on step type
         if step_type == StepType.CLASSIFICATION:
-            return self._invoke_classification(step, prompt, context, routing_info)
+            return self._invoke_classification(step, prompt, context, routing_info, system_prompt)
         elif step_type == StepType.LIGHTWEIGHT_ANALYSIS:
-            return self._invoke_lightweight_analysis(step, prompt, context, routing_info)
+            return self._invoke_lightweight_analysis(step, prompt, context, routing_info, system_prompt)
         elif step_type == StepType.COMPLEX_REASONING:
-            return self._invoke_complex_reasoning(step, prompt, context, routing_info)
+            return self._invoke_complex_reasoning(step, prompt, context, routing_info, system_prompt)
 
         # Fallback
-        return self._invoke_claude(prompt, context)
+        return self._invoke_claude(prompt, context, system_prompt=system_prompt)
 
     def _invoke_classification(
         self,
@@ -205,6 +219,7 @@ class HybridInferenceManager:
         prompt: str,
         context: Optional[Dict[str, Any]],
         routing_info: Dict[str, Any],
+        system_prompt: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Ultra-fast classification using NPU."""
         npu_model = routing_info.get("npu_model")
@@ -231,7 +246,7 @@ class HybridInferenceManager:
                 logger.warning(f"NPU inference failed for {step}: {e}, fallback to Claude")
 
         # Fallback to Claude
-        return self._invoke_claude(prompt, context, step=step)
+        return self._invoke_claude(prompt, context, step=step, system_prompt=system_prompt)
 
     def _invoke_lightweight_analysis(
         self,
@@ -239,6 +254,7 @@ class HybridInferenceManager:
         prompt: str,
         context: Optional[Dict[str, Any]],
         routing_info: Dict[str, Any],
+        system_prompt: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Fast analysis using NPU with Claude fallback."""
         npu_model = routing_info.get("npu_model")
@@ -269,7 +285,7 @@ class HybridInferenceManager:
                 )
 
         # Fallback to Claude
-        return self._invoke_claude(prompt, context, step=step)
+        return self._invoke_claude(prompt, context, step=step, system_prompt=system_prompt)
 
     def _invoke_complex_reasoning(
         self,
@@ -277,54 +293,104 @@ class HybridInferenceManager:
         prompt: str,
         context: Optional[Dict[str, Any]],
         routing_info: Dict[str, Any],
+        system_prompt: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Complex reasoning using Claude."""
         logger.debug(f"Complex reasoning task: {step}")
-        return self._invoke_claude(prompt, context, step=step)
+        return self._invoke_claude(prompt, context, step=step, system_prompt=system_prompt)
 
     def _invoke_claude_cli(
         self,
         prompt: str,
-        context: Optional[Dict[str, Any]],
+        context: Optional[Dict[str, Any]] = None,
         step: Optional[str] = None,
+        system_prompt: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Invoke Claude via CLI (subscription-based, no API costs).
 
         Uses Claude Code CLI to call Claude in a subprocess.
         This method uses your existing Claude subscription instead of API credits.
+
+        Args:
+            prompt: User message (or full prompt if no system_prompt)
+            context: Legacy context dict (for backward compatibility)
+            step: Step name for logging
+            system_prompt: Optional system prompt for context foundation.
+                          If provided, prompt becomes user_message
+
+        Claude CLI invocation with system prompt support:
+            claude --json --system @system.txt --message @user.txt
+            or (legacy):
+            claude --json @prompt.txt
         """
         try:
             start_time = time.time()
 
-            # Build the full prompt with context if available
-            full_prompt = prompt
-            if context:
-                context_str = json.dumps(context, indent=2)[:1000]  # Limit context size
-                full_prompt = f"{prompt}\n\n[CONTEXT]\n{context_str}"
+            temp_files = []  # Track for cleanup
 
-            # Create temporary file for prompt (to avoid shell escaping issues)
-            with tempfile.NamedTemporaryFile(
-                mode='w',
-                suffix='.txt',
-                delete=False,
-                encoding='utf-8'
-            ) as temp_file:
-                temp_file.write(full_prompt)
-                temp_prompt_file = temp_file.name
+            # If we have system_prompt, use new format (system + message)
+            if system_prompt:
+                # Create system prompt file
+                with tempfile.NamedTemporaryFile(
+                    mode='w',
+                    suffix='.txt',
+                    delete=False,
+                    encoding='utf-8'
+                ) as temp_file:
+                    temp_file.write(system_prompt)
+                    temp_system_file = temp_file.name
+                    temp_files.append(temp_system_file)
 
-            try:
-                # Call Claude CLI
-                # Format: claude [options] [prompt or @file]
+                # Create user message file
+                with tempfile.NamedTemporaryFile(
+                    mode='w',
+                    suffix='.txt',
+                    delete=False,
+                    encoding='utf-8'
+                ) as temp_file:
+                    temp_file.write(prompt)
+                    temp_message_file = temp_file.name
+                    temp_files.append(temp_message_file)
+
+                # Claude CLI with system prompt support
+                cmd = [
+                    "claude",
+                    "--json",  # Get JSON output
+                    "--no-stream",  # Wait for full response
+                    f"--system={temp_system_file}",  # System prompt from file
+                    f"@{temp_message_file}",  # User message from file
+                ]
+                logger.debug(f"Calling Claude CLI with system prompt and user message")
+
+            else:
+                # Legacy format: combine prompt + context
+                full_prompt = prompt
+                if context:
+                    context_str = json.dumps(context, indent=2)[:1000]  # Limit context size
+                    full_prompt = f"{prompt}\n\n[CONTEXT]\n{context_str}"
+
+                # Create temporary file for prompt (to avoid shell escaping issues)
+                with tempfile.NamedTemporaryFile(
+                    mode='w',
+                    suffix='.txt',
+                    delete=False,
+                    encoding='utf-8'
+                ) as temp_file:
+                    temp_file.write(full_prompt)
+                    temp_prompt_file = temp_file.name
+                    temp_files.append(temp_prompt_file)
+
+                # Call Claude CLI (legacy format)
                 cmd = [
                     "claude",
                     "--json",  # Get JSON output
                     "--no-stream",  # Wait for full response
                     f"@{temp_prompt_file}",  # Read prompt from file
                 ]
+                logger.debug(f"Calling Claude CLI (legacy format)")
 
-                logger.debug(f"Calling Claude CLI: {' '.join(cmd[:2])}")
-
+            try:
                 result = subprocess.run(
                     cmd,
                     capture_output=True,
@@ -392,11 +458,12 @@ class HybridInferenceManager:
                 }
 
             finally:
-                # Clean up temp file
-                try:
-                    Path(temp_prompt_file).unlink()
-                except Exception:
-                    pass
+                # Clean up temp files
+                for temp_file in temp_files:
+                    try:
+                        Path(temp_file).unlink()
+                    except Exception:
+                        pass
 
         except FileNotFoundError:
             logger.error(
@@ -427,18 +494,25 @@ class HybridInferenceManager:
     def _invoke_claude(
         self,
         prompt: str,
-        context: Optional[Dict[str, Any]],
+        context: Optional[Dict[str, Any]] = None,
         step: Optional[str] = None,
+        system_prompt: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Invoke Claude for high-quality responses.
         Uses CLI-based subscription first (no API costs), falls back to API if needed.
+
+        Args:
+            prompt: User message (or full prompt if no system_prompt)
+            context: Legacy context dict (for backward compatibility)
+            step: Step name for logging
+            system_prompt: Optional system prompt for context foundation
         """
         # Try CLI first (subscription-based)
         use_cli = os.getenv("CLAUDE_USE_CLI", "1").lower() == "1"
 
         if use_cli:
-            cli_result = self._invoke_claude_cli(prompt, context, step)
+            cli_result = self._invoke_claude_cli(prompt, context, step, system_prompt)
 
             # If CLI worked, return it
             if cli_result.get("status") == "ok":
@@ -459,19 +533,28 @@ class HybridInferenceManager:
 
             client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
-            # Build message
+            # Build message with optional system prompt support
             messages = [{"role": "user", "content": prompt}]
 
-            # Add context if available
-            if context:
-                logger.debug(f"  Context provided: {len(str(context))} bytes")
+            # Use system_prompt if available, otherwise legacy context handling
+            api_system_prompt = system_prompt
+            if not api_system_prompt and context:
+                # Legacy: build system prompt from context
+                context_str = json.dumps(context, indent=2)[:1000]
+                api_system_prompt = f"Context:\n{context_str}"
 
             # Invoke Claude
-            response = client.messages.create(
-                model="claude-opus-4-6",
-                max_tokens=2000,
-                messages=messages,
-            )
+            invoke_kwargs = {
+                "model": "claude-opus-4-6",
+                "max_tokens": 2000,
+                "messages": messages,
+            }
+
+            # Add system prompt if available
+            if api_system_prompt:
+                invoke_kwargs["system"] = api_system_prompt
+
+            response = client.messages.create(**invoke_kwargs)
 
             elapsed_ms = (time.time() - start_time) * 1000
             self.stats["claude_calls"] += 1
