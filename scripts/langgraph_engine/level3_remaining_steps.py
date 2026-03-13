@@ -760,14 +760,29 @@ Be very specific and actionable - mention actual file paths and existing functio
             logger.info(f"  Detected frameworks: {detected_frameworks}")
             logger.info(f"  Effort estimate: {effort_estimate}/10")
 
+            # Ensure risks dict has all required fields
+            risks_data = plan.get("risks", {})
+            if not risks_data.get("risk_level"):
+                risks_data["risk_level"] = "medium"
+            if "factors" not in risks_data:
+                risks_data["factors"] = []
+            if "mitigation" not in risks_data:
+                risks_data["mitigation"] = []
+
+            # Ensure session_id has a fallback
+            session_id = toon_analysis.get("session_id")
+            if not session_id:
+                from uuid import uuid4
+                session_id = f"session-{uuid4().hex[:12]}"
+
             blueprint = {
-                "session_id": toon_analysis.get("session_id"),
-                "timestamp": datetime.now().isoformat(),
+                "session_id": session_id,
+                "timestamp": datetime.now(),  # Use datetime object, not string
                 "complexity_score": complexity_score,
                 "plan": plan.get("plan", ""),
                 "files_affected": files_affected,
                 "phases": plan.get("phases", []),
-                "risks": plan.get("risks", {"risk_level": "medium", "factors": [], "mitigation": []}),
+                "risks": risks_data,
                 "selected_skills": [],  # To be filled in Step 5
                 "selected_agents": [],  # To be filled in Step 5
                 "execution_strategy": "sequential",
