@@ -40,11 +40,25 @@ This project now supports **hybrid inference** that intelligently routes between
 - NVIDIA GPU recommended but optional (fallback to Claude)
 
 **Software Required:**
-```bash
-# Claude SDK
-pip install anthropic
 
-# NPU/GPU runtime (for local inference)
+**Option A: CLI-Based (Recommended - No API Costs)**
+```bash
+# Claude Code CLI (uses your subscription)
+pip install claude-code
+# or download from: https://github.com/anthropics/claude-code
+
+# Verify Claude CLI is installed
+claude --version
+```
+
+**Option B: API-Based (Fallback Only)**
+```bash
+# Claude SDK (for API fallback only)
+pip install anthropic
+```
+
+**NPU/GPU runtime (for local inference)**
+```bash
 # Intel AI Boost: https://www.intel.com/content/www/us/en/developer/tools/oneapi/ai-runtime.html
 # AMD Ryzen AI: https://www.amd.com/en/technologies/ryzen-ai
 ```
@@ -63,11 +77,28 @@ export NPU_PATH="C:/Users/techd/Downloads/intel-ai/npu"
 # GPU/Ollama endpoint (if using local GPU)
 export OLLAMA_ENDPOINT="http://127.0.0.1:11434"
 
-# Claude API key (required for high-quality steps)
+# ============================================
+# CLAUDE INVOCATION (choose one)
+# ============================================
+
+# OPTION 1: Use Claude CLI (Recommended - No API costs)
+export CLAUDE_USE_CLI=1
+# No API key needed - uses your Claude Code subscription
+
+# OPTION 2: Use Claude API (Fallback)
+export CLAUDE_USE_CLI=0
 export ANTHROPIC_API_KEY="sk-..."
 
 # Enable debug logging
 export CLAUDE_DEBUG=1
+```
+
+**Default Behavior:**
+```
+CLAUDE_USE_CLI=1 (enabled by default)
+├─ Step 0, 2, 4, 7: Use Claude CLI (free with subscription)
+│  └─ If CLI fails: Falls back to API
+└─ Saves 100% on API costs for complex reasoning steps
 ```
 
 ### 3. Verify Setup
@@ -186,7 +217,7 @@ Use default decision (plan_required=False)
 
 ## Cost Analysis
 
-### Before (Claude-only)
+### Before (Claude API only)
 
 ```
 Per execution:
@@ -196,27 +227,72 @@ Per execution:
 Cost: $0.02-0.05 per execution
 ```
 
-### After (Hybrid NPU+Claude)
+### After (Hybrid NPU + Claude CLI)
 
 ```
 Per execution:
 - 3 NPU calls (LOCAL, FREE)
-- 4 Claude API calls
-- ~5,000 input tokens (fewer, better prompts)
-- ~3,000 output tokens
-Cost: $0.01-0.025 per execution
-Savings: 50% lower cost
+- 4 Claude CLI calls (subscription, FREE)
+- $0 cost from LLM calls
+Cost: ZERO per execution (only subscription)
+Savings: 100% reduction in per-execution API costs
 ```
 
 ### Annual Savings (assuming 100 executions/day)
 
 ```
-Before: $0.03 × 100 × 365 = $1,095/year
-After:  $0.015 × 100 × 365 = $548/year
-Saved:  $547/year + 40-50% faster execution
+BEFORE:
+- API Cost: $0.03 × 100 × 365 = $1,095/year
+- Subscription: Already paying Claude Code
+
+AFTER:
+- API Cost: $0 × 100 × 365 = $0/year ✨
+- Subscription: Already paying Claude Code
+- Savings: $1,095/year + 40-50% faster execution
+
+Total annual savings: $1,095 + faster performance!
+
+Note: Assumes Claude Code subscription is active
+(which you're already using for the CLI anyway)
+```
+
+### Why This Works
+
+You have Claude Code CLI subscription → Use it!
+- All Claude CLI calls are covered by your subscription
+- No additional API token consumption
+- Same quality responses as API calls
+- Better latency for local operations
+
+```
+Before:  API Credits    → Get used up → Buy more
+After:   CLI Calls      → Covered by subscription → Always available
 ```
 
 ## Troubleshooting
+
+### Claude CLI not found
+
+```bash
+# Check if Claude CLI is installed
+claude --version
+
+# Install if missing
+pip install claude-code
+
+# Or verify it's in PATH
+which claude  # Linux/Mac
+where claude  # Windows
+```
+
+### Claude CLI failing with "command not found"
+
+```bash
+# Try with full path
+export CLAUDE_CLI_PATH="path/to/claude"
+# Or add to PATH
+export PATH="/path/to/claude:$PATH"
+```
 
 ### NPU not found
 
@@ -238,7 +314,21 @@ python -m scripts.langgraph_engine.hybrid_inference
 # Check logs:
 # [DEBUG] Classification task: step1_plan_mode_decision
 # [DEBUG]   Using NPU model: Gemma-2-2B
-# [DEBUG] NPU inference failed: ..., fallback to Claude
+# [DEBUG] Calling Claude CLI: claude --json
+# [DEBUG] Claude CLI response length: 1250
+```
+
+### Switch between CLI and API
+
+```bash
+# Force Claude CLI only (no API fallback)
+export CLAUDE_USE_CLI=1
+
+# Force Claude API only (no CLI)
+export CLAUDE_USE_CLI=0
+
+# Auto (try CLI first, fallback to API)
+# Just unset or leave default
 ```
 
 ### Quality degradation

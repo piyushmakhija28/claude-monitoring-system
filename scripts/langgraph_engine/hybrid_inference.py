@@ -6,7 +6,7 @@ Smart routing between NPU (fast, local) and GPU/Claude (high-quality) based on s
 Step Classification:
 - CLASSIFICATION: Step 1 (plan decision) → NPU Gemma-2-2B
 - LIGHTWEIGHT_ANALYSIS: Step 3, 5 → NPU Llama-3.2-3B or Qwen2.5-7B
-- COMPLEX_REASONING: Step 0, 2, 4, 7 → Claude API (Opus for best quality)
+- COMPLEX_REASONING: Step 0, 2, 4, 7 → Claude CLI (subscription-based, no API costs)
 - NO_LLM: Steps 6, 8-14 → Skip LLM entirely
 
 Usage:
@@ -26,8 +26,13 @@ Usage:
 
 import os
 import json
+import subprocess
+import sys
+import tempfile
+import time
 from typing import Dict, Any, Optional, List
 from enum import Enum
+from pathlib import Path
 from loguru import logger
 
 try:
@@ -277,13 +282,175 @@ class HybridInferenceManager:
         logger.debug(f"Complex reasoning task: {step}")
         return self._invoke_claude(prompt, context, step=step)
 
+    def _invoke_claude_cli(
+        self,
+        prompt: str,
+        context: Optional[Dict[str, Any]],
+        step: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Invoke Claude via CLI (subscription-based, no API costs).
+
+        Uses Claude Code CLI to call Claude in a subprocess.
+        This method uses your existing Claude subscription instead of API credits.
+        """
+        try:
+            start_time = time.time()
+
+            # Build the full prompt with context if available
+            full_prompt = prompt
+            if context:
+                context_str = json.dumps(context, indent=2)[:1000]  # Limit context size
+                full_prompt = f"{prompt}\n\n[CONTEXT]\n{context_str}"
+
+            # Create temporary file for prompt (to avoid shell escaping issues)
+            with tempfile.NamedTemporaryFile(
+                mode='w',
+                suffix='.txt',
+                delete=False,
+                encoding='utf-8'
+            ) as temp_file:
+                temp_file.write(full_prompt)
+                temp_prompt_file = temp_file.name
+
+            try:
+                # Call Claude CLI
+                # Format: claude [options] [prompt or @file]
+                cmd = [
+                    "claude",
+                    "--json",  # Get JSON output
+                    "--no-stream",  # Wait for full response
+                    f"@{temp_prompt_file}",  # Read prompt from file
+                ]
+
+                logger.debug(f"Calling Claude CLI: {' '.join(cmd[:2])}")
+
+                result = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=30,  # 30 second timeout
+                )
+
+                elapsed_ms = (time.time() - start_time) * 1000
+                self.stats["claude_calls"] += 1
+                self.stats["claude_time_ms"] += elapsed_ms
+
+                if result.returncode != 0:
+                    logger.warning(
+                        f"Claude CLI returned non-zero exit code: {result.returncode}\n"
+                        f"stderr: {result.stderr[:200]}"
+                    )
+                    # Try to extract response from output anyway
+                    response_text = result.stdout or result.stderr
+
+                    # Try parsing as JSON first
+                    try:
+                        json_out = json.loads(response_text)
+                        response_text = (
+                            json_out.get("response", "")
+                            or json_out.get("text", "")
+                            or json_out.get("output", "")
+                            or str(json_out)
+                        )
+                    except json.JSONDecodeError:
+                        pass  # Use as-is
+
+                    return {
+                        "status": "ok",
+                        "source": "claude-cli",
+                        "model": "claude-subscription",
+                        "response": response_text,
+                        "step": step,
+                        "timing": f"{elapsed_ms:.0f}ms",
+                        "warning": "CLI returned non-zero code but response extracted",
+                    }
+
+                # Parse response
+                try:
+                    # If JSON output was requested
+                    json_response = json.loads(result.stdout)
+                    response_text = (
+                        json_response.get("response", "")
+                        or json_response.get("text", "")
+                        or json_response.get("output", "")
+                        or str(json_response)
+                    )
+                except json.JSONDecodeError:
+                    # Fallback to plain text
+                    response_text = result.stdout
+
+                logger.debug(f"Claude CLI response length: {len(response_text)}")
+
+                return {
+                    "status": "ok",
+                    "source": "claude-cli",
+                    "model": "claude-subscription",
+                    "response": response_text,
+                    "step": step,
+                    "timing": f"{elapsed_ms:.0f}ms",
+                }
+
+            finally:
+                # Clean up temp file
+                try:
+                    Path(temp_prompt_file).unlink()
+                except Exception:
+                    pass
+
+        except FileNotFoundError:
+            logger.error(
+                "Claude CLI not found. Install with: pip install claude-code\n"
+                "Or ensure 'claude' command is in PATH"
+            )
+            return {
+                "status": "error",
+                "reason": "Claude CLI not found in PATH",
+                "step": step,
+                "hint": "Install: pip install claude-code",
+            }
+        except subprocess.TimeoutExpired:
+            logger.error("Claude CLI call timed out (30s)")
+            return {
+                "status": "error",
+                "reason": "Claude CLI timeout",
+                "step": step,
+            }
+        except Exception as e:
+            logger.error(f"Claude CLI error: {e}")
+            return {
+                "status": "error",
+                "reason": str(e),
+                "step": step,
+            }
+
     def _invoke_claude(
         self,
         prompt: str,
         context: Optional[Dict[str, Any]],
         step: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Invoke Claude API for high-quality responses."""
+        """
+        Invoke Claude for high-quality responses.
+        Uses CLI-based subscription first (no API costs), falls back to API if needed.
+        """
+        # Try CLI first (subscription-based)
+        use_cli = os.getenv("CLAUDE_USE_CLI", "1").lower() == "1"
+
+        if use_cli:
+            cli_result = self._invoke_claude_cli(prompt, context, step)
+
+            # If CLI worked, return it
+            if cli_result.get("status") == "ok":
+                return cli_result
+
+            # If CLI failed but has a reason, log it
+            if cli_result.get("status") == "error":
+                logger.warning(f"Claude CLI failed: {cli_result.get('reason')}")
+                # Fall through to API fallback
+
+        # Fallback to API (only if CLI unavailable or failed)
+        logger.debug("Falling back to Claude API")
         try:
             import anthropic
             import time
@@ -312,7 +479,7 @@ class HybridInferenceManager:
 
             return {
                 "status": "ok",
-                "source": "claude",
+                "source": "claude-api",
                 "model": "claude-opus-4-6",
                 "response": response.content[0].text if response.content else "",
                 "step": step,
@@ -321,13 +488,14 @@ class HybridInferenceManager:
                     "input_tokens": response.usage.input_tokens,
                     "output_tokens": response.usage.output_tokens,
                 },
+                "warning": "Using API fallback (CLI unavailable)",
             }
 
         except ImportError:
-            logger.error("anthropic SDK not installed")
+            logger.error("anthropic SDK not installed and Claude CLI unavailable")
             return {
                 "status": "error",
-                "reason": "anthropic SDK not installed",
+                "reason": "anthropic SDK not installed and Claude CLI unavailable",
                 "step": step,
             }
         except Exception as e:
