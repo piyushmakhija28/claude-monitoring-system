@@ -121,7 +121,12 @@ class FlowState(TypedDict, total=False):
     # Level 1 caching
     context_cache_hit: Optional[bool]       # True if cache was valid and used
     context_cache_age_hours: Optional[float]  # How old the cached context is
-    context_cache_key: Optional[str]        # Cache key (hash of project path)
+    context_cache_key: Optional[str]        # Cache key (SHA-256 of project path)
+
+    # Level 1 optimization metrics (Task #6)
+    context_load_time_ms: Optional[int]        # Wall-clock ms for context load
+    context_hit_rate_pct: Optional[float]      # Session cache hit rate percentage (0-100)
+    context_streamed_files: Optional[List[str]]  # Files loaded via streaming (large files)
 
     # ===========================================================================
     # LEVEL 2: STANDARDS SYSTEM
@@ -138,6 +143,26 @@ class FlowState(TypedDict, total=False):
     # Tool Optimization Standards (loaded at Level 2, enforced by PreToolUse hook)
     tool_optimization_rules: Optional[Dict]   # {read_max_lines, grep_max_matches, etc.}
     tool_optimization_loaded: Optional[bool]  # True after Level 2 loads rules
+
+    # Standards selector result (level2_select_standards_node output)
+    standards_selection: Optional[Dict]       # {project_type, framework, total_loaded, conflicts_detected, merged_rules}
+    standards_merged_rules: Optional[Dict]    # Conflict-resolved merged rules from all standards sources
+    detected_framework: Optional[str]         # Framework detected by standard_selector (flask/django/spring-boot/react/etc.)
+    standards_selection_error: Optional[str]  # Error from standards selector (non-fatal)
+
+    # Standards integration hook outputs (set at each pipeline step)
+    standards_applied_step1: Optional[bool]   # Standards applied at Step 1 (plan mode decision)
+    standards_applied_step2: Optional[bool]   # Standards applied at Step 2 (plan execution)
+    standards_applied_step5: Optional[bool]   # Standards applied at Step 5 (skill selection)
+    standards_applied_step10: Optional[bool]  # Standards applied at Step 10 (code review)
+    standards_applied_step13: Optional[bool]  # Standards applied at Step 13 (documentation)
+
+    # Step-specific standards context injected by integration hooks
+    step1_standards_context: Optional[Dict]         # Standards metadata for plan complexity scorer
+    step2_standards_constraints: Optional[Dict]     # Naming/layer constraints for planner
+    step5_standards_validation: Optional[Dict]      # Skill/standards compatibility check result
+    step10_standards_checklist: Optional[Dict]      # Code review compliance checklist
+    step13_standards_doc_requirements: Optional[Dict]  # Documentation update requirements
 
     level2_status: str                 # OK / PARTIAL / FAILED
 

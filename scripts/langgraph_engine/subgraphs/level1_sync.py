@@ -7,6 +7,12 @@ CORRECT FLOW (per user specification):
 3. node_context_loader (PARALLEL with #2) - Read SRS, README, CLAUDE.md from PROJECT
 4. node_toon_compression (NEW) - Compress to TOON format + clear memory
 5. level1_merge_node - Final merge
+
+Optimization features (Task #6):
+- Cache integration with hit/miss rate logging (via CacheStats)
+- Per-file and total timeouts with graceful partial-context recovery
+- Memory-pressure streaming for files >1MB (chunked read, no full load)
+- OOM safeguard: total load budget enforced across all files
 """
 
 import sys
@@ -14,7 +20,7 @@ import json
 import subprocess
 from pathlib import Path
 from datetime import datetime
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Iterator
 
 try:
     from langgraph.graph import StateGraph, START, END
@@ -174,7 +180,11 @@ def node_complexity_calculation(state: FlowState) -> dict:
 
 # ============================================================================
 # NODE 3: CONTEXT LOADER (PARALLEL with complexity_calculation)
-# Subtasks 3, 5, 7: Timeout handling + Memory limits + Partial context fallback
+# Task #6 optimizations:
+#   - Timeout handling with graceful recovery and partial context return
+#   - Memory-pressure streaming for large files (>STREAMING_THRESHOLD)
+#   - OOM safeguard: total load budget enforced
+#   - Cache hit/miss rate logging via CacheStats
 # ============================================================================
 
 # Per-file and total-load timeouts (seconds)
@@ -182,21 +192,74 @@ CONTEXT_TIMEOUT_PER_FILE = 30
 CONTEXT_TIMEOUT_TOTAL = 120
 
 # Memory limits
-MAX_FILE_SIZE = 1_000_000       # 1 MB per file
-MAX_TOTAL_SIZE = 10_000_000     # 10 MB total loaded bytes
+MAX_FILE_SIZE = 1_000_000       # 1 MB: files bigger than this are streamed
+MAX_TOTAL_SIZE = 10_000_000     # 10 MB total loaded bytes across all files
+
+# Streaming: files larger than this threshold are read in chunks to avoid OOM
+STREAMING_THRESHOLD = 1_000_000   # 1 MB
+STREAMING_CHUNK_SIZE = 65_536     # 64 KB per read chunk
 
 # Max content per file sent to TOON (5 KB snippet)
 MAX_CONTENT_CHARS = 5000
 
 
-def _read_file_with_timeout(file_path: Path, timeout_seconds: int = CONTEXT_TIMEOUT_PER_FILE) -> str:
+def _stream_file_head(
+    file_path: Path,
+    max_chars: int = MAX_CONTENT_CHARS,
+    chunk_size: int = STREAMING_CHUNK_SIZE,
+) -> str:
+    """Stream the head of a large file without loading it fully into memory.
+
+    Reads file in chunks until max_chars bytes accumulated or EOF reached.
+    This avoids OOM errors for large SRS / README files.
+
+    Args:
+        file_path: Path object to read
+        max_chars: Maximum characters to return
+        chunk_size: Read chunk size in bytes
+
+    Returns:
+        String containing up to max_chars characters from the start of the file
+
+    Raises:
+        Exception: On file read errors (not caught here - caller handles)
+    """
+    collected: list = []
+    collected_len: int = 0
+
+    with open(str(file_path), "r", encoding="utf-8", errors="ignore") as fh:
+        while collected_len < max_chars:
+            remaining = max_chars - collected_len
+            # Read a chunk no larger than chunk_size and no larger than remaining
+            read_size = min(chunk_size, remaining)
+            chunk = fh.read(read_size)
+            if not chunk:
+                break
+            collected.append(chunk)
+            collected_len += len(chunk)
+
+    return "".join(collected)
+
+
+def _read_file_with_timeout(
+    file_path: Path,
+    timeout_seconds: int = CONTEXT_TIMEOUT_PER_FILE,
+    use_streaming: bool = False,
+    max_chars: int = MAX_CONTENT_CHARS,
+) -> str:
     """Read a file, returning content or raising TimeoutError / Exception.
 
     On Windows, threading-based timeout is used (signal module is POSIX-only).
 
+    Optimization (Task #6 - Memory Pressure):
+    When use_streaming=True the file is read in chunks via _stream_file_head()
+    to avoid loading the full multi-MB file into memory.
+
     Args:
         file_path: Path to read
         timeout_seconds: Max seconds to allow for the read
+        use_streaming: If True, use chunked streaming instead of read_text()
+        max_chars: Max characters to return when streaming (ignored otherwise)
 
     Returns:
         File content as string
@@ -207,12 +270,19 @@ def _read_file_with_timeout(file_path: Path, timeout_seconds: int = CONTEXT_TIME
     """
     import threading
 
+    # Normalize to Path for .read_text() compatibility (accepts both str and Path)
+    if not isinstance(file_path, Path):
+        file_path = Path(file_path)
+
     result: list = [None]
     exc: list = [None]
 
     def _reader():
         try:
-            result[0] = file_path.read_text(encoding="utf-8", errors="ignore")
+            if use_streaming:
+                result[0] = _stream_file_head(file_path, max_chars=max_chars)
+            else:
+                result[0] = file_path.read_text(encoding="utf-8", errors="ignore")
         except Exception as e:
             exc[0] = e
 
@@ -221,6 +291,8 @@ def _read_file_with_timeout(file_path: Path, timeout_seconds: int = CONTEXT_TIME
     thread.join(timeout=timeout_seconds)
 
     if thread.is_alive():
+        # Thread is still blocked - the read timed out
+        # Mark timeout in result so caller can detect partial success
         raise TimeoutError(
             "File read timed out after {}s: {}".format(timeout_seconds, file_path)
         )
@@ -234,11 +306,17 @@ def _read_file_with_timeout(file_path: Path, timeout_seconds: int = CONTEXT_TIME
 def node_context_loader(state: FlowState) -> dict:
     """Load context from PROJECT FILES (not ~/.claude/memory/).
 
-    Features:
-    - Per-file timeout (30s) and total timeout (120s)
-    - Memory limits: 1MB per file, 10MB total
-    - Partial context fallback: continue on any single-file failure
-    - Graceful degradation: return whatever loaded successfully
+    Optimization features (Task #6):
+    - Cache integration: try cache first, skip filesystem scan on hit
+    - Hit/miss rate logged to CacheStats and printed with cumulative rate
+    - Per-file timeout (30s) with graceful recovery: timed-out file is skipped,
+      remaining files still load (partial context returned, not empty context)
+    - Total timeout (120s) guard: stops adding files once limit hit; already
+      loaded files are returned as partial context
+    - Memory-pressure streaming: files >= STREAMING_THRESHOLD (1MB) are read
+      in 64KB chunks via _stream_file_head() to avoid OOM
+    - Total memory budget: stops loading once MAX_TOTAL_SIZE reached
+    - Partial context: context_data["files_loaded"] reflects what actually loaded
 
     Reads from project folder (root only, no deep recursion):
     - SRS.*
@@ -249,6 +327,9 @@ def node_context_loader(state: FlowState) -> dict:
 
     print("[LEVEL 1 CONTEXT LOADER] CALLED!", file=sys.stderr)
 
+    # Track timing for performance metric reporting
+    loader_start = time.time()
+
     try:
         project_root = Path(state.get("project_root", "."))
         session_path = Path(state.get("session_path", ""))
@@ -257,13 +338,19 @@ def node_context_loader(state: FlowState) -> dict:
         print("[LEVEL 1 CONTEXT LOADER] exists: {}".format(project_root.exists()), file=sys.stderr)
         sys.stderr.flush()
 
-        # ---- Subtask 8: Check context cache first ----
+        # ---- Cache check: try to return immediately on hit ----
         if _CONTEXT_CACHE_AVAILABLE:
             try:
                 _cache = ContextCache()
                 cached = _cache.load_cache(str(project_root))
                 if cached is not None:
-                    print("[LEVEL 1 CONTEXT LOADER] Cache HIT - using cached context", file=sys.stderr)
+                    elapsed_ms = int((time.time() - loader_start) * 1000)
+                    print(
+                        "[LEVEL 1 CONTEXT LOADER] Cache HIT - skipping filesystem scan"
+                        " ({}ms)".format(elapsed_ms),
+                        file=sys.stderr,
+                    )
+                    cache_stats = ContextCache.get_session_stats()
                     return {
                         "context_data": cached,
                         "context_loaded": True,
@@ -274,6 +361,9 @@ def node_context_loader(state: FlowState) -> dict:
                         "context_cache_hit": True,
                         "context_cache_age_hours": cached.get("_cache_age_hours", 0.0),
                         "context_cache_key": ContextCache._cache_key(str(project_root)),
+                        "context_load_time_ms": elapsed_ms,
+                        "context_hit_rate_pct": cache_stats.get("hit_rate_pct", 0.0),
+                        "context_streamed_files": [],
                     }
             except Exception as cache_exc:
                 print(
@@ -281,6 +371,7 @@ def node_context_loader(state: FlowState) -> dict:
                     file=sys.stderr,
                 )
 
+        # ---- Fresh load ----
         context_data: dict = {
             "srs": None,
             "readme": None,
@@ -292,8 +383,9 @@ def node_context_loader(state: FlowState) -> dict:
         load_start = time.time()
         skipped_files: list = []
         load_warnings: list = []
+        streamed_files: list = []
 
-        # Candidate files: pattern -> context_data key
+        # Candidate files: (glob_pattern, context_data_key, display_label)
         candidates = [
             ("[Ss][Rr][Ss].*", "srs", "SRS"),
             ("[Rr][Ee][Aa][Dd][Mm][Ee].*", "readme", "README"),
@@ -301,17 +393,22 @@ def node_context_loader(state: FlowState) -> dict:
         ]
 
         for glob_pattern, data_key, label in candidates:
-            # ---- Subtask 7: partial fallback - skip on any error, continue to next ----
+            # Partial context fallback: catch all errors, skip file, continue loop
             try:
-                # Check total timeout
+                # --- Total timeout guard ---
                 elapsed = time.time() - load_start
                 if elapsed >= CONTEXT_TIMEOUT_TOTAL:
-                    msg = "Total context load timeout ({}s) reached, stopping".format(
-                        CONTEXT_TIMEOUT_TOTAL
+                    msg = (
+                        "Total context load timeout ({}s) reached after {:.1f}s - "
+                        "returning partial context with {} files loaded".format(
+                            CONTEXT_TIMEOUT_TOTAL,
+                            elapsed,
+                            len(context_data.get("files_loaded", [])),
+                        )
                     )
                     print("[CONTEXT LOADER] " + msg, file=sys.stderr)
                     load_warnings.append(msg)
-                    break  # Subtask 5: stop_loading() when threshold reached
+                    break
 
                 # Find matching files in root only (no recursive glob)
                 matched = list(project_root.glob(glob_pattern))
@@ -320,57 +417,84 @@ def node_context_loader(state: FlowState) -> dict:
 
                 file_path = matched[0]
 
-                # ---- Subtask 5: MAX_FILE_SIZE check ----
+                # --- File size check ---
                 try:
                     file_size = file_path.stat().st_size
                 except Exception:
                     file_size = 0
 
-                if file_size > MAX_FILE_SIZE:
-                    msg = "Skipping {} - file too large ({} bytes > {} limit)".format(
-                        label, file_size, MAX_FILE_SIZE
+                # --- Total memory budget guard ---
+                if total_loaded_bytes >= MAX_TOTAL_SIZE:
+                    msg = "Total load limit ({} bytes) reached, returning partial context".format(
+                        MAX_TOTAL_SIZE
                     )
                     print("[CONTEXT LOADER] " + msg, file=sys.stderr)
-                    skipped_files.append(label)
                     load_warnings.append(msg)
-                    continue  # skip_file()
+                    break
 
-                # ---- Subtask 5: MAX_TOTAL_SIZE check ----
-                if total_loaded_bytes >= MAX_TOTAL_SIZE:
-                    msg = "Total load limit reached ({} bytes), stopping".format(MAX_TOTAL_SIZE)
+                # --- Memory pressure: use streaming for large files ---
+                use_streaming = file_size >= STREAMING_THRESHOLD
+                if use_streaming:
+                    msg = (
+                        "{} is large ({} bytes >= {}B threshold) - "
+                        "using streaming read".format(
+                            label, file_size, STREAMING_THRESHOLD
+                        )
+                    )
                     print("[CONTEXT LOADER] " + msg, file=sys.stderr)
                     load_warnings.append(msg)
-                    break  # stop_loading()
+                    streamed_files.append(label)
 
-                # ---- Subtask 3: Per-file timeout ----
+                # --- Per-file timeout with graceful recovery ---
                 try:
-                    content = _read_file_with_timeout(file_path, CONTEXT_TIMEOUT_PER_FILE)
-                except TimeoutError as te:
-                    msg = "File timeout for {} - skipping: {}".format(label, te)
+                    content = _read_file_with_timeout(
+                        file_path,
+                        CONTEXT_TIMEOUT_PER_FILE,
+                        use_streaming=use_streaming,
+                        max_chars=MAX_CONTENT_CHARS,
+                    )
+                except TimeoutError:
+                    # Timeout: skip this file, continue with others (partial context)
+                    msg = (
+                        "Timeout ({:.0f}s) reading {} - file skipped, "
+                        "continuing with remaining files".format(
+                            CONTEXT_TIMEOUT_PER_FILE, label
+                        )
+                    )
                     print("[CONTEXT LOADER] WARNING: " + msg, file=sys.stderr)
                     load_warnings.append(msg)
                     skipped_files.append(label)
-                    continue  # Graceful degradation - proceed without this file
+                    continue
 
-                # Store truncated content
-                context_data[data_key] = content[:MAX_CONTENT_CHARS]
+                # Store content (streaming already limits to MAX_CONTENT_CHARS)
+                if use_streaming:
+                    context_data[data_key] = content
+                else:
+                    context_data[data_key] = content[:MAX_CONTENT_CHARS]
+
                 context_data["files_loaded"].append(label)
-                total_loaded_bytes += len(content.encode("utf-8", errors="ignore"))
+                loaded_bytes = len(content.encode("utf-8", errors="ignore"))
+                total_loaded_bytes += loaded_bytes
 
                 print(
-                    "[CONTEXT LOADER] Loaded {} ({} bytes)".format(label, len(content)),
+                    "[CONTEXT LOADER] Loaded {} ({} bytes on disk, {} bytes in memory{})".format(
+                        label,
+                        file_size,
+                        loaded_bytes,
+                        ", streamed" if use_streaming else "",
+                    ),
                     file=sys.stderr,
                 )
 
             except Exception as exc:
-                # ---- Subtask 7: partial fallback - log warning and continue ----
-                msg = "Failed to load {} - skipping: {}".format(label, exc)
+                # General error: skip this file, continue with remaining
+                msg = "Error loading {} (skipped, partial context): {}".format(label, exc)
                 print("[CONTEXT LOADER] WARNING: " + msg, file=sys.stderr)
                 load_warnings.append(msg)
                 skipped_files.append(label)
-                continue  # Continue without this file
+                continue
 
-        # ---- Subtask 6: Context deduplication ----
+        # ---- Context deduplication ----
         if _DEDUPLICATOR_AVAILABLE and len(context_data.get("files_loaded", [])) >= 2:
             try:
                 context_data = deduplicate_context(context_data)
@@ -380,7 +504,7 @@ def node_context_loader(state: FlowState) -> dict:
                     file=sys.stderr,
                 )
 
-        # Save context to session folder
+        # ---- Save context to session folder ----
         if session_path and str(session_path) != ".":
             try:
                 context_file = Path(session_path) / "context-raw.json"
@@ -392,7 +516,7 @@ def node_context_loader(state: FlowState) -> dict:
                     file=sys.stderr,
                 )
 
-        # ---- Subtask 8: Persist fresh context to cache ----
+        # ---- Persist fresh context to cache ----
         if _CONTEXT_CACHE_AVAILABLE:
             try:
                 _cache = ContextCache()
@@ -403,7 +527,22 @@ def node_context_loader(state: FlowState) -> dict:
                     file=sys.stderr,
                 )
 
-        # Proceed with whatever loaded successfully (Subtask 7)
+        elapsed_ms = int((time.time() - loader_start) * 1000)
+        cache_stats = ContextCache.get_session_stats() if _CONTEXT_CACHE_AVAILABLE else {}
+
+        print(
+            "[CONTEXT LOADER] Complete: {} files loaded, {} skipped, "
+            "{} bytes, {}ms (session hit_rate={}%)".format(
+                len(context_data.get("files_loaded", [])),
+                len(skipped_files),
+                total_loaded_bytes,
+                elapsed_ms,
+                cache_stats.get("hit_rate_pct", "N/A"),
+            ),
+            file=sys.stderr,
+        )
+
+        # Return partial context - whatever loaded successfully
         return {
             "context_data": context_data,
             "context_loaded": True,
@@ -413,10 +552,14 @@ def node_context_loader(state: FlowState) -> dict:
             "context_total_bytes": total_loaded_bytes,
             "context_cache_hit": False,
             "context_cache_key": ContextCache._cache_key(str(project_root)) if _CONTEXT_CACHE_AVAILABLE else None,
+            "context_load_time_ms": elapsed_ms,
+            "context_hit_rate_pct": cache_stats.get("hit_rate_pct", 0.0),
+            "context_streamed_files": streamed_files,
         }
 
     except Exception as e:
-        # Top-level fallback - return empty but not crashed
+        # Top-level fallback: return empty context dict - never crash the pipeline
+        elapsed_ms = int((time.time() - loader_start) * 1000)
         print("[CONTEXT LOADER] ERROR: {}".format(e), file=sys.stderr)
         return {
             "context_loaded": False,
@@ -424,8 +567,10 @@ def node_context_loader(state: FlowState) -> dict:
             "context_data": {},
             "files_loaded_count": 0,
             "context_skipped_files": [],
-            "context_load_warnings": [],
+            "context_load_warnings": ["Top-level error: {}".format(e)],
             "context_total_bytes": 0,
+            "context_load_time_ms": elapsed_ms,
+            "context_streamed_files": [],
         }
 
 
