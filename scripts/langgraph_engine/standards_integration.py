@@ -4,6 +4,17 @@ Standards Integration Points - Level 2 Standards System
 Defines WHERE and HOW standards are applied during execution flow.
 Each integration point hooks into a specific step to ensure compliance.
 
+5 Integration Points:
+  Step 1  - Before plan mode decision: inject standards context for complexity scoring
+  Step 2  - During plan execution: inject naming/layer constraints for planner
+  Step 5  - After skill selection: validate skill is compatible with project standards
+  Step 10 - During code review: build compliance checklist from active standards
+  Step 13 - During doc update: specify required documentation files and formats
+
+Priority ordering used by conflict resolution (from standard_selector.py):
+  custom(4) > team(3) > framework(2) > language(1)
+  Higher numeric priority = higher precedence = wins on rule conflicts.
+
 Uses ErrorLogger from error_logger.py for audit trail.
 """
 
@@ -90,11 +101,18 @@ STANDARDS_INTEGRATION_POINTS = {
 def load_standards(state: FlowState) -> Dict[str, Any]:
     """Load applicable standards from FlowState.
 
+    Aggregates all standards data loaded by Level 2 nodes into a single
+    dict for use by integration hooks. Includes:
+    - Tool optimization rules (from level2_tool_optimization node)
+    - Spring Boot patterns (from level2_java_standards node)
+    - Merged rules from standards selector (from level2_select_standards node)
+    - Framework detection result (from standard_selector.detect_framework)
+
     Args:
         state: Current FlowState with loaded standards data.
 
     Returns:
-        Dict with standards data and metadata.
+        Dict with standards data and metadata keyed by standards domain.
     """
     standards: Dict[str, Any] = {}
 
@@ -108,13 +126,41 @@ def load_standards(state: FlowState) -> Dict[str, Any]:
     if spring_patterns:
         standards["spring_boot"] = spring_patterns
 
+    # Merged rules from standards selector (conflict-resolved)
+    merged_rules = state.get("standards_merged_rules")
+    if merged_rules:
+        standards["merged_rules"] = merged_rules
+
+    # Full standards selection result (includes traceability)
+    standards_selection = state.get("standards_selection")
+    if standards_selection:
+        standards["selection"] = standards_selection
+
+    # Derive project_type from multiple sources (most specific wins)
+    is_java = state.get("is_java_project", False)
+    detected_framework = state.get("detected_framework", "")
+    selection_project_type = (
+        (standards_selection or {}).get("project_type", "")
+        if standards_selection else ""
+    )
+
+    # Use selection result when available (most accurate), else fall back to is_java flag
+    if selection_project_type:
+        project_type = selection_project_type
+    elif is_java:
+        project_type = "java"
+    else:
+        project_type = "python"
+
     # Standards count from common loader
     standards_count = state.get("standards_count", 0)
     standards["__meta"] = {
         "count": standards_count,
         "loaded": state.get("standards_loaded", False),
         "level2_status": state.get("level2_status", "UNKNOWN"),
-        "project_type": "java" if state.get("is_java_project") else "python",
+        "project_type": project_type,
+        "framework": detected_framework or (standards_selection or {}).get("framework", "unknown"),
+        "priority_chain": "custom(4) > team(3) > framework(2) > language(1)",
     }
 
     return standards
@@ -203,22 +249,32 @@ def _apply_step1_standards(
 
     Makes the plan complexity scorer aware of how many standards are active
     so that it can factor framework-mandated boilerplate into its estimate.
+    Also exposes the detected framework so Step 1's LLM prompt can tailor
+    its complexity assessment to the project's tech stack.
 
     Returns:
-        State updates to merge.
+        State updates to merge (sets step1_standards_context in FlowState).
     """
     updates: Dict[str, Any] = {}
 
-    standards_count = standards.get("__meta", {}).get("count", 0)
-    project_type = standards.get("__meta", {}).get("project_type", "unknown")
+    meta = standards.get("__meta", {})
+    standards_count = meta.get("count", 0)
+    project_type = meta.get("project_type", "unknown")
+    framework = meta.get("framework", "unknown")
+    has_merged_rules = bool(standards.get("merged_rules"))
+    has_selection = bool(standards.get("selection"))
 
     # Store context so Step 1 LLM prompt can reference it
     updates["step1_standards_context"] = {
         "active_standards": standards_count,
         "project_type": project_type,
+        "framework": framework,
         "tool_rules_loaded": "tool_optimization" in standards,
+        "merged_rules_available": has_merged_rules,
+        "standards_selection_available": has_selection,
+        "priority_chain": "custom(4) > team(3) > framework(2) > language(1)",
         "note": (
-            "Account for project standards when scoring complexity. "
+            f"Account for {project_type}/{framework} standards when scoring complexity. "
             "Higher standard count may increase required steps."
         ),
     }
@@ -226,7 +282,7 @@ def _apply_step1_standards(
     logger.log_decision(
         step="Level 2 - Step 1",
         decision="Standards context prepared for plan decision",
-        reasoning=f"Project type={project_type}, active standards={standards_count}",
+        reasoning=f"project_type={project_type}, framework={framework}, active_standards={standards_count}",
         chosen_option="standards_context_injected",
     )
 
@@ -277,61 +333,85 @@ def _apply_step5_standards(
 
     If the selected skill is flagged as incompatible (e.g., a Java-only
     skill assigned to a Python project), log a warning and suggest
-    alternatives.
+    alternatives. Checks cross-language mismatches for Python, Java,
+    JavaScript/TypeScript, Go, Rust, and C# projects.
+
+    Integration point: step_5 (blocking=True in STANDARDS_INTEGRATION_POINTS).
+    Warnings do NOT block execution - they are recorded in FlowState for
+    the Step 11 code review checklist to verify.
 
     Returns:
-        State updates to merge.
+        State updates to merge (sets step5_standards_validation in FlowState).
     """
     updates: Dict[str, Any] = {}
 
-    project_type = standards.get("__meta", {}).get("project_type", "unknown")
+    meta = standards.get("__meta", {})
+    project_type = meta.get("project_type", "unknown")
+    framework = meta.get("framework", "unknown")
     selected_skill = state.get("step5_skill", "") or ""
     selected_agent = state.get("step5_agent", "") or ""
 
     validation_warnings: List[str] = []
+    validation_info: List[str] = []
 
-    # Basic cross-type check
-    if project_type == "java" and _is_python_only_skill(selected_skill):
-        msg = (
-            f"Skill '{selected_skill}' appears Python-only but project is Java. "
-            "Consider using a Java/Spring skill instead."
-        )
-        validation_warnings.append(msg)
-        logger.log_error(
-            step="Level 2 - Step 5",
-            error_message=msg,
-            severity="WARNING",
-            error_type="SkillMismatch",
-            recovery_action="Warning logged; execution continues with selected skill",
-        )
+    # Cross-language mismatch checks
+    cross_type_checks = [
+        ("java", _is_python_only_skill, "Python-only", "Java/Spring"),
+        ("python", _is_java_only_skill, "Java-only", "Python/Flask/Django/FastAPI"),
+        ("go", _is_python_only_skill, "Python-only", "Go"),
+        ("go", _is_java_only_skill, "Java-only", "Go"),
+        ("rust", _is_python_only_skill, "Python-only", "Rust"),
+        ("rust", _is_java_only_skill, "Java-only", "Rust"),
+    ]
 
-    if project_type == "python" and _is_java_only_skill(selected_skill):
-        msg = (
-            f"Skill '{selected_skill}' appears Java-only but project is Python. "
-            "Consider using a Python/Flask/Django/FastAPI skill instead."
-        )
-        validation_warnings.append(msg)
-        logger.log_error(
-            step="Level 2 - Step 5",
-            error_message=msg,
-            severity="WARNING",
-            error_type="SkillMismatch",
-            recovery_action="Warning logged; execution continues with selected skill",
+    for pt, check_fn, skill_label, suggestion in cross_type_checks:
+        if project_type == pt and check_fn(selected_skill):
+            msg = (
+                f"Skill '{selected_skill}' appears {skill_label} but project is {project_type.upper()}. "
+                f"Consider using a {suggestion} skill instead."
+            )
+            validation_warnings.append(msg)
+            logger.log_error(
+                step="Level 2 - Step 5",
+                error_message=msg,
+                severity="WARNING",
+                error_type="SkillMismatch",
+                recovery_action="Warning logged; execution continues with selected skill",
+                context={
+                    "project_type": project_type,
+                    "framework": framework,
+                    "selected_skill": selected_skill,
+                },
+            )
+            break  # Only one mismatch message per skill
+
+    if not validation_warnings:
+        validation_info.append(
+            f"Skill '{selected_skill}' is compatible with {project_type}/{framework} project"
         )
 
     updates["step5_standards_validation"] = {
         "passed": len(validation_warnings) == 0,
         "warnings": validation_warnings,
+        "info": validation_info,
         "project_type": project_type,
+        "framework": framework,
         "skill_checked": selected_skill,
         "agent_checked": selected_agent,
+        "traceability": {
+            "checks_run": len(cross_type_checks),
+            "priority_chain": meta.get("priority_chain", "custom(4) > team(3) > framework(2) > language(1)"),
+        },
     }
 
     logger.log_validation_result(
         step="Level 2 - Step 5",
         check_name="Skill/Standards compatibility",
         passed=len(validation_warnings) == 0,
-        details="; ".join(validation_warnings) if validation_warnings else "All checks passed",
+        details=(
+            "; ".join(validation_warnings) if validation_warnings
+            else f"Skill '{selected_skill}' compatible with {project_type}/{framework}"
+        ),
     )
 
     return updates

@@ -2,6 +2,7 @@
 Level 2 SubGraph - Standards System with REAL Policy Script Integration
 
 Calls standards-loader.py to load actual standards from policies/
+Includes MCP plugin discovery for auto-routing tool optimization.
 """
 
 import sys
@@ -242,6 +243,68 @@ def node_tool_optimization_standards(state: FlowState) -> dict:
     return updates
 
 
+def node_mcp_plugin_discovery(state: FlowState) -> dict:
+    """Level 2: Discover and load MCP plugin registry.
+
+    Scans ~/.claude/mcp/plugins/ for available MCP servers and populates
+    state with available MCPs. Enables AUTO-ROUTE mode in pre-tool-enforcer.py
+    if Filesystem MCP is available.
+    """
+    updates = {}
+
+    try:
+        from ..mcp_plugin_loader import MCPPluginLoader, MCPPluginError
+
+        loader = MCPPluginLoader()
+        plugins = loader.discover_plugins()
+
+        # Get list of available MCPs
+        available_mcps = loader.get_available_mcps()
+
+        # Check if Filesystem MCP is available
+        filesystem_enabled = "filesystem" in plugins
+
+        updates = {
+            "mcp_servers_available": available_mcps,
+            "mcp_filesystem_enabled": filesystem_enabled,
+            "mcp_plugins_path": str(loader.plugins_path),
+            "mcp_cache_dir": str(Path.home() / ".claude" / "mcp" / "cache"),
+            "mcp_discovered_count": len(plugins),
+            "mcp_initialization_status": "PARTIAL" if len(plugins) > 0 else "ERROR",
+            "mcp_auto_routing_enabled": filesystem_enabled,  # Enable AUTO-ROUTE if filesystem available
+        }
+
+        existing_pipeline = state.get("pipeline") or []
+        updates["pipeline"] = list(existing_pipeline) + [{
+            "node": "node_mcp_plugin_discovery",
+            "plugins_discovered": len(plugins),
+            "filesystem_mcp_enabled": filesystem_enabled,
+            "plugins_list": [p["short_name"] for p in available_mcps],
+        }]
+
+    except ImportError:
+        # MCPPluginLoader not available - graceful fallback
+        updates = {
+            "mcp_filesystem_enabled": False,
+            "mcp_auto_routing_enabled": False,
+            "mcp_initialization_status": "SKIPPED",
+            "mcp_error": "MCPPluginLoader not available",
+            "mcp_discovered_count": 0,
+        }
+
+    except Exception as e:
+        # Any other error - graceful fallback
+        updates = {
+            "mcp_filesystem_enabled": False,
+            "mcp_auto_routing_enabled": False,
+            "mcp_initialization_status": "ERROR",
+            "mcp_error": str(e),
+            "mcp_discovered_count": 0,
+        }
+
+    return updates
+
+
 # ============================================================================
 # MERGE NODE
 # ============================================================================
@@ -288,11 +351,14 @@ def create_level2_subgraph():
     graph.add_node("level2_common_standards", node_common_standards)
     graph.add_node("level2_java_standards", node_java_standards)
     graph.add_node("level2_tool_optimization", node_tool_optimization_standards)
+    graph.add_node("level2_mcp_plugin_discovery", node_mcp_plugin_discovery)
     graph.add_node("level2_merge", level2_merge_node)
 
     # Common standards and tool optimization run in parallel
     graph.add_edge(START, "level2_common_standards")
     graph.add_edge(START, "level2_tool_optimization")
+    # MCP plugin discovery also runs in parallel
+    graph.add_edge(START, "level2_mcp_plugin_discovery")
 
     # Conditional routing for Java (from common standards)
     graph.add_conditional_edges(
@@ -304,9 +370,10 @@ def create_level2_subgraph():
         },
     )
 
-    # Java and tool optimization both lead to merge
+    # Java, tool optimization, and MCP plugin discovery all lead to merge
     graph.add_edge("level2_java_standards", "level2_merge")
     graph.add_edge("level2_tool_optimization", "level2_merge")
+    graph.add_edge("level2_mcp_plugin_discovery", "level2_merge")
 
     # Done
     graph.add_edge("level2_merge", END)

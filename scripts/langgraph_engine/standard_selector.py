@@ -7,6 +7,9 @@ Implements:
 - Custom standards loading (project-local + team-global)
 - Conflict detection and resolution with priority ordering
 
+Priority ordering (higher number wins conflicts):
+  custom=4 > team=3 > framework=2 > language=1
+
 Uses ErrorLogger from error_logger.py for decision audit trail.
 """
 
@@ -16,6 +19,13 @@ from pathlib import Path
 from typing import Optional, List, Dict, Any, Tuple
 
 from .error_logger import ErrorLogger
+
+
+# Priority constants - higher number = higher precedence (wins in conflict resolution)
+PRIORITY_CUSTOM = 4       # Project-local .claude/standards/ or standards/
+PRIORITY_TEAM = 3         # Team-global ~/.claude/standards/ or ~/.claude/policies/
+PRIORITY_FRAMEWORK = 2    # Built-in framework rules (flask-standards.md, etc.)
+PRIORITY_LANGUAGE = 1     # Built-in language rules (python-standards.md, etc.)
 
 
 # ============================================================================
@@ -268,7 +278,7 @@ def load_custom_standards(project_path: str) -> List[Dict[str, Any]]:
                     "source": "custom_standards",
                     "file": str(md_file),
                     "content": content,
-                    "priority": 1,  # Highest priority
+                    "priority": PRIORITY_CUSTOM,  # 4 - highest precedence
                 })
             except Exception:
                 pass
@@ -309,7 +319,7 @@ def load_team_standards(project_path: str) -> List[Dict[str, Any]]:
                     "source": "team_standards",
                     "file": str(md_file),
                     "content": content,
-                    "priority": 2,  # Second highest
+                    "priority": PRIORITY_TEAM,  # 3 - second highest precedence
                 })
             except Exception:
                 pass
@@ -355,7 +365,7 @@ def load_framework_standards(project_type: str, framework: str) -> List[Dict[str
                     "source": "framework_standards",
                     "file": str(candidate),
                     "content": content,
-                    "priority": 3,  # Third priority
+                    "priority": PRIORITY_FRAMEWORK,  # 2 - third highest precedence
                 })
                 break  # Only load the most specific match
             except Exception:
@@ -390,7 +400,7 @@ def load_language_standards(project_type: str) -> List[Dict[str, Any]]:
                 "source": "language_standards",
                 "file": str(candidate),
                 "content": content,
-                "priority": 4,  # Lowest priority
+                "priority": PRIORITY_LANGUAGE,  # 1 - lowest precedence
             })
         except Exception:
             pass
@@ -406,13 +416,15 @@ def select_standards(project_path: str, session_id: str = "default") -> Dict[str
     """Select and load all applicable standards for a project.
 
     Detection order:
-      1. detect_project_type()
-      2. detect_framework()
-      3. load_custom_standards()    (priority 1 - highest)
-      4. load_team_standards()      (priority 2)
-      5. load_framework_standards() (priority 3)
-      6. load_language_standards()  (priority 4 - lowest)
-      7. detect_conflicts() + resolve_conflicts()
+      1. detect_project_type() - checks setup.py, pom.xml, package.json, go.mod, Cargo.toml
+      2. detect_framework()    - checks imports, build files, manage.py
+      3. load_custom_standards()    (priority=4 - highest precedence)
+      4. load_team_standards()      (priority=3)
+      5. load_framework_standards() (priority=2)
+      6. load_language_standards()  (priority=1 - lowest precedence)
+      7. detect_conflicts() + resolve_conflicts() - higher numeric priority wins
+
+    Priority ordering: custom(4) > team(3) > framework(2) > language(1)
 
     Args:
         project_path: Absolute path to project root.
@@ -420,18 +432,37 @@ def select_standards(project_path: str, session_id: str = "default") -> Dict[str
 
     Returns:
         Dict with keys:
-          - project_type: str
-          - framework: str
-          - standards_list: List[Dict]
-          - merged_rules: Dict   (resolved, no conflicts)
-          - conflicts: List[Dict]
-          - total_loaded: int
+          - project_type: str         Language detected (python/java/javascript/etc.)
+          - framework: str            Framework detected (flask/django/spring-boot/react/etc.)
+          - standards_list: List[Dict] All loaded standard dicts with id/source/priority/content
+          - merged_rules: Dict        Conflict-resolved merged rules (custom wins)
+          - conflicts: List[Dict]     Detected rule conflicts with standard ids
+          - total_loaded: int         Total number of standard files loaded
+          - traceability: Dict        Selection reasoning log for audit trail
     """
     logger = ErrorLogger(session_id)
+    traceability: Dict[str, Any] = {
+        "project_path": project_path,
+        "session_id": session_id,
+        "detection_steps": [],
+        "sources_checked": [],
+        "priority_chain": "custom(4) > team(3) > framework(2) > language(1)",
+    }
 
     # --- 1. Detect project characteristics ---
     project_type = detect_project_type(project_path)
     framework = detect_framework(project_path, project_type)
+
+    traceability["project_type"] = project_type
+    traceability["framework"] = framework
+    traceability["detection_steps"].append(
+        f"detect_project_type() -> '{project_type}' (checked setup.py, pom.xml, "
+        "package.json, tsconfig.json, go.mod, Cargo.toml, *.csproj)"
+    )
+    traceability["detection_steps"].append(
+        f"detect_framework() -> '{framework}' (checked requirements.txt, "
+        "pyproject.toml, pom.xml, build.gradle, package.json deps)"
+    )
 
     logger.log_decision(
         step="Standard Selector",
@@ -442,15 +473,50 @@ def select_standards(project_path: str, session_id: str = "default") -> Dict[str
 
     # --- 2. Load standards from all sources ---
     all_standards: List[Dict[str, Any]] = []
-    all_standards.extend(load_custom_standards(project_path))
-    all_standards.extend(load_team_standards(project_path))
-    all_standards.extend(load_framework_standards(project_type, framework))
-    all_standards.extend(load_language_standards(project_type))
+
+    custom_loaded = load_custom_standards(project_path)
+    all_standards.extend(custom_loaded)
+    traceability["sources_checked"].append({
+        "source": "custom_standards",
+        "priority": PRIORITY_CUSTOM,
+        "loaded": len(custom_loaded),
+        "locations": [".claude/standards/*.md", "standards/*.md"],
+    })
+
+    team_loaded = load_team_standards(project_path)
+    all_standards.extend(team_loaded)
+    traceability["sources_checked"].append({
+        "source": "team_standards",
+        "priority": PRIORITY_TEAM,
+        "loaded": len(team_loaded),
+        "locations": ["~/.claude/policies/02-standards-system/**/*.md", "~/.claude/standards/*.md"],
+    })
+
+    framework_loaded = load_framework_standards(project_type, framework)
+    all_standards.extend(framework_loaded)
+    traceability["sources_checked"].append({
+        "source": "framework_standards",
+        "priority": PRIORITY_FRAMEWORK,
+        "loaded": len(framework_loaded),
+        "locations": [f"architecture/02-standards-system/{project_type}-{framework}-standards.md"],
+    })
+
+    language_loaded = load_language_standards(project_type)
+    all_standards.extend(language_loaded)
+    traceability["sources_checked"].append({
+        "source": "language_standards",
+        "priority": PRIORITY_LANGUAGE,
+        "loaded": len(language_loaded),
+        "locations": [f"architecture/02-standards-system/{project_type}-standards.md"],
+    })
 
     logger.log_decision(
         step="Standard Selector",
         decision=f"Loaded {len(all_standards)} standards from all sources",
-        reasoning="Custom > Team > Framework > Language priority chain",
+        reasoning=(
+            f"custom({len(custom_loaded)}) > team({len(team_loaded)}) > "
+            f"framework({len(framework_loaded)}) > language({len(language_loaded)})"
+        ),
         chosen_option="standards_loaded",
     )
 
@@ -458,14 +524,21 @@ def select_standards(project_path: str, session_id: str = "default") -> Dict[str
     conflicts = detect_conflicts(all_standards)
     merged_rules = resolve_conflicts(all_standards)
 
+    traceability["conflicts_detected"] = len(conflicts)
+    traceability["merged_rules_keys"] = list(merged_rules.keys()) if merged_rules else []
+
     if conflicts:
         logger.log_error(
             step="Standard Selector",
             error_message=f"{len(conflicts)} conflict(s) detected between standards",
             severity="WARNING",
             error_type="StandardsConflict",
-            recovery_action="Higher-priority standard wins per priority_order",
+            recovery_action="Higher numeric priority wins: custom(4) > team(3) > framework(2) > language(1)",
             context={"conflicts": [c.get("conflicts") for c in conflicts]},
+        )
+        traceability["conflict_resolution"] = (
+            "Conflicts resolved: higher numeric priority source wins. "
+            "Rules were merged lowest-priority-first so custom(4) overwrites all."
         )
 
     logger.save_audit_trail()
@@ -477,6 +550,7 @@ def select_standards(project_path: str, session_id: str = "default") -> Dict[str
         "merged_rules": merged_rules,
         "conflicts": conflicts,
         "total_loaded": len(all_standards),
+        "traceability": traceability,
     }
 
 
@@ -553,44 +627,44 @@ def detect_conflicts(standards_list: List[Dict[str, Any]]) -> List[Dict[str, Any
 def resolve_conflicts(standards_list: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Resolve conflicts by applying standards in priority order.
 
-    Priority order (lower number = higher priority, wins conflicts):
-      1. custom_standards   - project-local .claude/standards/
-      2. project_standards  - project-local standards/ (legacy path)
-      3. team_standards     - ~/.claude/standards/
-      4. framework_standards - built-in framework rules
-      5. language_standards  - built-in language rules
+    Priority ordering (higher numeric value = higher precedence, wins conflicts):
+      custom=4    - project-local .claude/standards/ or standards/
+      team=3      - team-global ~/.claude/standards/ or ~/.claude/policies/
+      framework=2 - built-in framework rules (flask-standards.md, etc.)
+      language=1  - built-in language rules (python-standards.md, etc.)
 
-    Rules from higher-priority sources override lower-priority sources.
+    Standards are applied lowest-priority-first so that higher-priority sources
+    overwrite conflicting keys. The result is a single merged rules dict where
+    custom project standards take full precedence.
 
     Args:
-        standards_list: List of standard dicts (each may have a ``rules`` key).
+        standards_list: List of standard dicts (each may have a ``rules`` key
+            and a ``priority`` int field set by the loader functions).
 
     Returns:
-        Merged rules dict with conflicts resolved.
+        Merged rules dict with conflicts resolved. Higher-priority source wins
+        on any conflicting rule key path.
     """
-    priority_order = [
-        "custom_standards",       # Priority 1 (highest)
-        "project_standards",      # Priority 2
-        "team_standards",         # Priority 3
-        "framework_standards",    # Priority 4
-        "language_standards",     # Priority 5 (lowest)
-    ]
-
-    # Sort standards by priority (lowest priority number first = highest precedence)
+    # Sort ascending by priority number so lowest-priority standards go first.
+    # When we merge in order, later (higher-priority) values overwrite earlier ones.
     def _priority_key(std: Dict[str, Any]) -> int:
-        source = std.get("source", "unknown")
+        # Numeric priority field: custom=4, team=3, framework=2, language=1
+        # Unknown/missing defaults to 0 (below language level)
+        raw = std.get("priority", 0)
         try:
-            return priority_order.index(source)
-        except ValueError:
-            return len(priority_order)  # Unknown sources get lowest priority
+            return int(raw)
+        except (TypeError, ValueError):
+            return 0
 
+    # Ascending sort: language(1) first, custom(4) last
     sorted_standards = sorted(standards_list, key=_priority_key)
 
     merged: Dict[str, Any] = {}
 
-    # Apply in reverse order (lowest priority first) so that higher-priority
-    # sources overwrite when they apply the same key.
-    for std in reversed(sorted_standards):
+    # Merge from lowest to highest priority.
+    # Each iteration can overwrite keys from the previous iteration,
+    # so the last writer (highest priority) wins.
+    for std in sorted_standards:
         rules = std.get("rules", {})
         if not rules:
             continue

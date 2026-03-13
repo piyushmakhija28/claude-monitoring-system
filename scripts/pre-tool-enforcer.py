@@ -138,6 +138,23 @@ try:
 except Exception:
     pass  # Non-blocking: PreExecutionChecker unavailable
 
+# ===================================================================
+# NEW: MCP AUTO-ROUTE INTEGRATION (Tool optimization with MCP awareness)
+# ===================================================================
+_mcp_integration = None
+try:
+    _scripts_path = Path(__file__).parent
+    sys.path.insert(0, str(_scripts_path))
+    from mcp_hook_integration import (
+        should_suggest_mcp,
+        enhance_read_blocking_message,
+        enhance_grep_blocking_message,
+        log_mcp_routing_decision
+    )
+    _mcp_integration = True
+except Exception:
+    pass  # Non-blocking: MCP integration unavailable
+
 # Track hook start time for total duration
 _HOOK_START = datetime.now()
 
@@ -1060,11 +1077,21 @@ def check_grep(tool_input):
 
         if output_mode == 'content':
             # BLOCK: content mode without head_limit can flood context
-            blocks.append(
+            msg = (
                 f'[TOOL-OPT BLOCKED] Grep output_mode="content" requires head_limit. '
-                f'Add head_limit={suggested} to prevent context overflow. '
+                f'CHOOSE ONE:\n'
+                f'1. Add head_limit={suggested} to prevent context overflow. '
                 f'Rule: ALWAYS set head_limit on Grep content-mode calls.'
             )
+            # Enhance with MCP option if available
+            if _mcp_integration:
+                try:
+                    if should_suggest_mcp():
+                        msg = enhance_grep_blocking_message(msg)
+                        log_mcp_routing_decision('grep_smart', 'Grep', True)
+                except Exception:
+                    pass  # Non-blocking: Enhancement failed
+            blocks.append(msg)
         else:
             # HINT only for compact modes (files_with_matches, count)
             hints.append(
@@ -1116,16 +1143,27 @@ def check_read(tool_input):
                 import os
                 if os.path.exists(file_path):
                     file_size = os.path.getsize(file_path)
+                    file_size_kb = file_size // 1024
                     if file_size > 50 * 1024:  # >50KB = likely >500 lines
-                        blocks.append(
+                        msg = (
                             f'[TOOL-OPT BLOCKED] Read: file is '
-                            f'{file_size // 1024}KB (>{50}KB limit). '
-                            f'Add limit=200 and offset=0 to read in chunks. '
+                            f'{file_size_kb}KB (>50KB limit). '
+                            f'CHOOSE ONE:\n'
+                            f'1. Add limit=200 and offset=0 to read in chunks. '
                             f'Rule: Use offset+limit for files >500 lines.'
                         )
+                        # Enhance with MCP option if available
+                        if _mcp_integration:
+                            try:
+                                if should_suggest_mcp():
+                                    msg = enhance_read_blocking_message(msg, file_size_kb)
+                                    log_mcp_routing_decision('read_smart', 'Read', True)
+                            except Exception:
+                                pass  # Non-blocking: Enhancement failed
+                        blocks.append(msg)
                     elif file_size > 20 * 1024:  # 20-50KB = hint
                         hints.append(
-                            f'[TOOL-OPT] Read: file is {file_size // 1024}KB. '
+                            f'[TOOL-OPT] Read: file is {file_size_kb}KB. '
                             f'Consider using offset+limit to save context tokens.'
                         )
             except Exception:

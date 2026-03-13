@@ -525,6 +525,10 @@ def step5_skill_agent_selection(state: FlowState) -> dict:
     all_skills = loader.list_all_skills()  # Dict[skill_name: full_definition]
     all_agents = loader.list_all_agents()  # Dict[agent_name: full_definition]
 
+    # NEW: Include available MCPs (MCP Integration Phase 1)
+    available_mcps = state.get("mcp_servers_available", [])
+    mcp_filesystem_enabled = state.get("mcp_filesystem_enabled", False)
+
     context_data = {
         "user_message": user_message,
         "task_type": task_type,
@@ -542,6 +546,9 @@ def step5_skill_agent_selection(state: FlowState) -> dict:
         "available_agents": list(all_agents.keys()),
         "skill_definitions": all_skills,  # Full markdown content for all skills
         "agent_definitions": all_agents,  # Full markdown content for all agents
+        # NEW: Include available MCPs for context-aware skill selection
+        "available_mcps": available_mcps,  # List of discovered MCPs
+        "mcp_filesystem_enabled": mcp_filesystem_enabled,  # True if Filesystem MCP available
     }
 
     # Pass complete context INCLUDING skill definitions to get perfect skill match
@@ -644,6 +651,7 @@ def step6_skill_validation_download(state: FlowState) -> dict:
     1. Validates that selected resources exist locally
     2. Downloads missing skills/agents from repository
     3. Reports validation status and download progress
+    4. (NEW) Validates any selected MCPs are available
 
     This ensures all selected tools are ready before execution.
     """
@@ -685,11 +693,35 @@ def step6_skill_validation_download(state: FlowState) -> dict:
             )
             validation_results["downloaded"].append(agent_name)
 
+    # NEW: Validate any selected MCPs (MCP Integration Phase 1)
+    mcp_results = {
+        "mcps_validated": {},
+        "mcp_validation_errors": [],
+        "mcp_status": "OK"
+    }
+
+    available_mcps = state.get("mcp_servers_available", [])
+    if available_mcps:
+        available_mcp_names = {mcp["short_name"] for mcp in available_mcps}
+
+        # Check if any MCPs were selected (would be from Step 5)
+        # For now, just validate the Filesystem MCP if it's supposed to be available
+        if state.get("mcp_filesystem_enabled"):
+            if "filesystem" in available_mcp_names:
+                mcp_results["mcps_validated"]["filesystem"] = "OK"
+            else:
+                mcp_results["mcp_validation_errors"].append(
+                    "Filesystem MCP marked as enabled but not found in registry"
+                )
+                mcp_results["mcp_status"] = "WARNING"
+
     return {
         "step6_skill_validation": validation_results,
         "step6_skill_ready": validation_results["skill_exists"] or not skill_name,
         "step6_agent_ready": validation_results["agent_exists"] or not agent_name,
         "step6_validation_status": "OK" if not validation_results["validation_errors"] else "MISSING",
+        "step6_mcp_validation": mcp_results,
+        "step6_mcp_ready": mcp_results["mcp_status"] == "OK",
     }
 
 

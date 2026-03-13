@@ -144,6 +144,18 @@ class FlowState(TypedDict, total=False):
     tool_optimization_rules: Optional[Dict]   # {read_max_lines, grep_max_matches, etc.}
     tool_optimization_loaded: Optional[bool]  # True after Level 2 loads rules
 
+    # ===========================================================================
+    # LEVEL 2: MCP REGISTRY & PLUGIN DISCOVERY (NEW)
+    # ===========================================================================
+    mcp_servers_available: Optional[List[Dict]]   # All discovered MCP plugins with metadata
+    mcp_filesystem_enabled: Optional[bool]        # True if Filesystem MCP available
+    mcp_plugins_path: Optional[str]               # Path to plugins directory (usually ~/.claude/mcp/plugins/)
+    mcp_cache_dir: Optional[str]                  # Cache directory (usually ~/.claude/mcp/cache/)
+    mcp_discovered_count: Optional[int]           # Number of MCPs successfully discovered
+    mcp_initialization_status: Optional[str]      # OK / PARTIAL / ERROR / SKIPPED
+    mcp_error: Optional[str]                      # Error message if initialization failed
+    mcp_auto_routing_enabled: Optional[bool]      # Enable AUTO-ROUTE in hook (true if filesystem available)
+
     # Standards selector result (level2_select_standards_node output)
     standards_selection: Optional[Dict]       # {project_type, framework, total_loaded, conflicts_detected, merged_rules}
     standards_merged_rules: Optional[Dict]    # Conflict-resolved merged rules from all standards sources
