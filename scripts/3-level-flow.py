@@ -234,16 +234,16 @@ def main():
             print(f"[DEBUG] Processing arg: {arg}", file=sys.stderr)
             if arg.startswith("--session-id="):
                 session_id = arg.split("=", 1)[1]
-                print(f"[DEBUG]   → session_id={session_id}", file=sys.stderr)
+                print(f"[DEBUG]   -> session_id={session_id}", file=sys.stderr)
             elif arg.startswith("--project="):
                 project_root = arg.split("=", 1)[1]
-                print(f"[DEBUG]   → project_root={project_root}", file=sys.stderr)
+                print(f"[DEBUG]   -> project_root={project_root}", file=sys.stderr)
             elif arg.startswith("--message="):
                 user_message = arg.split("=", 1)[1]
-                print(f"[DEBUG]   → user_message=...", file=sys.stderr)
+                print(f"[DEBUG]   -> user_message=...", file=sys.stderr)
             elif arg in ("--summary", "-s"):
                 DEBUG = True
-                print(f"[DEBUG]   → DEBUG=True", file=sys.stderr)
+                print(f"[DEBUG]   -> DEBUG=True", file=sys.stderr)
             elif arg in ("--help", "-h"):
                 print(f"{SCRIPT_NAME} - LangGraph 3-Level Flow Engine v{VERSION}")
                 print("Usage: python 3-level-flow.py [options]")
