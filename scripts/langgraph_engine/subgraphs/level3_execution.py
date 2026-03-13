@@ -193,27 +193,52 @@ def step0_task_analysis(state: FlowState) -> dict:
 def step1_plan_mode_decision(state: FlowState) -> dict:
     """Step 1: Plan Mode Decision - Determine if detailed planning is needed.
 
-    Uses task type and complexity from Step 0 analysis to decide whether to
-    enter plan mode (Step 2) or proceed directly to task breakdown (Step 3).
+    Uses FULL context from Step 0 (user message, task type, complexity, task details)
+    to decide whether detailed planning is needed.
 
     Returns:
     - step1_plan_required: bool (True if planning needed)
     - step1_reasoning: str (explanation of decision)
     """
+    # Get all relevant context
+    user_message = state.get("user_message", "")
+    task_type = state.get("step0_task_type", "General Task")
     complexity = state.get("step0_complexity", 5)
     task_count = state.get("step0_task_count", 1)
+    tasks = state.get("step0_tasks", {}).get("tasks", [])
+    patterns = state.get("patterns_detected", [])
+    reasoning_from_step0 = state.get("step0_reasoning", "")
+
+    # Build complete context for better decision
+    task_descriptions = []
+    for task in tasks:
+        if isinstance(task, dict):
+            task_descriptions.append(task.get("description", ""))
+        else:
+            task_descriptions.append(str(task))
+
+    # Pass rich context to LLM
+    context_data = {
+        "user_message": user_message,
+        "task_type": task_type,
+        "complexity": complexity,
+        "task_count": task_count,
+        "task_descriptions": task_descriptions,
+        "patterns_detected": patterns,
+        "step0_reasoning": reasoning_from_step0,
+    }
 
     args = [
         "--analyze",
-        f"--complexity={complexity}",
-        f"--tasks={task_count}"
+        f"--context={json.dumps(context_data)}"
     ]
     result = call_execution_script("auto-plan-mode-suggester", args)
 
     return {
         "step1_plan_required": result.get("plan_required", False),
         "step1_reasoning": result.get("reasoning", "Task analysis complete"),
-        "step1_complexity_score": result.get("complexity_score", complexity)
+        "step1_complexity_score": result.get("complexity_score", complexity),
+        "step1_context_provided": True  # Mark that context was passed
     }
 
 
@@ -374,14 +399,15 @@ def step3_task_breakdown_validation(state: FlowState) -> dict:
 # ===== STEP 4: TOON REFINEMENT =====
 
 def step4_toon_refinement(state: FlowState) -> dict:
-    """Step 4: TOON Refinement - Enhance TOON with task breakdown insights.
+    """Step 4: TOON Refinement - Enhance TOON with FULL task context.
 
-    Takes the initial TOON from Level 1 and refines it with:
-    - Task breakdown from Step 0/3
-    - Complexity analysis from Step 1
-    - Skill hints from analysis
+    Enriches initial TOON from Level 1 with:
+    - Validated task breakdown from Step 3
+    - Plan details from Step 2 (if planning enabled)
+    - Complexity score from Step 0
+    - Skill hints from patterns
 
-    This prepares TOON for skill/agent selection in Step 5.
+    This prepares comprehensive TOON for skill/agent selection in Step 5.
     """
     import json
 
@@ -391,40 +417,63 @@ def step4_toon_refinement(state: FlowState) -> dict:
         if not level1_toon:
             return {"step4_toon_refined": level1_toon, "step4_refinement_status": "SKIPPED"}
 
-        # Get task breakdown from Step 0/3
-        tasks = state.get("step0_tasks", {}).get("tasks", [])
-        task_count = len(tasks)
+        # Get ALL task context
+        validated_tasks = state.get("step3_tasks_validated", [])
+        plan_details = state.get("step2_plan_execution", {})
+        task_type = state.get("step0_task_type", "")
+        complexity = state.get("step0_complexity", 5)
+        patterns = state.get("patterns_detected", [])
+        user_message = state.get("user_message", "")
 
-        # Build refinement context with task breakdown for better skill selection
+        # Build complete refinement context
         refinement_data = {
-            "initial_complexity": level1_toon.get("complexity_score", 5),
-            "task_count": task_count,
-            "files_involved": level1_toon.get("files_loaded_count", 0),
-            "task_breakdown": {
-                "tasks": tasks[:3]  # Include first 3 tasks for context
-            }
+            "user_message": user_message,
+            "task_type": task_type,
+            "complexity": complexity,
+            "plan_details": plan_details,
+            "validated_tasks": validated_tasks,
+            "patterns_detected": patterns,
         }
 
-        # Enhance TOON with refinement
+        # Enhance TOON with ALL insights
         refined_toon = dict(level1_toon)
 
-        # Add task insights
-        if tasks:
+        # Add task insights from validated tasks
+        if validated_tasks:
             task_files = set()
-            for task in tasks:
-                if isinstance(task, dict):
-                    task_files.update(task.get("files", []))
-            refined_toon["estimated_files"] = len(task_files)
+            task_deps = []
+            for task in validated_tasks:
+                task_files.update(task.get("files", []))
+                if task.get("dependencies"):
+                    task_deps.append(task.get("dependencies"))
 
-        # Adjust complexity based on task count
+            refined_toon["estimated_files"] = len(task_files)
+            refined_toon["has_dependencies"] = len(task_deps) > 0
+            refined_toon["task_descriptions"] = [
+                t.get("description", "") for t in validated_tasks
+            ]
+
+        # Add plan insights
+        if plan_details:
+            refined_toon["planned_phases"] = len(plan_details.get("phases", []))
+            refined_toon["planned_steps"] = plan_details.get("estimated_steps", 0)
+
+        # Add pattern insights for better skill selection
+        if patterns:
+            refined_toon["detected_patterns"] = patterns
+
+        # Adjust complexity based on actual tasks
         base_complexity = refined_toon.get("complexity_score", 5)
-        adjusted_complexity = min(10, base_complexity + (task_count - 1) // 2)
+        adjusted_complexity = min(10, base_complexity + (len(validated_tasks) - 1) // 2)
         refined_toon["adjusted_complexity"] = adjusted_complexity
+        refined_toon["refinement_context"] = refinement_data  # Store full context
 
         return {
             "step4_toon_refined": refined_toon,
             "step4_refinement_status": "OK",
             "step4_complexity_adjusted": adjusted_complexity,
+            "step4_context_provided": True,  # Mark that full context was used
+            "step4_tasks_included": len(validated_tasks),
         }
 
     except Exception as e:
@@ -438,18 +487,49 @@ def step4_toon_refinement(state: FlowState) -> dict:
 # ===== STEP 5: SKILL & AGENT SELECTION =====
 
 def step5_skill_agent_selection(state: FlowState) -> dict:
-    """Step 5: Skill & Agent Selection - Select appropriate skills/agents for execution.
+    """Step 5: Skill & Agent Selection - Select perfect skill/agent with FULL context.
 
-    Uses task type and complexity to select the best skills and agents.
-    Returns full skill/agent definitions for downstream use.
+    Uses COMPLETE context to make informed skill/agent selection:
+    - User message (what they're asking)
+    - Task type & complexity (what kind of work)
+    - Validated tasks (specific work items)
+    - Project info (Java/Python/etc)
+    - Patterns detected (tech stack)
+    - TOON refinement (enriched overview)
+
+    This is CRITICAL - wrong skill selection breaks everything downstream!
     """
+    # Gather ALL context for best skill selection
+    user_message = state.get("user_message", "")
     task_type = state.get("step0_task_type", "General Task")
     complexity = state.get("step0_complexity", 5)
+    validated_tasks = state.get("step3_tasks_validated", [])
+    patterns = state.get("patterns_detected", [])
+    project_root = state.get("project_root", "")
+    is_java = state.get("is_java_project", False)
+    refined_toon = state.get("step4_toon_refined", {})
 
+    # Build complete context for skill selection
+    task_descriptions = [t.get("description", "") for t in validated_tasks]
+
+    context_data = {
+        "user_message": user_message,
+        "task_type": task_type,
+        "complexity": complexity,
+        "validated_tasks_count": len(validated_tasks),
+        "task_descriptions": task_descriptions,
+        "patterns_detected": patterns,
+        "project_info": {
+            "project_root": project_root,
+            "is_java_project": is_java,
+        },
+        "toon_refinement": refined_toon,
+    }
+
+    # Pass complete context to get perfect skill match
     args = [
         "--analyze",
-        f"--task-type={task_type}",
-        f"--complexity={complexity}"
+        f"--context={json.dumps(context_data)}"
     ]
     result = call_execution_script("auto-skill-agent-selector", args)
 
@@ -461,7 +541,9 @@ def step5_skill_agent_selection(state: FlowState) -> dict:
         "step5_reasoning": result.get("reasoning", ""),
         "step5_confidence": result.get("confidence", 0.5),
         "step5_alternatives": result.get("alternatives", []),
-        "step5_llm_query_needed": result.get("llm_needed", False)
+        "step5_llm_query_needed": result.get("llm_needed", False),
+        "step5_context_provided": True,  # Mark that full context was passed
+        "step5_task_count": len(validated_tasks),
     }
 
 
@@ -526,31 +608,35 @@ def step6_skill_validation_download(state: FlowState) -> dict:
 # ===== STEP 7: FINAL PROMPT GENERATION =====
 
 def step7_final_prompt_generation(state: FlowState) -> dict:
-    """Step 7: Final Prompt Generation - Compose complete execution prompt.
+    """Step 7: Final Prompt Generation - Compose COMPLETE execution prompt.
 
-    Composes final execution prompt from all previous steps:
-    - User message + context
-    - Task analysis and breakdown
-    - Execution plan (if available)
-    - Skill/Agent selection
-    - Tool optimization hints
+    Generates comprehensive execution prompt with FULL context from all steps:
+    - Original user message (what they're asking)
+    - Task type & complexity (scope analysis)
+    - Validated task breakdown (specific work items)
+    - Execution plan with phases (if planning enabled)
+    - TOON enrichment (context from previous sessions)
+    - Selected skill/agent definitions (tools to use)
+    - Patterns detected (tech stack hints)
+    - Project information (Java/Python/etc)
 
-    Saves to session folder as prompt.txt for execution.
+    This is the MOST IMPORTANT prompt - it determines execution quality!
+    Saves comprehensive prompt.txt to session folder.
     """
     try:
         import os
 
         session_path = state.get("session_dir") or os.environ.get("CLAUDE_SESSION_PATH")
 
-        # Build prompt
+        # Build COMPREHENSIVE prompt with all context
         prompt_lines = []
 
-        # 1. User message
+        # 1. User message (original request)
         prompt_lines.append("# EXECUTION PROMPT")
         prompt_lines.append("")
         user_msg = state.get("user_message", "").strip()
         if user_msg:
-            prompt_lines.append(f"## TASK\n\n{user_msg}\n")
+            prompt_lines.append(f"## ORIGINAL TASK\n\n{user_msg}\n")
 
         # 2. Task analysis
         prompt_lines.append("## ANALYSIS")
@@ -558,38 +644,92 @@ def step7_final_prompt_generation(state: FlowState) -> dict:
         complexity = state.get("step0_complexity", 5)
         prompt_lines.append(f"- Task Type: {task_type}")
         prompt_lines.append(f"- Complexity: {complexity}/10")
+        prompt_lines.append(f"- Reasoning: {state.get('step0_reasoning', 'N/A')[:100]}")
         prompt_lines.append("")
 
-        # 3. Task breakdown
-        prompt_lines.append("## TASK BREAKDOWN")
-        tasks = state.get("step0_tasks", {}).get("tasks", [])
-        prompt_lines.append(f"- Task Count: {len(tasks)}")
-        if tasks:
-            for i, task in enumerate(tasks[:5], 1):  # Show first 5
+        # 3. VALIDATED Task breakdown (from Step 3, not Step 0)
+        prompt_lines.append("## DETAILED TASK BREAKDOWN")
+        validated_tasks = state.get("step3_tasks_validated", [])
+        raw_tasks = state.get("step0_tasks", {}).get("tasks", [])
+        tasks_to_show = validated_tasks if validated_tasks else raw_tasks
+
+        prompt_lines.append(f"- Total Tasks: {len(tasks_to_show)}")
+        if tasks_to_show:
+            for i, task in enumerate(tasks_to_show[:10], 1):  # Show all 10 tasks
                 if isinstance(task, dict):
-                    prompt_lines.append(f"  {i}. {task.get('description', task.get('id', 'Task'))}")
+                    desc = task.get('description', task.get('id', 'Task'))
+                    effort = task.get('estimated_effort', 'medium')
+                    files = task.get('files', [])
+                    prompt_lines.append(f"  {i}. {desc} [{effort}]")
+                    if files:
+                        prompt_lines.append(f"     Files: {', '.join(files[:3])}")
                 else:
                     prompt_lines.append(f"  {i}. {str(task)}")
         prompt_lines.append("")
 
         # 4. Execution plan (if available)
-        if state.get("step2_plan_execution"):
+        plan_exec = state.get("step2_plan_execution", {})
+        if plan_exec and plan_exec.get("phases"):
             prompt_lines.append("## EXECUTION PLAN")
-            plan = state.get("step2_plan_execution", {})
-            for phase in plan.get("phases", []):
-                prompt_lines.append(f"- {phase['name']}: {phase['task_count']} tasks")
+            phases = plan_exec.get("phases", [])
+            for phase in phases:
+                prompt_lines.append(f"### Phase: {phase.get('name', 'Phase')}")
+                prompt_lines.append(f"- Tasks: {phase.get('task_count', 0)}")
+                prompt_lines.append(f"- Task IDs: {', '.join([str(t) for t in phase.get('tasks', [])])}")
             prompt_lines.append("")
 
-        # 5. Skill & Agent selection
+        # 5. TOON Enrichment
+        toon = state.get("step4_toon_refined", {})
+        if toon:
+            prompt_lines.append("## CONTEXT & INSIGHTS")
+            if toon.get("task_descriptions"):
+                prompt_lines.append("- Task Descriptions Provided: Yes")
+            if toon.get("detected_patterns"):
+                prompt_lines.append(f"- Detected Patterns: {', '.join(toon.get('detected_patterns', []))}")
+            if toon.get("planned_phases"):
+                prompt_lines.append(f"- Planned Phases: {toon.get('planned_phases')}")
+            if toon.get("has_dependencies"):
+                prompt_lines.append("- Task Dependencies: Yes")
+            prompt_lines.append("")
+
+        # 6. Selected Skill & Agent definitions
         prompt_lines.append("## SELECTED RESOURCES")
         skill = state.get("step5_skill", "")
         agent = state.get("step5_agent", "")
+        skill_def = state.get("step5_skill_definition", "")
+        agent_def = state.get("step5_agent_definition", "")
+
         if skill:
-            prompt_lines.append(f"- Skill: {skill}")
+            prompt_lines.append(f"### Skill: {skill}")
+            if skill_def:
+                prompt_lines.append(f"Definition:\n{skill_def[:200]}")
         if agent:
-            prompt_lines.append(f"- Agent: {agent}")
+            prompt_lines.append(f"### Agent: {agent}")
+            if agent_def:
+                prompt_lines.append(f"Definition:\n{agent_def[:200]}")
         if not skill and not agent:
-            prompt_lines.append("- No special skills/agents selected")
+            prompt_lines.append("- No special skills/agents needed")
+        prompt_lines.append("")
+
+        # 7. Project context
+        prompt_lines.append("## PROJECT CONTEXT")
+        project_root = state.get("project_root", "")
+        is_java = state.get("is_java_project", False)
+        patterns = state.get("patterns_detected", [])
+
+        if project_root:
+            prompt_lines.append(f"- Project Root: {project_root}")
+        prompt_lines.append(f"- Project Type: {'Java/Spring' if is_java else 'Python/Node/Other'}")
+        if patterns:
+            prompt_lines.append(f"- Detected Stack: {', '.join(patterns[:5])}")
+        prompt_lines.append("")
+
+        # 8. Execution notes
+        prompt_lines.append("## EXECUTION GUIDELINES")
+        prompt_lines.append("1. Follow the task breakdown order")
+        prompt_lines.append("2. Use the selected skill/agent for implementation")
+        prompt_lines.append("3. Report progress after each task")
+        prompt_lines.append("4. Update file modifications as you go")
         prompt_lines.append("")
 
         # Compose final prompt
@@ -604,7 +744,17 @@ def step7_final_prompt_generation(state: FlowState) -> dict:
             return {
                 "step7_prompt_saved": True,
                 "step7_prompt_file": str(prompt_file),
-                "step7_prompt_size": len(final_prompt)
+                "step7_prompt_size": len(final_prompt),
+                "step7_context_included": {
+                    "user_message": bool(user_msg),
+                    "task_analysis": True,
+                    "validated_tasks": len(validated_tasks) > 0,
+                    "execution_plan": plan_exec.get("phases") is not None,
+                    "toon_enrichment": bool(toon),
+                    "skill_definition": bool(skill_def),
+                    "agent_definition": bool(agent_def),
+                    "project_context": bool(project_root or patterns),
+                }
             }
         else:
             return {
