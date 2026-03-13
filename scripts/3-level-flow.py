@@ -256,6 +256,12 @@ def main():
         # Run engine (user_message auto-captured from stdin if not provided)
         if not user_message:
             user_message = _capture_user_message()
+
+        print(f"[DEBUG] Before run_langgraph_engine:", file=sys.stderr)
+        print(f"[DEBUG]   session_id={session_id}", file=sys.stderr)
+        print(f"[DEBUG]   project_root={project_root}", file=sys.stderr)
+        print(f"[DEBUG]   user_message length={len(user_message) if user_message else 0}", file=sys.stderr)
+
         result = run_langgraph_engine(session_id, project_root, user_message)
 
         # Write flow-trace.json (backward compatible format)
