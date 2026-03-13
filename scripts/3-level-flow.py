@@ -84,7 +84,37 @@ def _generate_session_id() -> str:
 
 
 def _get_project_root() -> str:
-    """Determine project root directory."""
+    """Determine project root directory.
+
+    Priority:
+    1. Command-line argument --project=PATH
+    2. Script's parent directory (for source installation)
+    3. ~/.claude/scripts parent (for global installation)
+    4. Current working directory (fallback)
+    """
+    # Check if script is in claude-insight/scripts
+    script_dir = Path(__file__).parent
+
+    # If we're in ~/.claude/scripts, go up to ~/.claude
+    if "/.claude/scripts" in str(script_dir) or "\\.claude\\scripts" in str(script_dir):
+        claude_root = script_dir.parent
+        # Look for claude-insight in parent structure
+        possible_projects = [
+            claude_root.parent / "Documents" / "workspace-spring-tool-suite-4-4.27.0-new" / "claude-insight",
+            Path.home() / "Documents" / "workspace-spring-tool-suite-4-4.27.0-new" / "claude-insight",
+            claude_root / "claude-insight",
+        ]
+        for proj_path in possible_projects:
+            if (proj_path / "CLAUDE.md").exists() or (proj_path / "README.md").exists():
+                return str(proj_path)
+
+    # If we're in /claude-insight/scripts, use parent parent
+    if "claude-insight" in str(script_dir) and "scripts" in str(script_dir):
+        claude_insight_root = script_dir.parent
+        if (claude_insight_root / "CLAUDE.md").exists() or (claude_insight_root / "README.md").exists():
+            return str(claude_insight_root)
+
+    # Fallback to cwd
     return str(Path.cwd())
 
 

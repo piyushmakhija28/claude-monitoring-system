@@ -38,12 +38,28 @@ def main():
     if user_message:
         env["CLAUDE_USER_MESSAGE"] = user_message
 
-    # Run with summary flag (doesn't need user message if not available)
+    # Determine claude-insight project path
+    # Priority: source location > global location > fallback
+    possible_projects = [
+        Path.home() / "Documents" / "workspace-spring-tool-suite-4-4.27.0-new" / "claude-insight",
+        Path.home() / ".claude" / "claude-insight",
+    ]
+
+    project_path = ""
+    for proj in possible_projects:
+        if (proj / "CLAUDE.md").exists() or (proj / "README.md").exists():
+            project_path = str(proj)
+            break
+
+    # Run with summary flag and explicit project path
     cmd = [
         sys.executable,
         str(script_path),
         "--summary"
     ]
+
+    if project_path:
+        cmd.append(f"--project={project_path}")
 
     # Execute the script
     try:
