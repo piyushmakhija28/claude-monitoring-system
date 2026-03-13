@@ -139,7 +139,7 @@ class FlowState(TypedDict, total=False):
     step3_error: Optional[str]
 
     # Step 4: Model Selection
-    step4_model: str                   # Selected model: haiku/sonnet/opus
+    step4_model: str                   # Selected model: fast_classification/complex_reasoning
     step4_reasoning: str               # Why this model was chosen
     step4_error: Optional[str]
 
@@ -239,7 +239,7 @@ class FlowState(TypedDict, total=False):
     step2_phases: Optional[List[Dict]]
     step2_risks: Optional[Dict]
     step2_code_context: Optional[str]        # Code analysis from exploration tools
-    step2_selected_model: Optional[str]      # Which model was used (haiku/sonnet/opus)
+    step2_selected_model: Optional[str]      # Which model was used (fast_classification/complex_reasoning)
     step2_execution_time_ms: Optional[float]
     step2_error: Optional[str]
 

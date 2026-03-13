@@ -182,7 +182,7 @@ def step4_model_selection(state: FlowState) -> dict:
     complexity = state.get("step0_prompt", {}).get("complexity", 5)
     result = call_execution_script("model-auto-selector", [f"--complexity={complexity}"])
     return {
-        "step4_model": result.get("selected_model", "haiku"),
+        "step4_model": result.get("selected_model", "complex_reasoning"),
         "step4_reasoning": result.get("reason", "Model selected")
     }
 

@@ -103,7 +103,7 @@ def step2_plan_execution_node(state: FlowState) -> Dict[str, Any]:
         execution_time_ms = (time.time() - step_start) * 1000
 
         if plan_result.get("success"):
-            selected_model = plan_result.get("selected_model", "sonnet")
+            selected_model = plan_result.get("selected_model", "complex_reasoning")
             logger.info(f"✓ Step 2 completed with {selected_model} model ({execution_time_ms:.0f}ms)")
             return {
                 "step2_plan": plan_result.get("plan", ""),

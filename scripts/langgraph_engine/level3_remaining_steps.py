@@ -41,67 +41,38 @@ class Level3RemainingSteps:
     def _select_planning_model(self, toon: Dict[str, Any]) -> str:
         """Intelligently select planning model based on TOON factors.
 
-        WORKFLOW.md SPEC: Use OPUS for deep reasoning, but this function
-        applies intelligence to choose appropriate model based on complexity.
+        Maps complexity to available Ollama models via service.
+        The OllamaService handles actual model routing based on availability.
 
-        Available models:
-        - haiku: Fast and cheap, good for simple planning (complexity 1-3)
-        - sonnet: Balanced reasoning, good for medium complexity (4-7)
-        - opus: Deep reasoning, best for complex architecture (8-10)
+        Available models (via OllamaService):
+        - fast_classification: qwen2.5:7b (good for simple planning, complexity 1-5)
+        - complex_reasoning: granite4:3b (for complex architecture, complexity 6-10)
 
         Args:
             toon: TOON object with complexity_score, files_affected, etc.
 
         Returns:
-            Model name: "haiku" | "sonnet" | "opus"
+            Model type: "fast_classification" | "complex_reasoning"
         """
         complexity_score = toon.get("complexity_score", 5)
         files_affected = len(toon.get("files_affected", []))
         project_type = toon.get("project_type", "unknown")
 
-        # Build decision prompt for LLM
-        decision_prompt = f"""Analyze this planning requirement and select the best LLM model:
+        # Simple threshold-based selection (Ollama has fewer models than Claude)
+        # Complexity 1-5: Use fast, efficient model
+        # Complexity 6-10: Use more capable model for deep reasoning
+        if complexity_score <= 5:
+            selected_model = "fast_classification"
+            reason = "Low-medium complexity, fast model sufficient"
+        else:
+            selected_model = "complex_reasoning"
+            reason = "High complexity, deeper reasoning needed"
 
-FACTORS:
-- Complexity score: {complexity_score}/10
-- Files affected: {files_affected}
-- Project type: {project_type}
+        logger.info(f"-> Selecting planning model based on TOON factors...")
+        logger.info(f"   Complexity: {complexity_score}/10, Files: {files_affected}, Type: {project_type}")
+        logger.info(f"✓ Selected model: {selected_model} ({reason})")
 
-AVAILABLE MODELS:
-- haiku: Fast and cheap, good for simple/straightforward planning
-- sonnet: Balanced reasoning and speed, good for medium complexity
-- opus: Deep reasoning, best for complex architecture or intricate requirements
-
-DECISION LOGIC:
-- Complexity 1-3: haiku is usually sufficient and cost-effective
-- Complexity 4-7: sonnet provides good balance of reasoning and speed
-- Complexity 8-10: opus provides deep reasoning needed for complex tasks
-
-Based on these factors and the DECISION LOGIC above, which model would be BEST for this planning task?
-
-Respond with ONLY the model name (haiku, sonnet, or opus). No explanation needed."""
-
-        try:
-            logger.info("→ Selecting planning model based on TOON factors...")
-            response = self.ollama.chat(
-                messages=[{"role": "user", "content": decision_prompt}],
-                model="fast_classification",  # Use fast model for decision-making
-                temperature=0.3  # Low temperature for deterministic choice
-            )
-
-            model_choice = response.get("message", {}).get("content", "sonnet").strip().lower()
-
-            # Validate choice
-            if model_choice not in ["haiku", "sonnet", "opus"]:
-                logger.warning(f"Invalid model choice '{model_choice}', defaulting to sonnet")
-                model_choice = "sonnet"
-
-            logger.info(f"✓ Selected model: {model_choice} (complexity: {complexity_score}/10, files: {files_affected})")
-            return model_choice
-
-        except Exception as e:
-            logger.warning(f"Model selection failed, defaulting to sonnet: {e}")
-            return "sonnet"
+        return selected_model
 
     # ===== STEP 2: PLAN EXECUTION =====
 
@@ -115,6 +86,9 @@ Respond with ONLY the model name (haiku, sonnet, or opus). No explanation needed
         Execute detailed planning phase with tool-optimized code exploration.
 
         Only runs if Step 1 returned plan_required=True.
+
+        Uses Ollama models (fast_classification or complex_reasoning) selected
+        based on complexity score via _select_planning_model().
 
         WORKFLOW.md SPEC: Use exploration tools (Read, Grep, Search) with optimization
         - Read: offset/limit (max 500 lines per file)
@@ -139,7 +113,7 @@ Respond with ONLY the model name (haiku, sonnet, or opus). No explanation needed
                 "phases": List[Dict],
                 "risks": Dict,
                 "code_context": str,  # Code snippets from tool-optimized exploration
-                "selected_model": str,  # Model used (haiku/sonnet/opus)
+                "selected_model": str,  # Model used (fast_classification/complex_reasoning)
                 "success": bool
             }
         """
