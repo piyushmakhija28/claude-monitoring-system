@@ -790,6 +790,11 @@ def create_initial_state(session_id: str = "", project_root: str = "", user_mess
 
         session_id = f"flow-{uuid.uuid4().hex[:8]}"
 
+    # TEMPORARY FIX: Hardcode project_root to test if this fixes context loading
+    if True:  # Force hardcoding for testing
+        project_root = str(Path.home() / "Documents" / "workspace-spring-tool-suite-4-4.27.0-new" / "claude-insight")
+
+    # OLD CODE (keep for reference, will remove after testing)
     if not project_root:
         # Smart detection: try to find claude-insight directory
         import os

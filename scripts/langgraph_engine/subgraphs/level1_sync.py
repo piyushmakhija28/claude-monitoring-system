@@ -149,17 +149,18 @@ def node_context_loader(state: FlowState) -> dict:
 
     Saves to session folder.
     """
+    import sys
+    print(f"\n[LEVEL 1 CONTEXT LOADER] CALLED!", file=sys.stderr)
     try:
         import os
         project_root = Path(state.get("project_root", "."))
         session_path = Path(state.get("session_path", ""))
 
-        # DEBUG: Log what project_root we got
-        DEBUG = os.getenv("CLAUDE_DEBUG") == "1"
-        if DEBUG:
-            print(f"\n[LEVEL 1 CONTEXT LOADER]", file=__import__('sys').stderr)
-            print(f"  project_root from state: {project_root}", file=__import__('sys').stderr)
-            print(f"  project_root exists: {project_root.exists()}", file=__import__('sys').stderr)
+        # ALWAYS log - not conditional on DEBUG
+        print(f"\n[LEVEL 1 CONTEXT LOADER]", file=sys.stderr)
+        print(f"  project_root from state: {project_root}", file=sys.stderr)
+        print(f"  project_root exists: {project_root.exists()}", file=sys.stderr)
+        print(f"  session_path: {session_path}", file=sys.stderr)
 
         context_data = {
             "srs": None,

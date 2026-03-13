@@ -146,7 +146,8 @@ class OllamaService:
             "model": model_name,
             "messages": messages,
             "temperature": temperature,
-            "stream": False
+            "stream": False,
+            "num_ctx": 8192  # CRITICAL: Increase context window from default 2048 to 8192
         }
 
         if format:
