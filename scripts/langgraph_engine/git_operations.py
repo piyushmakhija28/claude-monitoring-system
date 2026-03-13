@@ -31,13 +31,22 @@ class GitOperations:
         if not self._is_git_available():
             raise RuntimeError("Git CLI not found. Install git and ensure it's in PATH")
 
-        # Get current repo info
-        self.origin_url = self._get_origin_url()
-        self.current_branch = self._get_current_branch()
+        # Check if we're in a git repository
+        self.is_git_repo = self._is_git_repository()
 
-        logger.info(f"Git operations initialized at {self.repo_path}")
-        logger.info(f"Current branch: {self.current_branch}")
-        logger.info(f"Remote origin: {self.origin_url}")
+        if not self.is_git_repo:
+            logger.warning(f"Not a git repository: {self.repo_path}")
+            logger.warning("GitHub operations will be skipped. Initialize a git repo with: git init")
+            self.origin_url = None
+            self.current_branch = None
+        else:
+            # Get current repo info
+            self.origin_url = self._get_origin_url()
+            self.current_branch = self._get_current_branch()
+
+            logger.info(f"Git operations initialized at {self.repo_path}")
+            logger.info(f"Current branch: {self.current_branch}")
+            logger.info(f"Remote origin: {self.origin_url}")
 
     def _is_git_available(self) -> bool:
         """Check if git CLI is available."""
@@ -51,6 +60,11 @@ class GitOperations:
             return result.returncode == 0
         except Exception:
             return False
+
+    def _is_git_repository(self) -> bool:
+        """Check if the current directory is a git repository."""
+        result = self._run_git(["rev-parse", "--git-dir"], check=False)
+        return result.get("success", False) and result.get("stdout") != ""
 
     def _run_git(self, args: List[str], check: bool = True) -> Dict[str, Any]:
         """
@@ -107,6 +121,18 @@ class GitOperations:
         result = self._run_git(["rev-parse", "--abbrev-ref", "HEAD"], check=False)
         return result.get("stdout", "unknown") if result.get("success") else "unknown"
 
+    # ===== HELPER METHODS =====
+
+    def _ensure_git_repo(self) -> bool:
+        """Check if we're in a git repository and log appropriate message."""
+        if not self.is_git_repo:
+            logger.error(
+                f"Not a git repository at {self.repo_path}. "
+                "Initialize with: git init && git add remote origin <url>"
+            )
+            return False
+        return True
+
     # ===== BRANCH OPERATIONS =====
 
     def create_branch(self, branch_name: str, from_branch: str = "main") -> Dict[str, Any]:
@@ -121,6 +147,10 @@ class GitOperations:
             {"success": bool, "branch": str, "message": str}
         """
         logger.info(f"Creating branch: {branch_name} from {from_branch}")
+
+        # Check if we're in a git repository
+        if not self._ensure_git_repo():
+            return {"success": False, "error": "Not a git repository"}
 
         try:
             # First, ensure we have latest from origin
@@ -233,6 +263,10 @@ class GitOperations:
         """
         logger.info(f"Creating commit: {message[:50]}...")
 
+        # Check if we're in a git repository
+        if not self._ensure_git_repo():
+            return {"success": False, "error": "Not a git repository"}
+
         try:
             # Stage files first
             stage_result = self.stage_files(files)
@@ -280,6 +314,10 @@ class GitOperations:
         Returns:
             {"success": bool, "branch": str}
         """
+        # Check if we're in a git repository
+        if not self._ensure_git_repo():
+            return {"success": False, "error": "Not a git repository"}
+
         if not branch:
             branch = self.current_branch
 

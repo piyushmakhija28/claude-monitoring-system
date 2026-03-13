@@ -30,6 +30,18 @@ class Level3GitHubWorkflow:
         self.github = GitHubIntegration(repo_path=repo_path)
         self.git = GitOperations(repo_path=repo_path)
 
+        # Check if we're in a git repository - this is critical for Steps 8-12
+        if not self.git.is_git_repo:
+            logger.warning(
+                "="*70
+                + "\nWARNING: Not a git repository. GitHub workflow (Steps 8-12) cannot proceed.\n"
+                + "To enable GitHub integration:\n"
+                + "1. Initialize git: git init\n"
+                + "2. Add remote: git remote add origin <your-github-repo-url>\n"
+                + "3. Create initial commit: git add . && git commit -m 'Initial commit'\n"
+                + "="*70
+            )
+
         # Initialize Ollama service for intelligent label detection
         try:
             self.ollama = OllamaService()
@@ -66,6 +78,15 @@ class Level3GitHubWorkflow:
         logger.info("=" * 60)
         logger.info("LEVEL 3 - STEP 8: GITHUB ISSUE CREATION")
         logger.info("=" * 60)
+
+        # Check if we're in a git repository
+        if not self.git.is_git_repo:
+            logger.error("Cannot create GitHub issue: not a git repository")
+            return {
+                "success": False,
+                "error": "Not a git repository. GitHub operations require git initialization.",
+                "execution_time_ms": 0
+            }
 
         step_start = time.time()
 
