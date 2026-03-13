@@ -68,11 +68,11 @@ def main():
         result = subprocess.run(
             cmd,
             env=env,
-            timeout=75
+            timeout=180  # 3 minutes - allows for Ollama processing + all 14 steps
         )
         sys.exit(result.returncode)
     except subprocess.TimeoutExpired:
-        print("ERROR: 3-level-flow execution timed out after 75 seconds", file=sys.stderr)
+        print("ERROR: 3-level-flow execution timed out after 180 seconds", file=sys.stderr)
         sys.exit(1)
     except Exception as e:
         print(f"ERROR: Failed to execute 3-level-flow: {e}", file=sys.stderr)
