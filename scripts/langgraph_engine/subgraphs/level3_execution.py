@@ -196,6 +196,103 @@ def step2_plan_mode_decision(state: FlowState) -> dict:
     }
 
 
+def step2b_plan_execution(state: FlowState) -> dict:
+    """Step 2b: Conditional Plan Execution - Only runs if plan_required=true from Step 2.
+
+    When plan mode is needed (complex tasks, multi-phase work), this step:
+    1. Analyzes task breakdown from Step 1
+    2. Creates a detailed execution plan with phases
+    3. Identifies dependencies and milestones
+    4. Provides structured guidance for execution
+
+    This step is SKIPPED if step2_plan_mode=false.
+    """
+    try:
+        # Get task breakdown from Step 1
+        tasks = state.get("step1_tasks", {}).get("tasks", [])
+        task_type = state.get("step1_task_type", "General Task")
+        complexity = state.get("step1_complexity", 5)
+
+        # Build plan structure
+        plan = {
+            "task_type": task_type,
+            "complexity": complexity,
+            "task_count": len(tasks),
+            "phases": [],
+            "milestones": [],
+            "estimated_steps": 0
+        }
+
+        # Group tasks into logical phases
+        if tasks:
+            # Phase 1: Setup/Analysis
+            setup_tasks = [t for t in tasks if isinstance(t, dict) and
+                          any(kw in str(t.get('description', '')).lower()
+                              for kw in ['setup', 'analyze', 'plan', 'review'])]
+            if setup_tasks:
+                plan["phases"].append({
+                    "name": "Setup & Analysis",
+                    "task_count": len(setup_tasks),
+                    "tasks": [t.get('id') if isinstance(t, dict) else str(t) for t in setup_tasks]
+                })
+
+            # Phase 2: Implementation
+            impl_tasks = [t for t in tasks if isinstance(t, dict) and
+                         any(kw in str(t.get('description', '')).lower()
+                             for kw in ['implement', 'develop', 'build', 'code'])]
+            if impl_tasks:
+                plan["phases"].append({
+                    "name": "Implementation",
+                    "task_count": len(impl_tasks),
+                    "tasks": [t.get('id') if isinstance(t, dict) else str(t) for t in impl_tasks]
+                })
+
+            # Phase 3: Testing & Review
+            test_tasks = [t for t in tasks if isinstance(t, dict) and
+                         any(kw in str(t.get('description', '')).lower()
+                             for kw in ['test', 'review', 'verify', 'validate'])]
+            if test_tasks:
+                plan["phases"].append({
+                    "name": "Testing & Verification",
+                    "task_count": len(test_tasks),
+                    "tasks": [t.get('id') if isinstance(t, dict) else str(t) for t in test_tasks]
+                })
+
+            # If no clear phases, use all tasks
+            if not plan["phases"]:
+                plan["phases"].append({
+                    "name": "Execution",
+                    "task_count": len(tasks),
+                    "tasks": [t.get('id') if isinstance(t, dict) else str(t) for t in tasks[:10]]
+                })
+
+            # Set milestones at end of each phase
+            phase_num = 1
+            for phase in plan["phases"]:
+                plan["milestones"].append({
+                    "number": phase_num,
+                    "name": f"Complete {phase['name']}",
+                    "tasks_required": phase["task_count"]
+                })
+                phase_num += 1
+
+            plan["estimated_steps"] = sum(p["task_count"] for p in plan["phases"])
+
+        return {
+            "step2b_plan_execution": plan,
+            "step2b_plan_status": "OK",
+            "step2b_phases": len(plan["phases"]),
+            "step2b_total_estimated_steps": plan["estimated_steps"]
+        }
+
+    except Exception as e:
+        return {
+            "step2b_plan_execution": {"error": str(e)},
+            "step2b_plan_status": "ERROR",
+            "step2b_error": str(e)
+        }
+
+
 def step3_context_read_enforcement(state: FlowState) -> dict:
     """Step 3: Call context-reader.py"""
     result = call_execution_script("context-reader", ["--check"])
@@ -426,6 +523,24 @@ def step11_failure_prevention(state: FlowState) -> dict:
 
 
 # ============================================================================
+# ROUTING FUNCTIONS
+# ============================================================================
+
+
+def route_after_step2_plan_decision(state: FlowState) -> str:
+    """Route after step 2: Plan Mode Decision.
+
+    - If plan_required=true: Go to step2b_plan_execution
+    - If plan_required=false: Skip to step3_context
+    """
+    plan_required = state.get("step2_plan_mode", False)
+    if plan_required:
+        return "step2b_plan_execution"
+    else:
+        return "step3_context"
+
+
+# ============================================================================
 # MERGE NODE
 # ============================================================================
 
@@ -477,6 +592,7 @@ def create_level3_subgraph():
     # Add all steps + merge (per WORKFLOW.md, no Step 0)
     graph.add_node("step1_combined", step1_task_analysis_and_breakdown)
     graph.add_node("step2_plan", step2_plan_mode_decision)
+    graph.add_node("step2b_plan_exec", step2b_plan_execution)
     graph.add_node("step3_context", step3_context_read_enforcement)
     graph.add_node("step4_toon", step4_toon_refinement)
     graph.add_node("step5_model", step5_model_selection)
@@ -489,10 +605,24 @@ def create_level3_subgraph():
     graph.add_node("step11_prevention", step11_failure_prevention)
     graph.add_node("merge", level3_merge_node)
 
-    # Sequential edges (per WORKFLOW.md, 11 steps from 1-11 + validation)
+    # Sequential edges with conditional routing for plan execution
     graph.add_edge(START, "step1_combined")
     graph.add_edge("step1_combined", "step2_plan")
-    graph.add_edge("step2_plan", "step3_context")
+
+    # Conditional routing: plan required or skip?
+    graph.add_conditional_edges(
+        "step2_plan",
+        route_after_step2_plan_decision,
+        {
+            "step2b_plan_execution": "step2b_plan_exec",
+            "step3_context": "step3_context"
+        }
+    )
+
+    # Plan execution leads to context
+    graph.add_edge("step2b_plan_exec", "step3_context")
+
+    # Rest of pipeline
     graph.add_edge("step3_context", "step4_toon")
     graph.add_edge("step4_toon", "step5_model")
     graph.add_edge("step5_model", "step6_skill")
