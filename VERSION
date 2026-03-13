@@ -1,1 +1,32 @@
+# Version Information
+
+## Current Version
 4.23.3
+
+## Release History
+
+### v4.23.3
+- **Release Date:** 2026-03-13
+- **Status:** Stable
+- **Changes:**
+  - Documentation system implementation
+  - Enterprise-grade templates
+  - CodebaseAnalyzer integration
+
+### v0.1.0
+- **Release Date:** 2026-03-01
+- **Status:** Initial Release
+
+## Versioning Scheme
+
+Using Semantic Versioning (MAJOR.MINOR.PATCH):
+- **MAJOR**: Breaking changes
+- **MINOR**: New features (backward compatible)
+- **PATCH**: Bug fixes
+
+## Supported Versions
+
+| Version | Status | End of Support |
+|---------|--------|----------------|
+| 4.23.3 | Stable | TBD |
+| 0.1.0 | Legacy | 2026-06-01 |
