@@ -143,6 +143,19 @@ def route_after_step1_decision(state: FlowState) -> Literal["level3_step2", "lev
     return "level3_step3"
 
 
+def route_after_step11_review(state: FlowState) -> Literal["level3_step12", "level3_step10"]:
+    """Conditional routing after PR review: if failed and retries < 3, retry; else continue to closure."""
+    review_passed = state.get("step11_review_passed", False)
+    retry_count = state.get("step11_retry_count", 0)
+
+    if review_passed or retry_count >= 3:
+        return "level3_step12"
+    else:
+        # Increment retry count for next attempt
+        state["step11_retry_count"] = retry_count + 1
+        return "level3_step10"
+
+
 # ============================================================================
 # SIMPLE HELPER NODES
 # ============================================================================
@@ -741,9 +754,18 @@ def create_flow_graph():
     graph.add_node("level3_step11", step11_pull_request_node)
     graph.add_edge("level3_step10", "level3_step11")
 
+    # Step 11 → Conditional Routing (retry loop or continue to closure)
+    graph.add_conditional_edges(
+        "level3_step11",
+        route_after_step11_review,
+        {
+            "level3_step12": "level3_step12",  # Review passed or max retries reached
+            "level3_step10": "level3_step10"   # Review failed, retry implementation
+        }
+    )
+
     # Step 12: Issue Closure
     graph.add_node("level3_step12", step12_issue_closure_node)
-    graph.add_edge("level3_step11", "level3_step12")
 
     # Step 13: Documentation Update
     graph.add_node("level3_step13", step13_docs_update_node)

@@ -95,6 +95,7 @@ class FlowState(TypedDict, total=False):
 
     # Level 1 merge result
     level1_status: str                 # OK / PARTIAL / FAILED
+    level1_context_toon: Optional[Dict]  # TOON-formatted context from Level 1 (for Level 3)
 
     # ===========================================================================
     # LEVEL 2: STANDARDS SYSTEM
@@ -278,39 +279,129 @@ class FlowState(TypedDict, total=False):
     step7_execution_time_ms: Optional[float]
     step7_error: Optional[str]
 
-    # Step 8: GitHub Issue
-    step8_issue_number: Optional[int]
-    step8_issue_url: Optional[str]
-    step8_label: Optional[str]
+    # Step 0: Task Analysis (PHASE 2A - New)
+    step0_task_type: str               # Detected task type
+    step0_complexity: int              # Complexity score (1-10)
+    step0_reasoning: str               # Reasoning for task analysis
+    step0_tasks: Dict                  # Broken down tasks
+    step0_task_count: int              # Number of tasks identified
+    step0_error: Optional[str]
+
+    # Step 1: Plan Mode Decision (PHASE 2A - Renamed from step2_plan_mode)
+    step1_plan_required: bool          # Whether plan mode is needed
+    step1_reasoning: str               # Reasoning for plan decision
+    step1_complexity_score: int        # Complexity score from Step 1
+    step1_execution_time_ms: Optional[float]
+    step1_error: Optional[str]
+
+    # Step 2: Plan Execution (PHASE 2A - Renamed from step2b_plan_exec)
+    step2_plan_execution: Optional[Dict]       # Detailed execution plan
+    step2_plan_status: Optional[str]           # Plan generation status
+    step2_phases: Optional[List[Dict]]         # Plan phases
+    step2_total_estimated_steps: Optional[int] # Total estimated steps
+    step2_execution_time_ms: Optional[float]
+    step2_error: Optional[str]
+
+    # Step 3: Task Breakdown Validation (PHASE 2A - Renamed from step3_breakdown)
+    step3_tasks_validated: Optional[List[Dict]]      # Validated task list
+    step3_task_count: Optional[int]                   # Number of validated tasks
+    step3_validation_status: Optional[str]            # Validation status
+    step3_validation_errors: Optional[List[str]]      # Any validation errors
+    step3_execution_time_ms: Optional[float]
+    step3_error: Optional[str]
+
+    # Step 4: TOON Refinement (PHASE 2A - Kept as is)
+    step4_toon_refined: Optional[Dict]         # Refined TOON object
+    step4_refinement_status: Optional[str]     # Refinement status
+    step4_complexity_adjusted: Optional[int]   # Adjusted complexity
+    step4_execution_time_ms: Optional[float]
+    step4_error: Optional[str]
+
+    # Step 5: Skill & Agent Selection (PHASE 2A - Renamed from step6_skill)
+    step5_skill: str                           # Selected skill name
+    step5_agent: str                           # Selected agent name
+    step5_skill_definition: Optional[str]      # Full skill definition
+    step5_agent_definition: Optional[str]      # Full agent definition
+    step5_reasoning: str                       # Reasoning for selection
+    step5_confidence: float                    # Confidence score
+    step5_alternatives: List[Dict]             # Alternative selections
+    step5_llm_query_needed: bool               # Whether LLM was needed
+    step5_execution_time_ms: Optional[float]
+    step5_error: Optional[str]
+
+    # Step 6: Skill Validation & Download (PHASE 2A - Renamed from step6b_validation)
+    step6_skill_validation: Optional[Dict]     # Validation results
+    step6_skill_ready: bool                    # Skill is ready to use
+    step6_agent_ready: bool                    # Agent is ready to use
+    step6_validation_status: Optional[str]     # Validation status
+    step6_execution_time_ms: Optional[float]
+    step6_error: Optional[str]
+
+    # Step 7: Final Prompt Generation (PHASE 2A - Renamed from step12_prompt)
+    step7_prompt_saved: bool                   # Prompt successfully saved
+    step7_prompt_file: Optional[str]           # Path to saved prompt
+    step7_prompt_size: Optional[int]           # Size of prompt in bytes
+    step7_execution_time_ms: Optional[float]
+    step7_error: Optional[str]
+
+    # Step 8: GitHub Issue Creation (NEW - PHASE 2B)
+    step8_issue_id: str                        # GitHub issue ID
+    step8_issue_url: str                       # GitHub issue URL
+    step8_issue_created: bool                  # Issue successfully created
+    step8_title: Optional[str]                 # Issue title
+    step8_status: Optional[str]                # Creation status (OK/ERROR)
     step8_execution_time_ms: Optional[float]
     step8_error: Optional[str]
 
-    # Step 9: Branch Creation
-    step9_branch_name: Optional[str]
+    # Step 9: Branch Creation (NEW - PHASE 2B)
+    step9_branch_name: str                     # Created branch name
+    step9_branch_created: bool                 # Branch successfully created
+    step9_status: Optional[str]                # Creation status (OK/ERROR)
     step9_execution_time_ms: Optional[float]
     step9_error: Optional[str]
 
-    # Step 10: Implementation Placeholder
-    step10_status: Optional[str]
-    step10_message: Optional[str]
+    # Step 10: Implementation Execution (NEW - PHASE 2B)
+    step10_tasks_executed: int                 # Number of tasks executed
+    step10_modified_files: List[str]           # List of modified files
+    step10_implementation_status: str          # Implementation status (OK/ERROR)
+    step10_changes_summary: Optional[Dict]     # Summary of changes
     step10_execution_time_ms: Optional[float]
     step10_error: Optional[str]
 
-    # Step 11: PR & Review
-    step11_pr_number: Optional[int]
-    step11_pr_url: Optional[str]
-    step11_merged: Optional[bool]
-    step11_review_passed: Optional[bool]        # Did code review pass?
-    step11_review_issues: Optional[List[Dict]]  # What issues were found?
-    step11_retry_count: Optional[int]           # How many implementation attempts so far?
-    step11_retry_messages: Optional[List[str]]  # Messages from each retry
+    # Step 11: Pull Request & Code Review (NEW - PHASE 2B)
+    step11_pr_id: str                          # GitHub PR ID
+    step11_pr_url: str                         # GitHub PR URL
+    step11_review_passed: bool                 # Code review passed
+    step11_review_issues: List[str]            # Issues found in review
+    step11_retry_count: int                    # Number of retry attempts
+    step11_status: Optional[str]               # PR status (OK/ERROR)
     step11_execution_time_ms: Optional[float]
     step11_error: Optional[str]
 
-    # Step 12: Issue Closure
-    step12_closed: Optional[bool]
+    # Step 12: Issue Closure (NEW - PHASE 2B)
+    step12_issue_closed: bool                  # Issue successfully closed
+    step12_closing_comment: Optional[str]      # Closing comment text
+    step12_status: Optional[str]               # Closure status (OK/ERROR)
     step12_execution_time_ms: Optional[float]
     step12_error: Optional[str]
+
+    # Step 13: Project Documentation (PHASE 2A - Renamed from existing)
+    step13_updates_prepared: bool              # Documentation updates prepared
+    step13_update_count: int                   # Number of updates
+    step13_documentation_status: Optional[str] # Update status (OK/ERROR)
+    step13_updated_files: Optional[List[str]]  # Files that were updated
+    step13_execution_time_ms: Optional[float]
+    step13_error: Optional[str]
+
+    # Step 14: Final Summary (PHASE 2A - Renamed from existing)
+    step14_summary: Optional[Dict]             # Execution summary
+    step14_status: Optional[str]               # Summary generation status
+    step14_execution_time_ms: Optional[float]
+    step14_error: Optional[str]
+
+    # Level 3 Overall Status (PHASE 2A)
+    level3_status: Optional[str]               # Overall Level 3 execution status
+    level3_total_execution_time_ms: Optional[float]
 
     # Step 13: Documentation Update
     step13_updated_files: Optional[List[str]]
