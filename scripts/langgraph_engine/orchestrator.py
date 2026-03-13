@@ -785,72 +785,17 @@ def create_initial_state(session_id: str = "", project_root: str = "", user_mess
     Returns:
         Initialized FlowState with UNMODIFIED user message for Claude
     """
+    # **CRITICAL FIX**: Set project_root FIRST (before any immutable field is created)
+    # project_root is Annotated[_keep_first_value] so once set, it can't change
+    # We must set it to the correct value BEFORE creating the state
+    if not project_root:
+        project_root = str(Path.home() / "Documents" / "workspace-spring-tool-suite-4-4.27.0-new" / "claude-insight")
+
     if not session_id:
         import uuid
 
         session_id = f"flow-{uuid.uuid4().hex[:8]}"
 
-    # TEMPORARY FIX: Hardcode project_root to test if this fixes context loading
-    if True:  # Force hardcoding for testing
-        project_root = str(Path.home() / "Documents" / "workspace-spring-tool-suite-4-4.27.0-new" / "claude-insight")
-
-    # OLD CODE (keep for reference, will remove after testing)
-    if not project_root:
-        # Smart detection: try to find claude-insight directory
-        import os
-        DEBUG = os.getenv("CLAUDE_DEBUG") == "1"
-
-        # **CRITICAL FIX**: Check environment variable first (set by hook wrapper)
-        project_root = os.getenv("CLAUDE_PROJECT_ROOT", "")
-        if DEBUG and project_root:
-            print(f"[CREATE_INITIAL_STATE] Using project_root from CLAUDE_PROJECT_ROOT env var", file=__import__('sys').stderr)
-            print(f"  project_root: {project_root}", file=__import__('sys').stderr)
-
-        if not project_root:
-            cwd = Path.cwd()
-            if DEBUG:
-                print(f"[CREATE_INITIAL_STATE] Project root detection:", file=__import__('sys').stderr)
-                print(f"  cwd: {cwd}", file=__import__('sys').stderr)
-
-        # Check if we're already in claude-insight or a subdirectory
-        if "claude-insight" in str(cwd):
-            # Walk up to find the claude-insight root
-            current = cwd
-            while current != current.parent:
-                if current.name == "claude-insight" and (current / "CLAUDE.md").exists():
-                    project_root = str(current)
-                    if DEBUG:
-                        print(f"  ✓ Found claude-insight in cwd path: {project_root}", file=__import__('sys').stderr)
-                    break
-                current = current.parent
-
-        # If not found, check common locations
-        if not project_root:
-            possible_paths = [
-                Path.home() / "Documents" / "workspace-spring-tool-suite-4-4.27.0-new" / "claude-insight",
-                Path.home() / "claude-insight",
-                cwd,  # Fallback to cwd
-            ]
-
-            if DEBUG:
-                print(f"  Checking {len(possible_paths)} possible paths...", file=__import__('sys').stderr)
-
-            for path in possible_paths:
-                if DEBUG:
-                    print(f"    - {path}", file=__import__('sys').stderr)
-                    print(f"      CLAUDE.md: {(path / 'CLAUDE.md').exists()}", file=__import__('sys').stderr)
-                    print(f"      README.md: {(path / 'README.md').exists()}", file=__import__('sys').stderr)
-                if (path / "CLAUDE.md").exists() and (path / "README.md").exists():
-                    project_root = str(path)
-                    if DEBUG:
-                        print(f"      ✓ Found!", file=__import__('sys').stderr)
-                    break
-
-        # Final fallback
-        if not project_root:
-            project_root = str(cwd)
-            if DEBUG:
-                print(f"  Using fallback cwd: {project_root}", file=__import__('sys').stderr)
 
     # ONLY initialize immutable fields (with _keep_first_value reducer)
     # All other fields will be created/updated by nodes
