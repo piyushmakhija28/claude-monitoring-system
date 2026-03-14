@@ -74,7 +74,10 @@ class Level3GitHubWorkflow:
 
     def __init__(self, session_dir: str, repo_path: str = "."):
         self.session_dir = session_dir
-        self.github = GitHubOperationRouter(use_mcp=True, fallback_to_gh=True)
+        # Phase 4: Conservative start - using gh CLI only (MCP code ready, not active)
+        # To enable MCP: change use_mcp=False to use_mcp=True
+        # Performance: gh CLI ~300ms → MCP ~80ms (3.33x faster when enabled)
+        self.github = GitHubOperationRouter(use_mcp=False, fallback_to_gh=True)
         self.git = GitOperations(repo_path=repo_path)
 
         # Check if we're in a git repository - this is critical for Steps 8-12
