@@ -586,15 +586,46 @@ def step5_skill_agent_selection(state: FlowState) -> dict:
         "deepseek_skill_eval": deepseek_skill_eval,
     }
 
-    # Pass task_type and complexity as explicit args (script parses these)
-    # AND pass full context for scripts that support --context=
+    # Pass task_type, complexity, and a SLIM context via temp file
+    # (full context with skill definitions is ~800KB, exceeds Windows 32KB cmd line limit)
+    import tempfile
+    import os
+
+    slim_context = {
+        "user_message": user_message[:500],
+        "task_type": task_type,
+        "complexity": complexity,
+        "available_skills": list(all_skills.keys()),
+        "available_agents": list(all_agents.keys()),
+        "patterns_detected": patterns,
+        "is_java_project": is_java,
+    }
+
+    # Write context to temp file to avoid command line length limit
+    context_file = None
+    try:
+        fd, context_file = tempfile.mkstemp(suffix=".json", prefix="step5_ctx_")
+        with os.fdopen(fd, 'w', encoding='utf-8') as f:
+            json.dump(slim_context, f)
+    except Exception:
+        context_file = None
+
     args = [
         "--analyze",
         f"--task-type={task_type}",
         f"--complexity={complexity}",
-        f"--context={json.dumps(context_data, default=str)}"
     ]
+    if context_file:
+        args.append(f"--context-file={context_file}")
+
     result = call_execution_script("auto-skill-agent-selector", args)
+
+    # Cleanup temp file
+    if context_file:
+        try:
+            os.unlink(context_file)
+        except Exception:
+            pass
 
     selected_skill_name = result.get("selected_skill", "")
     selected_agent_name = result.get("selected_agent", "")

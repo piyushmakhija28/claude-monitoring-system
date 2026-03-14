@@ -482,12 +482,22 @@ def main():
             elif arg.startswith("--context="):
                 try:
                     ctx = json.loads(arg.split("=", 1)[1])
-                    # Override with context values if available
                     task_type = ctx.get("task_type", task_type)
                     complexity = ctx.get("complexity", complexity)
                     user_message = ctx.get("user_message", "")
                     context_skills = ctx.get("available_skills", [])
                 except (json.JSONDecodeError, TypeError):
+                    pass
+            elif arg.startswith("--context-file="):
+                try:
+                    ctx_path = arg.split("=", 1)[1]
+                    with open(ctx_path, 'r', encoding='utf-8') as f:
+                        ctx = json.load(f)
+                    task_type = ctx.get("task_type", task_type)
+                    complexity = ctx.get("complexity", complexity)
+                    user_message = ctx.get("user_message", "")
+                    context_skills = ctx.get("available_skills", [])
+                except Exception:
                     pass
             elif not arg.startswith('--'):
                 task_type = arg
