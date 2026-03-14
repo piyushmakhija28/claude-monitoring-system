@@ -87,56 +87,52 @@ def _get_project_root() -> str:
     """Determine project root directory.
 
     Priority:
-    1. Command-line argument --project=PATH
-    2. Script's parent directory (for source installation)
-    3. ~/.claude/scripts parent (for global installation)
-    4. Current working directory (fallback)
+    1. CLAUDE_CWD env var (set by hook event JSON parsing)
+    2. Current working directory (actual project the user is in)
     """
-    # Check if script is in claude-insight/scripts
-    script_dir = Path(__file__).parent
+    # Hook event provides cwd - use it if available
+    cwd_from_hook = os.environ.get("CLAUDE_CWD", "").strip()
+    if cwd_from_hook and Path(cwd_from_hook).exists():
+        return cwd_from_hook
 
-    # If we're in ~/.claude/scripts, go up to ~/.claude
-    if "/.claude/scripts" in str(script_dir) or "\\.claude\\scripts" in str(script_dir):
-        claude_root = script_dir.parent
-        # Look for claude-insight in parent structure
-        possible_projects = [
-            claude_root.parent / "Documents" / "workspace-spring-tool-suite-4-4.27.0-new" / "claude-insight",
-            Path.home() / "Documents" / "workspace-spring-tool-suite-4-4.27.0-new" / "claude-insight",
-            claude_root / "claude-insight",
-        ]
-        for proj_path in possible_projects:
-            if (proj_path / "CLAUDE.md").exists() or (proj_path / "README.md").exists():
-                return str(proj_path)
-
-    # If we're in /claude-insight/scripts, use parent parent
-    if "claude-insight" in str(script_dir) and "scripts" in str(script_dir):
-        claude_insight_root = script_dir.parent
-        if (claude_insight_root / "CLAUDE.md").exists() or (claude_insight_root / "README.md").exists():
-            return str(claude_insight_root)
-
-    # Fallback to cwd
+    # Fallback to actual cwd (where Claude CLI was started)
     return str(Path.cwd())
 
 
 def _capture_user_message() -> str:
-    """Capture user message from stdin or environment.
+    """Capture user message from stdin hook event.
 
-    Hook passes user message via stdin when script is executed.
-    Fallback to CLAUDE_USER_MESSAGE environment variable.
+    Hook passes JSON event via stdin: {"prompt":"...", "cwd":"...", ...}
+    We extract the actual user prompt and set cwd for project detection.
     """
     import sys
     user_message = ""
 
-    # Try reading from stdin (hook typically pipes it here)
+    # Try reading from stdin (hook pipes JSON event here)
     if not sys.stdin.isatty():
         try:
-            user_message = sys.stdin.read().strip()
-            if user_message:
-                return user_message
+            raw_input = sys.stdin.read().strip()
+            if raw_input:
+                # Try parsing as JSON (hook event format)
+                try:
+                    event = json.loads(raw_input)
+                    # Extract actual user prompt
+                    user_message = event.get("prompt", "").strip()
+                    # Extract cwd so _get_project_root() uses correct project
+                    cwd = event.get("cwd", "").strip()
+                    if cwd:
+                        os.environ["CLAUDE_CWD"] = cwd
+                    if user_message:
+                        return user_message
+                except (json.JSONDecodeError, TypeError):
+                    # Not JSON - treat as plain text prompt
+                    user_message = raw_input
+                    if user_message:
+                        return user_message
         except Exception:
             pass
 
-    # Fallback to environment variable (for testing or alternative invocation)
+    # Fallback to environment variable
     user_message = os.environ.get("CLAUDE_USER_MESSAGE", "").strip()
     return user_message
 
