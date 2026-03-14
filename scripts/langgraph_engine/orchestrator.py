@@ -947,9 +947,9 @@ def create_initial_state(session_id: str = "", project_root: str = "", user_mess
     import sys
     print(f"[CREATE_INITIAL_STATE] Input project_root: '{project_root}'", file=sys.stderr)
     if not project_root:
-        hardcoded = str(Path.home() / "Documents" / "workspace-spring-tool-suite-4-4.27.0-new" / "claude-insight")
-        project_root = hardcoded
-        print(f"[CREATE_INITIAL_STATE] Set project_root to hardcoded: {project_root}", file=sys.stderr)
+        # Use cwd from hook event or actual cwd - NOT hardcoded path
+        project_root = os.environ.get("CLAUDE_CWD", str(Path.cwd()))
+        print(f"[CREATE_INITIAL_STATE] Set project_root from cwd: {project_root}", file=sys.stderr)
     print(f"[CREATE_INITIAL_STATE] Final project_root before state creation: {project_root}", file=sys.stderr)
 
     if not session_id:
