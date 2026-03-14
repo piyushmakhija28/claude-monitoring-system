@@ -173,12 +173,13 @@ class SkillAgentLoader:
             logger.warning("Skills directory not found: %s", self.skills_dir)
             return {}
 
-        if self._use_parallel:
-            skills = parallel_load_all_skills(self.skills_dir)
-            # Filter empty results
-            skills = {k: v for k, v in skills.items() if v}
-            logger.info("Loaded %d total skills (parallel)", len(skills))
-            return skills
+        # NOTE: parallel_load_all_skills is broken on Windows (returns 0 skills).
+        # Always use sequential loading until parallel loader is fixed.
+        # if self._use_parallel:
+        #     skills = parallel_load_all_skills(self.skills_dir)
+        #     skills = {k: v for k, v in skills.items() if v}
+        #     logger.info("Loaded %d total skills (parallel)", len(skills))
+        #     return skills
 
         skills: Dict[str, str] = {}
         for skill_dir in self.skills_dir.iterdir():

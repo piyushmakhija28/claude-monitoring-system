@@ -288,33 +288,38 @@ class MetricsCollector:
         }
 
     def print_summary(self) -> None:
-        """Print a human-readable summary to stdout."""
+        """Print a human-readable summary to stderr (hooks use stdout for JSON)."""
+        import sys
+        out = sys.stderr
         s = self.summary()
-        print("\n" + "=" * 55)
-        print(f"  SESSION METRICS  ({self.session_id})")
-        print("=" * 55)
-        print(f"  Steps completed  : {s['total_steps']}")
-        print(f"  Successful       : {s['successful_steps']}")
-        print(f"  Failed           : {s['failed_steps']}")
-        print(f"  Skipped          : {s['skipped_steps']}")
-        print(f"  Success rate     : {s['success_rate']*100:.1f}%")
-        print(f"  Total time       : {s['total_time_seconds']:.1f}s")
-        print(f"  Total tokens     : {s['total_tokens']}")
-        print(f"  Total errors     : {s['total_errors']}")
-        print(f"  Files modified   : {s['total_files_modified']}")
-        print("=" * 55)
+        print("\n" + "=" * 55, file=out)
+        print(f"  SESSION METRICS  ({self.session_id})", file=out)
+        print("=" * 55, file=out)
+        print(f"  Steps completed  : {s['total_steps']}", file=out)
+        print(f"  Successful       : {s['successful_steps']}", file=out)
+        print(f"  Failed           : {s['failed_steps']}", file=out)
+        print(f"  Skipped          : {s['skipped_steps']}", file=out)
+        print(f"  Success rate     : {s['success_rate']*100:.1f}%", file=out)
+        print(f"  Total time       : {s['total_time_seconds']:.1f}s", file=out)
+        print(f"  Total tokens     : {s['total_tokens']}", file=out)
+        print(f"  Total errors     : {s['total_errors']}", file=out)
+        print(f"  Files modified   : {s['total_files_modified']}", file=out)
+        print("=" * 55, file=out)
 
         if s["by_step"]:
-            print("  Per-step breakdown:")
+            print("  Per-step breakdown:", file=out)
             for key in sorted(s["by_step"].keys(), key=lambda k: int(k.split("_")[1])):
                 m = s["by_step"][key]
                 status_icon = "OK" if m["status"] == STATUS_SUCCESS else m["status"]
+                model_info = f"  [{m.get('model', '')}]" if m.get('model') else ""
                 print(
                     f"    Step {m['step']:02d}  {status_icon:<10}"
                     f"  {m.get('duration_seconds', 0):.2f}s"
                     f"  {m.get('tokens_used', 0)} tokens"
+                    f"{model_info}",
+                    file=out,
                 )
-        print()
+        print(file=out)
 
     # ------------------------------------------------------------------
     # Persistence

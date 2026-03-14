@@ -152,8 +152,41 @@ class PromptGenerator:
         context_parts.append(f"\nTASK ANALYSIS (Level 3):")
         context_parts.append(f"  - Task type: {level3.get('task_type', 'Unknown')}")
         context_parts.append(f"  - Complexity: {level3.get('complexity', 5)}/10")
-        context_parts.append(f"  - Suggested model: {level3.get('suggested_model', 'sonnet')}")
+        context_parts.append(f"  - Suggested model: {level3.get('suggested_model', 'complex_reasoning')}")
         context_parts.append(f"  - Plan mode needed: {level3.get('plan_mode_suggested', False)}")
+        if level3.get('reasoning'):
+            context_parts.append(f"  - Analysis: {level3['reasoning'][:200]}")
+
+        # Selected skill/agent
+        if level3.get('selected_skill') or level3.get('selected_agent'):
+            context_parts.append(f"\nSELECTED TOOLS:")
+            if level3.get('selected_skill'):
+                context_parts.append(f"  - Skill: {level3['selected_skill']}")
+            if level3.get('selected_agent'):
+                context_parts.append(f"  - Agent: {level3['selected_agent']}")
+
+        # Task breakdown
+        tasks = level3.get('tasks', [])
+        task_lines = []
+        if tasks:
+            context_parts.append(f"\nTASK BREAKDOWN ({len(tasks)} tasks):")
+            for i, task in enumerate(tasks[:10], 1):
+                if isinstance(task, dict):
+                    desc = task.get('description', task.get('id', f'Task {i}'))
+                    effort = task.get('estimated_effort', 'medium')
+                    task_lines.append(f"  {i}. {desc} [effort: {effort}]")
+                else:
+                    task_lines.append(f"  {i}. {str(task)}")
+            context_parts.extend(task_lines)
+
+        # Plan phases
+        plan_phases = level3.get('plan_phases', [])
+        if plan_phases:
+            context_parts.append(f"\nEXECUTION PLAN ({len(plan_phases)} phases):")
+            for phase in plan_phases:
+                phase_name = phase.get('name', 'Phase')
+                phase_count = phase.get('task_count', 0)
+                context_parts.append(f"  Phase: {phase_name} ({phase_count} tasks)")
 
         # BUILD COMPREHENSIVE PROMPT
         comprehensive_prompt = f"""TASK: {user_message}
@@ -162,10 +195,10 @@ SYSTEM CONTEXT COLLECTED FROM 3-LEVEL FLOW:
 
 {chr(10).join(context_parts)}
 
-INSTRUCTIONS FOR EXECUTION:
-1. Use the context above to understand the full scope
-2. Follow the standards and rules defined in Level 2
-3. Leverage the detected patterns from Level 1
+EXECUTION INSTRUCTIONS:
+1. FIRST: Create a TodoList (TaskCreate) with each task from the TASK BREAKDOWN above
+2. Work through tasks in order, updating status as you go (TaskUpdate)
+3. Follow the standards and rules defined in Level 2
 4. Consider complexity level: {level3.get('complexity', 5)}/10
 5. Approach: {self._get_approach(level3.get('task_type', 'Unknown'))}
 
@@ -176,7 +209,7 @@ EXECUTION REQUIREMENTS:
 
 ORIGINAL USER REQUEST: {user_message}
 
-Now execute this task with full context awareness."""
+Now create the task list and start executing."""
 
         return {
             "original_message": user_message,

@@ -59,6 +59,7 @@ from .standard_selector import select_standards, detect_project_type as selector
 
 from .subgraphs.level3_execution_v2 import (
     level3_init_node,
+    step0_task_analysis_node,
     step1_plan_mode_decision_node,
     step2_plan_execution_node,
     step3_task_breakdown_node,
@@ -569,7 +570,16 @@ def synthesize_prompt_with_flow_data(state: FlowState) -> dict:
 
         generator = pg_module.PromptGenerator()
 
-        # Prepare flow data for synthesis
+        # Prepare flow data for synthesis - use ACTUAL pipeline results
+        # Collect validated tasks for TodoList
+        validated_tasks = state.get("step3_tasks_validated", [])
+        raw_tasks = state.get("step0_tasks", {}).get("tasks", [])
+        all_tasks = validated_tasks if validated_tasks else raw_tasks
+
+        # Collect plan phases
+        plan_exec = state.get("step2_plan_execution", {})
+        plan_phases = plan_exec.get("phases", []) if isinstance(plan_exec, dict) else []
+
         flow_data = {
             "level_minus1": {
                 "unicode_check": state.get("unicode_check", False),
@@ -580,7 +590,7 @@ def synthesize_prompt_with_flow_data(state: FlowState) -> dict:
                 "context_percentage": state.get("context_percentage", 0),
                 "session_chain_loaded": state.get("session_chain_loaded", False),
                 "patterns_detected": state.get("patterns_detected", []),
-                "project_type": "Unknown",
+                "project_type": state.get("detected_framework", "Unknown"),
             },
             "level2": {
                 "standards_count": state.get("standards_count", 0),
@@ -588,10 +598,16 @@ def synthesize_prompt_with_flow_data(state: FlowState) -> dict:
                 "java_standards_loaded": state.get("java_standards_loaded", False),
             },
             "level3": {
-                "task_type": state.get("step0_prompt", {}).get("task_type", "General"),
-                "complexity": state.get("step0_prompt", {}).get("complexity", 5),
-                "suggested_model": state.get("step4_model", "sonnet"),
-                "plan_mode_suggested": state.get("step2_plan_mode", False),
+                "task_type": state.get("step0_task_type", "General"),
+                "complexity": state.get("step0_complexity", 5),
+                "suggested_model": state.get("step4_model", "complex_reasoning"),
+                "plan_mode_suggested": state.get("step1_plan_required", False),
+                "reasoning": state.get("step0_reasoning", ""),
+                "tasks": all_tasks,
+                "task_count": len(all_tasks),
+                "plan_phases": plan_phases,
+                "selected_skill": state.get("step5_skill", ""),
+                "selected_agent": state.get("step5_agent", ""),
             }
         }
 
@@ -819,9 +835,13 @@ def create_flow_graph():
     graph.add_node("level3_init", level3_init_node)
     graph.add_edge("optimize_after_level2", "level3_init")
 
+    # Step 0: Task Analysis (MUST run before Step 1 - provides task_type, complexity, tasks)
+    graph.add_node("level3_step0", step0_task_analysis_node)
+    graph.add_edge("level3_init", "level3_step0")
+
     # Standards integration hook: Step 1 - before plan mode decision
     graph.add_node("standards_hook_step1", apply_integration_step1)
-    graph.add_edge("level3_init", "standards_hook_step1")
+    graph.add_edge("level3_step0", "standards_hook_step1")
 
     # Step 1: Plan Mode Decision (LOCAL LLM - Ollama)
     graph.add_node("level3_step1", step1_plan_mode_decision_node)

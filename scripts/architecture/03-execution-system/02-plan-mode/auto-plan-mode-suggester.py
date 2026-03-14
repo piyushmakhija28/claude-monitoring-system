@@ -442,17 +442,30 @@ def main():
     analyze_mode = "--analyze" in sys.argv
 
     if analyze_mode:
-        # Simplified mode for LangGraph - uses default complexity
-        # In real flow, this would read from flow-trace.json
+        # Parse --context=JSON from LangGraph step1_plan_mode_decision
+        context_data = {}
+        for arg in sys.argv[1:]:
+            if arg.startswith("--context="):
+                try:
+                    context_data = json.loads(arg.split("=", 1)[1])
+                except (json.JSONDecodeError, IndexError):
+                    pass
+
+        # Use actual complexity from step0 analysis (default 5 if missing)
+        actual_complexity = context_data.get("complexity", 5)
+        actual_task_count = context_data.get("task_count", 1)
+        actual_task_type = context_data.get("task_type", "Unknown")
+        actual_user_message = context_data.get("user_message", "")
+
         complexity = {
-            'score': 5,  # Default to moderate
-            'level': 'MODERATE',
-            'estimated_tasks': 2,
-            'requires_phases': False
+            'score': actual_complexity,
+            'level': 'SIMPLE' if actual_complexity < 5 else 'MODERATE' if actual_complexity < 10 else 'COMPLEX',
+            'estimated_tasks': actual_task_count,
+            'requires_phases': actual_complexity >= 10
         }
         structured_prompt = {
-            'metadata': {'original_request': 'Task'},
-            'task_type': 'Unknown',
+            'metadata': {'original_request': actual_user_message or 'Task'},
+            'task_type': actual_task_type,
             'analysis': {}
         }
     elif len(sys.argv) < 2:

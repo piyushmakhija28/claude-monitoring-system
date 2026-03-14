@@ -86,15 +86,22 @@ def node_session_loader(state: FlowState) -> dict:
         session_path.mkdir(parents=True, exist_ok=True)
 
         # Save session metadata
+        # user_message: try state first, then env var fallback (set by run_langgraph_engine)
+        import os
+        user_msg = state.get("user_message", "") or os.environ.get("CURRENT_USER_MESSAGE", "")
+
         session_meta = {
             "session_id": session_id,
             "created_at": datetime.now().isoformat(),
-            "user_message": state.get("user_message", ""),
+            "user_message": user_msg,
         }
 
         meta_file = session_path / "session.json"
         with open(meta_file, 'w', encoding='utf-8') as f:
             json.dump(session_meta, f, indent=2)
+
+        # Set env var so Level 3 infra can find session_id
+        os.environ["CURRENT_SESSION_ID"] = session_id
 
         return {
             "session_id": session_id,

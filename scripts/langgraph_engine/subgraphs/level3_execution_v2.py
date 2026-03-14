@@ -123,8 +123,40 @@ def _get_infra(state: FlowState) -> Dict[str, Any]:
 
     Returns a dict with keys: checkpoint, metrics, error_logger, backup.
     Missing objects are None (degraded but non-fatal).
+
+    IMPORTANT: session_id MUST be a real session ID (from Level 1 node_session_loader).
+    We check state, then env var, then session_path. Never use "unknown" - it creates
+    orphan log directories.
     """
-    session_id = state.get("session_id") or "unknown"
+    import os
+
+    session_id = (
+        state.get("session_id")
+        or os.environ.get("CURRENT_SESSION_ID", "")
+        or ""
+    )
+
+    # Extract session_id from session_path if still empty
+    if not session_id:
+        session_path = state.get("session_path", "") or state.get("session_dir", "")
+        if session_path:
+            # session_path = ~/.claude/logs/sessions/{session_id}
+            session_id = Path(session_path).name
+
+    if not session_id:
+        session_id = "unknown"
+
+    # Cache infrastructure per session_id, but allow upgrade from "unknown" to real ID
+    if session_id != "unknown" and "unknown" in _infra_cache and session_id not in _infra_cache:
+        # Real session_id arrived - create proper infra (don't keep using "unknown")
+        _infra_cache[session_id] = {
+            "checkpoint": _get_checkpoint_manager(session_id),
+            "metrics":    _get_metrics_collector(session_id),
+            "error_logger": _get_error_logger(session_id),
+            "backup":     _get_backup_manager(session_id),
+        }
+        # Store session_id in env for other components
+        os.environ["CURRENT_SESSION_ID"] = session_id
 
     if session_id not in _infra_cache:
         _infra_cache[session_id] = {
@@ -133,8 +165,86 @@ def _get_infra(state: FlowState) -> Dict[str, Any]:
             "error_logger": _get_error_logger(session_id),
             "backup":     _get_backup_manager(session_id),
         }
+        if session_id != "unknown":
+            os.environ["CURRENT_SESSION_ID"] = session_id
 
     return _infra_cache[session_id]
+
+
+# ---------------------------------------------------------------------------
+# Per-step session logging
+# ---------------------------------------------------------------------------
+
+def _write_step_log(
+    state: FlowState,
+    step_number: int,
+    step_label: str,
+    status: str,
+    duration: float,
+    result: Optional[Dict[str, Any]] = None,
+    error: Optional[str] = None,
+) -> None:
+    """Write per-step log entry to session directory as step-{NN}.json.
+
+    This creates a complete audit trail in the session folder so the user can
+    see exactly what happened at each step (kab kya hua).
+
+    Args:
+        state: Current flow state (for session_dir)
+        step_number: Step number (0-14)
+        step_label: Human-readable step label
+        status: OK / FAILED / TIMEOUT
+        duration: Duration in seconds
+        result: Step result dict (keys only, not full values to save space)
+        error: Error message if failed
+    """
+    import json
+    from datetime import datetime
+
+    session_dir = state.get("session_dir") or state.get("session_path", "")
+    if not session_dir:
+        return
+
+    try:
+        log_dir = Path(session_dir) / "step-logs"
+        log_dir.mkdir(parents=True, exist_ok=True)
+
+        log_entry = {
+            "step": step_number,
+            "label": step_label,
+            "status": status,
+            "duration_ms": round(duration * 1000, 1),
+            "timestamp": datetime.now().isoformat(),
+            "session_id": state.get("session_id", ""),
+        }
+
+        if error:
+            log_entry["error"] = error
+
+        if result:
+            # Store result keys and summary values (not full data to save space)
+            summary = {}
+            for k, v in result.items():
+                if isinstance(v, bool):
+                    summary[k] = v
+                elif isinstance(v, (int, float)):
+                    summary[k] = v
+                elif isinstance(v, str):
+                    summary[k] = v[:200] if len(v) > 200 else v
+                elif isinstance(v, list):
+                    summary[k] = f"[{len(v)} items]"
+                elif isinstance(v, dict):
+                    summary[k] = f"{{{len(v)} keys}}"
+                else:
+                    summary[k] = str(type(v).__name__)
+            log_entry["result_summary"] = summary
+
+        log_file = log_dir / f"step-{step_number:02d}.json"
+        with open(log_file, 'w', encoding='utf-8') as f:
+            json.dump(log_entry, f, indent=2)
+
+    except Exception:
+        pass  # Logging failure is never fatal
 
 
 # ---------------------------------------------------------------------------
@@ -185,6 +295,8 @@ def _run_step(
     except Exception:
         pass   # Recovery handler update is best-effort
 
+    # Log step start to stderr for real-time visibility
+    print(f"\n[STEP {step_number:02d}] {step_label} - START", file=sys.stderr)
     logger.info(f"\n[STEP {step_number:02d}] {step_label} - START")
     step_start = time.time()
 
@@ -258,7 +370,11 @@ def _run_step(
             except Exception as ce:
                 logger.warning(f"[v2] Checkpoint save failed: {ce}")
 
+        print(f"[STEP {step_number:02d}] {step_label} - OK ({duration*1000:.0f}ms)", file=sys.stderr)
         logger.info(f"[STEP {step_number:02d}] {step_label} - OK ({duration*1000:.0f}ms)")
+
+        # Write step log to session directory
+        _write_step_log(state, step_number, step_label, "OK", duration, result)
 
         if result is not None:
             result[f"step{step_number}_execution_time_ms"] = duration * 1000
@@ -315,7 +431,11 @@ def _run_step(
             except Exception as ce:
                 logger.warning(f"[v2] Failed checkpoint save after error: {ce}")
 
+        print(f"[STEP {step_number:02d}] {step_label} - FAILED: {exc}", file=sys.stderr)
         logger.error(f"[STEP {step_number:02d}] {step_label} - FAILED: {exc}")
+
+        # Write step error log to session directory
+        _write_step_log(state, step_number, step_label, "FAILED", duration, None, str(exc))
 
         error_key = f"step{step_number}_error"
         base: Dict[str, Any] = {
@@ -340,12 +460,21 @@ def level3_init_node(state: FlowState) -> Dict[str, Any]:
 
     session_path is set by node_session_loader in Level 1.
     session_dir is what Level 3 steps use.
+
+    CRITICAL: Must resolve to REAL session directory, never "unknown".
+    Fallback chain: state.session_path -> state.session_id -> env CURRENT_SESSION_ID
     """
+    import os
+
     session_path = state.get("session_path", "")
     session_id = state.get("session_id", "")
 
+    # Fallback chain for session_id
+    if not session_id:
+        session_id = os.environ.get("CURRENT_SESSION_ID", "")
+
     if not session_path:
-        # Fallback: construct from session_id (should rarely happen)
+        # Construct from session_id
         if not session_id:
             session_id = "unknown"
         session_path = str(Path.home() / ".claude" / "logs" / "sessions" / session_id)

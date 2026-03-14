@@ -906,22 +906,19 @@ def step7_final_prompt_generation(state: FlowState) -> dict:
         system_prompt = "\n".join(system_prompt_lines)
 
         # =====================================================================
-        # BUILD USER MESSAGE (what to do)
+        # BUILD USER MESSAGE (original user prompt - NEVER generic)
         # =====================================================================
-        user_message_lines = []
-        user_message_lines.append("# EXECUTION TASK")
-        user_message_lines.append("")
-        user_message_lines.append(f"Execute the {task_type} using the breakdown and tools above.")
-        user_message_lines.append("")
-        user_message_lines.append("## GUIDELINES")
-        user_message_lines.append("1. Follow the task breakdown in order")
-        user_message_lines.append("2. Use the selected skill/agent for implementation")
-        user_message_lines.append("3. Report progress after each task")
-        user_message_lines.append("4. Track file modifications")
-        user_message_lines.append("5. Validate outputs match requirements")
-        user_message_lines.append("")
-
-        user_message = "\n".join(user_message_lines)
+        # CRITICAL: user_message.txt must contain the ORIGINAL user request,
+        # NOT a generic "Execute the General..." instruction.
+        # The system prompt already has full context; user message is the actual task.
+        if user_msg:
+            user_message = user_msg
+        else:
+            # Fallback to env var if state didn't have it
+            user_message = os.environ.get("CURRENT_USER_MESSAGE", "")
+        if not user_message:
+            # Last resort: generic instruction (should rarely happen)
+            user_message = f"Execute the {task_type} using the breakdown and tools above."
 
         # =====================================================================
         # BUILD COMBINED PROMPT (for tools that don't support system prompt)
@@ -988,6 +985,83 @@ def step7_final_prompt_generation(state: FlowState) -> dict:
         }
 
 
+# ===== HELPER: LLM-BASED ISSUE TITLE GENERATION =====
+
+def _generate_issue_title(user_message: str, task_type: str, complexity: int) -> str:
+    """Generate a short, descriptive GitHub issue title from user message using Ollama.
+
+    Falls back to a cleaned-up version of the user message if LLM is unavailable.
+
+    Args:
+        user_message: Original user request
+        task_type: Detected task type (bug fix, feature, etc.)
+        complexity: Complexity score 1-10
+
+    Returns:
+        Descriptive title string (max ~80 chars)
+    """
+    import os
+    import urllib.request
+    import urllib.error
+
+    if not user_message:
+        return f"[{task_type}] Task (complexity {complexity}/10)"
+
+    # Try Ollama for concise title
+    ollama_endpoint = os.getenv("OLLAMA_ENDPOINT", "http://localhost:11434/api/generate")
+    ollama_model = os.getenv("OLLAMA_MODEL_FAST", os.getenv("OLLAMA_MODEL", "qwen2.5:7b"))
+
+    prompt = (
+        "Generate a short GitHub issue title (max 70 chars) for this task. "
+        "Return ONLY the title text, no quotes, no prefix, no explanation.\n\n"
+        f"Task type: {task_type}\n"
+        f"User request: {user_message[:300]}\n\n"
+        "Title:"
+    )
+
+    try:
+        payload = json.dumps({
+            "model": ollama_model,
+            "prompt": prompt,
+            "stream": False,
+            "temperature": 0.3,
+        }).encode()
+        req = urllib.request.Request(
+            ollama_endpoint,
+            data=payload,
+            headers={"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=15) as response:
+            result = json.loads(response.read().decode())
+            llm_title = result.get("response", "").strip().strip('"').strip("'")
+            # Clean up: remove markdown, limit length
+            llm_title = llm_title.split("\n")[0].strip()
+            if llm_title and len(llm_title) > 5:
+                return llm_title[:80]
+    except Exception:
+        pass
+
+    # Fallback: clean up user message as title
+    clean = user_message.strip().split("\n")[0][:70]
+    # Capitalize first letter
+    if clean and clean[0].islower():
+        clean = clean[0].upper() + clean[1:]
+    return clean
+
+
+def _slugify_title(title: str, max_len: int = 50) -> str:
+    """Convert a title to a branch-name-safe slug.
+
+    Example: 'Fix authentication bug in dashboard' -> 'fix-authentication-bug-in-dashboard'
+    """
+    import re
+    slug = title.lower().strip()
+    slug = re.sub(r'[^a-z0-9\s-]', '', slug)
+    slug = re.sub(r'[\s_]+', '-', slug)
+    slug = re.sub(r'-+', '-', slug).strip('-')
+    return slug[:max_len].rstrip('-')
+
+
 # ===== STEP 8: GITHUB ISSUE CREATION (NEW) =====
 
 def step8_github_issue_creation(state: FlowState) -> dict:
@@ -1016,10 +1090,10 @@ def step8_github_issue_creation(state: FlowState) -> dict:
         # Extract metadata from state
         task_type = state.get("step0_task_type", "General")
         complexity = state.get("step0_complexity", 5)
-        user_msg = state.get("user_message", "")
+        user_msg = state.get("user_message", "") or os.environ.get("CURRENT_USER_MESSAGE", "")
 
-        # Create title
-        title = f"[{task_type}] Complexity-{complexity}/10 - {user_msg[:50]}"
+        # Generate descriptive title using LLM (Ollama)
+        title = _generate_issue_title(user_msg, task_type, complexity)
 
         # Create body with checklist
         tasks = state.get("step0_tasks", {}).get("tasks", [])
@@ -1100,10 +1174,17 @@ def step9_branch_creation(state: FlowState) -> dict:
         import os
 
         issue_id = state.get("step8_issue_id", "0")
+        issue_title = state.get("step8_title", "")
         task_type = state.get("step0_task_type", "task").lower()
         label = state.get("step8_label", task_type)
         session_path = state.get("session_dir") or os.environ.get("CLAUDE_SESSION_PATH", ".")
         project_root = state.get("project_root", ".")
+
+        # Derive branch slug from issue title (LLM-generated) instead of generic label
+        if issue_title:
+            branch_slug = _slugify_title(issue_title)
+        else:
+            branch_slug = label
 
         # Skip branch creation if no real issue was created (issue_id=0 means fallback)
         if issue_id == "0" or not state.get("step8_issue_created", False):
@@ -1124,7 +1205,7 @@ def step9_branch_creation(state: FlowState) -> dict:
             )
             result = workflow.step9_create_branch(
                 issue_number=int(issue_id) if issue_id.isdigit() else 0,
-                label=label,
+                label=branch_slug,
                 session_dir=session_path
             )
 
@@ -1142,7 +1223,7 @@ def step9_branch_creation(state: FlowState) -> dict:
             logger.warning(f"Level3GitHubWorkflow unavailable for branch: {gh_err}. Using fallback.")
 
         # Fallback: return branch name without actually creating it
-        branch_name = f"issue-{issue_id}-{label}"
+        branch_name = f"issue-{issue_id}-{branch_slug}"
         return {
             "step9_branch_name": branch_name,
             "step9_branch_created": False,

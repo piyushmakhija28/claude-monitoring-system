@@ -191,7 +191,12 @@ def apply_standards_at_step(step: int, state: FlowState) -> FlowState:
         # No integration point defined for this step - silently pass through
         return state
 
-    session_id = state.get("session_id", "unknown-session")
+    import os
+    session_id = (
+        state.get("session_id")
+        or os.environ.get("CURRENT_SESSION_ID", "")
+        or "unknown-session"
+    )
     logger = ErrorLogger(session_id)
 
     logger.log_decision(
