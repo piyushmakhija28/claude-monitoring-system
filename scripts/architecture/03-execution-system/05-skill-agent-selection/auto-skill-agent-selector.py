@@ -377,7 +377,9 @@ def load_skill_definitions() -> dict:
     # Load each skill's metadata
     for skill_dir in skills_dir.iterdir():
         if skill_dir.is_dir():
-            skill_md = skill_dir / "skill.md"
+            skill_md = skill_dir / "SKILL.md"
+            if not skill_md.exists():
+                skill_md = skill_dir / "skill.md"
             if skill_md.exists():
                 try:
                     content = skill_md.read_text(encoding='utf-8', errors='ignore')
@@ -463,18 +465,30 @@ def main():
         # Default task type for LangGraph
         task_type = "General"
         complexity = 5
+        user_message = ""
+        context_skills = []
 
         # Parse arguments
         for i, arg in enumerate(sys.argv[1:], 1):
             if arg == "--analyze":
                 continue
             elif arg.startswith("--task-type="):
-                task_type = arg.replace("--task-type=", "")
+                task_type = arg.split("=", 1)[1]
             elif arg.startswith("--complexity="):
                 try:
-                    complexity = int(arg.replace("--complexity=", ""))
+                    complexity = int(arg.split("=", 1)[1])
                 except ValueError:
                     complexity = 5
+            elif arg.startswith("--context="):
+                try:
+                    ctx = json.loads(arg.split("=", 1)[1])
+                    # Override with context values if available
+                    task_type = ctx.get("task_type", task_type)
+                    complexity = ctx.get("complexity", complexity)
+                    user_message = ctx.get("user_message", "")
+                    context_skills = ctx.get("available_skills", [])
+                except (json.JSONDecodeError, TypeError):
+                    pass
             elif not arg.startswith('--'):
                 task_type = arg
 
@@ -502,26 +516,38 @@ def main():
         else:
             agents_text = "Available Agents: None loaded\n"
 
+        # Include user message for context-aware selection
+        user_msg_text = ""
+        if user_message:
+            user_msg_text = f"\nUser Request: {user_message[:300]}\n"
+
+        # If context provided skill names, use those instead of filesystem scan
+        if context_skills and not available_skills:
+            skills_text = "Available Skills:\n"
+            for name in context_skills[:20]:
+                skills_text += f"  - {name}\n"
+
         # Build prompt with actual definitions
-        prompt = f"""You are a task-to-skill matcher. Based on the task type and complexity, suggest the BEST skill and agent.
+        prompt = f"""You are a task-to-skill matcher. Based on the task details, suggest the BEST skill and agent.
 
 Task Type: {task_type}
 Complexity: {complexity}/10
-
+{user_msg_text}
 {skills_text}
 {agents_text}
 
 Choose the skill and agent that BEST match this task. Consider:
+- The user's actual request and what technologies are involved
 - Task complexity and nature
 - Skill/agent capabilities and specialization
-- Technology alignment
+- Technology alignment (CSS/SCSS = css-core, React = react-core, etc.)
 
 Respond ONLY with JSON (no markdown, no explanation):
 {{
-  "selected_skill": "skill name or empty string if none needed",
-  "selected_agent": "agent name or empty string if none needed",
+  "selected_skill": "exact skill name from list above, or empty string if none match",
+  "selected_agent": "exact agent name from list above, or empty string if none match",
   "confidence": 0.5 to 1.0,
-  "reasoning": "brief explanation of choices"
+  "reasoning": "brief explanation of why these were chosen"
 }}
 
 JSON only, no markdown:"""

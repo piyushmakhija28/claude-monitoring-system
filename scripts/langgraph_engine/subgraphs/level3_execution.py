@@ -586,9 +586,12 @@ def step5_skill_agent_selection(state: FlowState) -> dict:
         "deepseek_skill_eval": deepseek_skill_eval,
     }
 
-    # Pass complete context INCLUDING skill definitions to get perfect skill match
+    # Pass task_type and complexity as explicit args (script parses these)
+    # AND pass full context for scripts that support --context=
     args = [
         "--analyze",
+        f"--task-type={task_type}",
+        f"--complexity={complexity}",
         f"--context={json.dumps(context_data, default=str)}"
     ]
     result = call_execution_script("auto-skill-agent-selector", args)
