@@ -27,48 +27,41 @@ class OllamaService:
 
     def __init__(self, endpoint: str = "http://127.0.0.1:11434"):
         self.endpoint = endpoint
+        self.ollama_available = False
+        self.available_models = []
+        self.claude_client = None
 
-        # VALIDATE OLLAMA SERVER IS RUNNING
-        self._validate_ollama_server()
-
-        self.available_models = self._check_available_models()
-
-        # Model routing
-        # Setup: run intel-ai/models/gpu/import-models.bat
-        #
-        # Strategy:
-        #   14b steps (deep reasoning): qwen2.5:14b -> if GPU can't handle -> Claude CLI
-        #   7b steps (classification):  qwen2.5:7b (7b is enough for yes/no)
-        #   3b steps (breakdown):       llama3.2:3b (3b is enough for structured output)
-        #
-        # If 14b not available, HybridInferenceManager handles Claude CLI fallback
+        # Model routing config (used by both Ollama and Claude CLI fallback)
         self.models = {
-            # 14B - deep reasoning (Steps 0, 2, 5, 7, 14)
-            "deep_reasoning": "qwen2.5:14b",          # If GPU can't run -> Claude CLI fallback
-            "prompt_synthesis": "qwen2.5:14b",         # If GPU can't run -> Claude CLI fallback
-            # 7B - fast tasks (Steps 1, 8, 11)
-            "fast_classification": "qwen2.5:7b",       # Step 1: plan yes/no
-            "code_analysis": "qwen2.5:7b",             # Step 11: code review patterns
-            # 3B - lightweight (Step 3)
-            "task_breakdown": "llama3.2:3b",            # Step 3: structured task analysis
-            # Backward compatibility keys
-            "complex_reasoning": "qwen2.5:14b",        # Legacy key -> 14B
-            "synthesis": "qwen2.5:14b",                # Legacy key -> 14B
-            "pattern_matching": "qwen2.5:14b",         # Legacy key -> 14B
+            "deep_reasoning": "qwen2.5:14b",
+            "prompt_synthesis": "qwen2.5:14b",
+            "fast_classification": "qwen2.5:7b",
+            "code_analysis": "qwen2.5:7b",
+            "task_breakdown": "llama3.2:3b",
+            "complex_reasoning": "qwen2.5:14b",
+            "synthesis": "qwen2.5:14b",
+            "pattern_matching": "qwen2.5:14b",
         }
 
-        # Fallback to first available model if configured models not found
-        if self.available_models:
-            for key in self.models:
-                if self.models[key] not in self.available_models:
-                    self.models[key] = self.available_models[0]
-                    logger.warning(f"Model {self.models[key]} not available, using {self.available_models[0]} instead")
+        # Try Ollama - gracefully degrade if unavailable
+        try:
+            self._validate_ollama_server()
+            self.ollama_available = True
+            self.available_models = self._check_available_models()
 
-        logger.info(f"Ollama service initialized at {endpoint}")
-        logger.info(f"Available models: {self.available_models}")
+            # Fallback to first available model if configured models not found
+            if self.available_models:
+                for key in self.models:
+                    if self.models[key] not in self.available_models:
+                        self.models[key] = self.available_models[0]
 
-        # Initialize Claude API client for fallback
-        self.claude_client = None
+            logger.info(f"Ollama service initialized at {endpoint}")
+            logger.info(f"Available models: {self.available_models}")
+        except Exception as e:
+            logger.warning(f"Ollama unavailable: {str(e)[:100]}")
+            logger.info("Will use Claude CLI fallback for all LLM calls")
+
+        # Initialize Claude API SDK fallback (if anthropic package installed)
         self._init_claude_fallback()
 
     def _validate_ollama_server(self):
@@ -151,13 +144,17 @@ class OllamaService:
         Returns:
             Dict with 'message' containing response content
         """
+        # If Ollama is down, go straight to fallbacks
+        if not self.ollama_available:
+            return self._fallback_chain(messages, model, temperature)
+
         # Resolve model name
         model_name = self.models.get(model, model)
 
         # Check if model available
         if model_name not in self.available_models:
-            logger.error(f"Model {model_name} not available. Available: {self.available_models}")
-            return {"error": f"Model {model_name} not installed"}
+            logger.warning(f"Model {model_name} not available, trying fallback")
+            return self._fallback_chain(messages, model, temperature)
 
         # Build request
         request_body = {
@@ -204,20 +201,24 @@ class OllamaService:
 
         except (requests.Timeout, json.JSONDecodeError, Exception) as e:
             logger.warning(f"Ollama failed: {e}")
-            # Fallback 1: Claude API SDK
-            try:
-                r = self._chat_claude(messages=messages, model_type=model, temperature=temperature)
-                return {"message": {"content": r, "role": "assistant"}, "model": "claude-api", "done": True}
-            except Exception:
-                pass
-            # Fallback 2: claude CLI (user's subscription)
-            try:
-                r = self._chat_claude_cli(messages=messages, model_type=model)
-                if r:
-                    return {"message": {"content": r, "role": "assistant"}, "model": "claude-cli", "done": True}
-            except Exception:
-                pass
-            return {"error": f"All LLM backends failed: {e}"}
+            return self._fallback_chain(messages, model, temperature)
+
+    def _fallback_chain(self, messages, model_type, temperature=0.7):
+        """Try Claude API SDK then claude CLI when Ollama is unavailable."""
+        # Fallback 1: Claude API SDK
+        try:
+            r = self._chat_claude(messages=messages, model_type=model_type, temperature=temperature)
+            return {"message": {"content": r, "role": "assistant"}, "model": "claude-api", "done": True}
+        except Exception as e:
+            logger.debug(f"Claude API SDK fallback: {e}")
+        # Fallback 2: claude CLI (user's Claude Code subscription)
+        try:
+            r = self._chat_claude_cli(messages=messages, model_type=model_type)
+            if r:
+                return {"message": {"content": r, "role": "assistant"}, "model": "claude-cli", "done": True}
+        except Exception as e:
+            logger.debug(f"Claude CLI fallback: {e}")
+        return {"error": "All LLM backends failed (Ollama down, no Claude API key, claude CLI failed)"}
 
 
     def _init_claude_fallback(self):
