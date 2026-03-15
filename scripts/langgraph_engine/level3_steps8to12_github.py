@@ -1007,7 +1007,7 @@ IMPORTANT: Respond with ONLY the label name, nothing else. No explanation, no qu
         similar to Claude Code's /simplify command. Returns actionable issues.
         Non-blocking: returns empty list on failure.
         """
-        if not diff_text or len(diff_text.strip()) < 50:
+        if not diff_text or len(diff_text) < 50:
             return []
 
         try:
@@ -1016,9 +1016,9 @@ IMPORTANT: Respond with ONLY the label name, nothing else. No explanation, no qu
             logger.debug("[Simplify] llm_call not available, skipping LLM review")
             return []
 
-        # Truncate diff to stay within LLM context limits
-        max_diff_len = 6000
-        truncated = diff_text[:max_diff_len] if len(diff_text) > max_diff_len else diff_text
+        # Line-aware truncation to preserve diff structure
+        diff_lines = diff_text.split("\n")
+        truncated = "\n".join(diff_lines[:200]) if len(diff_lines) > 200 else diff_text
 
         prompt = (
             "You are a code reviewer. Analyze this git diff for 3 categories:\n"
@@ -1034,7 +1034,7 @@ IMPORTANT: Respond with ONLY the label name, nothing else. No explanation, no qu
 
         logger.info("[Simplify] Running LLM-powered code review...")
 
-        response = llm_call(prompt, model="balanced", temperature=0.1)
+        response = llm_call(prompt, model="balanced", temperature=0.1, timeout=30)
         if not response:
             logger.warning("[Simplify] LLM review returned no response, skipping")
             return []
@@ -1049,17 +1049,24 @@ IMPORTANT: Respond with ONLY the label name, nothing else. No explanation, no qu
         return issues
 
     @staticmethod
+    def _format_simplify_issues(items) -> List[str]:
+        """Prefix items with [Simplify] marker for PR review identification."""
+        return [f"[Simplify] {str(item)}" for item in items if item]
+
+    @staticmethod
     def _parse_simplify_response(response: str) -> List[str]:
         """Parse LLM simplify review response into list of issue strings."""
-        import json as _json
+        import json
+
+        text = response.strip()
+        fmt = Level3GitHubWorkflow._format_simplify_issues
 
         # Try direct JSON parse
-        text = response.strip()
         try:
-            result = _json.loads(text)
+            result = json.loads(text)
             if isinstance(result, list):
-                return [f"[Simplify] {str(item)}" for item in result if item]
-        except _json.JSONDecodeError:
+                return fmt(result)
+        except json.JSONDecodeError:
             pass
 
         # Try extracting JSON array from markdown/text wrapper
@@ -1067,17 +1074,16 @@ IMPORTANT: Respond with ONLY the label name, nothing else. No explanation, no qu
         end = text.rfind("]")
         if start != -1 and end != -1 and end > start:
             try:
-                result = _json.loads(text[start:end + 1])
+                result = json.loads(text[start:end + 1])
                 if isinstance(result, list):
-                    return [f"[Simplify] {str(item)}" for item in result if item]
-            except _json.JSONDecodeError:
+                    return fmt(result)
+            except json.JSONDecodeError:
                 pass
 
         # Fallback: treat non-empty lines as issues (LLM returned plain text)
         lines = [line.strip() for line in text.splitlines() if line.strip()]
-        # Only use fallback if it looks like actual issues (not a wall of text)
         if 1 <= len(lines) <= 10:
-            return [f"[Simplify] {line}" for line in lines]
+            return fmt(lines)
 
         return []
 
