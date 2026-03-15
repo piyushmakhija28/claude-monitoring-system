@@ -156,25 +156,25 @@ class Level3GitHubWorkflow:
             # Build issue body with task information
             issue_body = self._build_issue_body(description, task_summary, implementation_plan)
 
-            # Create issue
-            result = self.github.create_issue(
+            # Create issue via facade (typed IssueResult)
+            result = self.facade.create_issue(
                 title=title,
                 body=issue_body,
                 labels=[label] if label else []
             )
 
-            if not result.get("success"):
-                logger.error(f"Issue creation failed: {result.get('error')}")
+            if not result.success:
+                logger.error(f"Issue creation failed: {result.error}")
                 return {
                     "success": False,
-                    "error": result.get("error"),
+                    "error": result.error,
                     "execution_time_ms": (time.time() - step_start) * 1000
                 }
 
-            issue_number = result.get("issue_number")
-            issue_url = result.get("issue_url")
+            issue_number = result.number
+            issue_url = result.url
 
-            logger.info(f"✓ Issue created: #{issue_number}")
+            logger.info(f"Issue created: #{issue_number}")
             logger.info(f"  URL: {issue_url}")
 
             execution_time_ms = (time.time() - step_start) * 1000
@@ -183,7 +183,7 @@ class Level3GitHubWorkflow:
                 "success": True,
                 "issue_number": issue_number,
                 "issue_url": issue_url,
-                "issue_id": result.get("issue_id"),
+                "issue_id": None,
                 "label": label,
                 "execution_time_ms": execution_time_ms,
                 "timestamp": datetime.now().isoformat()
@@ -377,14 +377,14 @@ IMPORTANT: Respond with ONLY the label name, nothing else. No explanation, no qu
 
             logger.info(f"Creating branch: {branch_name}")
 
-            # Create branch from main
-            result = self.git.create_branch(branch_name, "main")
+            # Create branch from main via facade (typed BranchResult)
+            branch_result = self.facade.create_branch(branch_name, from_branch="main")
 
-            if not result.get("success"):
-                logger.error(f"Branch creation failed: {result.get('error')}")
+            if not branch_result.success:
+                logger.error(f"Branch creation failed: {branch_result.error}")
                 return {
                     "success": False,
-                    "error": result.get("error"),
+                    "error": branch_result.error,
                     "execution_time_ms": (time.time() - step_start) * 1000
                 }
 
@@ -449,28 +449,28 @@ IMPORTANT: Respond with ONLY the label name, nothing else. No explanation, no qu
             pr_title = f"Fix/Feature: Issue #{issue_number}"
             pr_body = self._build_pr_body(issue_number, changes_summary)
 
-            logger.info(f"Creating PR from {branch_name} → main")
+            logger.info(f"Creating PR from {branch_name} -> main")
 
-            # Create PR
-            pr_result = self.github.create_pull_request(
+            # Create PR via facade (typed PRResult)
+            pr_result = self.facade.create_pr(
                 title=pr_title,
                 body=pr_body,
-                head_branch=branch_name,
-                base_branch="main"
+                head=branch_name,
+                base="main"
             )
 
-            if not pr_result.get("success"):
-                logger.error(f"PR creation failed: {pr_result.get('error')}")
+            if not pr_result.success:
+                logger.error(f"PR creation failed: {pr_result.error}")
                 return {
                     "success": False,
-                    "error": pr_result.get("error"),
+                    "error": pr_result.error,
                     "execution_time_ms": (time.time() - step_start) * 1000
                 }
 
-            pr_number = pr_result.get("pr_number")
-            pr_url = pr_result.get("pr_url")
+            pr_number = pr_result.number
+            pr_url = pr_result.url
 
-            logger.info(f"✓ PR created: #{pr_number}")
+            logger.info(f"PR created: #{pr_number}")
             logger.info(f"  URL: {pr_url}")
 
             # CODE REVIEW (NEW: Using selected skills/agents)
@@ -531,17 +531,17 @@ IMPORTANT: Respond with ONLY the label name, nothing else. No explanation, no qu
                         "execution_time_ms": (time.time() - step_start) * 1000
                     }
 
-                # All checks passed - proceed with merge
-                merge_result = self.github.merge_pull_request(
+                # All checks passed - proceed with merge via facade (typed MergeResult)
+                merge_result = self.facade.merge_pr(
                     pr_number,
                     commit_message=f"Merge PR #{pr_number}: Fix issue #{issue_number}"
                 )
 
-                if merge_result.get("success"):
+                if merge_result.success:
                     merged = True
-                    logger.info(f"✓ PR #{pr_number} merged")
+                    logger.info(f"PR #{pr_number} merged")
                 else:
-                    logger.warning(f"PR merge failed: {merge_result.get('error')}")
+                    logger.warning(f"PR merge failed: {merge_result.error}")
                     logger.info("Keeping PR open for manual review")
 
             execution_time_ms = (time.time() - step_start) * 1000
@@ -616,18 +616,18 @@ IMPORTANT: Respond with ONLY the label name, nothing else. No explanation, no qu
 
             logger.info(f"Closing issue #{issue_number}")
 
-            # Close issue with comment
-            result = self.github.close_issue(issue_number, closing_comment)
+            # Close issue with comment via facade (returns bool)
+            closed_ok = self.facade.close_issue(issue_number, comment=closing_comment)
 
-            if not result.get("success"):
-                logger.error(f"Issue closure failed: {result.get('error')}")
+            if not closed_ok:
+                logger.error(f"Issue closure failed for #{issue_number}")
                 return {
                     "success": False,
-                    "error": result.get("error"),
+                    "error": f"Failed to close issue #{issue_number}",
                     "execution_time_ms": (time.time() - step_start) * 1000
                 }
 
-            logger.info(f"✓ Issue #{issue_number} closed")
+            logger.info(f"Issue #{issue_number} closed")
 
             execution_time_ms = (time.time() - step_start) * 1000
 
@@ -820,17 +820,18 @@ IMPORTANT: Respond with ONLY the label name, nothing else. No explanation, no qu
             diff_text = "\n".join(diff_lines)
 
             # Analyze diff for common issues (existing logic)
-            issues = self._analyze_diff_for_issues(diff_lines)
+            # Pass pre-computed diff_text to avoid redundant joins in each helper
+            issues = self._analyze_diff_for_issues(diff_text, diff_lines)
 
             # Check for specific patterns based on selected skills
             if "python-backend-engineer" in selected_skills or "python-backend-engineer" in selected_agents:
-                issues.extend(self._check_python_best_practices(diff_lines))
+                issues.extend(self._check_python_best_practices(diff_text))
 
             if "spring-boot-microservices" in selected_skills or "spring-boot-microservices" in selected_agents:
-                issues.extend(self._check_java_spring_patterns(diff_lines))
+                issues.extend(self._check_java_spring_patterns(diff_text))
 
             if "docker" in selected_skills or "devops-engineer" in selected_agents:
-                issues.extend(self._check_docker_best_practices(diff_lines))
+                issues.extend(self._check_docker_best_practices(diff_text))
 
             # --- LLM-powered simplify review (reuse, quality, efficiency) ---
             simplify_issues = self._run_simplify_review(diff_text)
@@ -909,71 +910,85 @@ IMPORTANT: Respond with ONLY the label name, nothing else. No explanation, no qu
                 "criteria_score": 0.0,
             }
 
-    def _analyze_diff_for_issues(self, diff_lines: List[str]) -> List[str]:
-        """Analyze diff for common issues."""
-        issues = []
+    def _analyze_diff_for_issues(self, diff_text: str, diff_lines: List[str]) -> List[str]:
+        """Analyze diff for common issues.
 
-        diff_text = "\n".join(diff_lines)
+        Args:
+            diff_text:  Pre-joined diff string (caller computes once, no redundant join).
+            diff_lines: Raw diff lines list (needed for prefix-based addition counting).
+        """
+        issues = []
 
         # Check for obvious issues
         if "TODO" in diff_text or "FIXME" in diff_text:
-            issues.append("⚠️ Found TODO/FIXME comments in code")
+            issues.append("Warning: Found TODO/FIXME comments in code")
 
         if "print(" in diff_text:
-            issues.append("⚠️ Found print() statements (use logging instead)")
+            issues.append("Warning: Found print() statements (use logging instead)")
 
         if "eval(" in diff_text or "exec(" in diff_text:
-            issues.append("🔴 Found dangerous eval/exec calls")
+            issues.append("Warning: Found dangerous eval/exec calls")
 
         if "password" in diff_text.lower() and "***" not in diff_text:
-            issues.append("🔴 Potential exposed credentials or password in code")
+            issues.append("Warning: Potential exposed credentials or password in code")
 
-        # Check for large additions
+        # Line-level count requires diff_lines (prefix-based)
         additions = len([l for l in diff_lines if l.startswith("+")])
         if additions > 500:
-            issues.append(f"⚠️ Large addition ({additions} lines) - consider breaking into smaller commits")
+            issues.append(
+                f"Warning: Large addition ({additions} lines) - consider breaking into smaller commits"
+            )
 
         return issues
 
-    def _check_python_best_practices(self, diff_lines: List[str]) -> List[str]:
-        """Check for Python-specific best practices."""
+    def _check_python_best_practices(self, diff_text: str) -> List[str]:
+        """Check for Python-specific best practices.
+
+        Args:
+            diff_text: Pre-joined diff string (caller computes once, no redundant join).
+        """
         issues = []
-        diff_text = "\n".join(diff_lines)
 
         if "import *" in diff_text:
-            issues.append("⚠️ Found 'import *' - use explicit imports")
+            issues.append("Warning: Found 'import *' - use explicit imports")
 
         if "except:" in diff_text:
-            issues.append("⚠️ Found bare 'except:' - specify exception types")
+            issues.append("Warning: Found bare 'except:' - specify exception types")
 
         if "global " in diff_text:
-            issues.append("⚠️ Found 'global' keyword - consider refactoring")
+            issues.append("Warning: Found 'global' keyword - consider refactoring")
 
         return issues
 
-    def _check_java_spring_patterns(self, diff_lines: List[str]) -> List[str]:
-        """Check for Spring Boot/Java best practices."""
+    def _check_java_spring_patterns(self, diff_text: str) -> List[str]:
+        """Check for Spring Boot/Java best practices.
+
+        Args:
+            diff_text: Pre-joined diff string (caller computes once, no redundant join).
+        """
         issues = []
-        diff_text = "\n".join(diff_lines)
 
         if "@Component" in diff_text and "@Autowired" not in diff_text:
-            issues.append("⚠️ Found @Component but no @Autowired - verify dependency injection")
+            issues.append("Warning: Found @Component but no @Autowired - verify dependency injection")
 
         if "new Thread(" in diff_text:
-            issues.append("⚠️ Found raw Thread creation - use ExecutorService instead")
+            issues.append("Warning: Found raw Thread creation - use ExecutorService instead")
 
         return issues
 
-    def _check_docker_best_practices(self, diff_lines: List[str]) -> List[str]:
-        """Check for Docker/DevOps best practices."""
+    def _check_docker_best_practices(self, diff_text: str) -> List[str]:
+        """Check for Docker/DevOps best practices.
+
+        Args:
+            diff_text: Pre-joined diff string (caller computes once, no redundant join).
+        """
         issues = []
-        diff_text = "\n".join(diff_lines)
 
         if "FROM ubuntu" in diff_text or "FROM centos" in diff_text:
-            issues.append("⚠️ Consider using alpine for smaller images")
+            issues.append("Warning: Consider using alpine for smaller images")
 
         if "RUN apt-get" in diff_text:
-            issues.append("⚠️ RUN apt-get without apt-get update - use multi-stage or combine")
+            issues.append("Warning: RUN apt-get without apt-get update - use multi-stage or combine")
 
         return issues
 

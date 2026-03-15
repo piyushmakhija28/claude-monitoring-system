@@ -139,13 +139,12 @@ class GitOperations:
         """
         Create a new branch from specified base.
 
-        Workflow:
+        Optimized workflow (5 subprocess calls instead of 7):
         1. Stash any uncommitted changes (safety)
-        2. Checkout base branch (main)
-        3. Pull latest from remote
-        4. Create new branch
-        5. Push new branch to remote
-        6. Pop stash if anything was stashed
+        2. Fetch origin/{from_branch} into FETCH_HEAD (replaces separate fetch + checkout + pull)
+        3. Create new branch directly from FETCH_HEAD (avoids checking out base branch)
+        4. Pop stash onto new branch if anything was stashed
+        5. Push new branch to remote with tracking
 
         Args:
             branch_name: Name for new branch (e.g., "issue-42-fix-dashboard")
@@ -175,39 +174,33 @@ class GitOperations:
             elif not stash_result.get("returncode") == 0:
                 logger.warning(f"Stash push failed: {stash_result.get('stderr', '')}")
 
-            # Step 2: Fetch latest from origin
-            logger.debug(f"Fetching latest from origin...")
-            self._run_git(["fetch", "origin"], check=False)
+            # Step 2: Fetch only the base branch from origin into FETCH_HEAD.
+            # This replaces three separate calls (fetch, checkout main, pull main)
+            # by updating FETCH_HEAD to the latest remote commit without switching branches.
+            logger.debug(f"Fetching origin/{from_branch} into FETCH_HEAD...")
+            fetch_result = self._run_git(["fetch", "origin", from_branch], check=False)
+            if not fetch_result.get("success"):
+                # Non-fatal: fall back to using local ref if fetch fails
+                logger.warning(f"Fetch failed, will create branch from local {from_branch}: {fetch_result.get('stderr', '')}")
+                base_ref = from_branch
+            else:
+                # FETCH_HEAD always points to the last fetched branch
+                base_ref = "FETCH_HEAD"
 
-            # Step 3: Switch to base branch
-            logger.debug(f"Checking out {from_branch}...")
-            result = self._run_git(["checkout", from_branch], check=False)
+            # Step 3: Create new branch directly from the fetched remote ref.
+            # Avoids checking out the base branch and pulling - saves 2 subprocess calls.
+            logger.debug(f"Creating branch {branch_name} from {base_ref}...")
+            result = self._run_git(["checkout", "-b", branch_name, base_ref], check=False)
             if not result.get("success"):
                 # Restore stash before returning error
                 if had_stash:
                     self._run_git(["stash", "pop"], check=False)
                 return {
                     "success": False,
-                    "error": f"Cannot checkout {from_branch}: {result.get('stderr')}"
+                    "error": f"Cannot create branch from {base_ref}: {result.get('stderr')}"
                 }
 
-            # Step 4: Pull latest to ensure main is synced with remote
-            logger.debug(f"Pulling latest from {from_branch}...")
-            self._run_git(["pull", "origin", from_branch], check=False)
-
-            # Step 5: Create new branch from synced main
-            logger.debug(f"Creating branch {branch_name}...")
-            result = self._run_git(["checkout", "-b", branch_name], check=False)
-            if not result.get("success"):
-                # Restore stash before returning error
-                if had_stash:
-                    self._run_git(["stash", "pop"], check=False)
-                return {
-                    "success": False,
-                    "error": f"Cannot create branch: {result.get('stderr')}"
-                }
-
-            # Step 6: Pop stash onto new branch (restore working changes)
+            # Step 4: Pop stash onto new branch (restore working changes)
             if had_stash:
                 pop_result = self._run_git(["stash", "pop"], check=False)
                 if pop_result.get("success"):
@@ -215,12 +208,12 @@ class GitOperations:
                 else:
                     logger.warning(f"Stash pop had conflicts: {pop_result.get('stderr')}")
 
-            # Step 7: Push to remote
+            # Step 5: Push to remote with upstream tracking
             logger.debug(f"Pushing {branch_name} to origin...")
             result = self._run_git(["push", "-u", "origin", branch_name], check=False)
             if not result.get("success"):
                 # Non-critical error, branch exists locally
-                logger.warning(f"Push error (branch may exist): {result.get('stderr')}")
+                logger.warning(f"Push error (branch may exist remotely): {result.get('stderr')}")
 
             logger.info(f"Branch created: {branch_name}")
             return {

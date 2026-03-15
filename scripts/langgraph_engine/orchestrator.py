@@ -28,7 +28,7 @@ try:
 except ImportError:
     _LANGGRAPH_AVAILABLE = False
 
-from .flow_state import FlowState, WorkflowContextOptimizer
+from .flow_state import FlowState, WorkflowContextOptimizer, StepKeys
 
 # Import all nodes from subgraphs
 from .subgraphs.level_minus1 import (
@@ -91,7 +91,7 @@ def route_after_level_minus1(state: FlowState) -> Literal["ask_level_minus1_fix"
     - If OK: go to Level 1 session loader (level1_session)
     - If FAILED: ask user for recovery (ask_level_minus1_fix)
     """
-    status = state.get("level_minus1_status", "FAILED")
+    status = state.get(StepKeys.LEVEL_MINUS1_STATUS, "FAILED")
     if status == "OK":
         return "level1_session"
     else:
@@ -105,11 +105,11 @@ def route_after_level_minus1_user_choice(state: FlowState) -> Literal["fix_level
     - 'skip': Continue to Level 1 (session_loader) anyway
     - default: Skip (user will fix manually)
     """
-    choice = state.get("level_minus1_user_choice", "skip")
+    choice = state.get(StepKeys.LEVEL_MINUS1_USER_CHOICE, "skip")
 
     if choice == "auto-fix":
         # Check retry count to prevent infinite loops (max 3 attempts)
-        retry_count = state.get("level_minus1_retry_count", 0)
+        retry_count = state.get(StepKeys.LEVEL_MINUS1_RETRY_COUNT, 0)
         if retry_count < 3:
             return "fix_level_minus1"
 
@@ -129,7 +129,7 @@ def route_after_level_minus1_fix(state: FlowState) -> Literal["level_minus1_unic
 
 def route_context_threshold(state: FlowState) -> Literal["emergency_archive", "level2_common_standards"]:
     """Route based on context usage threshold."""
-    if state.get("context_threshold_exceeded"):
+    if state.get(StepKeys.CONTEXT_THRESHOLD_EXCEEDED):
         return "emergency_archive"
     return "level2_common_standards"
 
@@ -137,28 +137,28 @@ def route_context_threshold(state: FlowState) -> Literal["emergency_archive", "l
 def route_standards_loading(state: FlowState) -> Literal["level2_java_standards", "level2_merge"]:
     """Route based on project type (Java detection)."""
     detect_project_type(state)
-    if state.get("is_java_project"):
+    if state.get(StepKeys.IS_JAVA_PROJECT):
         return "level2_java_standards"
     return "level2_merge"
 
 
 def route_after_step1_decision(state: FlowState) -> Literal["level3_step2", "level3_step3"]:
     """Conditional routing: if plan required, execute Step 2; else skip to Step 3."""
-    if state.get("step1_plan_required", True):
+    if state.get(StepKeys.PLAN_REQUIRED, True):
         return "level3_step2"
     return "level3_step3"
 
 
 def route_after_step11_review(state: FlowState) -> Literal["level3_step12", "level3_step10"]:
     """Conditional routing after PR review: if failed and retries < 3, retry; else continue to closure."""
-    review_passed = state.get("step11_review_passed", False)
-    retry_count = state.get("step11_retry_count", 0)
+    review_passed = state.get(StepKeys.REVIEW_PASSED, False)
+    retry_count = state.get(StepKeys.RETRY_COUNT, 0)
 
     if review_passed or retry_count >= 3:
         return "level3_step12"
     else:
         # Increment retry count for next attempt
-        state["step11_retry_count"] = retry_count + 1
+        state[StepKeys.RETRY_COUNT] = retry_count + 1
         return "level3_step10"
 
 
@@ -176,15 +176,15 @@ def ask_level_minus1_fix(state: FlowState) -> dict:
     """
     from langchain_core.messages import BaseMessage
 
-    retry_count = state.get("level_minus1_retry_count", 0)
+    retry_count = state.get(StepKeys.LEVEL_MINUS1_RETRY_COUNT, 0)
 
     # Build human-readable error message
     error_details = []
-    if not state.get("unicode_check"):
+    if not state.get(StepKeys.UNICODE_CHECK):
         error_details.append("Unicode/UTF-8 encoding issue")
-    if not state.get("encoding_check"):
+    if not state.get(StepKeys.ENCODING_CHECK):
         error_details.append("Non-ASCII files found (cp1252 incompatible)")
-    if not state.get("windows_path_check"):
+    if not state.get(StepKeys.WINDOWS_PATH_CHECK):
         error_details.append("Windows paths using backslashes detected")
 
     # Default to auto-fix (safe, recommended)
@@ -251,26 +251,26 @@ def fix_level_minus1_issues(state: FlowState) -> dict:
     DEBUG = os.getenv("CLAUDE_DEBUG") == "1"
     if DEBUG:
         print("[L-1-FIX] Starting auto-fix attempts...", file=__import__('sys').stderr)
-        print(f"[L-1-FIX] state['project_root'] at entry: '{state.get('project_root', 'MISSING')}'", file=sys.stderr)
+        print(f"[L-1-FIX] state['project_root'] at entry: '{state.get(StepKeys.PROJECT_ROOT, 'MISSING')}'", file=sys.stderr)
 
     fixes_applied = []
     fixes_failed = []
 
     # Fix 1: Unicode encoding (this is already applied in node_unicode_fix)
-    if not state.get("unicode_check"):
+    if not state.get(StepKeys.UNICODE_CHECK):
         fixes_applied.append("Unicode/UTF-8 encoding")
         if DEBUG:
             print("[L-1-FIX] Unicode fix already applied", file=__import__('sys').stderr)
 
     # Fix 2: Non-ASCII files - in real scenario, would need to rewrite files
     # For now, just log
-    if not state.get("encoding_check"):
+    if not state.get(StepKeys.ENCODING_CHECK):
         fixes_failed.append("Non-ASCII files (manual edit needed)")
         if DEBUG:
             print("[L-1-FIX] Non-ASCII files require manual editing", file=__import__('sys').stderr)
 
     # Fix 3: Windows paths - replace backslashes with forward slashes
-    if not state.get("windows_path_check"):
+    if not state.get(StepKeys.WINDOWS_PATH_CHECK):
         try:
             # In real scenario: scan .py files and replace \\ with /
             fixes_applied.append("Windows path backslashes")
@@ -280,12 +280,12 @@ def fix_level_minus1_issues(state: FlowState) -> dict:
             fixes_failed.append(f"Windows path fix failed: {e}")
 
     # Increment retry counter
-    retry_count = state.get("level_minus1_retry_count", 0) + 1
+    retry_count = state.get(StepKeys.LEVEL_MINUS1_RETRY_COUNT, 0) + 1
 
     updates = {
         "level_minus1_fixes_applied": fixes_applied,
         "level_minus1_fixes_failed": fixes_failed,
-        "level_minus1_retry_count": retry_count,
+        StepKeys.LEVEL_MINUS1_RETRY_COUNT: retry_count,
         "level_minus1_attempt": f"Attempt {retry_count}",
         # Reset checks for retry
         "unicode_check": True,  # Re-enable for retry
@@ -310,12 +310,12 @@ def fix_level_minus1_issues(state: FlowState) -> dict:
 def emergency_archive(state: FlowState) -> dict:
     """Emergency archival when context threshold exceeded."""
     updates = {}
-    existing_warnings = state.get("warnings") or []
+    existing_warnings = state.get(StepKeys.WARNINGS) or []
     warnings = list(existing_warnings) + [
-        f"Context usage high ({state.get('context_percentage', 0):.1f}%) - "
+        f"Context usage high ({state.get(StepKeys.CONTEXT_PERCENTAGE, 0):.1f}%) - "
         "archive recommended"
     ]
-    updates["warnings"] = warnings
+    updates[StepKeys.WARNINGS] = warnings
     return updates
 
 
@@ -332,11 +332,11 @@ def optimize_context_after_level1(state: FlowState) -> dict:
     """
     # Store full level 1 output
     level1_output = {
-        "context_loaded": state.get("context_loaded"),
-        "context_percentage": state.get("context_percentage"),
-        "session_chain_loaded": state.get("session_chain_loaded"),
-        "patterns_detected": state.get("patterns_detected", []),
-        "preferences_data": state.get("preferences_data", {}),
+        StepKeys.CONTEXT_LOADED: state.get(StepKeys.CONTEXT_LOADED),
+        StepKeys.CONTEXT_PERCENTAGE: state.get(StepKeys.CONTEXT_PERCENTAGE),
+        StepKeys.SESSION_CHAIN_LOADED: state.get(StepKeys.SESSION_CHAIN_LOADED),
+        StepKeys.PATTERNS_DETECTED: state.get(StepKeys.PATTERNS_DETECTED, []),
+        StepKeys.PREFERENCES_DATA: state.get(StepKeys.PREFERENCES_DATA, {}),
     }
 
     state = WorkflowContextOptimizer.store_step_output(state, "level1_output", level1_output)
@@ -355,12 +355,12 @@ def optimize_context_after_level2(state: FlowState) -> dict:
     """
     # Store full level 2 output
     level2_output = {
-        "standards_loaded": state.get("standards_loaded"),
-        "standards_count": state.get("standards_count"),
-        "java_standards_loaded": state.get("java_standards_loaded"),
-        "spring_boot_patterns": state.get("spring_boot_patterns", {}),
-        "tool_optimization_rules": state.get("tool_optimization_rules", {}),
-        "tool_optimization_loaded": state.get("tool_optimization_loaded", False),
+        StepKeys.STANDARDS_LOADED: state.get(StepKeys.STANDARDS_LOADED),
+        StepKeys.STANDARDS_COUNT: state.get(StepKeys.STANDARDS_COUNT),
+        StepKeys.JAVA_STANDARDS_LOADED: state.get(StepKeys.JAVA_STANDARDS_LOADED),
+        StepKeys.SPRING_BOOT_PATTERNS: state.get(StepKeys.SPRING_BOOT_PATTERNS, {}),
+        StepKeys.TOOL_OPTIMIZATION_RULES: state.get(StepKeys.TOOL_OPTIMIZATION_RULES, {}),
+        StepKeys.TOOL_OPTIMIZATION_LOADED: state.get(StepKeys.TOOL_OPTIMIZATION_LOADED, False),
     }
 
     state = WorkflowContextOptimizer.store_step_output(state, "level2_output", level2_output)
@@ -395,8 +395,8 @@ def save_workflow_memory(state: FlowState) -> dict:
         import json
         from pathlib import Path
 
-        session_id = state.get("session_id", "unknown")
-        memory = state.get("workflow_memory", {})
+        session_id = state.get(StepKeys.SESSION_ID, "unknown")
+        memory = state.get(StepKeys.WORKFLOW_MEMORY, {})
 
         if memory and session_id != "unknown":
             # Save to ~/.claude/memory/sessions/{session_id}/workflow-memory.json
@@ -408,10 +408,10 @@ def save_workflow_memory(state: FlowState) -> dict:
                 json.dump(
                     {
                         "session_id": session_id,
-                        "timestamp": state.get("timestamp"),
+                        "timestamp": state.get(StepKeys.TIMESTAMP),
                         "workflow_memory": memory,
-                        "context_optimization_stats": state.get("step_optimization_stats", {}),
-                        "memory_size_kb": state.get("workflow_memory_size_kb", 0),
+                        "context_optimization_stats": state.get(StepKeys.STEP_OPTIMIZATION_STATS, {}),
+                        "memory_size_kb": state.get(StepKeys.WORKFLOW_MEMORY_SIZE_KB, 0),
                     },
                     f,
                     indent=2,
@@ -452,8 +452,8 @@ def level2_select_standards_node(state: FlowState) -> dict:
     updates: dict = {}
 
     try:
-        project_root = state.get("project_root", ".")
-        session_id = state.get("session_id", "unknown")
+        project_root = state.get(StepKeys.PROJECT_ROOT, ".")
+        session_id = state.get(StepKeys.SESSION_ID, "unknown")
 
         # select_standards() internally calls detect_project_type() + detect_framework()
         # and loads all sources with conflict resolution
@@ -477,8 +477,8 @@ def level2_select_standards_node(state: FlowState) -> dict:
         # Expose detected framework for downstream nodes
         updates["detected_framework"] = full_selection["framework"]
 
-        existing_pipeline = state.get("pipeline") or []
-        updates["pipeline"] = list(existing_pipeline) + [{
+        existing_pipeline = state.get(StepKeys.PIPELINE) or []
+        updates[StepKeys.PIPELINE] = list(existing_pipeline) + [{
             "node": "level2_select_standards",
             "project_type": full_selection["project_type"],
             "framework": full_selection["framework"],
@@ -490,8 +490,8 @@ def level2_select_standards_node(state: FlowState) -> dict:
 
     except Exception as exc:
         updates["standards_selection_error"] = str(exc)
-        existing_pipeline = state.get("pipeline") or []
-        updates["pipeline"] = list(existing_pipeline) + [{
+        existing_pipeline = state.get(StepKeys.PIPELINE) or []
+        updates[StepKeys.PIPELINE] = list(existing_pipeline) + [{
             "node": "level2_select_standards",
             "error": str(exc),
         }]
@@ -535,8 +535,8 @@ def verify_prompt_integrity(state: FlowState) -> bool:
     CRITICAL: user_message must equal user_message_original
     If modified, that's a bug in the flow design.
     """
-    original = state.get("user_message_original", "")
-    current = state.get("user_message", "")
+    original = state.get(StepKeys.USER_MESSAGE_ORIGINAL, "")
+    current = state.get(StepKeys.USER_MESSAGE, "")
 
     if original != current:
         print(f"[WARNING] PROMPT INTEGRITY VIOLATION!", file=sys.stderr)
@@ -574,46 +574,46 @@ def synthesize_prompt_with_flow_data(state: FlowState) -> dict:
 
         # Prepare flow data for synthesis - use ACTUAL pipeline results
         # Collect validated tasks for TodoList
-        validated_tasks = state.get("step3_tasks_validated", [])
-        raw_tasks = state.get("step0_tasks", {}).get("tasks", [])
+        validated_tasks = state.get(StepKeys.TASKS_VALIDATED, [])
+        raw_tasks = state.get(StepKeys.TASKS, {}).get("tasks", [])
         all_tasks = validated_tasks if validated_tasks else raw_tasks
 
         # Collect plan phases
-        plan_exec = state.get("step2_plan_execution", {})
+        plan_exec = state.get(StepKeys.PLAN_EXECUTION, {})
         plan_phases = plan_exec.get("phases", []) if isinstance(plan_exec, dict) else []
 
         flow_data = {
             "level_minus1": {
-                "unicode_check": state.get("unicode_check", False),
-                "encoding_check": state.get("encoding_check", False),
-                "windows_path_check": state.get("windows_path_check", False),
+                "unicode_check": state.get(StepKeys.UNICODE_CHECK, False),
+                "encoding_check": state.get(StepKeys.ENCODING_CHECK, False),
+                "windows_path_check": state.get(StepKeys.WINDOWS_PATH_CHECK, False),
             },
             "level1": {
-                "context_percentage": state.get("context_percentage", 0),
-                "session_chain_loaded": state.get("session_chain_loaded", False),
-                "patterns_detected": state.get("patterns_detected", []),
-                "project_type": state.get("detected_framework", "Unknown"),
+                "context_percentage": state.get(StepKeys.CONTEXT_PERCENTAGE, 0),
+                "session_chain_loaded": state.get(StepKeys.SESSION_CHAIN_LOADED, False),
+                "patterns_detected": state.get(StepKeys.PATTERNS_DETECTED, []),
+                "project_type": state.get(StepKeys.DETECTED_FRAMEWORK, "Unknown"),
             },
             "level2": {
-                "standards_count": state.get("standards_count", 0),
-                "is_java_project": state.get("is_java_project", False),
-                "java_standards_loaded": state.get("java_standards_loaded", False),
+                "standards_count": state.get(StepKeys.STANDARDS_COUNT, 0),
+                "is_java_project": state.get(StepKeys.IS_JAVA_PROJECT, False),
+                "java_standards_loaded": state.get(StepKeys.JAVA_STANDARDS_LOADED, False),
             },
             "level3": {
-                "task_type": state.get("step0_task_type", "General"),
-                "complexity": state.get("step0_complexity", 5),
-                "suggested_model": state.get("step4_model", "complex_reasoning"),
-                "plan_mode_suggested": state.get("step1_plan_required", False),
-                "reasoning": state.get("step0_reasoning", ""),
+                "task_type": state.get(StepKeys.TASK_TYPE, "General"),
+                "complexity": state.get(StepKeys.COMPLEXITY, 5),
+                "suggested_model": state.get(StepKeys.SELECTED_MODEL, "complex_reasoning"),
+                "plan_mode_suggested": state.get(StepKeys.PLAN_REQUIRED, False),
+                "reasoning": state.get(StepKeys.REASONING, ""),
                 "tasks": all_tasks,
                 "task_count": len(all_tasks),
                 "plan_phases": plan_phases,
-                "selected_skill": state.get("step5_skill", ""),
-                "selected_agent": state.get("step5_agent", ""),
-                "selected_skills": state.get("step5_skills", []),
-                "selected_agents": state.get("step5_agents", []),
-                "skill_definition": state.get("step5_skill_definition", ""),
-                "agent_definition": state.get("step5_agent_definition", ""),
+                "selected_skill": state.get(StepKeys.SKILL, ""),
+                "selected_agent": state.get(StepKeys.AGENT, ""),
+                "selected_skills": state.get(StepKeys.SKILLS, []),
+                "selected_agents": state.get(StepKeys.AGENTS, []),
+                "skill_definition": state.get(StepKeys.SKILL_DEFINITION, ""),
+                "agent_definition": state.get(StepKeys.AGENT_DEFINITION, ""),
             }
         }
 
@@ -621,8 +621,8 @@ def synthesize_prompt_with_flow_data(state: FlowState) -> dict:
         # Priority: user_message > user_message_original > env var CURRENT_USER_MESSAGE
         import os
         user_msg = (
-            state.get("user_message")
-            or state.get("user_message_original")
+            state.get(StepKeys.USER_MESSAGE)
+            or state.get(StepKeys.USER_MESSAGE_ORIGINAL)
             or os.environ.get("CURRENT_USER_MESSAGE", "")
         )
         synthesis_result = generator.synthesize_with_flow_data(
@@ -644,7 +644,7 @@ def synthesize_prompt_with_flow_data(state: FlowState) -> dict:
         print(f"[WARNING] Prompt synthesis failed: {e}", file=sys.stderr)
         # Fallback: return original message
         return {
-            "synthesized_prompt": state.get("user_message", ""),
+            "synthesized_prompt": state.get(StepKeys.USER_MESSAGE, ""),
             "synthesis_metadata": {"status": "fallback"}
         }
 
@@ -664,9 +664,9 @@ def output_node(state: FlowState) -> dict:
         flag_dir = Path.home() / ".claude"
         start_flag = flag_dir / ".session-start-voice"
         if not start_flag.exists():
-            task_type = state.get("step0_task_type", "task")
-            complexity = state.get("step0_complexity", 5)
-            skill = state.get("step5_skill", "")
+            task_type = state.get(StepKeys.TASK_TYPE, "task")
+            complexity = state.get(StepKeys.COMPLEXITY, 5)
+            skill = state.get(StepKeys.SKILL, "")
             msg = f"Starting {task_type} task, complexity {complexity} out of 10."
             if skill:
                 msg += f" Using {skill} skill."
@@ -681,7 +681,7 @@ def output_node(state: FlowState) -> dict:
     save_workflow_memory(state)
 
     # Determine final status based on actual step results (not just errors list)
-    if state.get("level_minus1_status") == "BLOCKED":
+    if state.get(StepKeys.LEVEL_MINUS1_STATUS) == "BLOCKED":
         final_status = "BLOCKED"
     else:
         step_failures = []
@@ -690,7 +690,7 @@ def output_node(state: FlowState) -> dict:
                 step_failures.append(key)
         if step_failures:
             final_status = "FAILED"
-        elif state.get("warnings"):
+        elif state.get(StepKeys.WARNINGS):
             final_status = "PARTIAL"
         else:
             final_status = "OK"
@@ -699,18 +699,18 @@ def output_node(state: FlowState) -> dict:
     _save_pipeline_execution_log(state, final_status)
 
     # In hook_mode, Step 14 doesn't run. Save a quick summary anyway.
-    if not state.get("step14_summary_saved"):
-        session_dir = state.get("session_dir") or state.get("session_path", "")
+    if not state.get(StepKeys.SUMMARY_SAVED):
+        session_dir = state.get(StepKeys.SESSION_DIR) or state.get(StepKeys.SESSION_PATH, "")
         if session_dir:
             try:
                 from datetime import datetime
                 quick_summary = (
                     f"Pipeline: {final_status} | "
-                    f"Task: {state.get('step0_task_type', '?')} | "
-                    f"Complexity: {state.get('step0_complexity', '?')}/10 | "
-                    f"Skill: {state.get('step5_skill', 'none')} | "
-                    f"Agent: {state.get('step5_agent', 'none')} | "
-                    f"Framework: {state.get('detected_framework', '?')} | "
+                    f"Task: {state.get(StepKeys.TASK_TYPE, '?')} | "
+                    f"Complexity: {state.get(StepKeys.COMPLEXITY, '?')}/10 | "
+                    f"Skill: {state.get(StepKeys.SKILL, 'none')} | "
+                    f"Agent: {state.get(StepKeys.AGENT, 'none')} | "
+                    f"Framework: {state.get(StepKeys.DETECTED_FRAMEWORK, '?')} | "
                     f"Time: {datetime.now().strftime('%H:%M:%S')}"
                 )
                 summary_file = Path(session_dir) / "execution-summary.txt"
@@ -738,50 +738,50 @@ def _save_pipeline_execution_log(state: FlowState, final_status: str) -> None:
     import json
     from datetime import datetime
 
-    session_dir = state.get("session_dir") or state.get("session_path", "")
+    session_dir = state.get(StepKeys.SESSION_DIR) or state.get(StepKeys.SESSION_PATH, "")
     if not session_dir:
         return
 
     try:
         log_lines = []
         log_lines.append("# Pipeline Execution Log")
-        log_lines.append(f"\n**Session**: {state.get('session_id', 'unknown')}")
+        log_lines.append(f"\n**Session**: {state.get(StepKeys.SESSION_ID, 'unknown')}")
         log_lines.append(f"**Date**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        log_lines.append(f"**Project**: {state.get('project_root', '.')}")
+        log_lines.append(f"**Project**: {state.get(StepKeys.PROJECT_ROOT, '.')}")
         log_lines.append(f"**Final Status**: {final_status}")
-        log_lines.append(f"**Framework**: {state.get('detected_framework', 'unknown')}")
+        log_lines.append(f"**Framework**: {state.get(StepKeys.DETECTED_FRAMEWORK, 'unknown')}")
         log_lines.append("")
 
         # Level -1
         log_lines.append("## Level -1: Auto-Fix")
-        log_lines.append(f"- Unicode: {'PASS' if state.get('unicode_check') else 'FAIL'}")
-        log_lines.append(f"- Encoding: {'PASS' if state.get('encoding_check') else 'FAIL'}")
-        log_lines.append(f"- Paths: {'PASS' if state.get('windows_path_check') else 'FAIL'}")
-        log_lines.append(f"- Status: {state.get('level_minus1_status', 'unknown')}")
+        log_lines.append(f"- Unicode: {'PASS' if state.get(StepKeys.UNICODE_CHECK) else 'FAIL'}")
+        log_lines.append(f"- Encoding: {'PASS' if state.get(StepKeys.ENCODING_CHECK) else 'FAIL'}")
+        log_lines.append(f"- Paths: {'PASS' if state.get(StepKeys.WINDOWS_PATH_CHECK) else 'FAIL'}")
+        log_lines.append(f"- Status: {state.get(StepKeys.LEVEL_MINUS1_STATUS, 'unknown')}")
         log_lines.append("")
 
         # Level 1
         log_lines.append("## Level 1: Context Sync")
-        log_lines.append(f"- Session: {state.get('session_id', 'none')}")
-        log_lines.append(f"- Complexity: {state.get('complexity_score', '?')}/10")
-        graph_score = state.get('graph_complexity_score')
+        log_lines.append(f"- Session: {state.get(StepKeys.SESSION_ID, 'none')}")
+        log_lines.append(f"- Complexity: {state.get(StepKeys.COMPLEXITY_SCORE, '?')}/10")
+        graph_score = state.get(StepKeys.GRAPH_COMPLEXITY_SCORE)
         if graph_score:
             log_lines.append(f"- Graph Complexity: {graph_score}/25")
-            combined = state.get('combined_complexity_score')
+            combined = state.get(StepKeys.COMBINED_COMPLEXITY_SCORE)
             if combined:
                 log_lines.append(f"- Combined Score: {combined}/25")
-        log_lines.append(f"- Context Files: {state.get('files_loaded_count', 0)}")
-        log_lines.append(f"- Cache Hit: {state.get('context_cache_hit', False)}")
-        log_lines.append(f"- TOON: {'OK' if state.get('toon_saved') else 'FAILED'}")
+        log_lines.append(f"- Context Files: {state.get(StepKeys.FILES_LOADED_COUNT, 0)}")
+        log_lines.append(f"- Cache Hit: {state.get(StepKeys.CONTEXT_CACHE_HIT, False)}")
+        log_lines.append(f"- TOON: {'OK' if state.get(StepKeys.TOON_SAVED) else 'FAILED'}")
         log_lines.append("")
 
         # Level 2
         log_lines.append("## Level 2: Standards")
-        log_lines.append(f"- Standards Loaded: {state.get('standards_count', 0)}")
-        log_lines.append(f"- Framework Detected: {state.get('detected_framework', 'unknown')}")
-        log_lines.append(f"- MCP Discovered: {state.get('mcp_discovered_count', 0)}")
-        log_lines.append(f"- Tool Rules: {'Loaded' if state.get('tool_optimization_loaded') else 'Missing'}")
-        log_lines.append(f"- Status: {state.get('level2_status', 'unknown')}")
+        log_lines.append(f"- Standards Loaded: {state.get(StepKeys.STANDARDS_COUNT, 0)}")
+        log_lines.append(f"- Framework Detected: {state.get(StepKeys.DETECTED_FRAMEWORK, 'unknown')}")
+        log_lines.append(f"- MCP Discovered: {state.get(StepKeys.MCP_DISCOVERED_COUNT, 0)}")
+        log_lines.append(f"- Tool Rules: {'Loaded' if state.get(StepKeys.TOOL_OPTIMIZATION_LOADED) else 'Missing'}")
+        log_lines.append(f"- Status: {state.get(StepKeys.LEVEL2_STATUS, 'unknown')}")
         log_lines.append("")
 
         # Level 3 Steps
@@ -833,12 +833,12 @@ def _save_pipeline_execution_log(state: FlowState, final_status: str) -> None:
 
         # Selected resources
         log_lines.append("## Selected Resources")
-        skills = state.get("step5_skills") or []
-        skill = state.get("step5_skill", "")
+        skills = state.get(StepKeys.SKILLS) or []
+        skill = state.get(StepKeys.SKILL, "")
         if skill and skill not in skills:
             skills = [skill] + skills
-        agents = state.get("step5_agents") or []
-        agent = state.get("step5_agent", "")
+        agents = state.get(StepKeys.AGENTS) or []
+        agent = state.get(StepKeys.AGENT, "")
         if agent and agent not in agents:
             agents = [agent] + agents
 
@@ -849,7 +849,7 @@ def _save_pipeline_execution_log(state: FlowState, final_status: str) -> None:
         log_lines.append("")
 
         # Errors
-        errors = state.get("errors") or []
+        errors = state.get(StepKeys.ERRORS) or []
         if errors:
             log_lines.append("## Errors")
             for err in errors[:10]:
