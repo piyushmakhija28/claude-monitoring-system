@@ -468,6 +468,12 @@ def main():
         import urllib.error
         import os
 
+        try:
+            sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent))
+            from langgraph_engine.llm_call import llm_call as _llm_call
+        except ImportError:
+            _llm_call = None
+
         # Get Ollama config
         ollama_endpoint = os.getenv("OLLAMA_ENDPOINT", "http://localhost:11434/api/generate")
         ollama_model = os.getenv("OLLAMA_MODEL", "qwen2.5:7b")
@@ -580,22 +586,27 @@ Respond ONLY with JSON (no markdown):
 JSON only:"""
 
         try:
-            num_ctx = 8192 if "14b" in ollama_model else 16384
-            payload = {
-                "model": ollama_model,
-                "prompt": prompt,
-                "stream": False,
-                "temperature": 0.3,
-                "options": {"num_ctx": num_ctx, "num_predict": 2048}
-            }
-            req = urllib.request.Request(
-                ollama_endpoint,
-                data=json.dumps(payload).encode(),
-                headers={"Content-Type": "application/json"}
-            )
-            with urllib.request.urlopen(req, timeout=30) as response:
-                result = json.loads(response.read().decode())
-                llm_response = result.get("response", "")
+            llm_response = ""
+            if _llm_call:
+                llm_response = _llm_call(prompt, model="fast", temperature=0.3) or ""
+
+            if not llm_response:
+                num_ctx = 8192 if "14b" in ollama_model else 16384
+                payload = {
+                    "model": ollama_model,
+                    "prompt": prompt,
+                    "stream": False,
+                    "temperature": 0.3,
+                    "options": {"num_ctx": num_ctx, "num_predict": 2048}
+                }
+                req = urllib.request.Request(
+                    ollama_endpoint,
+                    data=json.dumps(payload).encode(),
+                    headers={"Content-Type": "application/json"}
+                )
+                with urllib.request.urlopen(req, timeout=30) as response:
+                    result = json.loads(response.read().decode())
+                    llm_response = result.get("response", "")
 
             # Parse JSON from response
             if "{" in llm_response:

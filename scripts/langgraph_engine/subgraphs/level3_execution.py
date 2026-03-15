@@ -1286,15 +1286,9 @@ def _generate_issue_title(user_message: str, task_type: str, complexity: int) ->
         Descriptive title string (max ~80 chars)
     """
     import os
-    import urllib.request
-    import urllib.error
 
     if not user_message:
         return f"[{task_type}] Task (complexity {complexity}/10)"
-
-    # Try Ollama for concise title
-    ollama_endpoint = os.getenv("OLLAMA_ENDPOINT", "http://localhost:11434/api/generate")
-    ollama_model = os.getenv("OLLAMA_MODEL_FAST", os.getenv("OLLAMA_MODEL", "qwen2.5:7b"))
 
     prompt = (
         "Generate a short GitHub issue title (max 70 chars) for this task. "
@@ -1304,23 +1298,12 @@ def _generate_issue_title(user_message: str, task_type: str, complexity: int) ->
         "Title:"
     )
 
+    # Use shared LLM call (Ollama -> Claude CLI fallback)
     try:
-        payload = json.dumps({
-            "model": ollama_model,
-            "prompt": prompt,
-            "stream": False,
-            "temperature": 0.3,
-        }).encode()
-        req = urllib.request.Request(
-            ollama_endpoint,
-            data=payload,
-            headers={"Content-Type": "application/json"},
-        )
-        with urllib.request.urlopen(req, timeout=15) as response:
-            result = json.loads(response.read().decode())
-            llm_title = result.get("response", "").strip().strip('"').strip("'")
-            # Clean up: remove markdown, limit length
-            llm_title = llm_title.split("\n")[0].strip()
+        from ..llm_call import llm_call
+        llm_title = llm_call(prompt, model="fast", temperature=0.3, timeout=30)
+        if llm_title:
+            llm_title = llm_title.strip().strip('"').strip("'").split("\n")[0].strip()
             if llm_title and len(llm_title) > 5:
                 return llm_title[:80]
     except Exception:
@@ -1328,7 +1311,6 @@ def _generate_issue_title(user_message: str, task_type: str, complexity: int) ->
 
     # Fallback: clean up user message as title
     clean = user_message.strip().split("\n")[0][:70]
-    # Capitalize first letter
     if clean and clean[0].islower():
         clean = clean[0].upper() + clean[1:]
     return clean
