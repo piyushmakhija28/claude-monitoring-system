@@ -276,12 +276,23 @@ class OllamaService:
             raise
 
     def _chat_claude_cli(self, messages: List[Dict[str, str]], model_type: str = "fast_classification") -> Optional[str]:
-        """Fallback to claude CLI (user's Claude Code subscription)."""
+        """Fallback to claude CLI (user's Claude Code subscription).
+
+        Model selection mirrors the Ollama model map:
+          fast_classification -> haiku (cheap, fast)
+          complex_reasoning  -> opus (best quality for planning/analysis)
+          synthesis          -> sonnet (balanced for generation)
+        """
         import subprocess, shutil
         claude_path = shutil.which("claude")
         if not claude_path:
             return None
-        cli_model = {"fast_classification": "haiku", "complex_reasoning": "sonnet", "synthesis": "sonnet"}.get(model_type, "haiku")
+        # Same model selection logic as Claude API SDK (_chat_claude)
+        cli_model = {
+            "fast_classification": "haiku",
+            "complex_reasoning": "opus",
+            "synthesis": "sonnet",
+        }.get(model_type, "haiku")
         parts = []
         for m in messages:
             if m.get("role") == "system":

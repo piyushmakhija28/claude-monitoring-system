@@ -161,8 +161,8 @@ class GitOperations:
             return {"success": False, "error": "Not a git repository"}
 
         try:
-            # Step 1: Stash uncommitted changes to prevent data loss
-            stash_result = self._run_git(["stash", "push", "-m", f"auto-stash-before-{branch_name}"], check=False)
+            # Step 1: Stash ALL changes (including untracked files) to prevent data loss
+            stash_result = self._run_git(["stash", "push", "--include-untracked", "-m", f"auto-stash-before-{branch_name}"], check=False)
             had_stash = stash_result.get("success") and "No local changes" not in stash_result.get("stdout", "")
             if had_stash:
                 logger.info(f"Stashed uncommitted changes before branch creation")

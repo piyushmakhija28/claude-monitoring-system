@@ -1366,22 +1366,43 @@ def step8_github_issue_creation(state: FlowState) -> dict:
         project_root = state.get("project_root", ".")
         user_msg = state.get("user_message", "") or os.environ.get("CURRENT_USER_MESSAGE", "")
 
-        # Skip issue creation for non-task prompts
-        skip_patterns = [
-            "<task-notification>", "<system-reminder>",
-            "test", "hello", "hi", "ok", "yes", "no", "haan", "nahi",
-            "theek hai", "chal", "hmm", "achha",
-        ]
+        # Smart skip: only create issues for REAL tasks (not chat, greetings, system messages)
+        task_type = state.get("step0_task_type", "General Task")
+        complexity = state.get("step0_complexity", 5)
+        reasoning = state.get("step0_reasoning", "")
         msg_lower = user_msg.strip().lower()
-        if len(msg_lower) < 5 or any(msg_lower.startswith(p) for p in skip_patterns):
-            logger.info(f"Step 8: Skipping issue creation - prompt too short or non-task: '{msg_lower[:30]}'")
+
+        # Skip conditions:
+        # 1. Very short prompts (< 10 chars) - greetings, yes/no, etc.
+        # 2. System notifications (XML tags)
+        # 3. LLM analysis failed AND complexity is default (5) - means Ollama was down
+        # 4. Task type is still "General Task" (fallback) with no real reasoning
+        should_skip = False
+        skip_reason = ""
+
+        if len(msg_lower) < 10:
+            should_skip = True
+            skip_reason = f"prompt too short ({len(msg_lower)} chars)"
+        elif msg_lower.startswith("<task-notification>") or msg_lower.startswith("<system"):
+            should_skip = True
+            skip_reason = "system notification"
+        elif "LLM analysis parsing failed" in reasoning:
+            should_skip = True
+            skip_reason = "LLM analysis failed (Ollama down?)"
+        elif task_type == "General Task" and complexity == 5 and not reasoning:
+            should_skip = True
+            skip_reason = "default task type with no analysis"
+
+        if should_skip:
+            logger.info(f"Step 8: Skipping issue - {skip_reason}")
             return {
                 "step8_issue_id": "0",
                 "step8_issue_url": "",
                 "step8_issue_created": False,
                 "step8_title": "",
                 "step8_label": "",
-                "step8_status": "SKIPPED"
+                "step8_status": "SKIPPED",
+                "step8_skip_reason": skip_reason,
             }
 
         # Extract metadata from state
