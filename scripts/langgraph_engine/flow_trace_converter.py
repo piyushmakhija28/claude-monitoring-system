@@ -244,7 +244,7 @@ def print_flow_checkpoint(state: FlowState, verbose: bool = False) -> None:
     print(f"  Context: {context_pct:.1f}%")
     print(f"  Model: {model}")
 
-    # Save synthesized prompt for Claude to access
+    # Save synthesized prompt to file AND print to stdout so Claude Code receives it
     if synthesized_prompt:
         try:
             synthesis_file = Path.home() / ".claude" / "memory" / "current-synthesis.txt"
@@ -254,6 +254,28 @@ def print_flow_checkpoint(state: FlowState, verbose: bool = False) -> None:
             print(f"  Location: {synthesis_file}")
         except Exception:
             pass
+
+        # CRITICAL: Print the ACTUAL synthesized prompt content to stdout
+        # This is what Claude Code reads as hook output and uses as context
+        print(f"\n--- SYNTHESIZED CONTEXT (from 3-level pipeline) ---")
+        print(synthesized_prompt)
+        print(f"--- END SYNTHESIZED CONTEXT ---\n")
+
+    # Print selected skills for Skill tool invocation
+    skills = state.get("step5_skills") or []
+    skill = state.get("step5_skill", "")
+    if skill and skill not in skills:
+        skills = [skill] + skills
+    agents = state.get("step5_agents") or []
+    agent = state.get("step5_agent", "")
+    if agent and agent not in agents:
+        agents = [agent] + agents
+
+    if skills:
+        print(f"  Selected Skills: {', '.join(skills)}")
+        print(f"  ACTION: Load these skills using /skill-name before implementation")
+    if agents:
+        print(f"  Selected Agents: {', '.join(agents)}")
 
     if verbose:
         if state.get("errors"):

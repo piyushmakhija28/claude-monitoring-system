@@ -612,6 +612,8 @@ def synthesize_prompt_with_flow_data(state: FlowState) -> dict:
                 "selected_agent": state.get("step5_agent", ""),
                 "selected_skills": state.get("step5_skills", []),
                 "selected_agents": state.get("step5_agents", []),
+                "skill_definition": state.get("step5_skill_definition", ""),
+                "agent_definition": state.get("step5_agent_definition", ""),
             }
         }
 
