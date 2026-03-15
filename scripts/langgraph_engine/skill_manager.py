@@ -57,9 +57,11 @@ from .version_selector import (
 _RETRY_DELAYS: List[float] = [0, 1, 2, 4, 8]  # Index = attempt number (0-based)
 MAX_RETRIES: int = 4  # Max number of retries after initial attempt = 5 total attempts
 
-# GitHub raw base URL for claude-global-library skill downloads
-_GITHUB_RAW_BASE = (
-    "https://raw.githubusercontent.com/piyushmakhija28/claude-global-library/main"
+# GitHub raw base URL for skill downloads (configurable via env var)
+_GITHUB_OWNER = os.environ.get("CLAUDE_GITHUB_OWNER", "techdeveloper-org")
+_GITHUB_RAW_BASE = os.environ.get(
+    "CLAUDE_SKILL_REPO_URL",
+    f"https://raw.githubusercontent.com/{_GITHUB_OWNER}/claude-global-library/main"
 )
 
 # Default domains to search when locating a skill by name

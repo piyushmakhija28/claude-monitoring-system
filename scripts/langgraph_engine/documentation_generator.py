@@ -14,6 +14,9 @@ from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
+# GitHub owner for generated docs (configurable via env var)
+_GITHUB_OWNER = os.environ.get("CLAUDE_GITHUB_OWNER", "techdeveloper-org")
+
 
 @dataclass
 class ProjectContext:
@@ -398,7 +401,7 @@ class DocumentationGenerator:
 ### Installation
 
 ```bash
-git clone https://github.com/piyushmakhija28/{context.name}.git
+git clone https://github.com/{_GITHUB_OWNER}/{context.name}.git
 cd {context.name}
 pip install -r requirements.txt
 ```
@@ -481,7 +484,7 @@ MIT License - see LICENSE file for details
 ---
 
 **Maintainers:** Claude Insight Team
-**Repository:** https://github.com/piyushmakhija28/{context.name}
+**Repository:** https://github.com/{_GITHUB_OWNER}/{context.name}
 **Last Updated:** {datetime.now().strftime('%Y-%m-%d')}
 """
         file_path.write_text(content, encoding='utf-8')
@@ -931,9 +934,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
-[Unreleased]: https://github.com/piyushmakhija28/{context.name}/compare/v{context.version}...HEAD
-[{context.version}]: https://github.com/piyushmakhija28/{context.name}/compare/v0.1.0...v{context.version}
-[0.1.0]: https://github.com/piyushmakhija28/{context.name}/releases/tag/v0.1.0
+[Unreleased]: https://github.com/{_GITHUB_OWNER}/{context.name}/compare/v{context.version}...HEAD
+[{context.version}]: https://github.com/{_GITHUB_OWNER}/{context.name}/compare/v0.1.0...v{context.version}
+[0.1.0]: https://github.com/{_GITHUB_OWNER}/{context.name}/releases/tag/v0.1.0
 """
         file_path.write_text(content, encoding='utf-8')
         self.logger.info(f"{'Created' if not file_path.exists() else 'Updated'} {file_path.name}")

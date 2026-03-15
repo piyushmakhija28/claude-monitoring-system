@@ -1214,9 +1214,10 @@ Be very specific and actionable - mention actual file paths and existing functio
             return True
 
         try:
-            # Try to download from Claude Code GitHub
+            # Try to download from GitHub skill library
+            _gh_owner = os.environ.get("CLAUDE_GITHUB_OWNER", "techdeveloper-org")
             github_url = (
-                f"https://raw.githubusercontent.com/piyushmakhija28/claude-global-library/main/"
+                f"https://raw.githubusercontent.com/{_gh_owner}/claude-global-library/main/"
                 f"skills/{category}/{skill_name}/skill.md"
             )
 
