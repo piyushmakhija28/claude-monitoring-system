@@ -25,6 +25,7 @@ All public methods return structured result dicts for consistent error handling.
 
 from __future__ import annotations
 
+import os
 import time
 import json
 import hashlib
@@ -65,10 +66,12 @@ _GITHUB_RAW_BASE = os.environ.get(
     f"https://raw.githubusercontent.com/{_GITHUB_OWNER}/claude-global-library/main"
 )
 
-# Default domains - kept for backward compatibility with any code that imports
-# this list directly.  New code should call SkillRegistry.all_domains_raw().
-# SkillRegistry is already seeded with these same domains on patterns.py import.
-_DEFAULT_DOMAINS: List[str] = SkillRegistry.all_domains_raw()
+# Default domains - hardcoded fallback for backward compatibility.
+# New code should call SkillRegistry.all_domains_raw() at call time (not import time).
+_DEFAULT_DOMAINS: List[str] = [
+    "backend", "frontend", "devops", "database",
+    "testing", "security", "mobile", "ai",
+]
 
 # Timeout for HTTP requests in seconds
 _HTTP_TIMEOUT: int = 15

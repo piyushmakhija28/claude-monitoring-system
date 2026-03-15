@@ -1271,7 +1271,7 @@ IMPORTANT: Respond with ONLY the label name, nothing else. No explanation, no qu
             logger.warning(f"Error in test merge: {e}")
             try:
                 self.git._run_git(["merge", "--abort"], check=False)
-            except:
+            except Exception:
                 pass
             return {
                 "success": False,
@@ -1302,7 +1302,7 @@ IMPORTANT: Respond with ONLY the label name, nothing else. No explanation, no qu
                 try:
                     if Path(self.git.repo_path / file_pattern).exists():
                         return lang
-                except:
+                except (OSError, TypeError):
                     pass
 
         return "unknown"

@@ -36,10 +36,13 @@ Usage (unchanged - backward compatible):
 import os
 import sys
 import json
+import logging
 import subprocess
 import shutil
 from abc import ABC, abstractmethod
 from typing import Optional, List
+
+_log = logging.getLogger(__name__)
 
 
 # =============================================================================
@@ -102,13 +105,15 @@ class OllamaProvider(LLMProvider):
         self._endpoint = os.getenv("OLLAMA_ENDPOINT", "http://localhost:11434/api/generate")
         self._model_fast = os.getenv("OLLAMA_MODEL_FAST", os.getenv("OLLAMA_MODEL", "qwen2.5:7b"))
         self._model_deep = os.getenv("OLLAMA_MODEL_DEEP", "qwen2.5:14b")
-        self._available = self._check_health()
+        self._available = None  # Lazy: checked on first call, not at import
 
     @property
     def name(self) -> str:
         return "ollama"
 
     def is_available(self) -> bool:
+        if self._available is None:
+            self._available = self._check_health()
         return self._available
 
     def _check_health(self) -> bool:
@@ -124,7 +129,7 @@ class OllamaProvider(LLMProvider):
             return False
 
     def call(self, prompt, model="fast", temperature=0.3, timeout=120, json_mode=False):
-        if not self._available:
+        if not self.is_available():
             return None
 
         import urllib.request
@@ -152,8 +157,8 @@ class OllamaProvider(LLMProvider):
                 text = result.get("response", "").strip()
                 if text:
                     return text
-        except Exception:
-            pass
+        except Exception as exc:
+            _log.debug("OllamaProvider call failed: %s", exc)
         return None
 
 
@@ -210,8 +215,8 @@ class ClaudeCLIProvider(LLMProvider):
             )
             if result.returncode == 0 and result.stdout.strip():
                 return result.stdout.strip()
-        except Exception:
-            pass
+        except Exception as exc:
+            _log.debug("ClaudeCLIProvider call failed: %s", exc)
         return None
 
 
@@ -279,8 +284,8 @@ class OpenAIProvider(LLMProvider):
                 text = result.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
                 if text:
                     return text
-        except Exception:
-            pass
+        except Exception as exc:
+            _log.debug("OpenAIProvider call failed: %s", exc)
         return None
 
 
