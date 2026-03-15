@@ -855,6 +855,11 @@ IMPORTANT: Respond with ONLY the label name, nothing else. No explanation, no qu
             if "docker" in selected_skills or "devops-engineer" in selected_agents:
                 issues.extend(self._check_docker_best_practices(diff_lines))
 
+            # --- LLM-powered simplify review (reuse, quality, efficiency) ---
+            simplify_issues = self._run_simplify_review(diff_text)
+            if simplify_issues:
+                issues.extend(simplify_issues)
+
             # --- ReviewCriteria structured evaluation ---
             criteria_result: Dict[str, Any] = {}
             criteria_score: float = 1.0
@@ -994,6 +999,87 @@ IMPORTANT: Respond with ONLY the label name, nothing else. No explanation, no qu
             issues.append("⚠️ RUN apt-get without apt-get update - use multi-stage or combine")
 
         return issues
+
+    def _run_simplify_review(self, diff_text: str) -> List[str]:
+        """Run LLM-powered simplify review on PR diff for reuse, quality, efficiency.
+
+        Uses llm_call (Ollama -> claude CLI fallback) to analyze the diff
+        similar to Claude Code's /simplify command. Returns actionable issues.
+        Non-blocking: returns empty list on failure.
+        """
+        if not diff_text or len(diff_text.strip()) < 50:
+            return []
+
+        try:
+            from .llm_call import llm_call
+        except ImportError:
+            logger.debug("[Simplify] llm_call not available, skipping LLM review")
+            return []
+
+        # Truncate diff to stay within LLM context limits
+        max_diff_len = 6000
+        truncated = diff_text[:max_diff_len] if len(diff_text) > max_diff_len else diff_text
+
+        prompt = (
+            "You are a code reviewer. Analyze this git diff for 3 categories:\n"
+            "1. CODE REUSE: duplicated logic, existing utilities that could replace new code\n"
+            "2. CODE QUALITY: redundant state, copy-paste, leaky abstractions, bare except\n"
+            "3. EFFICIENCY: unnecessary work, missed concurrency, N+1 patterns, memory leaks\n\n"
+            "Return ONLY a JSON array of issue strings. Each issue should be a single line.\n"
+            "If the code is clean, return an empty array: []\n"
+            "Do NOT include explanations outside the JSON array.\n\n"
+            f"DIFF:\n```\n{truncated}\n```\n\n"
+            "Response (JSON array only):"
+        )
+
+        logger.info("[Simplify] Running LLM-powered code review...")
+
+        response = llm_call(prompt, model="balanced", temperature=0.1)
+        if not response:
+            logger.warning("[Simplify] LLM review returned no response, skipping")
+            return []
+
+        # Parse JSON array from response
+        issues = self._parse_simplify_response(response)
+        if issues:
+            logger.info(f"[Simplify] LLM review found {len(issues)} issues")
+        else:
+            logger.info("[Simplify] LLM review: code is clean")
+
+        return issues
+
+    @staticmethod
+    def _parse_simplify_response(response: str) -> List[str]:
+        """Parse LLM simplify review response into list of issue strings."""
+        import json as _json
+
+        # Try direct JSON parse
+        text = response.strip()
+        try:
+            result = _json.loads(text)
+            if isinstance(result, list):
+                return [f"[Simplify] {str(item)}" for item in result if item]
+        except _json.JSONDecodeError:
+            pass
+
+        # Try extracting JSON array from markdown/text wrapper
+        start = text.find("[")
+        end = text.rfind("]")
+        if start != -1 and end != -1 and end > start:
+            try:
+                result = _json.loads(text[start:end + 1])
+                if isinstance(result, list):
+                    return [f"[Simplify] {str(item)}" for item in result if item]
+            except _json.JSONDecodeError:
+                pass
+
+        # Fallback: treat non-empty lines as issues (LLM returned plain text)
+        lines = [line.strip() for line in text.splitlines() if line.strip()]
+        # Only use fallback if it looks like actual issues (not a wall of text)
+        if 1 <= len(lines) <= 10:
+            return [f"[Simplify] {line}" for line in lines]
+
+        return []
 
     def _generate_review_recommendations(self, issues: List[str]) -> str:
         """Generate summary recommendations from review issues."""
