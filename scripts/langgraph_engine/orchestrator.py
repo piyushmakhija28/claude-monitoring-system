@@ -656,6 +656,24 @@ def output_node(state: FlowState) -> dict:
         # Log but don't block - prompt should never be modified
         pass
 
+    # Write session-start voice flag so Stop hook speaks a greeting
+    try:
+        import os
+        flag_dir = Path.home() / ".claude"
+        pid = os.getpid()
+        # PID-isolated flag for multi-window support
+        start_flag = flag_dir / f".session-start-voice-{pid}"
+        if not start_flag.exists():
+            task_type = state.get("step0_task_type", "task")
+            complexity = state.get("step0_complexity", 5)
+            skill = state.get("step5_skill", "")
+            msg = f"Starting {task_type} task, complexity {complexity} out of 10."
+            if skill:
+                msg += f" Using {skill} skill."
+            start_flag.write_text(msg, encoding='utf-8')
+    except Exception:
+        pass
+
     # SYNTHESIS: Create comprehensive prompt from all flow data
     synthesis = synthesize_prompt_with_flow_data(state)
 
