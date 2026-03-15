@@ -122,6 +122,125 @@ def play_wav(wav_path):
 
 
 # =============================================================================
+# TTS ENGINE 0: EDGE TTS (Microsoft Azure Neural - Best Quality, Free)
+# =============================================================================
+
+# Edge TTS voice config (Indian English male by default)
+EDGE_TTS_VOICE = os.environ.get("CLAUDE_TTS_VOICE", "en-IN-PrabhatNeural")
+
+
+def speak_edge_tts(text):
+    """Speak text using Microsoft Edge TTS (neural voice, human quality).
+
+    Uses Microsoft Azure neural voices via edge-tts package.
+    Free, no API key needed, Python 3.13 compatible.
+    Supports 400+ voices including Indian English.
+
+    Voices: en-IN-PrabhatNeural (male), en-IN-NeerjaNeural (female),
+            en-US-AndrewNeural (male), en-US-AvaNeural (female)
+
+    Set CLAUDE_TTS_VOICE env var to change voice.
+
+    Args:
+        text: Text to speak.
+
+    Returns:
+        bool: True if spoken successfully.
+    """
+    try:
+        import edge_tts
+        import asyncio
+    except ImportError:
+        log_voice("[TTS-EDGE] edge-tts not installed (pip install edge-tts)")
+        return False
+
+    wav_path = None
+    try:
+        # Generate MP3 audio
+        wav_fd, wav_path = tempfile.mkstemp(suffix='.mp3', prefix='claude_voice_')
+        os.close(wav_fd)
+
+        async def _generate():
+            communicate = edge_tts.Communicate(text, EDGE_TTS_VOICE)
+            await communicate.save(wav_path)
+
+        asyncio.run(_generate())
+
+        if not os.path.exists(wav_path) or os.path.getsize(wav_path) < 100:
+            log_voice("[TTS-EDGE] Generated file too small or missing")
+            return False
+
+        log_voice(f"[TTS-EDGE] Generated audio: {os.path.getsize(wav_path)} bytes, voice={EDGE_TTS_VOICE}")
+
+        # Play audio - convert MP3 to WAV for reliable Windows playback
+        played = False
+        if sys.platform == 'win32':
+            # Method 1: Use PowerShell to convert MP3 to WAV and play via SoundPlayer
+            try:
+                wav_converted = wav_path.replace('.mp3', '.wav')
+                # PowerShell: load MP3 via MediaFoundation, save as WAV, play
+                ps_cmd = (
+                    f'$mp3 = \"{wav_path}\"; '
+                    f'$wav = \"{wav_converted}\"; '
+                    f'Add-Type -AssemblyName System.Speech; '
+                    f'# Use Windows Media Player COM for MP3 playback; '
+                    f'$wmp = New-Object -ComObject WMPlayer.OCX; '
+                    f'$wmp.URL = $mp3; '
+                    f'$wmp.controls.play(); '
+                    f'Start-Sleep -Seconds 1; '
+                    f'while ($wmp.playState -eq 3) {{ Start-Sleep -Milliseconds 300 }}; '
+                    f'$wmp.close()'
+                )
+                result = subprocess.run(
+                    ['powershell', '-NoProfile', '-WindowStyle', 'Hidden', '-Command', ps_cmd],
+                    timeout=60, capture_output=True
+                )
+                played = (result.returncode == 0)
+                # Cleanup converted file
+                if os.path.exists(wav_converted):
+                    os.unlink(wav_converted)
+            except Exception as e:
+                log_voice(f"[TTS-EDGE] WMPlayer playback failed: {str(e)[:80]}")
+
+            # Method 2: Fallback - use start command (opens default media player)
+            if not played:
+                try:
+                    # Create a copy that won't be deleted immediately
+                    import shutil
+                    persist_path = os.path.join(tempfile.gettempdir(), 'claude_voice_latest.mp3')
+                    shutil.copy2(wav_path, persist_path)
+                    subprocess.Popen(
+                        ['cmd', '/c', 'start', '', persist_path],
+                        creationflags=subprocess.CREATE_NO_WINDOW,
+                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+                    )
+                    import time
+                    time.sleep(5)  # Give media player time to start
+                    played = True
+                except Exception:
+                    pass
+        else:
+            played = play_wav_unix(wav_path)
+
+        if played:
+            log_voice(f"[TTS-EDGE-SUCCESS] Spoke ({EDGE_TTS_VOICE}): {text[:60]}")
+            return True
+        else:
+            log_voice("[TTS-EDGE] Audio generated but playback failed")
+            return False
+
+    except Exception as e:
+        log_voice(f"[TTS-EDGE-ERROR] {str(e)[:100]}")
+        return False
+    finally:
+        if wav_path and os.path.exists(wav_path):
+            try:
+                os.unlink(wav_path)
+            except Exception:
+                pass
+
+
+# =============================================================================
 # TTS ENGINE 1: COQUI TTS (Neural - Primary)
 # =============================================================================
 
@@ -277,13 +396,57 @@ def speak_espeak(text):
 
 
 # =============================================================================
+# TTS ENGINE 4: POWERSHELL SAPI (Windows Built-in - No Dependencies)
+# =============================================================================
+
+def speak_powershell_sapi(text):
+    """Speak text on Windows using PowerShell SAPI.SpVoice (built-in, no packages needed).
+
+    This is the most reliable Windows TTS - always available, no pip installs.
+    Uses the Windows Speech API (SAPI) directly via PowerShell.
+
+    Args:
+        text: Text to speak.
+
+    Returns:
+        bool: True if spoken successfully.
+    """
+    if sys.platform != 'win32':
+        return False
+
+    try:
+        # Escape single quotes for PowerShell
+        safe_text = text.replace("'", "''")
+        # Use SAPI.SpVoice - built into every Windows
+        ps_script = f"Add-Type -AssemblyName System.Speech; $s = New-Object System.Speech.Synthesis.SpeechSynthesizer; $s.Rate = 1; $s.Speak('{safe_text}')"
+        result = subprocess.run(
+            ['powershell', '-NoProfile', '-Command', ps_script],
+            timeout=60,
+            capture_output=True,
+        )
+        if result.returncode == 0:
+            log_voice(f"[TTS-SAPI-SUCCESS] Spoke: {text[:60]}")
+            return True
+        else:
+            stderr = result.stderr.decode('utf-8', errors='replace')[:100]
+            log_voice(f"[TTS-SAPI-FAILED] {stderr}")
+            return False
+    except subprocess.TimeoutExpired:
+        log_voice("[TTS-SAPI] Timed out after 60s")
+        return False
+    except Exception as e:
+        log_voice(f"[TTS-SAPI-ERROR] {str(e)[:100]}")
+        return False
+
+
+# =============================================================================
 # MAIN - TTS ENGINE CHAIN
 # =============================================================================
 
 def main():
     """Entry point - tries TTS engines in priority order.
 
-    Priority: Coqui TTS (neural) -> pyttsx3/espeak (robotic fallback)
+    Priority: Edge TTS (neural) -> Coqui TTS -> pyttsx3 -> PowerShell SAPI -> espeak
     """
     if len(sys.argv) < 2:
         log_voice("[ERROR] No text provided")
@@ -297,24 +460,34 @@ def main():
 
     log_voice(f"[INIT] Speaking: {text[:80]}")
 
-    # ENGINE 1: Coqui TTS (neural voice - best quality)
+    # ENGINE 0: Edge TTS (Microsoft Azure neural - human quality, free, Python 3.13 compatible)
+    if speak_edge_tts(text):
+        log_voice("[OK] Voice notification completed (Edge TTS neural)")
+        sys.exit(0)
+
+    # ENGINE 1: Coqui TTS (neural voice - needs Python <3.12)
     if speak_coqui(text):
         log_voice("[OK] Voice notification completed (Coqui TTS)")
         sys.exit(0)
 
-    # ENGINE 2: Platform fallback (robotic but always available)
-    log_voice("[FALLBACK] Coqui TTS unavailable, trying platform TTS...")
-
+    # ENGINE 2: pyttsx3 (Windows, needs pywin32)
     if sys.platform == 'win32':
-        success = speak_pyttsx3(text)
-    else:
-        success = speak_espeak(text)
+        if speak_pyttsx3(text):
+            log_voice("[OK] Voice notification completed (pyttsx3)")
+            sys.exit(0)
 
-    if success:
-        log_voice("[OK] Voice notification completed (platform fallback)")
-    else:
-        log_voice("[WARN] All TTS engines failed - silent mode")
+    # ENGINE 3: PowerShell SAPI (Windows built-in, always works, no packages)
+    if speak_powershell_sapi(text):
+        log_voice("[OK] Voice notification completed (PowerShell SAPI)")
+        sys.exit(0)
 
+    # ENGINE 4: espeak (Unix fallback)
+    if sys.platform != 'win32':
+        if speak_espeak(text):
+            log_voice("[OK] Voice notification completed (espeak)")
+            sys.exit(0)
+
+    log_voice("[WARN] All TTS engines failed - silent mode")
     sys.exit(0)
 
 

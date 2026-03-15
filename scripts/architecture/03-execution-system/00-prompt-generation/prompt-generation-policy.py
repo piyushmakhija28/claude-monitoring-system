@@ -172,10 +172,20 @@ class PromptGenerator:
                 context_parts.append(f"  Skills ({len(selected_skills)}):")
                 for sk in selected_skills:
                     context_parts.append(f"    - /{sk}")
+                # Include actual skill definition if available
+                skill_def = level3.get('skill_definition', '')
+                if skill_def:
+                    context_parts.append(f"\n  SKILL DEFINITION ({selected_skills[0]}):")
+                    context_parts.append(skill_def[:3000])
             if selected_agents:
                 context_parts.append(f"  Agents ({len(selected_agents)}):")
                 for ag in selected_agents:
                     context_parts.append(f"    - {ag}")
+                # Include actual agent definition if available
+                agent_def = level3.get('agent_definition', '')
+                if agent_def:
+                    context_parts.append(f"\n  AGENT DEFINITION ({selected_agents[0]}):")
+                    context_parts.append(agent_def[:3000])
 
         # Task breakdown
         tasks = level3.get('tasks', [])
