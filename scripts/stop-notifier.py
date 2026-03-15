@@ -54,6 +54,7 @@ import os
 import json
 import subprocess
 from pathlib import Path
+import time
 from datetime import datetime
 from urllib import request as urllib_request
 
@@ -891,8 +892,9 @@ def main():
                     except Exception:
                         pass
 
-                # Check 3: Feature branch has commits ahead of main (most reliable)
-                # This catches ALL cases where work was done but tracking was skipped
+                # Check 3: Feature branch has commits ahead + clean working tree + debounce
+                # Debounce: Only ship after 60s of inactivity (no tool calls)
+                # This prevents shipping mid-work when Claude is still coding
                 if not should_trigger:
                     try:
                         ahead_result = subprocess.run(
@@ -900,9 +902,50 @@ def main():
                             capture_output=True, text=True, timeout=5
                         )
                         commits_ahead = int(ahead_result.stdout.strip()) if ahead_result.returncode == 0 else 0
+
                         if commits_ahead > 0:
-                            should_trigger = True
-                            trigger_reason = f'{commits_ahead} commits ahead of main'
+                            # Also check: working tree must be clean (no uncommitted changes)
+                            status_result = subprocess.run(
+                                ['git', 'status', '--porcelain'],
+                                capture_output=True, text=True, timeout=5
+                            )
+                            working_tree_clean = not status_result.stdout.strip()
+
+                            if working_tree_clean:
+                                # Debounce: write "ready" timestamp, only ship if 60s old
+                                ready_flag = FLAG_DIR / '.pr-ready-timestamp'
+                                now = time.time()
+
+                                if ready_flag.exists():
+                                    try:
+                                        ready_ts = float(ready_flag.read_text(encoding='utf-8').strip())
+                                        age = now - ready_ts
+                                        if age >= 60:
+                                            # 60s of quiet + clean tree + commits ahead = SHIP
+                                            should_trigger = True
+                                            trigger_reason = (
+                                                f'{commits_ahead} commits ahead, '
+                                                f'clean tree, {int(age)}s idle'
+                                            )
+                                            ready_flag.unlink(missing_ok=True)
+                                        else:
+                                            log_s(
+                                                f"[PR-WORKFLOW] Ready to ship but debouncing "
+                                                f"({int(age)}s/{60}s) - waiting for idle"
+                                            )
+                                    except (ValueError, OSError):
+                                        ready_flag.write_text(str(now), encoding='utf-8')
+                                else:
+                                    # First time ready - write timestamp, ship on next Stop
+                                    ready_flag.write_text(str(now), encoding='utf-8')
+                                    log_s(
+                                        f"[PR-WORKFLOW] Ready to ship: {commits_ahead} commits ahead, "
+                                        f"clean tree. Debounce started (60s)."
+                                    )
+                            else:
+                                # Uncommitted changes = still working, reset debounce
+                                ready_flag = FLAG_DIR / '.pr-ready-timestamp'
+                                ready_flag.unlink(missing_ok=True)
                     except Exception:
                         pass
 
