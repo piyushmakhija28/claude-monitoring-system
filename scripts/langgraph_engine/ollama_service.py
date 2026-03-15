@@ -203,26 +203,21 @@ class OllamaService:
             return result
 
         except (requests.Timeout, json.JSONDecodeError, Exception) as e:
-            # Try Claude API fallback
-            logger.warning(f"Ollama failed, attempting Claude API fallback: {e}")
+            logger.warning(f"Ollama failed: {e}")
+            # Fallback 1: Claude API SDK
             try:
-                claude_response = self._chat_claude(
-                    messages=messages,
-                    model_type=model,
-                    temperature=temperature
-                )
-                # Return in same format as Ollama
-                return {
-                    "message": {
-                        "content": claude_response,
-                        "role": "assistant"
-                    },
-                    "model": "claude-fallback",
-                    "done": True
-                }
-            except Exception as fallback_error:
-                logger.error(f"Claude fallback also failed: {fallback_error}")
-                return {"error": f"Both Ollama and Claude failed: {str(e)} / {str(fallback_error)}"}
+                r = self._chat_claude(messages=messages, model_type=model, temperature=temperature)
+                return {"message": {"content": r, "role": "assistant"}, "model": "claude-api", "done": True}
+            except Exception:
+                pass
+            # Fallback 2: claude CLI (user's subscription)
+            try:
+                r = self._chat_claude_cli(messages=messages, model_type=model)
+                if r:
+                    return {"message": {"content": r, "role": "assistant"}, "model": "claude-cli", "done": True}
+            except Exception:
+                pass
+            return {"error": f"All LLM backends failed: {e}"}
 
 
     def _init_claude_fallback(self):
@@ -279,6 +274,31 @@ class OllamaService:
         except Exception as e:
             logger.error(f"Claude API fallback failed: {e}")
             raise
+
+    def _chat_claude_cli(self, messages: List[Dict[str, str]], model_type: str = "fast_classification") -> Optional[str]:
+        """Fallback to claude CLI (user's Claude Code subscription)."""
+        import subprocess, shutil
+        claude_path = shutil.which("claude")
+        if not claude_path:
+            return None
+        cli_model = {"fast_classification": "haiku", "complex_reasoning": "sonnet", "synthesis": "sonnet"}.get(model_type, "haiku")
+        parts = []
+        for m in messages:
+            if m.get("role") == "system":
+                parts.append(f"SYSTEM: {m['content']}")
+            else:
+                parts.append(m.get("content", ""))
+        prompt = "\n\n".join(parts)[:10000]
+        env = os.environ.copy()
+        env["CLAUDE_WORKFLOW_RUNNING"] = "1"
+        try:
+            result = subprocess.run([claude_path, "-p", "--model", cli_model, prompt], capture_output=True, text=True, timeout=120, env=env, encoding="utf-8", errors="replace")
+            if result.returncode == 0 and result.stdout.strip():
+                logger.info(f"Claude CLI fallback OK: {len(result.stdout)} chars")
+                return result.stdout.strip()
+        except Exception as e:
+            logger.warning(f"Claude CLI failed: {e}")
+        return None
 
     # ===== LEVEL 3 STEP 1: PLAN MODE DECISION =====
 

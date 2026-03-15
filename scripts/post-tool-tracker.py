@@ -62,6 +62,8 @@ Windows-safe: ASCII only, no Unicode characters.
 
 import sys
 import os
+if os.environ.get("CLAUDE_WORKFLOW_RUNNING") == "1":
+    sys.exit(0)
 import json
 import glob as _glob
 from pathlib import Path

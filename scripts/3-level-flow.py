@@ -25,6 +25,13 @@ from pathlib import Path
 from datetime import datetime
 
 # ============================================================================
+# RECURSION GUARD - Prevent infinite loop when claude CLI calls trigger hooks
+# ============================================================================
+if os.environ.get("CLAUDE_WORKFLOW_RUNNING") == "1":
+    sys.exit(0)
+os.environ["CLAUDE_WORKFLOW_RUNNING"] = "1"
+
+# ============================================================================
 # PATH SETUP - Add claude-insight scripts to path for hook execution
 # ============================================================================
 
