@@ -512,23 +512,63 @@ def main():
         available_skills = load_skill_definitions()
         available_agents = load_agent_definitions()
 
-        # Build skill list with descriptions (show ALL skills for best match)
-        skills_text = ""
+        # Pre-filter skills by project type (reduces tokens + improves accuracy)
+        # Universal skills always included; language-specific filtered by project
+        _UNIVERSAL_SKILLS = {
+            'api-design-core', 'authentication-core', 'testing-core', 'json-core',
+            'system-design', 'clean-architecture', 'error-handling-patterns',
+            'logging-patterns', 'performance-optimization', 'docker', 'kubernetes',
+            'github-actions-ci', 'jenkins-pipeline', 'prompt-engineering-core',
+            'ai-agents-core', 'guardrails-core', 'ui-ux-core',
+        }
+        _LANG_FILTER = {
+            'python': {'python', 'django', 'flask', 'fastapi', 'langchain', 'langgraph', 'rag', 'vector'},
+            'java': {'java', 'spring', 'kotlin', 'android'},
+            'javascript': {'javascript', 'typescript', 'react', 'angular', 'css', 'html', 'animation', 'seo', 'graphql'},
+            'swift': {'swift', 'swiftui', 'ios'},
+            'kotlin': {'kotlin', 'android'},
+        }
+
         all_skill_names = list(available_skills.keys()) if available_skills else context_skills
-        if all_skill_names:
-            skills_text = "Available Skills:\n"
-            for name in all_skill_names[:30]:
+        if project_type and project_type.lower() in _LANG_FILTER:
+            keywords = _LANG_FILTER[project_type.lower()]
+            filtered_skills = [
+                s for s in all_skill_names
+                if s in _UNIVERSAL_SKILLS or any(kw in s.lower() for kw in keywords)
+            ]
+        else:
+            filtered_skills = all_skill_names
+
+        # Build skill list with descriptions
+        skills_text = ""
+        if filtered_skills:
+            skills_text = f"Available Skills ({len(filtered_skills)} of {len(all_skill_names)}):\n"
+            for name in filtered_skills:
                 info = available_skills.get(name, {})
                 desc = info.get('description', '')[:80] if isinstance(info, dict) else ""
                 skills_text += f"  - {name}: {desc}\n" if desc else f"  - {name}\n"
         else:
             skills_text = "Available Skills: None loaded\n"
 
-        # Build agent list with descriptions
+        # Pre-filter agents by project type
+        _AGENT_LANG = {
+            'python': {'python-backend-engineer', 'devops-engineer', 'qa-testing-agent', 'orchestrator-agent'},
+            'java': {'spring-boot-microservices', 'android-backend-engineer', 'android-ui-designer', 'devops-engineer', 'qa-testing-agent'},
+            'javascript': {'react-engineer', 'angular-engineer', 'dynamic-seo-agent', 'static-seo-agent', 'devops-engineer', 'qa-testing-agent', 'ui-ux-designer'},
+            'swift': {'swift-backend-engineer', 'swiftui-designer', 'qa-testing-agent'},
+            'kotlin': {'android-backend-engineer', 'android-ui-designer', 'qa-testing-agent'},
+        }
+
         agents_text = ""
         if available_agents:
-            agents_text = "Available Agents:\n"
-            for name, info in list(available_agents.items())[:15]:
+            if project_type and project_type.lower() in _AGENT_LANG:
+                relevant_agents = {k: v for k, v in available_agents.items()
+                                   if k in _AGENT_LANG[project_type.lower()]}
+            else:
+                relevant_agents = available_agents
+
+            agents_text = f"Available Agents ({len(relevant_agents)} of {len(available_agents)}):\n"
+            for name, info in list(relevant_agents.items()):
                 desc = info.get('description', '')[:80]
                 agents_text += f"  - {name}: {desc}\n"
         else:
