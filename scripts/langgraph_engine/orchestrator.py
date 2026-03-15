@@ -680,6 +680,26 @@ def output_node(state: FlowState) -> dict:
     # Save detailed pipeline execution log to session folder
     _save_pipeline_execution_log(state, final_status)
 
+    # In hook_mode, Step 14 doesn't run. Save a quick summary anyway.
+    if not state.get("step14_summary_saved"):
+        session_dir = state.get("session_dir") or state.get("session_path", "")
+        if session_dir:
+            try:
+                from datetime import datetime
+                quick_summary = (
+                    f"Pipeline: {final_status} | "
+                    f"Task: {state.get('step0_task_type', '?')} | "
+                    f"Complexity: {state.get('step0_complexity', '?')}/10 | "
+                    f"Skill: {state.get('step5_skill', 'none')} | "
+                    f"Agent: {state.get('step5_agent', 'none')} | "
+                    f"Framework: {state.get('detected_framework', '?')} | "
+                    f"Time: {datetime.now().strftime('%H:%M:%S')}"
+                )
+                summary_file = Path(session_dir) / "execution-summary.txt"
+                summary_file.write_text(quick_summary, encoding='utf-8')
+            except Exception:
+                pass
+
     # Return synthesis result with proper status
     return {
         "final_status": final_status,

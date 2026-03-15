@@ -277,13 +277,57 @@ def speak_espeak(text):
 
 
 # =============================================================================
+# TTS ENGINE 4: POWERSHELL SAPI (Windows Built-in - No Dependencies)
+# =============================================================================
+
+def speak_powershell_sapi(text):
+    """Speak text on Windows using PowerShell SAPI.SpVoice (built-in, no packages needed).
+
+    This is the most reliable Windows TTS - always available, no pip installs.
+    Uses the Windows Speech API (SAPI) directly via PowerShell.
+
+    Args:
+        text: Text to speak.
+
+    Returns:
+        bool: True if spoken successfully.
+    """
+    if sys.platform != 'win32':
+        return False
+
+    try:
+        # Escape single quotes for PowerShell
+        safe_text = text.replace("'", "''")
+        # Use SAPI.SpVoice - built into every Windows
+        ps_script = f"Add-Type -AssemblyName System.Speech; $s = New-Object System.Speech.Synthesis.SpeechSynthesizer; $s.Rate = 1; $s.Speak('{safe_text}')"
+        result = subprocess.run(
+            ['powershell', '-NoProfile', '-Command', ps_script],
+            timeout=60,
+            capture_output=True,
+        )
+        if result.returncode == 0:
+            log_voice(f"[TTS-SAPI-SUCCESS] Spoke: {text[:60]}")
+            return True
+        else:
+            stderr = result.stderr.decode('utf-8', errors='replace')[:100]
+            log_voice(f"[TTS-SAPI-FAILED] {stderr}")
+            return False
+    except subprocess.TimeoutExpired:
+        log_voice("[TTS-SAPI] Timed out after 60s")
+        return False
+    except Exception as e:
+        log_voice(f"[TTS-SAPI-ERROR] {str(e)[:100]}")
+        return False
+
+
+# =============================================================================
 # MAIN - TTS ENGINE CHAIN
 # =============================================================================
 
 def main():
     """Entry point - tries TTS engines in priority order.
 
-    Priority: Coqui TTS (neural) -> pyttsx3/espeak (robotic fallback)
+    Priority: Coqui TTS (neural) -> pyttsx3 -> PowerShell SAPI -> espeak
     """
     if len(sys.argv) < 2:
         log_voice("[ERROR] No text provided")
@@ -302,19 +346,24 @@ def main():
         log_voice("[OK] Voice notification completed (Coqui TTS)")
         sys.exit(0)
 
-    # ENGINE 2: Platform fallback (robotic but always available)
-    log_voice("[FALLBACK] Coqui TTS unavailable, trying platform TTS...")
-
+    # ENGINE 2: pyttsx3 (Windows, needs pywin32)
     if sys.platform == 'win32':
-        success = speak_pyttsx3(text)
-    else:
-        success = speak_espeak(text)
+        if speak_pyttsx3(text):
+            log_voice("[OK] Voice notification completed (pyttsx3)")
+            sys.exit(0)
 
-    if success:
-        log_voice("[OK] Voice notification completed (platform fallback)")
-    else:
-        log_voice("[WARN] All TTS engines failed - silent mode")
+    # ENGINE 3: PowerShell SAPI (Windows built-in, always works, no packages)
+    if speak_powershell_sapi(text):
+        log_voice("[OK] Voice notification completed (PowerShell SAPI)")
+        sys.exit(0)
 
+    # ENGINE 4: espeak (Unix fallback)
+    if sys.platform != 'win32':
+        if speak_espeak(text):
+            log_voice("[OK] Voice notification completed (espeak)")
+            sys.exit(0)
+
+    log_voice("[WARN] All TTS engines failed - silent mode")
     sys.exit(0)
 
 
