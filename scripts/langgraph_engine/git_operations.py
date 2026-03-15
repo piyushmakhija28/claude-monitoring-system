@@ -139,6 +139,14 @@ class GitOperations:
         """
         Create a new branch from specified base.
 
+        Workflow:
+        1. Stash any uncommitted changes (safety)
+        2. Checkout base branch (main)
+        3. Pull latest from remote
+        4. Create new branch
+        5. Push new branch to remote
+        6. Pop stash if anything was stashed
+
         Args:
             branch_name: Name for new branch (e.g., "issue-42-fix-dashboard")
             from_branch: Base branch to create from (default: main)
@@ -153,40 +161,60 @@ class GitOperations:
             return {"success": False, "error": "Not a git repository"}
 
         try:
-            # First, ensure we have latest from origin
+            # Step 1: Stash uncommitted changes to prevent data loss
+            stash_result = self._run_git(["stash", "push", "-m", f"auto-stash-before-{branch_name}"], check=False)
+            had_stash = stash_result.get("success") and "No local changes" not in stash_result.get("stdout", "")
+            if had_stash:
+                logger.info(f"Stashed uncommitted changes before branch creation")
+
+            # Step 2: Fetch latest from origin
             logger.debug(f"Fetching latest from origin...")
             self._run_git(["fetch", "origin"], check=False)
 
-            # Switch to base branch
+            # Step 3: Switch to base branch
             logger.debug(f"Checking out {from_branch}...")
             result = self._run_git(["checkout", from_branch], check=False)
             if not result.get("success"):
+                # Restore stash before returning error
+                if had_stash:
+                    self._run_git(["stash", "pop"], check=False)
                 return {
                     "success": False,
                     "error": f"Cannot checkout {from_branch}: {result.get('stderr')}"
                 }
 
-            # Pull latest
+            # Step 4: Pull latest to ensure main is synced with remote
             logger.debug(f"Pulling latest from {from_branch}...")
             self._run_git(["pull", "origin", from_branch], check=False)
 
-            # Create new branch
+            # Step 5: Create new branch from synced main
             logger.debug(f"Creating branch {branch_name}...")
             result = self._run_git(["checkout", "-b", branch_name], check=False)
             if not result.get("success"):
+                # Restore stash before returning error
+                if had_stash:
+                    self._run_git(["stash", "pop"], check=False)
                 return {
                     "success": False,
                     "error": f"Cannot create branch: {result.get('stderr')}"
                 }
 
-            # Push to remote
+            # Step 6: Pop stash onto new branch (restore working changes)
+            if had_stash:
+                pop_result = self._run_git(["stash", "pop"], check=False)
+                if pop_result.get("success"):
+                    logger.info(f"Restored stashed changes onto {branch_name}")
+                else:
+                    logger.warning(f"Stash pop had conflicts: {pop_result.get('stderr')}")
+
+            # Step 7: Push to remote
             logger.debug(f"Pushing {branch_name} to origin...")
             result = self._run_git(["push", "-u", "origin", branch_name], check=False)
             if not result.get("success"):
                 # Non-critical error, branch exists locally
                 logger.warning(f"Push error (branch may exist): {result.get('stderr')}")
 
-            logger.info(f"✓ Branch created: {branch_name}")
+            logger.info(f"Branch created: {branch_name}")
             return {
                 "success": True,
                 "branch": branch_name,
@@ -195,6 +223,65 @@ class GitOperations:
 
         except Exception as e:
             logger.error(f"Branch creation failed: {e}")
+            return {"success": False, "error": str(e)}
+
+    def post_merge_cleanup(self, merged_branch: str, main_branch: str = "main") -> Dict[str, Any]:
+        """Clean up after a PR is merged: switch to main, pull, delete local branch.
+
+        Workflow:
+        1. Checkout main
+        2. Pull latest from remote (includes the merged PR)
+        3. Delete local merged branch
+        4. Prune remote-tracking branches that are deleted on remote
+
+        Args:
+            merged_branch: The branch that was merged (to be deleted locally)
+            main_branch: The target branch (default: main)
+
+        Returns:
+            {"success": bool, "cleaned_branch": str, "message": str}
+        """
+        logger.info(f"Post-merge cleanup: {merged_branch} -> {main_branch}")
+
+        if not self._ensure_git_repo():
+            return {"success": False, "error": "Not a git repository"}
+
+        try:
+            # Step 1: Switch to main
+            result = self._run_git(["checkout", main_branch], check=False)
+            if not result.get("success"):
+                return {"success": False, "error": f"Cannot checkout {main_branch}: {result.get('stderr')}"}
+
+            # Step 2: Pull latest (includes merged PR)
+            self._run_git(["pull", "origin", main_branch], check=False)
+            logger.info(f"Pulled latest {main_branch} from remote")
+
+            # Step 3: Delete local merged branch
+            if merged_branch and merged_branch != main_branch:
+                del_result = self._run_git(["branch", "-d", merged_branch], check=False)
+                if del_result.get("success"):
+                    logger.info(f"Deleted local branch: {merged_branch}")
+                else:
+                    # Force delete if normal delete fails (branch not fully merged locally)
+                    del_result = self._run_git(["branch", "-D", merged_branch], check=False)
+                    if del_result.get("success"):
+                        logger.info(f"Force-deleted local branch: {merged_branch}")
+                    else:
+                        logger.warning(f"Could not delete local branch {merged_branch}: {del_result.get('stderr')}")
+
+            # Step 4: Prune stale remote-tracking branches
+            self._run_git(["fetch", "--prune"], check=False)
+            logger.info("Pruned stale remote-tracking branches")
+
+            return {
+                "success": True,
+                "cleaned_branch": merged_branch,
+                "current_branch": main_branch,
+                "message": f"Cleaned up {merged_branch}, now on {main_branch} (synced)",
+            }
+
+        except Exception as e:
+            logger.error(f"Post-merge cleanup failed: {e}")
             return {"success": False, "error": str(e)}
 
     def switch_branch(self, branch_name: str) -> Dict[str, Any]:
