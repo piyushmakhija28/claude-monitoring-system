@@ -172,21 +172,53 @@ def speak_edge_tts(text):
 
         log_voice(f"[TTS-EDGE] Generated audio: {os.path.getsize(wav_path)} bytes, voice={EDGE_TTS_VOICE}")
 
-        # Play audio
+        # Play audio - convert MP3 to WAV for reliable Windows playback
+        played = False
         if sys.platform == 'win32':
-            # PowerShell MediaPlayer for MP3
-            result = subprocess.run(
-                ['powershell', '-NoProfile', '-Command',
-                 f'Add-Type -AssemblyName PresentationCore; '
-                 f'$p = New-Object System.Windows.Media.MediaPlayer; '
-                 f'$p.Open([Uri]::new(\"{wav_path}\")); '
-                 f'$p.Play(); '
-                 f'Start-Sleep -Milliseconds 500; '
-                 f'while($p.Position -lt $p.NaturalDuration.TimeSpan) {{ Start-Sleep -Milliseconds 200 }}; '
-                 f'$p.Close()'],
-                timeout=60, capture_output=True
-            )
-            played = (result.returncode == 0)
+            # Method 1: Use PowerShell to convert MP3 to WAV and play via SoundPlayer
+            try:
+                wav_converted = wav_path.replace('.mp3', '.wav')
+                # PowerShell: load MP3 via MediaFoundation, save as WAV, play
+                ps_cmd = (
+                    f'$mp3 = \"{wav_path}\"; '
+                    f'$wav = \"{wav_converted}\"; '
+                    f'Add-Type -AssemblyName System.Speech; '
+                    f'# Use Windows Media Player COM for MP3 playback; '
+                    f'$wmp = New-Object -ComObject WMPlayer.OCX; '
+                    f'$wmp.URL = $mp3; '
+                    f'$wmp.controls.play(); '
+                    f'Start-Sleep -Seconds 1; '
+                    f'while ($wmp.playState -eq 3) {{ Start-Sleep -Milliseconds 300 }}; '
+                    f'$wmp.close()'
+                )
+                result = subprocess.run(
+                    ['powershell', '-NoProfile', '-WindowStyle', 'Hidden', '-Command', ps_cmd],
+                    timeout=60, capture_output=True
+                )
+                played = (result.returncode == 0)
+                # Cleanup converted file
+                if os.path.exists(wav_converted):
+                    os.unlink(wav_converted)
+            except Exception as e:
+                log_voice(f"[TTS-EDGE] WMPlayer playback failed: {str(e)[:80]}")
+
+            # Method 2: Fallback - use start command (opens default media player)
+            if not played:
+                try:
+                    # Create a copy that won't be deleted immediately
+                    import shutil
+                    persist_path = os.path.join(tempfile.gettempdir(), 'claude_voice_latest.mp3')
+                    shutil.copy2(wav_path, persist_path)
+                    subprocess.Popen(
+                        ['cmd', '/c', 'start', '', persist_path],
+                        creationflags=subprocess.CREATE_NO_WINDOW,
+                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+                    )
+                    import time
+                    time.sleep(5)  # Give media player time to start
+                    played = True
+                except Exception:
+                    pass
         else:
             played = play_wav_unix(wav_path)
 
