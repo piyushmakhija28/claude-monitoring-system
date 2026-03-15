@@ -420,17 +420,22 @@ System Prompt:
    - File modifications
    - Expected outcomes
 
-   Generate ONE consolidated prompt (no markdown, plain text)"
+   Generate comprehensive execution blueprint with SEPARATE system prompt
+   and user message, plus a combined prompt for backward compatibility."
 
-Output:
-  prompt.txt (saved to session folder)
+Output (3 files saved to session folder):
+  system_prompt.txt  - Full context (task analysis, breakdown, skills, agents)
+  user_message.txt   - Execution instruction for Claude
+  prompt.txt         - Combined (system + user) for backward compatibility
 
 Save Location:
+  ~/.claude/logs/sessions/{session_id}/system_prompt.txt
+  ~/.claude/logs/sessions/{session_id}/user_message.txt
   ~/.claude/logs/sessions/{session_id}/prompt.txt
 
 Post-Processing:
   - Delete TOON object from memory
-  - Only prompt.txt remains
+  - Only prompt files remain
 ```
 
 #### STEP 8: GITHUB ISSUE CREATION
