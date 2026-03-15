@@ -1,7 +1,7 @@
-# Claude Insight: Complete 3-Level Execution Workflow
+# Claude Workflow Engine: Complete 3-Level Execution Workflow
 
-**Version:** 1.0.0
-**Date:** 2026-03-10
+**Version:** 2.0.0
+**Date:** 2026-03-15
 **Status:** ACTIVE IMPLEMENTATION
 
 ---
@@ -165,29 +165,46 @@ GO TO LEVEL 2
 ## LEVEL 2: STANDARDS SYSTEM
 
 ### Purpose
-Load project-specific rules and standards.
+Detect project type and load applicable coding standards before execution.
 
 ### Implementation
 
-**NOT part of execution flow** - Standards are loaded into Claude's RULES folder.
+**IS part of the orchestrator graph** - Level 2 runs after Level 1 and before Level 3.
 
-When Claude works on any task, it automatically loads:
-- Project-specific standards (18 for Java, 10 for common)
-- Coding patterns and conventions
-- Best practices
+### Flow
 
-**One-time setup:**
-```bash
-~/.claude/rules/
-├─ project-standards.md (auto-loaded)
-└─ [other rule files]
+```
+START (from Level 1)
+  |
+Node 1: Standard Selection
+  |- Detect project type: Python, Java, JavaScript, etc.
+  |- Select applicable standard set
+  |
+Node 2: Common Standards Loading
+  |- Load standards shared across all project types
+  |- Coding conventions, formatting, naming rules
+  |
+Node 3: Java/Spring-Specific Standards (conditional)
+  |- Runs ONLY if project type is Java/Spring
+  |- Load Spring Boot, JPA, REST API standards
+  |
+Node 4: Tool Optimization Standards
+  |- Load tool usage policies
+  |- Read offset/limit rules, grep head_limit, etc.
+  |
+Node 5: MCP Plugin Discovery
+  |- Discover available MCP plugins for the session
+  |- Register applicable plugins for Level 3 use
+  |
+GO TO LEVEL 3
 ```
 
 ### In Workflow
 
-- **No explicit execution step** in Level 3
-- **Automatic** - Claude environment loads rules
-- **External to flow** - managed separately
+- **Explicit nodes** in the orchestrator graph
+- **Runs after Level 1** (context sync complete)
+- **Runs before Level 3** (standards ready for execution)
+- **Conditional branching** for language-specific standards
 
 ---
 
@@ -206,6 +223,27 @@ Execute the actual development task using plan, skills, agents, and automation.
 ```
 
 ### Flow
+
+#### STEP 0: TASK ANALYSIS (Pre-Pipeline)
+
+```
+Action:
+  Analyze user message to determine:
+  1. Task type (Bug Fix, Feature, Refactoring, Documentation, etc.)
+  2. Complexity score (1-10)
+  3. Initial task breakdown
+
+Method:
+  Send user message to LLM (fast model) for classification
+
+Output:
+  {
+    "task_type": "Bug Fix",
+    "complexity": 5,
+    "tasks": [{"description": "...", "effort": "medium"}],
+    "reasoning": "..."
+  }
+```
 
 #### STEP 1: PLAN MODE DECISION
 
@@ -430,8 +468,8 @@ Output:
 ```
 Action:
   1. Switch to: main or master branch
-  2. Create new branch: issueID-label
-     Example: issue-42-feature
+  2. Create new branch: label/issue-{id}
+     Example: bug/issue-42, feature/issue-170
   3. Push to remote
 
 Output:
@@ -593,10 +631,10 @@ Level 3 - Step 7:
   Prompt generated: "Implement auth fix with..."
 
 Level 3 - Step 8:
-  Issue created: "issue-42-bug"
+  Issue created: #42 (label: bug)
 
 Level 3 - Step 9:
-  Branch created: issue-42-bug
+  Branch created: bug/issue-42
 
 Level 3 - Step 10:
   Implementation: Files modified
@@ -646,7 +684,7 @@ Result:
 
 ### GitHub Integration
 - ✓ Issue label determined from prompt
-- ✓ Branch naming: issueID-label
+- ✓ Branch naming: label/issue-{id}
 - ✓ Automated review before merge
 - ✓ Detailed closure comment
 
@@ -679,6 +717,7 @@ Result:
 | Version | Date | Changes |
 |---------|------|---------|
 | 1.0.0 | 2026-03-10 | Initial implementation of 3-level workflow |
+| 2.0.0 | 2026-03-15 | Added Step 0 task analysis; fixed Level 2 description (IS in graph); fixed Step 9 branch naming to label/issue-{id}; renamed to Claude Workflow Engine |
 
 ---
 
@@ -693,6 +732,6 @@ Result:
 
 ---
 
-**Last Updated:** 2026-03-10
+**Last Updated:** 2026-03-15
 **Status:** ACTIVE
-**Maintainers:** Claude Insight Team
+**Maintainers:** Claude Workflow Engine Team
