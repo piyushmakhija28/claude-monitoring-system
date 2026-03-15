@@ -34,21 +34,21 @@ from loguru import logger
 # ---------------------------------------------------------------------------
 
 STEP_TIMEOUTS: Dict[int, int] = {
-    0:  60,   # Task Analysis (Ollama LLM call with 16K context)
-    1:  45,   # Plan Mode Decision (Ollama classification)
-    2: 300,   # Plan Execution (convergence loop: up to 10 iterations x 30-60s each)
-    3:  60,   # Task Breakdown (parsing + validation)
-    4:  30,   # TOON Refinement (local computation)
-    5:  90,   # Skill & Agent Selection (filesystem scan + Ollama 16K ctx)
-    6:  45,   # Skill Validation & Download (network I/O possible)
-    7:  30,   # Final Prompt Generation (local formatting)
-    8:  60,   # GitHub Issue Creation (Ollama title gen + network I/O)
-    9:  30,   # Branch Creation (git operations)
-    10: 300,  # Implementation Execution (Claude does heavy lifting)
-    11: 60,   # Pull Request & Code Review (network + LLM)
-    12: 30,   # Issue Closure (network I/O)
-    13: 45,   # Project Documentation Update (file writes)
-    14: 30,   # Final Summary & Voice Notification (local)
+    0:  900,  # Task Analysis (Ollama LLM - let it take its time)
+    1:  900,  # Plan Mode Decision (Ollama classification)
+    2:  900,  # Plan Execution (convergence loop - multiple LLM iterations)
+    3:  120,  # Task Breakdown (parsing + validation, no LLM)
+    4:  120,  # TOON Refinement (local computation, no LLM)
+    5:  900,  # Skill & Agent Selection (filesystem scan + Ollama)
+    6:  120,  # Skill Validation & Download (network I/O possible)
+    7:  120,  # Final Prompt Generation (local formatting, no LLM)
+    8:  900,  # GitHub Issue Creation (Ollama title gen + GitHub API)
+    9:  120,  # Branch Creation (git operations)
+    10: 900,  # Implementation Execution (Claude/Ollama heavy lifting)
+    11: 900,  # Pull Request & Code Review (network + possible LLM)
+    12: 120,  # Issue Closure (network I/O)
+    13: 120,  # Project Documentation Update (file writes)
+    14: 120,  # Final Summary & Voice Notification (local)
 }
 
 # Human-readable step labels for log messages

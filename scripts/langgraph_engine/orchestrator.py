@@ -663,11 +663,9 @@ def output_node(state: FlowState) -> dict:
     save_workflow_memory(state)
 
     # Determine final status based on actual step results (not just errors list)
-    # errors list may contain non-fatal warnings from hooks_decorator
     if state.get("level_minus1_status") == "BLOCKED":
         final_status = "BLOCKED"
     else:
-        # Check actual step statuses - if any step explicitly FAILED, mark FAILED
         step_failures = []
         for key, val in state.items():
             if key.endswith("_status") and isinstance(val, str) and val == "ERROR":
@@ -679,12 +677,153 @@ def output_node(state: FlowState) -> dict:
         else:
             final_status = "OK"
 
+    # Save detailed pipeline execution log to session folder
+    _save_pipeline_execution_log(state, final_status)
+
     # Return synthesis result with proper status
     return {
         "final_status": final_status,
         "synthesized_prompt": synthesis.get("synthesized_prompt", ""),
         "synthesis_metadata": synthesis.get("synthesis_metadata", {}),
     }
+
+
+def _save_pipeline_execution_log(state: FlowState, final_status: str) -> None:
+    """Save a detailed pipeline execution log to session folder.
+
+    Creates a human-readable execution-log.md in the session directory showing:
+    - Each step's status, duration, decisions
+    - What came in, what went out
+    - Total pipeline timing
+    - Skills/agents selected
+    """
+    import json
+    from datetime import datetime
+
+    session_dir = state.get("session_dir") or state.get("session_path", "")
+    if not session_dir:
+        return
+
+    try:
+        log_lines = []
+        log_lines.append("# Pipeline Execution Log")
+        log_lines.append(f"\n**Session**: {state.get('session_id', 'unknown')}")
+        log_lines.append(f"**Date**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        log_lines.append(f"**Project**: {state.get('project_root', '.')}")
+        log_lines.append(f"**Final Status**: {final_status}")
+        log_lines.append(f"**Framework**: {state.get('detected_framework', 'unknown')}")
+        log_lines.append("")
+
+        # Level -1
+        log_lines.append("## Level -1: Auto-Fix")
+        log_lines.append(f"- Unicode: {'PASS' if state.get('unicode_check') else 'FAIL'}")
+        log_lines.append(f"- Encoding: {'PASS' if state.get('encoding_check') else 'FAIL'}")
+        log_lines.append(f"- Paths: {'PASS' if state.get('windows_path_check') else 'FAIL'}")
+        log_lines.append(f"- Status: {state.get('level_minus1_status', 'unknown')}")
+        log_lines.append("")
+
+        # Level 1
+        log_lines.append("## Level 1: Context Sync")
+        log_lines.append(f"- Session: {state.get('session_id', 'none')}")
+        log_lines.append(f"- Complexity: {state.get('complexity_score', '?')}/10")
+        graph_score = state.get('graph_complexity_score')
+        if graph_score:
+            log_lines.append(f"- Graph Complexity: {graph_score}/25")
+            combined = state.get('combined_complexity_score')
+            if combined:
+                log_lines.append(f"- Combined Score: {combined}/25")
+        log_lines.append(f"- Context Files: {state.get('files_loaded_count', 0)}")
+        log_lines.append(f"- Cache Hit: {state.get('context_cache_hit', False)}")
+        log_lines.append(f"- TOON: {'OK' if state.get('toon_saved') else 'FAILED'}")
+        log_lines.append("")
+
+        # Level 2
+        log_lines.append("## Level 2: Standards")
+        log_lines.append(f"- Standards Loaded: {state.get('standards_count', 0)}")
+        log_lines.append(f"- Framework Detected: {state.get('detected_framework', 'unknown')}")
+        log_lines.append(f"- MCP Discovered: {state.get('mcp_discovered_count', 0)}")
+        log_lines.append(f"- Tool Rules: {'Loaded' if state.get('tool_optimization_loaded') else 'Missing'}")
+        log_lines.append(f"- Status: {state.get('level2_status', 'unknown')}")
+        log_lines.append("")
+
+        # Level 3 Steps
+        log_lines.append("## Level 3: Execution Steps")
+        log_lines.append("")
+        log_lines.append("| Step | Name | Status | Duration | Details |")
+        log_lines.append("|------|------|--------|----------|---------|")
+
+        step_info = [
+            (0, "Task Analysis", "step0_task_type", "step0_complexity"),
+            (1, "Plan Mode Decision", "step1_plan_required", "step1_reasoning"),
+            (2, "Plan Execution", "step2_plan_status", "step2_phases"),
+            (3, "Task Breakdown", "step3_validation_status", "step3_task_count"),
+            (4, "TOON Refinement", "step4_refinement_status", "step4_complexity_adjusted"),
+            (5, "Skill & Agent Selection", "step5_skill", "step5_agent"),
+            (6, "Skill Validation", "step6_validation_status", "step6_skill_ready"),
+            (7, "Final Prompt Generation", "step7_prompt_saved", "step7_prompt_size"),
+            (8, "GitHub Issue Creation", "step8_status", "step8_issue_url"),
+            (9, "Branch Creation", "step9_status", "step9_branch_name"),
+            (10, "Implementation", "step10_implementation_status", "step10_llm_invoked"),
+            (11, "PR & Code Review", "step11_status", "step11_pr_url"),
+            (12, "Issue Closure", "step12_status", "step12_issue_closed"),
+            (13, "Documentation", "step13_documentation_status", "step13_update_count"),
+            (14, "Final Summary", "step14_status", "step14_voice_sent"),
+        ]
+
+        for step_num, name, status_key, detail_key in step_info:
+            time_key = f"step{step_num}_execution_time_ms"
+            duration_ms = state.get(time_key, 0)
+            duration_str = f"{duration_ms:.0f}ms" if duration_ms else "-"
+
+            status_val = state.get(status_key, "")
+            detail_val = state.get(detail_key, "")
+
+            # Format detail value
+            if isinstance(detail_val, (list, dict)):
+                detail_str = f"{len(detail_val)} items" if isinstance(detail_val, list) else f"{len(detail_val)} keys"
+            elif isinstance(detail_val, bool):
+                detail_str = "Yes" if detail_val else "No"
+            elif detail_val is not None:
+                detail_str = str(detail_val)[:60]
+            else:
+                detail_str = "-"
+
+            status_str = str(status_val)[:30] if status_val else "-"
+            log_lines.append(f"| {step_num:2d} | {name} | {status_str} | {duration_str} | {detail_str} |")
+
+        log_lines.append("")
+
+        # Selected resources
+        log_lines.append("## Selected Resources")
+        skills = state.get("step5_skills") or []
+        skill = state.get("step5_skill", "")
+        if skill and skill not in skills:
+            skills = [skill] + skills
+        agents = state.get("step5_agents") or []
+        agent = state.get("step5_agent", "")
+        if agent and agent not in agents:
+            agents = [agent] + agents
+
+        if skills:
+            log_lines.append(f"- **Skills**: {', '.join(skills)}")
+        if agents:
+            log_lines.append(f"- **Agents**: {', '.join(agents)}")
+        log_lines.append("")
+
+        # Errors
+        errors = state.get("errors") or []
+        if errors:
+            log_lines.append("## Errors")
+            for err in errors[:10]:
+                log_lines.append(f"- {err}")
+            log_lines.append("")
+
+        # Write to session folder
+        log_path = Path(session_dir) / "execution-log.md"
+        log_path.write_text("\n".join(log_lines), encoding="utf-8")
+
+    except Exception:
+        pass  # Never crash on logging
 
 
 # ============================================================================
