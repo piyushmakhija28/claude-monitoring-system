@@ -891,6 +891,21 @@ def main():
                     except Exception:
                         pass
 
+                # Check 3: Feature branch has commits ahead of main (most reliable)
+                # This catches ALL cases where work was done but tracking was skipped
+                if not should_trigger:
+                    try:
+                        ahead_result = subprocess.run(
+                            ['git', 'rev-list', '--count', f'main..{current_branch}'],
+                            capture_output=True, text=True, timeout=5
+                        )
+                        commits_ahead = int(ahead_result.stdout.strip()) if ahead_result.returncode == 0 else 0
+                        if commits_ahead > 0:
+                            should_trigger = True
+                            trigger_reason = f'{commits_ahead} commits ahead of main'
+                    except Exception:
+                        pass
+
                 if should_trigger:
                     log_s(f"[PR-WORKFLOW] Branch detection: on {current_branch} ({trigger_reason}) - triggering PR workflow (includes version bump)")
                     script_dir = Path(__file__).parent
