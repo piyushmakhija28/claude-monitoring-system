@@ -1786,6 +1786,18 @@ def step12_issue_closure(state: FlowState) -> dict:
             )
 
             if result.get("success"):
+                # Post-merge cleanup: checkout main, pull, delete merged branch
+                branch_name = state.get("step9_branch_name", "")
+                if branch_name and state.get("step11_merged", False):
+                    try:
+                        cleanup = workflow.git.post_merge_cleanup(branch_name)
+                        if cleanup.get("success"):
+                            logger.info(f"Post-merge cleanup: {cleanup.get('message')}")
+                        else:
+                            logger.warning(f"Post-merge cleanup issue: {cleanup.get('error')}")
+                    except Exception as cleanup_err:
+                        logger.warning(f"Post-merge cleanup skipped: {cleanup_err}")
+
                 return {
                     "step12_issue_closed": True,
                     "step12_closing_comment": f"Issue #{issue_id} closed via PR #{pr_id}",
