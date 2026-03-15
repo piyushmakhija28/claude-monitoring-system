@@ -7,6 +7,7 @@ Includes MCP plugin discovery for auto-routing tool optimization.
 
 import sys
 import json
+import time
 import subprocess
 from pathlib import Path
 
@@ -17,6 +18,7 @@ except ImportError:
     _LANGGRAPH_AVAILABLE = False
 
 from ..flow_state import FlowState
+from ..step_logger import write_level_log
 
 
 # ============================================================================
