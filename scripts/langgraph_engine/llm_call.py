@@ -42,11 +42,12 @@ OLLAMA_MODEL_DEEP = os.getenv("OLLAMA_MODEL_DEEP", "qwen2.5:14b")
 _OLLAMA_AVAILABLE = False
 try:
     import urllib.request
-    _health_url = OLLAMA_ENDPOINT.rsplit("/api/", 1)[0] + "/api/tags"
-    _health_req = urllib.request.Request(_health_url)
-    with urllib.request.urlopen(_health_req, timeout=3) as _resp:
-        if _resp.status == 200:
-            _OLLAMA_AVAILABLE = True
+    # Extract base URL (scheme + host) from endpoint, append health check path
+    from urllib.parse import urlparse
+    _parsed = urlparse(OLLAMA_ENDPOINT)
+    _health_url = f"{_parsed.scheme}://{_parsed.netloc}/api/tags"
+    with urllib.request.urlopen(urllib.request.Request(_health_url), timeout=3) as _resp:
+        _OLLAMA_AVAILABLE = _resp.status == 200
 except Exception:
     pass
 
@@ -179,3 +180,64 @@ def _call_claude_cli(prompt, model, timeout):
         pass
 
     return None
+
+
+def generate_llm_commit_title(commit_type: str = None, cwd: str = None) -> Optional[str]:
+    """Generate a meaningful commit title using LLM with staged diff context.
+
+    Single source of truth for LLM-powered commit messages. Used by both
+    git-auto-commit-policy.py and github_pr_workflow.py.
+
+    Args:
+        commit_type: Optional semantic type (feat, fix, refactor, etc.)
+        cwd: Working directory for git commands (default: current dir)
+
+    Returns:
+        Commit title string (max 72 chars), or None if LLM unavailable.
+    """
+    try:
+        stat_result = subprocess.run(
+            ['git', 'diff', '--cached', '--stat'],
+            capture_output=True, text=True, timeout=5, cwd=cwd
+        )
+        stat_text = stat_result.stdout.strip() if stat_result.returncode == 0 else ""
+
+        diff_result = subprocess.run(
+            ['git', 'diff', '--cached'],
+            capture_output=True, text=True, timeout=5, cwd=cwd
+        )
+        diff_text = diff_result.stdout[:3000] if diff_result.returncode == 0 else ""
+
+        if not stat_text and not diff_text:
+            return None
+
+        type_hint = f"Commit type: {commit_type}\n" if commit_type else ""
+        type_rule = (f"- Start with type prefix: {commit_type}:\n" if commit_type
+                     else "- Use conventional commit format: type: description\n")
+
+        prompt = (
+            f"Generate a git commit message for these changes.\n"
+            f"{type_hint}\n"
+            f"Changed files:\n{stat_text}\n\n"
+            f"Diff (truncated):\n{diff_text}\n\n"
+            f"Rules:\n"
+            f"- Return ONLY the commit title (one line, under 72 chars)\n"
+            f"{type_rule}"
+            f"- Focus on WHAT changed and WHY, not just file names\n"
+            f"- Be specific: 'fix stash detection using stdout+stderr' not 'fix issues'\n"
+            f"- No quotes, no explanation, just the commit title line\n"
+        )
+
+        response = llm_call(prompt, model="fast", temperature=0.1, timeout=15)
+        if not response:
+            return None
+
+        title = response.strip().splitlines()[0].strip().strip('"').strip("'")
+        if commit_type and not title.lower().startswith(commit_type):
+            title = f"{commit_type}: {title}"
+        return title[:69] + "..." if len(title) > 72 else title
+
+    except subprocess.TimeoutExpired:
+        return None
+    except Exception:
+        return None

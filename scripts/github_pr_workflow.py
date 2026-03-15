@@ -306,42 +306,15 @@ def _commit_session_changes(repo_root: str, session_summary: dict,
         )
         changed_files = [f for f in diff_result.stdout.strip().splitlines() if f] if diff_result.returncode == 0 else []
 
-        # Try LLM-powered commit message (meaningful, context-aware)
+        # Try LLM-powered commit message (shared function in llm_call.py)
         try:
-            diff_stat = subprocess.run(
-                ['git', 'diff', '--cached', '--stat'],
-                capture_output=True, text=True, timeout=5, cwd=repo_root
-            )
-            diff_content = subprocess.run(
-                ['git', 'diff', '--cached'],
-                capture_output=True, text=True, timeout=5, cwd=repo_root
-            )
-            diff_text = diff_content.stdout[:3000] if diff_content.returncode == 0 else ""
-            stat_text = diff_stat.stdout.strip() if diff_stat.returncode == 0 else ""
-
-            if diff_text:
-                script_dir = os.path.dirname(os.path.abspath(__file__))
-                if script_dir not in sys.path:
-                    sys.path.insert(0, script_dir)
-                from langgraph_engine.llm_call import llm_call
-
-                prompt = (
-                    f"Generate a git commit message for these changes.\n\n"
-                    f"Changed files:\n{stat_text}\n\n"
-                    f"Diff (truncated):\n{diff_text}\n\n"
-                    f"Rules:\n"
-                    f"- Return ONLY the commit title (one line, under 72 chars)\n"
-                    f"- Use conventional commit format: type: description\n"
-                    f"- Focus on WHAT changed and WHY, not just file names\n"
-                    f"- Be specific and meaningful\n"
-                    f"- No quotes, no explanation, just the commit title\n"
-                )
-                llm_title = llm_call(prompt, model="fast", temperature=0.1, timeout=15)
-                if llm_title:
-                    commit_title = llm_title.strip().splitlines()[0].strip().strip('"').strip("'")
-                    if len(commit_title) > 72:
-                        commit_title = commit_title[:69] + "..."
-                    _log(f"LLM commit title: {commit_title}")
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            if script_dir not in sys.path:
+                sys.path.insert(0, script_dir)
+            from langgraph_engine.llm_call import generate_llm_commit_title
+            commit_title = generate_llm_commit_title(cwd=repo_root) or ""
+            if commit_title:
+                _log(f"LLM commit title: {commit_title}")
         except Exception as llm_err:
             _log(f"LLM commit message skipped: {llm_err}")
 
