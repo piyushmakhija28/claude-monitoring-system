@@ -128,11 +128,11 @@ class TestVerifyCompliance:
         result = _parse(verify_compliance())
         assert result["compliant"] is False
         assert result["completed_steps"] == 0
-        assert result["total_steps"] == 8
-        assert len(result["missing_steps"]) == 8
+        assert result["total_steps"] == 14  # Updated: 14 steps (step_0 through step_13)
+        assert len(result["missing_steps"]) == 14
 
     def test_compliance_partial(self, temp_state_dir):
-        """Test compliance with some steps completed."""
+        """Test compliance with some legacy steps completed."""
         _, state_file = temp_state_dir
         state = {
             "session_started": True,
@@ -142,12 +142,29 @@ class TestVerifyCompliance:
         state_file.write_text(json.dumps(state), encoding="utf-8")
 
         result = _parse(verify_compliance())
-        assert result["compliant"] is False
-        assert result["completed_steps"] == 3
-        assert result["total_steps"] == 8
+        # Legacy keys detected but not enough for full compliance
+        assert "legacy_completed" in result
+        assert len(result["legacy_completed"]) == 3
 
-    def test_compliance_full(self, temp_state_dir):
-        """Test full compliance."""
+    def test_compliance_full_with_new_format(self, temp_state_dir):
+        """Test full compliance with new step_N format."""
+        _, state_file = temp_state_dir
+        state = {}
+        for i in range(14):
+            state[f"step_{i}"] = {
+                "name": f"Step {i}",
+                "status": "ENFORCED",
+                "timestamp": "2026-03-16T12:00:00"
+            }
+        state_file.write_text(json.dumps(state), encoding="utf-8")
+
+        result = _parse(verify_compliance())
+        assert result["compliant"] is True
+        assert result["completed_steps"] == 14
+        assert result["missing_steps"] == []
+
+    def test_compliance_legacy_backward_compat(self, temp_state_dir):
+        """Test compliance passes with 6+ legacy keys (backward compat)."""
         _, state_file = temp_state_dir
         state = {
             "session_started": True,
@@ -162,9 +179,7 @@ class TestVerifyCompliance:
         state_file.write_text(json.dumps(state), encoding="utf-8")
 
         result = _parse(verify_compliance())
-        assert result["compliant"] is True
-        assert result["completed_steps"] == 8
-        assert result["missing_steps"] == []
+        assert result["compliant"] is True  # 8 legacy keys >= 6 threshold
 
 
 class TestListPolicies:

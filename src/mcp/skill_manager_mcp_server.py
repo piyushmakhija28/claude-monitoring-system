@@ -55,6 +55,22 @@ def _extract_metadata(content: str) -> dict:
     if triggers:
         meta["triggers"] = [t.strip() for t in triggers]
 
+    # Extract plain key: value lines (exclusive, exclusive_domain, conflicts_with)
+    for line in content.splitlines():
+        line_s = line.strip()
+        if line_s.startswith("#") or not line_s:
+            continue
+        if ":" in line_s and not line_s.startswith("-") and not line_s.startswith("*"):
+            key, val = line_s.split(":", 1)
+            key = key.strip().lower()
+            val = val.strip()
+            if key == "exclusive" and val.lower() in ("true", "yes"):
+                meta["exclusive"] = True
+            elif key == "exclusive_domain":
+                meta["exclusive_domain"] = val
+            elif key == "conflicts_with":
+                meta["conflicts_with"] = [c.strip() for c in val.split(",")]
+
     return meta
 
 
