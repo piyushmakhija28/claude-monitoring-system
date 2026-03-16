@@ -5,6 +5,10 @@ Setup configuration for Claude Workflow Engine
 from setuptools import setup, find_packages
 from pathlib import Path
 
+# Single source of truth: VERSION file
+version_file = Path(__file__).parent / 'VERSION'
+VERSION = version_file.read_text(encoding='utf-8').strip() if version_file.exists() else '0.0.0'
+
 # Read README
 readme_file = Path(__file__).parent / 'README.md'
 long_description = readme_file.read_text(encoding='utf-8') if readme_file.exists() else ''
@@ -21,7 +25,7 @@ if requirements_file.exists():
 
 setup(
     name='claude-workflow-engine',
-    version='5.6.0',
+    version=VERSION,
     description='3-Level LangGraph orchestration pipeline for Claude Code workflows',
     long_description=long_description,
     long_description_content_type='text/markdown',

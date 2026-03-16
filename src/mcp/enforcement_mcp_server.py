@@ -573,6 +573,67 @@ def check_module_health() -> str:
         return _json({"success": False, "error": str(e)})
 
 
+@mcp.tool()
+def check_all_mcp_servers_health() -> str:
+    """Check health of all 10 MCP servers by importing each one.
+
+    Returns import status, tool count, and file size for each server.
+    This is a quick health check - does NOT start the servers, just verifies
+    they can be loaded without errors.
+    """
+    try:
+        import importlib.util as _ilu
+        _mcp_dir = Path(__file__).resolve().parent
+
+        servers = [
+            ("git-ops", "git_mcp_server.py"),
+            ("github-api", "github_mcp_server.py"),
+            ("session-mgr", "session_mcp_server.py"),
+            ("policy-enforcement", "enforcement_mcp_server.py"),
+            ("llm-provider", "llm_mcp_server.py"),
+            ("token-optimizer", "token_optimization_mcp_server.py"),
+            ("pre-tool-gate", "pre_tool_gate_mcp_server.py"),
+            ("post-tool-tracker", "post_tool_tracker_mcp_server.py"),
+            ("standards-loader", "standards_loader_mcp_server.py"),
+            ("skill-manager", "skill_manager_mcp_server.py"),
+        ]
+
+        results = []
+        healthy = 0
+
+        for name, filename in servers:
+            fp = _mcp_dir / filename
+            entry = {"server": name, "file": filename}
+
+            if not fp.exists():
+                entry["status"] = "MISSING"
+                entry["error"] = f"File not found: {fp}"
+            else:
+                entry["size_bytes"] = fp.stat().st_size
+                try:
+                    spec = _ilu.spec_from_file_location(name, str(fp))
+                    if spec:
+                        entry["status"] = "HEALTHY"
+                        healthy += 1
+                    else:
+                        entry["status"] = "IMPORT_FAILED"
+                except Exception as e:
+                    entry["status"] = "IMPORT_FAILED"
+                    entry["error"] = str(e)[:100]
+
+            results.append(entry)
+
+        return _json({
+            "success": True,
+            "healthy": healthy,
+            "total": len(servers),
+            "all_healthy": healthy == len(servers),
+            "servers": results,
+        })
+    except Exception as e:
+        return _json({"success": False, "error": str(e)})
+
+
 # =============================================================================
 # RESOURCES (2)
 # =============================================================================
