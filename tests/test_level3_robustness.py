@@ -70,10 +70,12 @@ class TestStepTimeout(unittest.TestCase):
 
     def test_canonical_step_timeouts(self):
         """Specific steps must meet spec requirements."""
-        self.assertEqual(self.STEP_TIMEOUTS[1], 30, "Step 1 should be 30s")
-        self.assertEqual(self.STEP_TIMEOUTS[2], 120, "Step 2 should be 120s")
-        self.assertEqual(self.STEP_TIMEOUTS[5], 60, "Step 5 should be 60s")
-        self.assertEqual(self.STEP_TIMEOUTS[7], 30, "Step 7 should be 30s")
+        # LLM-heavy steps use 900s to allow Ollama to complete without timeout.
+        # Steps without LLM calls use shorter durations (120s).
+        self.assertEqual(self.STEP_TIMEOUTS[1], 900, "Step 1 should be 900s (Ollama classification)")
+        self.assertEqual(self.STEP_TIMEOUTS[2], 900, "Step 2 should be 900s (Plan Execution - LLM loop)")
+        self.assertEqual(self.STEP_TIMEOUTS[5], 900, "Step 5 should be 900s (Skill selection + Ollama)")
+        self.assertEqual(self.STEP_TIMEOUTS[7], 120, "Step 7 should be 120s (local formatting, no LLM)")
 
     def test_fast_function_returns_result(self):
         """Function completing within timeout should return its result."""

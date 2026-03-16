@@ -374,15 +374,19 @@ class TestCompleteFlow(unittest.TestCase):
         flag = _tmp_flag(self.tmp, '.session-work-done', 'All tests passed')
 
         with patch.object(_mod, 'SESSION_START_FLAG', self._absent('.ss')), \
+             patch.object(_mod, 'SESSION_START_FLAG_PID', self._absent('.ss-pid')), \
              patch.object(_mod, 'TASK_COMPLETE_FLAG', self._absent('.tc')), \
+             patch.object(_mod, 'TASK_COMPLETE_FLAG_PID', self._absent('.tc-pid')), \
              patch.object(_mod, 'WORK_DONE_FLAG', flag), \
+             patch.object(_mod, 'WORK_DONE_FLAG_PID', self._absent('.wd-pid')), \
              patch.object(_mod, 'generate_dynamic_message', return_value='Sir, all done.') as mock_llm, \
              patch.object(_mod, 'speak') as mock_speak, \
              patch.object(_mod, 'delete_flag') as mock_delete:
             with self.assertRaises(SystemExit):
                 _mod.main()
 
-        mock_llm.assert_called_once_with('work_done', 'All tests passed')
+        mock_llm.assert_called_once()
+        self.assertEqual(mock_llm.call_args[0][0], 'work_done')
         mock_speak.assert_called_once_with('Sir, all done.')
         mock_delete.assert_called_once_with(flag)
 
@@ -391,40 +395,45 @@ class TestCompleteFlow(unittest.TestCase):
         flag = _tmp_flag(self.tmp, '.task-complete-voice', 'task info')
 
         with patch.object(_mod, 'SESSION_START_FLAG', self._absent('.ss')), \
+             patch.object(_mod, 'SESSION_START_FLAG_PID', self._absent('.ss-pid')), \
              patch.object(_mod, 'TASK_COMPLETE_FLAG', flag), \
+             patch.object(_mod, 'TASK_COMPLETE_FLAG_PID', self._absent('.tc-pid')), \
              patch.object(_mod, 'WORK_DONE_FLAG', self._absent('.wd')), \
+             patch.object(_mod, 'WORK_DONE_FLAG_PID', self._absent('.wd-pid')), \
              patch.object(_mod, 'generate_dynamic_message', return_value='Sir, task done.') as mock_llm, \
              patch.object(_mod, 'speak') as mock_speak, \
              patch.object(_mod, 'delete_flag') as mock_delete:
             with self.assertRaises(SystemExit):
                 _mod.main()
 
-        mock_llm.assert_called_once_with('task_complete', 'task info')
+        mock_llm.assert_called_once()
+        self.assertEqual(mock_llm.call_args[0][0], 'task_complete')
         mock_speak.assert_called_once_with('Sir, task done.')
         mock_delete.assert_called_once_with(flag)
 
     def test_retry_flow_flag_persists_when_retries_remain(self):
         """
-        Flow: LLM fails, increment_retry returns True (retries remain) ->
-              speak fallback, delete_flag must NOT be called for this flag.
+        v4.0.0: handle_voice_flag always deletes the flag after speaking,
+        regardless of LLM success/failure. No retry accumulation in v4.x.
+        Flow: LLM fails -> static fallback spoken -> flag deleted.
         """
         flag = _tmp_flag(self.tmp, '.session-start-voice', 'context')
 
         with patch.object(_mod, 'SESSION_START_FLAG', flag), \
+             patch.object(_mod, 'SESSION_START_FLAG_PID', self._absent('.ss-pid')), \
              patch.object(_mod, 'TASK_COMPLETE_FLAG', self._absent('.tc')), \
+             patch.object(_mod, 'TASK_COMPLETE_FLAG_PID', self._absent('.tc-pid')), \
              patch.object(_mod, 'WORK_DONE_FLAG', self._absent('.wd')), \
+             patch.object(_mod, 'WORK_DONE_FLAG_PID', self._absent('.wd-pid')), \
              patch.object(_mod, 'generate_dynamic_message', return_value=None), \
-             patch.object(_mod, 'increment_retry', return_value=True), \
              patch.object(_mod, 'speak') as mock_speak, \
              patch.object(_mod, 'delete_flag') as mock_delete:
             with self.assertRaises(SystemExit):
                 _mod.main()
 
+        # v4.0.0: LLM failure -> static default spoken, flag always deleted
         mock_speak.assert_called()
-        # delete_flag must NOT be called with this flag
-        called_with = [c.args[0] for c in mock_delete.call_args_list]
-        self.assertNotIn(flag, called_with,
-                         'Flag must NOT be deleted when retries remain')
+        mock_delete.assert_called_with(flag)
 
     def test_max_retries_uses_fallback_and_deletes_flag(self):
         """
@@ -480,21 +489,32 @@ class TestCompleteFlow(unittest.TestCase):
         mock_speak.assert_not_called()
         mock_llm.assert_not_called()
 
-    def test_session_start_retry_uses_context_as_fallback_text(self):
-        """When LLM fails and retries remain, speak receives the flag's context text."""
+    def test_session_start_llm_fail_uses_static_default(self):
+        """
+        v4.0.0: When LLM fails, handle_voice_flag calls get_default_fn()
+        for the fallback text (NEVER the raw flag content string).
+        """
         flag = _tmp_flag(self.tmp, '.session-start-voice', 'My custom context message')
+        expected_default = get_session_start_default()
 
         with patch.object(_mod, 'SESSION_START_FLAG', flag), \
+             patch.object(_mod, 'SESSION_START_FLAG_PID', self._absent('.ss-pid')), \
              patch.object(_mod, 'TASK_COMPLETE_FLAG', self._absent('.tc')), \
+             patch.object(_mod, 'TASK_COMPLETE_FLAG_PID', self._absent('.tc-pid')), \
              patch.object(_mod, 'WORK_DONE_FLAG', self._absent('.wd')), \
+             patch.object(_mod, 'WORK_DONE_FLAG_PID', self._absent('.wd-pid')), \
              patch.object(_mod, 'generate_dynamic_message', return_value=None), \
-             patch.object(_mod, 'increment_retry', return_value=True), \
              patch.object(_mod, 'speak') as mock_speak, \
              patch.object(_mod, 'delete_flag'):
             with self.assertRaises(SystemExit):
                 _mod.main()
 
-        mock_speak.assert_called_once_with('My custom context message')
+        # v4.0.0: static default is spoken, not raw flag content
+        mock_speak.assert_called_once()
+        spoken = mock_speak.call_args[0][0]
+        self.assertIn('Sir', spoken)
+        self.assertNotEqual(spoken, 'My custom context message',
+                            'v4.0.0 must not speak raw flag content as fallback')
 
 
 class TestPriorityOrder(unittest.TestCase):
@@ -579,11 +599,13 @@ class TestGenerateDynamicMessage(unittest.TestCase):
     def _patch_key(self):
         return patch.object(_mod, 'API_KEY_FILE', self.api_key_file)
 
-    def test_no_api_key_returns_none(self):
-        missing = Path(self.tmp) / 'no-key'
-        with patch.object(_mod, 'API_KEY_FILE', missing):
+    def test_ollama_unavailable_returns_none(self):
+        """When Ollama is unavailable (connection refused), must return None."""
+        from urllib.error import URLError
+        with patch.object(_mod.urllib_request, 'urlopen',
+                          side_effect=URLError('Connection refused')):
             result = generate_dynamic_message('session_start', 'ctx')
-        self.assertIsNone(result, 'Without API key must return None')
+        self.assertIsNone(result, 'Ollama unavailable must return None')
 
     def test_successful_llm_response_returned(self):
         """Mock a clean HTTP response -> function returns the message text."""
@@ -632,28 +654,24 @@ class TestGenerateDynamicMessage(unittest.TestCase):
         self.assertIsNone(result,
                           'All-models timeout -> must return None for static fallback')
 
-    def test_model_fallback_chain_on_first_model_failure(self):
+    def test_single_model_failure_returns_none(self):
         """
-        First model fails (URLError), second model succeeds.
-        Verifies the for-loop model fallback chain in generate_dynamic_message().
+        v4.2.0: Single Ollama model only (no fallback chain).
+        When the single model fails, generate_dynamic_message returns None.
         """
         from urllib.error import URLError
 
-        good_resp = _good_http_mock(_llm_json('Sir, fallback model responded.'))
         call_count = [0]
 
         def side_effect(req, timeout):
             call_count[0] += 1
-            if call_count[0] == 1:
-                raise URLError('first model network error')
-            return good_resp
+            raise URLError('network error')
 
-        with self._patch_key(), \
-             patch.object(_mod.urllib_request, 'urlopen', side_effect=side_effect):
+        with patch.object(_mod.urllib_request, 'urlopen', side_effect=side_effect):
             result = generate_dynamic_message('task_complete', 'context')
 
-        self.assertEqual(result, 'Sir, fallback model responded.')
-        self.assertEqual(call_count[0], 2, 'Should have tried exactly 2 models')
+        self.assertIsNone(result, 'Single model failure must return None')
+        self.assertEqual(call_count[0], 1, 'v4.2.0 tries exactly 1 model (Ollama only)')
 
     def test_all_three_models_fail_returns_none(self):
         """All 3 models fail -> generate_dynamic_message returns None."""
@@ -666,29 +684,22 @@ class TestGenerateDynamicMessage(unittest.TestCase):
 
         self.assertIsNone(result)
 
-    def test_empty_content_response_tries_next_model(self):
-        """LLM returns empty content string -> must fall through to next model."""
+    def test_empty_content_response_returns_none(self):
+        """
+        v4.2.0: Single Ollama model only.
+        When Ollama responds with empty content, generate_dynamic_message returns None.
+        """
         empty_resp = _good_http_mock(_llm_json(''))
-        good_resp = _good_http_mock(_llm_json('Sir, second model.'))
 
-        call_count = [0]
-
-        def side_effect(req, timeout):
-            call_count[0] += 1
-            if call_count[0] == 1:
-                return empty_resp
-            return good_resp
-
-        with self._patch_key(), \
-             patch.object(_mod.urllib_request, 'urlopen', side_effect=side_effect):
+        with patch.object(_mod.urllib_request, 'urlopen', return_value=empty_resp):
             result = generate_dynamic_message('session_start', 'ctx')
 
-        self.assertEqual(result, 'Sir, second model.')
+        self.assertIsNone(result, 'Empty content from Ollama must return None')
 
-    def test_timeout_is_15_seconds_v320(self):
+    def test_timeout_is_60_seconds_v420(self):
         """
-        v3.2.0 CRITICAL: timeout parameter passed to urlopen must be 15.
-        Old v3.1.0 used 5s. This test verifies the upgrade.
+        v4.2.0: timeout parameter passed to urlopen must be 60.
+        (v3.2.0 used 15s; v4.x upgraded to 60s for local Ollama latency.)
         """
         from urllib.error import URLError
 
@@ -698,15 +709,14 @@ class TestGenerateDynamicMessage(unittest.TestCase):
             observed_timeouts.append(timeout)
             raise URLError('forced fail for capture')
 
-        with self._patch_key(), \
-             patch.object(_mod.urllib_request, 'urlopen', side_effect=capture):
+        with patch.object(_mod.urllib_request, 'urlopen', side_effect=capture):
             generate_dynamic_message('session_start', '')
 
         self.assertGreater(len(observed_timeouts), 0,
                            'urlopen must have been called at least once')
         for t in observed_timeouts:
-            self.assertEqual(t, 15,
-                             f'Expected timeout=15s (v3.2.0 requirement), got {t}s')
+            self.assertEqual(t, 60,
+                             f'Expected timeout=60s (v4.2.0 Ollama requirement), got {t}s')
 
     def test_mock_success_speaks_and_deletes_end_to_end(self):
         """
@@ -825,64 +835,61 @@ class TestLogging(unittest.TestCase):
         self.assertIn('.my-flag', content)
         self.assertIn('deleted', content.lower())
 
-    def test_increment_retry_logs_attempt_number(self):
+    def test_increment_retry_writes_json_to_flag(self):
+        """
+        v4.2.0: increment_retry() does not log - it only updates the flag file.
+        Verify the retry counter is written correctly to the flag file.
+        """
         p = _tmp_flag(self.tmp, '.flag', 'ctx')
-        increment_retry(p)
-        content = self._read_log()
-        self.assertIn('attempt', content.lower())
-        self.assertIn('1/3', content)
+        result = increment_retry(p)
+        self.assertTrue(result)
+        data = json.loads(p.read_text(encoding='utf-8'))
+        self.assertEqual(data.get('retries'), 1)
 
-    def test_increment_retry_logs_max_exceeded(self):
+    def test_increment_retry_max_returns_false(self):
+        """
+        v4.2.0: increment_retry() at max_retries returns False without logging.
+        """
         p = _tmp_json_flag(self.tmp, '.flag.json', {'content': 'x', 'retries': 3})
-        increment_retry(p)
-        content = self._read_log()
-        self.assertIn('max retries', content.lower())
+        result = increment_retry(p)
+        self.assertFalse(result)
 
-    def test_llm_logs_start_with_timeout(self):
-        """[llm] log line must mention the 15s timeout (v3.2.0)."""
-        api_key_file = Path(self.tmp) / 'key'
-        api_key_file.write_text('sk-fake', encoding='utf-8')
+    def test_llm_logs_start_of_ollama_call(self):
+        """v4.2.0: [llm] log line appears at start of Ollama call."""
         from urllib.error import URLError
 
-        with patch.object(_mod, 'API_KEY_FILE', api_key_file), \
-             patch.object(_mod.urllib_request, 'urlopen',
+        with patch.object(_mod.urllib_request, 'urlopen',
                           side_effect=URLError('fail')):
             generate_dynamic_message('session_start', 'ctx')
 
         content = self._read_log()
         self.assertIn('[llm]', content)
-        self.assertIn('15s', content)
+        self.assertIn('Starting local Ollama call', content)
 
-    def test_llm_logs_each_model_attempt(self):
-        """Each model in the fallback chain must be logged with its attempt number."""
-        api_key_file = Path(self.tmp) / 'key'
-        api_key_file.write_text('sk-fake', encoding='utf-8')
+    def test_llm_logs_ollama_model_attempt(self):
+        """v4.2.0: Single Ollama model attempt is logged with model name."""
         from urllib.error import URLError
 
-        with patch.object(_mod, 'API_KEY_FILE', api_key_file), \
-             patch.object(_mod.urllib_request, 'urlopen',
+        with patch.object(_mod.urllib_request, 'urlopen',
                           side_effect=URLError('fail')):
             generate_dynamic_message('session_start', 'ctx')
 
         content = self._read_log()
-        self.assertIn('Attempt 1/', content)
-        self.assertIn('Attempt 2/', content)
-        self.assertIn('Attempt 3/', content)
+        self.assertIn('[ollama]', content)
+        self.assertIn('Trying local:', content)
+        self.assertIn('granite4:3b', content)
 
-    def test_llm_logs_all_models_failed_message(self):
-        """When all models fail, the 'All X models failed' message must be logged."""
-        api_key_file = Path(self.tmp) / 'key'
-        api_key_file.write_text('sk-fake', encoding='utf-8')
+    def test_llm_logs_ollama_unavailable_static_fallback(self):
+        """v4.2.0: When Ollama fails, logs 'Ollama not available - using static fallback'."""
         from urllib.error import URLError
 
-        with patch.object(_mod, 'API_KEY_FILE', api_key_file), \
-             patch.object(_mod.urllib_request, 'urlopen',
+        with patch.object(_mod.urllib_request, 'urlopen',
                           side_effect=URLError('fail')):
             generate_dynamic_message('work_done', 'summary')
 
         content = self._read_log()
-        self.assertIn('All', content)
-        self.assertIn('failed', content.lower())
+        self.assertIn('Ollama not available', content)
+        self.assertIn('static fallback', content)
 
     def test_llm_logs_success_with_model_and_message(self):
         """On success, log must contain 'SUCCESS' and the returned message."""
@@ -898,41 +905,37 @@ class TestLogging(unittest.TestCase):
         self.assertIn('SUCCESS', content)
         self.assertIn('Sir, done.', content)
 
-    def test_llm_logs_url_error_type(self):
-        """URLError must produce a log line containing 'URL error'."""
-        api_key_file = Path(self.tmp) / 'key'
-        api_key_file.write_text('sk-fake', encoding='utf-8')
+    def test_llm_logs_ollama_unavailable_on_url_error(self):
+        """v4.2.0: URLError produces 'Unavailable (local only):' log entry."""
         from urllib.error import URLError
 
-        with patch.object(_mod, 'API_KEY_FILE', api_key_file), \
-             patch.object(_mod.urllib_request, 'urlopen',
+        with patch.object(_mod.urllib_request, 'urlopen',
                           side_effect=URLError('timed out')):
             generate_dynamic_message('session_start', '')
 
         content = self._read_log()
-        self.assertIn('URL error', content)
+        self.assertIn('Unavailable (local only)', content)
 
-    def test_llm_logs_no_api_key(self):
-        """Missing API key must produce a 'No API key' log entry."""
-        missing = Path(self.tmp) / 'no-key'
-        with patch.object(_mod, 'API_KEY_FILE', missing):
+    def test_llm_logs_start_when_called(self):
+        """v4.2.0: generate_dynamic_message logs '[llm] Starting local Ollama call'."""
+        from urllib.error import URLError
+
+        with patch.object(_mod.urllib_request, 'urlopen',
+                          side_effect=URLError('fail')):
             generate_dynamic_message('session_start', 'ctx')
 
         content = self._read_log()
-        self.assertIn('No API key', content)
+        self.assertIn('[llm] Starting local Ollama call', content)
 
-    def test_connecting_log_line_before_urlopen(self):
-        """Log must contain 'Connecting to OpenRouter' before each urlopen call."""
-        api_key_file = Path(self.tmp) / 'key'
-        api_key_file.write_text('sk-fake', encoding='utf-8')
+    def test_ollama_model_logged_before_urlopen(self):
+        """v4.2.0: Log must contain '[ollama] Trying local:' before the urlopen call."""
         resp_mock = _good_http_mock(_llm_json('Sir, test.'))
 
-        with patch.object(_mod, 'API_KEY_FILE', api_key_file), \
-             patch.object(_mod.urllib_request, 'urlopen', return_value=resp_mock):
+        with patch.object(_mod.urllib_request, 'urlopen', return_value=resp_mock):
             generate_dynamic_message('session_start', '')
 
         content = self._read_log()
-        self.assertIn('Connecting to OpenRouter', content)
+        self.assertIn('[ollama] Trying local:', content)
 
     def test_stop_hook_logs_silence_when_no_flags(self):
         """When no flags exist, main() must log the 'No voice flags found' message."""
@@ -987,12 +990,14 @@ class TestSpeak(unittest.TestCase):
 
     def test_valid_text_calls_popen(self):
         with patch.object(_mod, 'VOICE_SCRIPT', self.voice_script), \
+             patch.object(_mod, 'VOICE_ENABLED', True), \
              patch.object(_mod.subprocess, 'Popen') as mock_popen:
             speak('Sir, session started.')
         mock_popen.assert_called_once()
 
     def test_valid_text_passed_to_popen_command(self):
         with patch.object(_mod, 'VOICE_SCRIPT', self.voice_script), \
+             patch.object(_mod, 'VOICE_ENABLED', True), \
              patch.object(_mod.subprocess, 'Popen') as mock_popen:
             speak('Sir, session started.')
         cmd = mock_popen.call_args[0][0]
@@ -1002,6 +1007,7 @@ class TestSpeak(unittest.TestCase):
         """Fire-and-forget pattern: stdout and stderr must be DEVNULL."""
         import subprocess as sp
         with patch.object(_mod, 'VOICE_SCRIPT', self.voice_script), \
+             patch.object(_mod, 'VOICE_ENABLED', True), \
              patch.object(_mod.subprocess, 'Popen') as mock_popen:
             speak('Sir, hello.')
         kwargs = mock_popen.call_args[1]

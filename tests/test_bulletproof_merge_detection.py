@@ -22,7 +22,13 @@ class TestBulletproofMergeDetection:
         """Create workflow instance with mocked dependencies."""
         with patch('langgraph_engine.level3_steps8to12_github.GitHubIntegration'), \
              patch('langgraph_engine.level3_steps8to12_github.GitOperations'):
-            return Level3GitHubWorkflow(session_dir="/tmp/test")
+            wf = Level3GitHubWorkflow(session_dir="/tmp/test")
+            # Attach a 'repo' mock to workflow.github so that Layer 1 checks
+            # against self.github.repo.get_pull() work with patch.object.
+            # GitHubOperationRouter does not expose a 'repo' attribute (it
+            # uses gh CLI / MCP), so we inject one here for testing only.
+            wf.github.repo = MagicMock()
+            return wf
 
     # ========================================================================
     # TEST 1: All layers pass - safe to merge
@@ -30,18 +36,17 @@ class TestBulletproofMergeDetection:
     def test_all_layers_pass_safe_to_merge(self, workflow):
         """Test when all 4 layers pass."""
         print("\n" + "=" * 70)
-        print("✅ TEST 1: All Layers Pass (Safe to Merge)")
+        print("TEST 1: All Layers Pass (Safe to Merge)")
         print("=" * 70)
 
-        with patch.object(workflow.github.repo, 'get_pull') as mock_pr, \
-             patch.object(workflow, '_detect_git_conflict_markers', return_value=[]), \
+        mock_pr_obj = MagicMock()
+        mock_pr_obj.mergeable = True
+        workflow.github.repo.get_pull.return_value = mock_pr_obj
+
+        with patch.object(workflow, '_detect_git_conflict_markers', return_value=[]), \
              patch.object(workflow, '_test_merge_locally', return_value={"success": True}), \
              patch.object(workflow, '_detect_project_type', return_value='python'), \
              patch.object(workflow, '_validate_project_after_merge', return_value={"success": True}):
-
-            mock_pr_obj = MagicMock()
-            mock_pr_obj.mergeable = True
-            mock_pr.return_value = mock_pr_obj
 
             result = workflow.check_merge_conflicts_bulletproof(
                 pr_number=42,
@@ -51,8 +56,8 @@ class TestBulletproofMergeDetection:
             print(f"Result: {result}")
             assert result["safe_to_merge"] == True, "Should be safe to merge"
             assert result["layer"] == 4, "Should pass all 4 layers"
-            print("✅ All 4 layers passed")
-            print("✅ Safe to merge")
+            print("All 4 layers passed")
+            print("Safe to merge")
 
     # ========================================================================
     # TEST 2: Layer 1 fails - GitHub API check
@@ -60,23 +65,22 @@ class TestBulletproofMergeDetection:
     def test_layer1_fails_not_mergeable(self, workflow):
         """Test Layer 1 failure - pr.mergeable = False."""
         print("\n" + "=" * 70)
-        print("❌ TEST 2: Layer 1 Fails (GitHub API)")
+        print("TEST 2: Layer 1 Fails (GitHub API)")
         print("=" * 70)
 
-        with patch.object(workflow.github.repo, 'get_pull') as mock_pr:
-            mock_pr_obj = MagicMock()
-            mock_pr_obj.mergeable = False
-            mock_pr.return_value = mock_pr_obj
+        mock_pr_obj = MagicMock()
+        mock_pr_obj.mergeable = False
+        workflow.github.repo.get_pull.return_value = mock_pr_obj
 
-            result = workflow.check_merge_conflicts_bulletproof(
-                pr_number=42,
-                branch_name="issue-42-feature"
-            )
+        result = workflow.check_merge_conflicts_bulletproof(
+            pr_number=42,
+            branch_name="issue-42-feature"
+        )
 
-            print(f"Result: {result}")
-            assert result["safe_to_merge"] == False, "Should not be safe"
-            assert result["layer"] == 1, "Should fail at Layer 1"
-            print(f"❌ Blocked at Layer 1: {result['reason']}")
+        print(f"Result: {result}")
+        assert result["safe_to_merge"] == False, "Should not be safe"
+        assert result["layer"] == 1, "Should fail at Layer 1"
+        print(f"Blocked at Layer 1: {result['reason']}")
 
     # ========================================================================
     # TEST 3: Layer 2 fails - Git conflict markers
@@ -84,16 +88,15 @@ class TestBulletproofMergeDetection:
     def test_layer2_fails_conflict_markers(self, workflow):
         """Test Layer 2 failure - UU/DD/AA markers found."""
         print("\n" + "=" * 70)
-        print("❌ TEST 3: Layer 2 Fails (Git Conflict Markers)")
+        print("TEST 3: Layer 2 Fails (Git Conflict Markers)")
         print("=" * 70)
 
-        with patch.object(workflow.github.repo, 'get_pull') as mock_pr, \
-             patch.object(workflow, '_detect_git_conflict_markers',
-                         return_value=['src/file1.py', 'src/file2.py']):
+        mock_pr_obj = MagicMock()
+        mock_pr_obj.mergeable = True
+        workflow.github.repo.get_pull.return_value = mock_pr_obj
 
-            mock_pr_obj = MagicMock()
-            mock_pr_obj.mergeable = True
-            mock_pr.return_value = mock_pr_obj
+        with patch.object(workflow, '_detect_git_conflict_markers',
+                         return_value=['src/file1.py', 'src/file2.py']):
 
             result = workflow.check_merge_conflicts_bulletproof(
                 pr_number=42,
@@ -104,7 +107,7 @@ class TestBulletproofMergeDetection:
             assert result["safe_to_merge"] == False, "Should not be safe"
             assert result["layer"] == 2, "Should fail at Layer 2"
             assert 'src/file1.py' in result['details']['conflict_files']
-            print(f"❌ Blocked at Layer 2: {result['reason']}")
+            print(f"Blocked at Layer 2: {result['reason']}")
             print(f"   Conflict files: {result['details']['conflict_files']}")
 
     # ========================================================================
@@ -113,17 +116,16 @@ class TestBulletproofMergeDetection:
     def test_layer3_fails_merge_conflict(self, workflow):
         """Test Layer 3 failure - test merge fails."""
         print("\n" + "=" * 70)
-        print("❌ TEST 4: Layer 3 Fails (Test Merge)")
+        print("TEST 4: Layer 3 Fails (Test Merge)")
         print("=" * 70)
 
-        with patch.object(workflow.github.repo, 'get_pull') as mock_pr, \
-             patch.object(workflow, '_detect_git_conflict_markers', return_value=[]), \
+        mock_pr_obj = MagicMock()
+        mock_pr_obj.mergeable = True
+        workflow.github.repo.get_pull.return_value = mock_pr_obj
+
+        with patch.object(workflow, '_detect_git_conflict_markers', return_value=[]), \
              patch.object(workflow, '_test_merge_locally',
                          return_value={"success": False, "reason": "Merge attempt failed"}):
-
-            mock_pr_obj = MagicMock()
-            mock_pr_obj.mergeable = True
-            mock_pr.return_value = mock_pr_obj
 
             result = workflow.check_merge_conflicts_bulletproof(
                 pr_number=42,
@@ -133,7 +135,7 @@ class TestBulletproofMergeDetection:
             print(f"Result: {result}")
             assert result["safe_to_merge"] == False, "Should not be safe"
             assert result["layer"] == 3, "Should fail at Layer 3"
-            print(f"❌ Blocked at Layer 3: {result['reason']}")
+            print(f"Blocked at Layer 3: {result['reason']}")
 
     # ========================================================================
     # TEST 5: Layer 4 fails - Project validation fails
@@ -141,19 +143,18 @@ class TestBulletproofMergeDetection:
     def test_layer4_fails_validation(self, workflow):
         """Test Layer 4 failure - project validation fails."""
         print("\n" + "=" * 70)
-        print("❌ TEST 5: Layer 4 Fails (Project Validation)")
+        print("TEST 5: Layer 4 Fails (Project Validation)")
         print("=" * 70)
 
-        with patch.object(workflow.github.repo, 'get_pull') as mock_pr, \
-             patch.object(workflow, '_detect_git_conflict_markers', return_value=[]), \
+        mock_pr_obj = MagicMock()
+        mock_pr_obj.mergeable = True
+        workflow.github.repo.get_pull.return_value = mock_pr_obj
+
+        with patch.object(workflow, '_detect_git_conflict_markers', return_value=[]), \
              patch.object(workflow, '_test_merge_locally', return_value={"success": True}), \
              patch.object(workflow, '_detect_project_type', return_value='python'), \
              patch.object(workflow, '_validate_project_after_merge',
                          return_value={"success": False, "reason": "Tests failed"}):
-
-            mock_pr_obj = MagicMock()
-            mock_pr_obj.mergeable = True
-            mock_pr.return_value = mock_pr_obj
 
             result = workflow.check_merge_conflicts_bulletproof(
                 pr_number=42,
@@ -163,7 +164,7 @@ class TestBulletproofMergeDetection:
             print(f"Result: {result}")
             assert result["safe_to_merge"] == False, "Should not be safe"
             assert result["layer"] == 4, "Should fail at Layer 4"
-            print(f"❌ Blocked at Layer 4: {result['reason']}")
+            print(f"Blocked at Layer 4: {result['reason']}")
 
     # ========================================================================
     # TEST 6: Project type detection
@@ -216,16 +217,15 @@ class TestBulletproofMergeDetection:
     def test_detailed_error_reporting(self, workflow):
         """Test that errors include detailed information."""
         print("\n" + "=" * 70)
-        print("✅ TEST 8: Detailed Error Reporting")
+        print("TEST 8: Detailed Error Reporting")
         print("=" * 70)
 
-        with patch.object(workflow.github.repo, 'get_pull') as mock_pr, \
-             patch.object(workflow, '_detect_git_conflict_markers',
-                         return_value=['src/models/user.py', 'src/api/routes.py']):
+        mock_pr_obj = MagicMock()
+        mock_pr_obj.mergeable = True
+        workflow.github.repo.get_pull.return_value = mock_pr_obj
 
-            mock_pr_obj = MagicMock()
-            mock_pr_obj.mergeable = True
-            mock_pr.return_value = mock_pr_obj
+        with patch.object(workflow, '_detect_git_conflict_markers',
+                         return_value=['src/models/user.py', 'src/api/routes.py']):
 
             result = workflow.check_merge_conflicts_bulletproof(
                 pr_number=42,
@@ -236,7 +236,7 @@ class TestBulletproofMergeDetection:
             print(f"Details: {result['details']}")
             assert "conflict_files" in result["details"]
             assert len(result["details"]["conflict_files"]) == 2
-            print("✅ Detailed information provided")
+            print("Detailed information provided")
 
 
 class TestBulletproofSummary:

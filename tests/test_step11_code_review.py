@@ -71,7 +71,7 @@ class TestStep11CodeReview:
         ]
 
         # Act
-        issues = github_workflow._analyze_diff_for_issues(diff_lines)
+        issues = github_workflow._analyze_diff_for_issues("\n".join(diff_lines), diff_lines)
 
         # Assert
         print("\n✅ TEST 2: Issue Detection")
@@ -133,7 +133,7 @@ class TestStep11CodeReview:
         ]
 
         # Act
-        issues = github_workflow._check_python_best_practices(diff_lines)
+        issues = github_workflow._check_python_best_practices("\n".join(diff_lines))
 
         # Assert
         print("\n✅ TEST 4: Python Best Practices")
@@ -177,7 +177,7 @@ class TestStep11CodeReview:
         ]
 
         # Act
-        issues = github_workflow._check_docker_best_practices(diff_lines)
+        issues = github_workflow._check_docker_best_practices("\n".join(diff_lines))
 
         # Assert
         print("\n✅ TEST 6: Docker Best Practices")
@@ -227,7 +227,7 @@ class TestStep11CodeReview:
         diff_lines = [f"+ line {i}" for i in range(600)]
 
         # Act
-        issues = github_workflow._analyze_diff_for_issues(diff_lines)
+        issues = github_workflow._analyze_diff_for_issues("\n".join(diff_lines), diff_lines)
 
         # Assert
         print("\n✅ TEST 8: Large Addition Detection")

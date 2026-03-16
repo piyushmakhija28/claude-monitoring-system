@@ -792,14 +792,20 @@ class TestLevel3GitHubWorkflowDirect(unittest.TestCase):
     def test_step8_create_issue_success(self):
         """step8_create_issue returns issue_number and issue_url on success."""
         router = MagicMock()
-        router.create_issue.return_value = {
-            "success": True,
-            "issue_number": 99,
-            "issue_url": "https://github.com/owner/repo/issues/99",
-            "created_at": "2026-01-01T00:00:00",
-        }
-
         workflow = self._make_workflow(router)
+
+        # step8_create_issue delegates to self.facade (GitHubFacade), not
+        # self.github/router directly.  Replace the facade with a mock that
+        # returns an IssueResult-like object so no real GitHub call is made.
+        facade_result = MagicMock()
+        facade_result.success = True
+        facade_result.number = 99
+        facade_result.url = "https://github.com/owner/repo/issues/99"
+        facade_result.error = None
+
+        workflow.facade = MagicMock()
+        workflow.facade.create_issue.return_value = facade_result
+
         result = workflow.step8_create_issue(
             title="Test Issue",
             description="Test description",
@@ -810,17 +816,21 @@ class TestLevel3GitHubWorkflowDirect(unittest.TestCase):
         self.assertTrue(result["success"])
         self.assertEqual(result["issue_number"], 99)
         self.assertIn("issue_url", result)
-        router.create_issue.assert_called_once()
+        workflow.facade.create_issue.assert_called_once()
 
     def test_step8_create_issue_failure(self):
         """step8_create_issue returns failure result when router fails."""
         router = MagicMock()
-        router.create_issue.return_value = {
-            "success": False,
-            "error": "API rate limit exceeded",
-        }
-
         workflow = self._make_workflow(router)
+
+        # Mock the facade so create_issue returns a failure IssueResult.
+        facade_result = MagicMock()
+        facade_result.success = False
+        facade_result.error = "API rate limit exceeded"
+
+        workflow.facade = MagicMock()
+        workflow.facade.create_issue.return_value = facade_result
+
         result = workflow.step8_create_issue(
             title="Fail Issue",
             description="desc",

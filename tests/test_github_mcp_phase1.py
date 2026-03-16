@@ -20,6 +20,12 @@ try:
     PYGITHUB_AVAILABLE = True
 except ImportError:
     PYGITHUB_AVAILABLE = False
+    # Provide a stub so tests that reference GithubException still work
+    class GithubException(Exception):
+        def __init__(self, status, data=None, headers=None, message=""):
+            self.status = status
+            self.data = data
+            super().__init__(str(status))
 
 # Import modules to test
 import sys
@@ -34,8 +40,16 @@ class TestGitHubMCP:
 
     @pytest.fixture
     def mock_github_mcp(self):
-        """Create mock GitHub MCP for testing."""
-        with patch('langgraph_engine.github_mcp.Github') as mock_github:
+        """Create mock GitHub MCP for testing.
+
+        Uses create=True so the patch works even when PyGithub is not
+        installed and Github/GithubException are absent from the module.
+        Yields to keep patches active for the full duration of each test.
+        """
+        with patch('langgraph_engine.github_mcp.PYGITHUB_AVAILABLE', True), \
+             patch('langgraph_engine.github_mcp.Github', create=True) as mock_github, \
+             patch('langgraph_engine.github_mcp.GithubException',
+                   create=True, new=GithubException):
             # Mock the Github client
             mock_user = Mock()
             mock_user.login = "test_user"
@@ -47,7 +61,7 @@ class TestGitHubMCP:
 
             mcp = GitHubMCP(token="test_token", repo_path=".")
             mcp.repo = mock_repo
-            return mcp
+            yield mcp
 
     def test_create_issue_success(self, mock_github_mcp):
         """Test successful issue creation via MCP."""
