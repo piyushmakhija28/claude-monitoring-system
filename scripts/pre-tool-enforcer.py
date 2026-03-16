@@ -1653,30 +1653,17 @@ def main():
     # This gives pre-tool-enforcer awareness of task type, complexity, skill, model
     flow_ctx = _load_flow_trace_context()
 
-    # INTEGRATION: Load tool optimization policies from scripts/architecture/
-    # This runs before every tool to apply optimizations
-    # L3.6: Tool Usage Optimizer (with retry - 3 attempts, 10s timeout each)
+    # INTEGRATION: Tool optimization via MCP (replaces subprocess call)
+    # L3.6: Token Optimizer MCP - direct import, no subprocess overhead
     try:
-        script_dir = Path(__file__).parent
-        tool_opt_script = script_dir / 'architecture' / '03-execution-system' / '06-tool-optimization' / 'tool-usage-optimization-policy.py'
-        if tool_opt_script.exists():
-            import subprocess
-            _opt_ok = False
-            for _attempt in range(1, 4):
-                try:
-                    _r = subprocess.run([sys.executable, str(tool_opt_script)], timeout=10, capture_output=True)
-                    if _r.returncode == 0:
-                        _opt_ok = True
-                        break
-                    if _attempt < 3:
-                        sys.stdout.write('[RETRY ' + str(_attempt) + '/3] tool-usage-optimizer failed, retrying...\n')
-                except Exception:
-                    if _attempt < 3:
-                        sys.stdout.write('[RETRY ' + str(_attempt) + '/3] tool-usage-optimizer error, retrying...\n')
-            if not _opt_ok:
-                sys.stdout.write('[POLICY-WARN] tool-usage-optimizer failed after 3 retries\n')
-    except:
-        pass  # Policy execution is optional, don't block
+        _src_mcp_dir = Path(__file__).resolve().parent.parent / 'src' / 'mcp'
+        if str(_src_mcp_dir) not in sys.path:
+            sys.path.insert(0, str(_src_mcp_dir))
+        from token_optimization_mcp_server import context_budget_status
+        # Quick health check - if MCP module loads, optimization is available
+        context_budget_status()  # Warm up the module
+    except Exception:
+        pass  # Non-blocking: MCP optimization unavailable
 
     # Read tool info from stdin
     try:
@@ -1700,34 +1687,25 @@ def main():
         try:
             skill_or_agent_name = tool_input.get('skill', tool_input.get('agent', ''))
             if skill_or_agent_name:
-                skill_loader_script = Path(__file__).parent / 'architecture' / \
-                    '03-execution-system' / '05-skill-agent-selection' / 'core-skills-loader.py'
-
-                if skill_loader_script.exists():
-                    # Verify the skill/agent exists locally
-                    result = subprocess.run(
-                        [sys.executable, str(skill_loader_script), skill_or_agent_name],
-                        capture_output=True,
-                        timeout=15
-                    )
-
-                    if result.returncode == 0:
-                        try:
-                            load_info = json.loads(result.stdout)
-                            skill_data = load_info.get('skill_loaded', {})
-                            agent_data = load_info.get('agent_loaded', {})
-
-                            if skill_data.get('loaded') or agent_data.get('loaded'):
-                                hint = f'[VERIFY] {skill_or_agent_name}: Available and ready'
-                                sys.stdout.write(hint + '\n')
-                            elif skill_data.get('status') == 'not_found' or agent_data.get('status') == 'not_found':
-                                # Provide available skills/agents for LLM
-                                available = load_info.get('available_skills', []) or load_info.get('available_agents', [])
-                                if available:
-                                    hint = f'[HINT] {skill_or_agent_name} not found. Available: {", ".join(available[:5])}'
-                                    sys.stdout.write(hint + '\n')
-                        except Exception:
-                            pass  # Non-critical
+                # MCP: Use skill-manager MCP instead of subprocess
+                try:
+                    _src_mcp_dir = Path(__file__).resolve().parent.parent / 'src' / 'mcp'
+                    if str(_src_mcp_dir) not in sys.path:
+                        sys.path.insert(0, str(_src_mcp_dir))
+                    from skill_manager_mcp_server import skill_load, agent_load
+                    load_result = json.loads(skill_load(skill_or_agent_name))
+                    if not load_result.get('success'):
+                        load_result = json.loads(agent_load(skill_or_agent_name))
+                    if load_result.get('success'):
+                        hint = '[VERIFY] ' + skill_or_agent_name + ': Available and ready (MCP)'
+                        sys.stdout.write(hint + '\n')
+                    else:
+                        available = load_result.get('available', [])
+                        if available:
+                            hint = '[HINT] ' + skill_or_agent_name + ' not found. Available: ' + ', '.join(available[:5])
+                            sys.stdout.write(hint + '\n')
+                except Exception:
+                    pass  # Non-critical - fall through
         except Exception:
             pass  # Non-blocking - let tool invocation proceed anyway
 

@@ -867,36 +867,16 @@ def main():
     _track_start_time = datetime.now()
     _sub_operations = []
 
-    # INTEGRATION: Load progress tracking policies from scripts/architecture/
-    # Retry up to 3 times. On 3rd failure, warn but don't hard-break
-    # (PostToolUse runs per-tool, not session-level).
+    # INTEGRATION: Progress tracking via MCP (replaces subprocess call)
+    # Post-tool-tracker MCP provides get_progress_status directly
     try:
-        script_dir = Path(__file__).parent
-        progress_script = script_dir / 'architecture' / '03-execution-system' / '08-progress-tracking' / 'task-progress-tracking-policy.py'
-        if progress_script.exists():
-            import subprocess
-            _prog_ok = False
-            for _attempt in range(1, 4):
-                try:
-                    _r = subprocess.run(
-                        [sys.executable, str(progress_script)],
-                        timeout=10, capture_output=True
-                    )
-                    if _r.returncode == 0:
-                        _prog_ok = True
-                        break
-                    if _attempt < 3:
-                        sys.stderr.write('[RETRY ' + str(_attempt) + '/3] check-incomplete-work failed, retrying...\n')
-                        sys.stderr.flush()
-                except Exception:
-                    if _attempt < 3:
-                        sys.stderr.write('[RETRY ' + str(_attempt) + '/3] check-incomplete-work error, retrying...\n')
-                        sys.stderr.flush()
-            if not _prog_ok:
-                sys.stderr.write('[POLICY-WARN] check-incomplete-work failed after 3 retries\n')
-                sys.stderr.flush()
-    except:
-        pass
+        _src_mcp_dir = Path(__file__).resolve().parent.parent / 'src' / 'mcp'
+        if str(_src_mcp_dir) not in sys.path:
+            sys.path.insert(0, str(_src_mcp_dir))
+        from post_tool_tracker_mcp_server import get_progress_status
+        # Warm up MCP module - progress tracking is now handled by MCP
+    except Exception:
+        pass  # Non-blocking
 
     # Read tool result from stdin
     try:
@@ -1463,20 +1443,27 @@ def main():
                     except Exception:
                         pass  # Never block on GitHub failures
 
-                    # AUTO-COMMIT: Actually trigger auto-commit on task completion
+                    # AUTO-COMMIT: Check via MCP if commit should trigger
                     try:
-                        import subprocess as _subprocess
-                        _script_dir = os.path.dirname(os.path.abspath(__file__))
-                        _commit_enforcer = os.path.join(_script_dir, 'architecture', '03-execution-system', '09-git-commit', 'auto-commit-enforcer.py')
-                        if os.path.exists(_commit_enforcer):
-                            _cr = _subprocess.run(
-                                [sys.executable, _commit_enforcer, '--enforce-now'],
-                                timeout=60, capture_output=True
-                            )
-                            if _cr.returncode == 0:
-                                sys.stderr.write('[POST-TOOL L3.11] Auto-commit enforcer executed successfully\n')
-                            else:
-                                sys.stderr.write('[POST-TOOL L3.11] Auto-commit: no changes to commit or skipped\n')
+                        _src_mcp = Path(__file__).resolve().parent.parent / 'src' / 'mcp'
+                        if str(_src_mcp) not in sys.path:
+                            sys.path.insert(0, str(_src_mcp))
+                        from post_tool_tracker_mcp_server import check_commit_readiness
+                        _commit_check = json.loads(check_commit_readiness())
+                        if _commit_check.get('should_commit'):
+                            sys.stderr.write('[POST-TOOL L3.11] Auto-commit ready: ' + _commit_check.get('reason', '') + '\n')
+                            sys.stderr.flush()
+                            # Fallback to old commit enforcer if it exists
+                            import subprocess as _subprocess
+                            _script_dir = os.path.dirname(os.path.abspath(__file__))
+                            _commit_enforcer = os.path.join(_script_dir, 'architecture', '03-execution-system', '09-git-commit', 'auto-commit-enforcer.py')
+                            if os.path.exists(_commit_enforcer):
+                                _cr = _subprocess.run(
+                                    [sys.executable, _commit_enforcer, '--enforce-now'],
+                                    timeout=60, capture_output=True
+                                )
+                        else:
+                            sys.stderr.write('[POST-TOOL L3.11] Auto-commit: ' + _commit_check.get('reason', 'not ready') + '\n')
                             sys.stderr.flush()
                     except Exception:
                         pass  # Never block on auto-commit

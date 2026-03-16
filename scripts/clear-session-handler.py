@@ -683,6 +683,21 @@ def create_new_session(reason=''):
                      or None when the generator script fails or returns no
                      recognisable session ID.
     """
+    # Primary: MCP session_create (direct import, no subprocess)
+    try:
+        _src_mcp_dir = Path(__file__).resolve().parent.parent / 'src' / 'mcp'
+        if str(_src_mcp_dir) not in sys.path:
+            sys.path.insert(0, str(_src_mcp_dir))
+        from session_hooks import create_session
+        new_session_id = create_session(project="default", prompt=reason or "clear")
+        if new_session_id:
+            log_event(f"New session created: {new_session_id} (reason: {reason}) (MCP)")
+            _reset_session_progress(new_session_id)
+            return new_session_id
+    except Exception:
+        pass  # Fall through to subprocess fallback
+
+    # Fallback: old subprocess call
     sess_script = CURRENT_DIR / 'session-id-generator.py'
     if not sess_script.exists():
         log_event(f"ERROR: session-id-generator.py not found at {sess_script}")
@@ -708,7 +723,6 @@ def create_new_session(reason=''):
 
         if new_session_id:
             log_event(f"New session created: {new_session_id} (reason: {reason})")
-            # Reset session-progress.json so context % starts fresh for new session
             _reset_session_progress(new_session_id)
             return new_session_id
         else:
@@ -879,31 +893,16 @@ def main():
             log_event(f"[FLAG-CLEANUP] Removed {_expired} expired flag(s) "
                       f"older than {FLAG_EXPIRY_MINUTES} minutes")
 
-    # INTEGRATION: Load session management policies from scripts/architecture/
-    # Retry up to 3 times. Warn on failure (session-handler should not hard-break).
+    # INTEGRATION: Session management via MCP (replaces subprocess call)
+    # Session-mgr MCP provides session_load directly - no subprocess needed
     try:
-        script_dir = Path(__file__).parent
-        session_loader = script_dir / 'architecture' / '01-sync-system' / 'session-management' / 'session-loader.py'
-        if session_loader.exists():
-            _sl_ok = False
-            for _attempt in range(1, 4):
-                try:
-                    _r = subprocess.run([sys.executable, str(session_loader)], timeout=10, capture_output=True)
-                    if _r.returncode == 0:
-                        _sl_ok = True
-                        break
-                    if _attempt < 3:
-                        sys.stdout.write('[RETRY ' + str(_attempt) + '/3] session-loader failed, retrying...\n')
-                        sys.stdout.flush()
-                except Exception:
-                    if _attempt < 3:
-                        sys.stdout.write('[RETRY ' + str(_attempt) + '/3] session-loader error, retrying...\n')
-                        sys.stdout.flush()
-            if not _sl_ok:
-                sys.stdout.write('[POLICY-WARN] session-loader failed after 3 retries\n')
-                sys.stdout.flush()
-    except:
-        pass
+        _src_mcp_dir = Path(__file__).resolve().parent.parent / 'src' / 'mcp'
+        if str(_src_mcp_dir) not in sys.path:
+            sys.path.insert(0, str(_src_mcp_dir))
+        from session_mcp_server import session_load
+        # Warm up session MCP module - session loading now handled by MCP
+    except Exception:
+        pass  # Non-blocking: session MCP unavailable, hooks still work
 
     hook_data = read_hook_stdin()
 
