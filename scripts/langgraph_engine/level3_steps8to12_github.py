@@ -858,8 +858,79 @@ IMPORTANT: Respond with ONLY the label name, nothing else. No explanation, no qu
         pr_number: int,
         branch_name: str
     ) -> Dict[str, Any]:
-        """Delegate to :func:`github_merge_validation.check_merge_conflicts_bulletproof`."""
-        return check_merge_conflicts_bulletproof(self.github, self.git, pr_number, branch_name)
+        """Bulletproof 4-layer merge conflict detection.
+
+        Calls self._detect_git_conflict_markers, self._test_merge_locally,
+        self._detect_project_type, self._validate_project_after_merge so
+        that tests can mock individual layers via patch.object.
+        """
+        logger.info("=" * 70)
+        logger.info("BULLETPROOF MERGE CONFLICT DETECTION (4 LAYERS)")
+        logger.info("=" * 70)
+
+        # Layer 1: GitHub API
+        logger.info("[Layer 1] GitHub API Check (pr.mergeable)...")
+        try:
+            pr = self.github.repo.get_pull(pr_number)
+            if not pr.mergeable:
+                logger.error("[Layer 1] FAILED: PR not mergeable")
+                return {
+                    "safe_to_merge": False, "layer": 1,
+                    "reason": "GitHub API: PR has unresolvable conflicts",
+                    "details": {"pr_mergeable": False},
+                }
+            logger.info("[Layer 1] PASSED")
+        except Exception as e:
+            logger.warning(f"[Layer 1] Could not check: {e}")
+
+        # Layer 2: Git conflict markers
+        logger.info("[Layer 2] Git Status Parsing...")
+        conflicts = self._detect_git_conflict_markers(branch_name)
+        if conflicts:
+            logger.error(f"[Layer 2] FAILED: {len(conflicts)} conflicts")
+            return {
+                "safe_to_merge": False, "layer": 2,
+                "reason": f"Git status: {len(conflicts)} files have conflict markers",
+                "details": {"conflict_files": conflicts},
+            }
+        logger.info("[Layer 2] PASSED")
+
+        # Layer 3: Test merge
+        logger.info("[Layer 3] Test Merge...")
+        merge_test = self._test_merge_locally(branch_name)
+        if not merge_test.get("success"):
+            logger.error(f"[Layer 3] FAILED: {merge_test.get('reason')}")
+            return {
+                "safe_to_merge": False, "layer": 3,
+                "reason": merge_test.get("reason"),
+                "details": merge_test.get("details", {}),
+            }
+        logger.info("[Layer 3] PASSED")
+
+        # Layer 4: Project validation
+        logger.info("[Layer 4] Project validation...")
+        project_type = self._detect_project_type()
+        validation = self._validate_project_after_merge(project_type)
+        if not validation.get("success"):
+            logger.error(f"[Layer 4] FAILED: {validation.get('reason')}")
+            return {
+                "safe_to_merge": False, "layer": 4,
+                "reason": validation.get("reason"),
+                "details": validation.get("details", {}),
+            }
+        logger.info("[Layer 4] PASSED")
+
+        logger.info("ALL 4 LAYERS PASSED - SAFE TO MERGE")
+        return {
+            "safe_to_merge": True, "layer": 4,
+            "reason": "All merge safety checks passed",
+            "details": {
+                "layer1": "GitHub API check passed",
+                "layer2": "No git conflict markers",
+                "layer3": "Test merge succeeded",
+                "layer4": f"Project validation passed ({project_type})",
+            },
+        }
 
     def _detect_git_conflict_markers(self, branch_name: str) -> List[str]:
         """Delegate to :func:`github_merge_validation.detect_git_conflict_markers`."""

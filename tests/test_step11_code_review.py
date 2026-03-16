@@ -88,11 +88,13 @@ class TestStep11CodeReview:
     # ========================================================================
     def test_code_review_fail_safe_on_exception(self, github_workflow):
         """Test that code review blocks merge when exception occurs."""
-        print("\n🔴 TEST 3: FAIL-SAFE Exception Handling (CRITICAL)")
+        print("\nTEST 3: FAIL-SAFE Exception Handling (CRITICAL)")
 
-        # Mock to force exception
-        with patch.object(github_workflow, '_analyze_diff_for_issues',
-                         side_effect=Exception("Network timeout")):
+        # Patch the module-level function (standalone, not instance method)
+        # because _run_code_review delegates to run_code_review() which calls
+        # analyze_diff_for_issues() directly from the module, not via self.
+        with patch('langgraph_engine.github_code_review.analyze_diff_for_issues',
+                   side_effect=Exception("Network timeout")):
 
             # Act
             result = github_workflow._run_code_review(
