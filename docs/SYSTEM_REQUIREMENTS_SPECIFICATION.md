@@ -1,6 +1,6 @@
 # Claude Workflow Engine v7.5.0 - System Requirements Specification
 
-**Document Version:** 2.0
+**Document Version:** 3.0
 **Release Date:** 2026-03-16
 **Last Updated:** 2026-03-16
 **Classification:** Enterprise-Grade System Documentation
@@ -10,22 +10,28 @@
 
 ## 1. Executive Summary
 
-Claude Workflow Engine v7.3.0 is a 3-level LangGraph-based orchestration pipeline for automating Claude Code development workflows. It provides 10 FastMCP servers (95 tools), 72 LangGraph engine modules, 43 policy definitions, and a comprehensive hook system for pre/post tool enforcement.
+Claude Workflow Engine v7.5.0 is a 3-level LangGraph-based orchestration pipeline for automating Claude Code development workflows. It provides 11 FastMCP servers (103 tools), 75 LangGraph engine modules, 83 architecture modules, 44 policy definitions, a RAG integration layer with 4 Vector DB collections, and a comprehensive hook system for pre/post tool enforcement.
 
 ### Key Statistics
 
 | Metric | Value |
 |--------|-------|
 | **Version** | 7.5.0 |
-| **MCP Servers** | 10 |
-| **MCP Tools** | 95 |
-| **LangGraph Modules** | 72 |
+| **Pipeline Levels** | 4 (Level -1, Level 1, Level 2, Level 3) |
+| **Execution Steps** | 15 (Step 0 through Step 14) |
+| **MCP Servers** | 11 |
+| **MCP Tools** | 103 |
+| **LangGraph Engine Modules** | 75 (70 root + 5 subgraphs) |
 | **Architecture Modules** | 83 |
-| **Policy Files** | 43 |
-| **Test Files** | 30 |
-| **Tests Passing** | 476 |
-| **MCP Server LOC** | 7,235 |
-| **Total Project LOC** | ~86,000+ |
+| **Policy Files** | 44 (43 .md + 1 .json) |
+| **Test Files** | 45 |
+| **Total Python Files** | 258 |
+| **MCP Server LOC** | 8,400+ |
+| **Total Project LOC** | ~95,000+ |
+| **RAG Collections** | 4 |
+| **LLM Providers** | 4 (Ollama, Claude CLI, Anthropic API, OpenAI) |
+| **Coding Standards** | 5 rule files |
+| **Documentation Files** | 40 |
 
 ---
 
@@ -33,7 +39,7 @@ Claude Workflow Engine v7.3.0 is a 3-level LangGraph-based orchestration pipelin
 
 ### 2.1 Purpose
 
-Claude Workflow Engine orchestrates the complete lifecycle of Claude Code task execution - from prompt analysis to PR creation. It enforces coding standards, manages sessions across multiple windows, provides intelligent model routing, and optimizes token usage by 60-85%.
+Claude Workflow Engine orchestrates the complete lifecycle of Claude Code task execution - from prompt analysis to PR creation. It enforces coding standards, manages sessions across multiple windows, provides intelligent model routing, optimizes token usage by 60-85%, and uses RAG-powered decision caching to skip redundant LLM calls.
 
 ### 2.2 Scope
 
@@ -42,22 +48,27 @@ The system covers:
 - Coding standards detection and enforcement
 - 14-step task execution pipeline (Step 0 to Step 14)
 - Pre/post tool enforcement hooks
-- Git and GitHub automation (branch, commit, PR, merge)
+- Git and GitHub automation (branch, commit, PR, merge, issue lifecycle)
 - LLM provider routing (Ollama, Claude CLI, Anthropic API, OpenAI)
 - Token optimization (AST navigation, context deduplication, smart reads)
 - Skill/agent lifecycle management
+- RAG integration with Vector DB for decision caching
+- Cross-session learning and pattern detection
 
 ### 2.3 Definitions
 
 | Term | Definition |
 |------|-----------|
-| MCP Server | FastMCP-based tool server communicating via JSON-RPC over stdio |
-| Level -1 | Auto-fix layer (encoding, Unicode, Windows path checks) |
-| Level 1 | Sync system (session, context, TOON compression) |
-| Level 2 | Standards system (project detection, framework standards, conflict resolution) |
-| Level 3 | Execution system (14-step pipeline from task analysis to PR creation) |
-| Hook Mode | Steps 0-7 in PreToolUse hook, Steps 8-14 deferred to Stop hook |
-| Full Mode | Steps 0-14 run sequentially without user interaction |
+| **MCP Server** | FastMCP-based tool server communicating via JSON-RPC over stdio |
+| **Level -1** | Auto-fix layer (encoding, Unicode, Windows path checks) |
+| **Level 1** | Sync system (session, context, complexity, TOON compression) |
+| **Level 2** | Standards system (project detection, framework standards, tool optimization, MCP discovery) |
+| **Level 3** | Execution system (14-step pipeline from task analysis to PR creation) |
+| **Hook Mode** | Steps 0-7 in PreToolUse hook, Steps 8-14 deferred to Stop hook |
+| **Full Mode** | Steps 0-14 run sequentially without user interaction |
+| **TOON** | Compressed context object (10x token reduction) |
+| **RAG** | Retrieval-Augmented Generation - vector similarity lookup before LLM calls |
+| **FlowState** | TypedDict state definition flowing through the LangGraph StateGraph |
 
 ---
 
@@ -66,74 +77,132 @@ The system covers:
 ### 3.1 Pipeline Architecture
 
 ```
-Level -1: Auto-Fix (encoding, Unicode, Windows path)
+USER PROMPT
     |
-Level 1: Sync (session load, context, TOON compression)
+    v
+Level -1: Auto-Fix Enforcement
+    |-- Check 1: node_unicode_fix (UTF-8 encoding on Windows)
+    |-- Check 2: node_encoding_validation (ASCII-only .py files)
+    |-- Check 3: node_windows_path_check (forward slashes)
+    |-- Merge: level_minus1_merge_node
+    |-- On failure: Interactive auto-fix or skip (max 3 retries)
     |
-Level 2: Standards (project detect, framework standards, conflict resolve)
+    v
+Level 1: Context Sync (5-step with parallel execution)
+    |-- Step 1: node_session_loader (MUST BE FIRST)
+    |-- Step 2: PARALLEL [node_complexity_calculation + node_context_loader]
+    |-- Step 3: node_toon_compression (compress + clear memory)
+    |-- Step 4: level1_merge_node (output TOON only)
+    |-- Step 5: cleanup_level1_memory (free RAM)
     |
-Level 3: Execution (14-step pipeline)
+    v
+Level 2: Standards System (5 nodes)
+    |-- Node 1: detect_project_type (Python/Java/JS/TS/Go/Rust...)
+    |-- Node 2: node_common_standards (shared coding conventions)
+    |-- Node 3: node_java_standards (conditional - Java/Spring only)
+    |-- Node 4: node_tool_optimization_standards (tool usage policies)
+    |-- Node 5: node_mcp_plugin_discovery (register MCP plugins)
+    |
+    v
+Level 3: 14-Step Execution Pipeline
     |-- Step 0:  Task Analysis + Prompt Generation
     |-- Step 1:  Plan Mode Decision
-    |-- Step 2:  Plan Execution (conditional)
-    |-- Step 3:  Task Breakdown
-    |-- Step 4:  Model Selection
-    |-- Step 5:  Skill/Agent Selection
-    |-- Step 6:  Skill Validation
-    |-- Step 7:  Context Reading + Prompt Synthesis
+    |-- Step 2:  Plan Execution (conditional - complexity-based model)
+    |-- Step 3:  Task/Phase Breakdown
+    |-- Step 4:  TOON Refinement
+    |-- Step 5:  Skill & Agent Selection (RAG cross-session boost)
+    |-- Step 6:  Skill Validation & Download
+    |-- Step 7:  Final Prompt Generation (3 files)
+    |   [Hook Mode: output to Claude here]
     |-- Step 8:  GitHub Issue Creation
-    |-- Step 9:  Branch Creation + Git Commit
-    |-- Step 10: Implementation
-    |-- Step 11: Pull Request (with code review loop)
-    |-- Step 12: Issue Closure
-    |-- Step 13: Documentation Update
-    |-- Step 14: Final Summary
+    |-- Step 9:  Branch Creation + Git Setup
+    |-- Step 10: Implementation Execution
+    |-- Step 11: Pull Request & Code Review (review loop)
+    |-- Step 12: Issue Closure (detailed comment)
+    |-- Step 13: Documentation Update (SRS, README, CLAUDE.md)
+    |-- Step 14: Final Summary (narrative + voice)
+    |
+    v
+RESULT (flow-trace.json + session finalized)
 ```
 
-### 3.2 MCP Server Architecture (10 Servers, 95 Tools)
+### 3.2 MCP Server Architecture (11 Servers, 103 Tools)
 
 All servers use FastMCP framework, communicate via stdio, and are registered in `~/.claude/settings.json`.
 
 | # | Server | File | Tools | Purpose |
 |---|--------|------|-------|---------|
-| 1 | git-ops | git_mcp_server.py | 14 | Git operations (branch, commit, push, pull, stash, log, post-merge cleanup, origin URL) |
-| 2 | github-api | github_mcp_server.py | 12 | GitHub (create/close issue, PR, merge with gh CLI fallback, label, build validate, merge cycle) |
-| 3 | session-mgr | session_mcp_server.py | 14 | Session lifecycle (create with ID gen, chain parent/child, tag with auto-extract, accumulate, finalize, work items, search) |
-| 4 | policy-enforcement | enforcement_mcp_server.py | 10 | Policy compliance (enforce steps 0-13, flow-trace recording, compliance verify, module health, MCP health check) |
-| 5 | llm-provider | llm_mcp_server.py | 8 | LLM access (4 providers, hybrid GPU-first routing, model selection, discover models, commit title gen) |
-| 6 | token-optimizer | token_optimization_mcp_server.py | 10 | Token reduction (optimize any tool call, AST code nav, smart read, context dedup, budget monitor) |
-| 7 | pre-tool-gate | pre_tool_gate_mcp_server.py | 8 | Pre-tool validation (8 policy checks, task breakdown flag, skill flag, level completion, failure patterns, skill hints) |
-| 8 | post-tool-tracker | post_tool_tracker_mcp_server.py | 6 | Post-tool tracking (usage logging, progress increment, flag clearing, commit readiness, tool stats) |
-| 9 | standards-loader | standards_loader_mcp_server.py | 6 | Standards (project type detect, framework detect, load from 4 sources, conflict resolve, list available) |
-| 10 | skill-manager | skill_manager_mcp_server.py | 8 | Skill lifecycle (load all/single, search, validate caps, rank, conflict detect, agent load) |
+| 1 | **git-ops** | git_mcp_server.py | 14 | Git operations (branch, commit, push, pull, stash, log, diff, fetch, post-merge cleanup, origin URL) |
+| 2 | **github-api** | github_mcp_server.py | 12 | GitHub (create/close issue, PR, merge with gh CLI fallback, label, build validate, full merge cycle, issue branch) |
+| 3 | **session-mgr** | session_mcp_server.py | 14 | Session lifecycle (create with ID gen, chain parent/child, tag with auto-extract, accumulate, finalize, work items, search, archive) |
+| 4 | **policy-enforcement** | enforcement_mcp_server.py | 10 | Policy compliance (enforce steps 0-13, flow-trace recording, compliance verify, module health, all-server health check) |
+| 5 | **llm-provider** | llm_mcp_server.py | 8 | LLM access (4 providers: Ollama/Claude CLI/Anthropic/OpenAI, hybrid GPU-first routing, model selection, discover models, commit title gen) |
+| 6 | **token-optimizer** | token_optimization_mcp_server.py | 10 | Token reduction (optimize any tool call, AST code navigation for Java/Python/TS/JS, smart read, context dedup, budget monitor) |
+| 7 | **pre-tool-gate** | pre_tool_gate_mcp_server.py | 8 | Pre-tool validation (8 policy checks, task breakdown flag, skill flag, level completion, failure patterns, skill hints) |
+| 8 | **post-tool-tracker** | post_tool_tracker_mcp_server.py | 6 | Post-tool tracking (usage logging, progress increment, flag clearing, commit readiness, tool stats) |
+| 9 | **standards-loader** | standards_loader_mcp_server.py | 7 | Standards discovery (project type detect, framework detect, load from 4 sources with priority, conflict resolve, hot-reload, list available) |
+| 10 | **skill-manager** | skill_manager_mcp_server.py | 8 | Skill lifecycle (load all/single, search by keyword/tag, validate capabilities, rank by relevance, conflict detect, agent load) |
+| 11 | **vector-db** | vector_db_mcp_server.py | 11 | Vector RAG (Qdrant backend, 4 collections, semantic search, bulk index, node decision storage, similar lookup, collection stats) |
 
-### 3.3 Hook System
+### 3.3 RAG Integration Architecture
+
+```
+Every LangGraph Node:
+  1. BEFORE LLM call: RAG lookup in node_decisions collection
+     - If confidence >= step threshold: return cached decision (skip LLM)
+     - If confidence < threshold: proceed with LLM call
+  2. AFTER node completes: Store decision in Vector DB
+
+Step-Specific Confidence Thresholds:
+  Step 0  (Task Analysis):     0.85
+  Step 1  (Plan Decision):     0.80
+  Step 2  (Plan Execution):    0.88
+  Step 5  (Skill Selection):   0.82
+  Step 7  (Final Prompt):      0.90
+  Step 8  (Issue Label):       0.78
+  Step 11 (PR Review):         0.85
+  Step 13 (Docs Update):       0.80
+  Step 14 (Summary):           0.75
+
+Vector DB Collections (Qdrant):
+  1. node_decisions  - Per-node decision history with full context
+  2. sessions        - Session-level summaries
+  3. flow_traces     - Step-level execution data
+  4. tool_calls      - Tool usage patterns
+```
+
+### 3.4 Hook System Architecture
 
 | Hook | Script | MCP Integration | Trigger |
 |------|--------|-----------------|---------|
-| UserPromptSubmit | script-chain-executor.py -> 3-level-flow.py | session_hooks.accumulate_request() | Every user message |
-| PreToolUse | pre-tool-enforcer.py | token-optimizer, skill-manager MCP imports | Before every tool call |
-| PostToolUse | post-tool-tracker.py | post-tool-tracker MCP imports | After every tool call |
-| Stop | stop-notifier.py | session_hooks.finalize_session() | Session end |
+| **UserPromptSubmit** | script-chain-executor.py -> 3-level-flow.py | session_hooks.accumulate_request() | Every user message |
+| **PreToolUse** | pre-tool-enforcer.py | token-optimizer, skill-manager MCP imports | Before every tool call |
+| **PostToolUse** | post-tool-tracker.py | post-tool-tracker MCP imports | After every tool call |
+| **Stop** | stop-notifier.py | session_hooks.finalize_session() | Session end (auto PR + Steps 12-14) |
 
-### 3.4 Directory Structure
+### 3.5 Directory Structure
 
 ```
-/
-+-- scripts/                  # Pipeline scripts and hooks
-|   +-- langgraph_engine/     # Core LangGraph orchestration (72 modules)
-|   +-- architecture/         # Architecture system (83 modules)
-|   +-- sync-version.py       # VERSION -> docs version sync
-|   +-- generate-mcp-docs.py  # Auto-generate MCP tool reference
-+-- policies/                 # 43 policy definitions
-|   +-- 01-sync-system/       # Level 1 policies
-|   +-- 02-standards/         # Level 2 policies
-|   +-- 03-execution/         # Level 3 policies (14 steps)
-+-- src/mcp/                  # 10 FastMCP servers (95 tools, 7,235 LOC)
-|   +-- session_hooks.py      # Bridge: direct Python import for MCP tools
-+-- tests/                    # Test suite (476 tests, 30 files)
-+-- docs/                     # Documentation (40+ files)
-+-- VERSION                   # Single source of truth for version (7.3.0)
+claude-insight/
++-- scripts/                          # Pipeline scripts and hooks
+|   +-- langgraph_engine/             # Core orchestration (75 modules)
+|   |   +-- orchestrator.py           # Main StateGraph pipeline
+|   |   +-- flow_state.py             # FlowState TypedDict
+|   |   +-- rag_integration.py        # RAG layer
+|   |   +-- subgraphs/               # 5 subgraph modules
+|   +-- architecture/                 # Architecture system (83 modules)
++-- policies/                         # 44 policy definitions
+|   +-- 01-sync-system/               # Level 1 policies
+|   +-- 02-standards-system/          # Level 2 policies
+|   +-- 03-execution-system/          # Level 3 policies (14 steps)
+|   +-- testing/                      # Test case policies
++-- src/mcp/                          # 11 FastMCP servers (103 tools, 8,400+ LOC)
+|   +-- session_hooks.py              # Bridge: direct Python import for MCP tools
++-- tests/                            # 45 test files
+|   +-- integration/                  # 2 integration test suites
++-- docs/                             # 40 documentation files
++-- rules/                            # 5 coding standard definitions
++-- VERSION                           # Single source of truth (7.5.0)
 ```
 
 ---
@@ -152,6 +221,12 @@ All servers use FastMCP framework, communicate via stdio, and are registered in 
 | FR-SESSION-06 | Generate comprehensive markdown summary on close | session_finalize | Done |
 | FR-SESSION-07 | Track work items within sessions | session_add_work_item | Done |
 | FR-SESSION-08 | Archive sessions older than N days | session_archive | Done |
+| FR-SESSION-09 | Search sessions by tag, date, content | session_search | Done |
+| FR-SESSION-10 | List all active sessions with metadata | session_list | Done |
+| FR-SESSION-11 | Save session state to disk | session_save | Done |
+| FR-SESSION-12 | Load session state from disk | session_load | Done |
+| FR-SESSION-13 | Query session data by key path | session_query | Done |
+| FR-SESSION-14 | Complete work items with status | session_complete_work_item | Done |
 
 ### 4.2 Policy Enforcement (FR-POLICY)
 
@@ -165,6 +240,8 @@ All servers use FastMCP framework, communicate via stdio, and are registered in 
 | FR-POLICY-06 | Block non-ASCII in .py files on Windows | validate_tool_call | Done |
 | FR-POLICY-07 | Auto-expire stale flags after 90 seconds | _check_flag_with_ttl | Done |
 | FR-POLICY-08 | Record policy execution to flow-trace.json | record_policy_execution | Done |
+| FR-POLICY-09 | Verify compliance across all policy steps | verify_compliance | Done |
+| FR-POLICY-10 | Check module health (all MCP servers) | check_all_mcp_servers_health | Done |
 
 ### 4.3 LLM Provider Management (FR-LLM)
 
@@ -177,6 +254,7 @@ All servers use FastMCP framework, communicate via stdio, and are registered in 
 | FR-LLM-05 | Intelligent model selection by complexity | llm_select_model | Done |
 | FR-LLM-06 | Auto-discover local Ollama models | llm_discover_models | Done |
 | FR-LLM-07 | Generate commit titles from staged diff | llm_git_commit_title | Done |
+| FR-LLM-08 | Health check with async inference test | llm_health_check | Done |
 
 ### 4.4 Token Optimization (FR-TOKEN)
 
@@ -206,10 +284,13 @@ All servers use FastMCP framework, communicate via stdio, and are registered in 
 
 | ID | Requirement | MCP Tool | Status |
 |----|-------------|----------|--------|
-| FR-STD-01 | Detect project type (10 languages) | detect_project_type | Done |
+| FR-STD-01 | Detect project type (10+ languages) | detect_project_type | Done |
 | FR-STD-02 | Detect framework within language | detect_framework | Done |
 | FR-STD-03 | Load from 4 sources with priority (custom>team>framework>language) | load_standards | Done |
 | FR-STD-04 | Priority-based conflict resolution | resolve_standard_conflicts | Done |
+| FR-STD-05 | Hot-reload standards on change | hot_reload_standards | Done |
+| FR-STD-06 | List all available standards | list_available_standards | Done |
+| FR-STD-07 | Tool optimization standards loading | load_tool_optimization | Done |
 
 ### 4.7 Skill Management (FR-SKILL)
 
@@ -220,6 +301,39 @@ All servers use FastMCP framework, communicate via stdio, and are registered in 
 | FR-SKILL-03 | Validate skill against required capabilities | skill_validate | Done |
 | FR-SKILL-04 | Rank skills by task relevance | skill_rank | Done |
 | FR-SKILL-05 | Detect conflicts (exclusive, domain, explicit) | skill_detect_conflicts | Done |
+
+### 4.8 RAG & Vector DB (FR-RAG) - NEW in v7.5.0
+
+| ID | Requirement | MCP Tool | Status |
+|----|-------------|----------|--------|
+| FR-RAG-01 | Store node decisions with full context in Vector DB | vector_bulk_index | Done |
+| FR-RAG-02 | Semantic similarity search across decisions | vector_search_similar | Done |
+| FR-RAG-03 | Per-step confidence thresholds for RAG reuse | rag_integration.py | Done |
+| FR-RAG-04 | 4 collections: node_decisions, sessions, flow_traces, tool_calls | vector_db_mcp_server.py | Done |
+| FR-RAG-05 | Skip LLM call when RAG confidence >= threshold | rag_integration.py | Done |
+| FR-RAG-06 | Cross-session learning for skill selection | rag_integration.py | Done |
+| FR-RAG-07 | Bulk indexing for batch operations | vector_bulk_index | Done |
+| FR-RAG-08 | Collection statistics and health monitoring | vector_collection_stats | Done |
+
+### 4.9 Level 3 Execution Steps (FR-EXEC)
+
+| ID | Step | Requirement | Status |
+|----|------|-------------|--------|
+| FR-EXEC-00 | Step 0 | Task analysis: type classification + complexity scoring + initial breakdown | Done |
+| FR-EXEC-01 | Step 1 | Plan mode decision based on TOON + complexity | Done |
+| FR-EXEC-02 | Step 2 | Plan execution with complexity-based model selection (Haiku/Sonnet/Opus) | Done |
+| FR-EXEC-03 | Step 3 | Task/phase breakdown with dependencies and execution order | Done |
+| FR-EXEC-04 | Step 4 | TOON refinement: keep essentials, delete intermediates | Done |
+| FR-EXEC-05 | Step 5 | Skill & agent selection with RAG cross-session boost | Done |
+| FR-EXEC-06 | Step 6 | Skill validation and download of missing skills | Done |
+| FR-EXEC-07 | Step 7 | Final prompt generation (3 files: system, user, combined) | Done |
+| FR-EXEC-08 | Step 8 | GitHub issue creation with label classification | Done |
+| FR-EXEC-09 | Step 9 | Branch creation ({label}/issue-{id}) with stash safety | Done |
+| FR-EXEC-10 | Step 10 | Implementation execution with tool optimization | Done |
+| FR-EXEC-11 | Step 11 | PR creation + automated code review loop | Done |
+| FR-EXEC-12 | Step 12 | Issue closure with detailed implementation comment | Done |
+| FR-EXEC-13 | Step 13 | Documentation update (SRS, README, CLAUDE.md) | Done |
+| FR-EXEC-14 | Step 14 | Final summary generation (narrative format) | Done |
 
 ---
 
@@ -232,8 +346,11 @@ All servers use FastMCP framework, communicate via stdio, and are registered in 
 | NFR-PERF-01 | MCP tool call latency | <50ms per call | Done |
 | NFR-PERF-02 | Token reduction on tool calls | 60-85% savings | Done |
 | NFR-PERF-03 | AST navigation vs full read savings | 80-95% savings | Done |
-| NFR-PERF-04 | Test suite execution time | <20 seconds | Done (15.87s) |
+| NFR-PERF-04 | Test suite execution time | <20 seconds | Done |
 | NFR-PERF-05 | Hook subprocess elimination | MCP direct imports | Done |
+| NFR-PERF-06 | Level 1 parallel execution speedup | ~4x (8s -> 2s) | Done |
+| NFR-PERF-07 | RAG lookup latency | <100ms per lookup | Done |
+| NFR-PERF-08 | TOON compression ratio | 10x token reduction | Done |
 
 ### 5.2 Compatibility
 
@@ -243,6 +360,7 @@ All servers use FastMCP framework, communicate via stdio, and are registered in 
 | NFR-COMPAT-02 | Python 3.8+ | Done |
 | NFR-COMPAT-03 | ASCII-only in all Python files | Done |
 | NFR-COMPAT-04 | Cross-platform paths via path_resolver.py | Done |
+| NFR-COMPAT-05 | LangGraph 1.0.10+ | Done |
 
 ### 5.3 Reliability
 
@@ -253,6 +371,9 @@ All servers use FastMCP framework, communicate via stdio, and are registered in 
 | NFR-REL-03 | Fallback paths (MCP fail -> subprocess) | Done |
 | NFR-REL-04 | Auto-expire stale flags (60min/90sec TTL) | Done |
 | NFR-REL-05 | Atomic file writes (.tmp -> rename) | Done |
+| NFR-REL-06 | MemorySaver checkpointing for recovery | Done |
+| NFR-REL-07 | Graceful degradation when Vector DB unavailable | Done |
+| NFR-REL-08 | Max 3 retry attempts for Level -1 auto-fix | Done |
 
 ### 5.4 Maintainability
 
@@ -260,22 +381,126 @@ All servers use FastMCP framework, communicate via stdio, and are registered in 
 |----|-------------|--------|
 | NFR-MAINT-01 | Single VERSION file as source of truth | Done |
 | NFR-MAINT-02 | Auto-doc generation from @mcp.tool() decorators | Done |
-| NFR-MAINT-03 | 476 tests with 100% pass rate | Done |
-| NFR-MAINT-04 | MCP health check for all 10 servers | Done |
+| NFR-MAINT-03 | Comprehensive test suite (45 files) | Done |
+| NFR-MAINT-04 | MCP health check for all 11 servers | Done |
+| NFR-MAINT-05 | Structured error hierarchy (WorkflowEngineError) | Done |
+| NFR-MAINT-06 | Lazy imports to avoid import-time side effects | Done |
+
+### 5.5 Security
+
+| ID | Requirement | Status |
+|----|-------------|--------|
+| NFR-SEC-01 | No secrets in committed files | Done |
+| NFR-SEC-02 | GitHub token via environment variable only | Done |
+| NFR-SEC-03 | Stash safety before branch operations | Done |
+| NFR-SEC-04 | Input validation on all MCP tool parameters | Done |
 
 ---
 
-## 6. Version History
+## 6. LangGraph Engine Modules (75 total)
+
+### 6.1 Core Modules
+
+| Module | File | Size | Purpose |
+|--------|------|------|---------|
+| Orchestrator | orchestrator.py | 59K | Main StateGraph with all routing |
+| FlowState | flow_state.py | 45K | TypedDict state definition |
+| RAG Integration | rag_integration.py | 16K | Vector DB decision caching |
+| Hybrid Inference | hybrid_inference.py | 31K | GPU-first LLM routing |
+| Skill Manager | skill_manager.py | 30K | Skill lifecycle management |
+| Conflict Resolver | conflict_resolver.py | 27K | Skill/standard conflict resolution |
+| Documentation Generator | documentation_generator.py | 29K | Auto-documentation |
+| Performance Benchmarks | performance_benchmarks.py | 26K | Benchmark collection |
+| Review Criteria | review_criteria.py | 27K | Code review rules |
+
+### 6.2 Subgraph Modules
+
+| Module | File | Size | Purpose |
+|--------|------|------|---------|
+| Level -1 | level_minus1.py | 28K | Auto-fix enforcement (3 checks) |
+| Level 1 | level1_sync.py | 37K | Context sync + TOON compression |
+| Level 2 | level2_standards.py | 15K | Standards loading with conditionals |
+| Level 3 v1 | level3_execution.py | 97K | Original 14-step pipeline |
+| Level 3 v2 | level3_execution_v2.py | 36K | Refactored v2 with RAG integration |
+
+---
+
+## 7. Architecture Module Breakdown (83 total)
+
+### 7.1 Sync System (01-sync-system)
+
+| Subsystem | Modules | Purpose |
+|-----------|---------|---------|
+| Context Management | 3 | Context monitor, pruning, management policy |
+| Pattern Detection | 3 | Cross-project patterns, detection, application |
+| Session Management | 11 | Full session lifecycle (create, chain, search, archive) |
+| User Preferences | 5 | Preference detection, tracking, loading |
+
+### 7.2 Standards System (02-standards-system)
+
+| Module | Purpose |
+|--------|---------|
+| coding-standards-enforcement-policy.py | Main enforcement logic |
+| common-standards-policy.py | Shared standards across languages |
+| standards-loader.py | Standards file discovery and loading |
+
+### 7.3 Execution System (03-execution-system)
+
+| Subsystem | Modules | Purpose |
+|-----------|---------|---------|
+| Code Graph Analysis | 1 | NetworkX-based code graph analysis (32K) |
+| Context Reading | 1 | Project context reader |
+| Prompt Generation | 5 | Prompt gen, AI task detection, anti-hallucination |
+| Task Breakdown | 4 | Auto-analysis, tracking, phase enforcement |
+| Plan Mode | 4 | Plan suggestion, decision, session archival |
+| Model Selection | 6 | Intelligent model selector, decision engine (85K) |
+| Skill/Agent Selection | 8 | Adaptive registry, auto-selection (54K) |
+| Tool Optimization | 8 | AST navigator, smart read, interceptor (100K) |
+| Progress Tracking | 4 | Task phase enforcement, progress tracking |
+| Git Commit | 3 | Auto-commit policy, version release (80K) |
+| Session Save | 1 | Session step |
+| Failure Prevention | 3 | Common failures prevention (84K), failure KB |
+| GitHub Integration | 5 | Branch, issue, PR, implementation, close |
+
+---
+
+## 8. Test Coverage
+
+### 8.1 Test Files (45 total)
+
+| Category | Files | Purpose |
+|----------|-------|---------|
+| MCP Server Tests | 10 | Individual server validation |
+| Integration Tests | 5 | Cross-component testing |
+| Engine Tests | 4 | LangGraph engine validation |
+| Feature Tests | 12 | Specific feature testing |
+| Robustness Tests | 4 | Error handling, retry, failure |
+| Full Pipeline | 2 | End-to-end 14-step + failure scenarios |
+| Utility Tests | 8 | Architecture, session, standards |
+
+### 8.2 Integration Test Suites
+
+| File | Size | Purpose |
+|------|------|---------|
+| test_all_14_steps.py | 62K | Complete 14-step pipeline validation |
+| test_failure_scenarios.py | 57K | Comprehensive failure scenario testing |
+
+---
+
+## 9. Version History
 
 | Version | Date | Changes |
 |---------|------|---------|
-| 7.3.0 | 2026-03-16 | 10 MCP servers (95 tools), hook migration, dynamic versioning |
+| **7.5.0** | 2026-03-16 | RAG integration, 11th MCP server (vector-db, 11 tools), cross-session learning, 103 total tools, stop hook autonomy, module refactoring |
+| 7.4.0 | 2026-03-16 | Dynamic versioning, SRS rewrite, MCP health checks, auto-doc generator |
+| 7.3.0 | 2026-03-16 | 10 MCP servers (91 tools), hook migration to MCP direct imports, 476 tests |
+| 7.2.0 | 2026-03-15 | 7 design patterns, Anthropic API as 4th LLM provider, strategy pattern |
 | 5.7.0 | 2026-03-14 | Monitoring system removed, workflow-only repo |
 | 5.6.0 | 2026-03-14 | LangGraph orchestration pipeline |
 | 5.0.0 | 2026-03-10 | Initial unified policy enforcement framework |
 
 ---
 
-**Document Version:** 2.0 | **Last Updated:** 2026-03-16
+**Document Version:** 3.0 | **Last Updated:** 2026-03-16
 
 *Version synced from VERSION file via scripts/sync-version.py*

@@ -2,54 +2,87 @@
 
 **Project:** Claude Workflow Engine
 **Version:** 7.5.0
-**Type:** LangGraph Orchestration Pipeline
+**Type:** LangGraph Orchestration Pipeline with RAG
 **Last Updated:** 2026-03-16
 
 ---
 
 ## Project Overview
 
-Claude Workflow Engine is a 3-level LangGraph-based orchestration pipeline for automating Claude Code development workflows. It handles session sync, coding standards enforcement, and end-to-end 14-step task execution with GitHub integration.
+Claude Workflow Engine is a 3-level LangGraph-based orchestration pipeline for automating Claude Code development workflows. It handles session sync, coding standards enforcement, and end-to-end 14-step task execution with GitHub integration, RAG-powered decision caching, and hybrid LLM inference across 4 providers.
 
 ### Quick Info
 
 | Property | Value |
 |----------|-------|
 | **Languages** | Python |
-| **Frameworks** | LangGraph, LangChain |
+| **Frameworks** | LangGraph 1.0.10+, LangChain, FastMCP, Qdrant |
 | **Status** | Active Development |
 | **Primary Location** | scripts/langgraph_engine/ |
+| **MCP Servers** | 11 (103 tools) |
+| **Total Python Files** | 258 |
+| **Test Files** | 45 |
 
 ---
 
 ## Architecture & Structure
 
+### Pipeline Flow
+
+```
+Level -1: Auto-Fix (3 checks: Unicode, encoding, paths)
+    |
+Level 1: Sync (session + parallel [complexity, context] + TOON compress)
+    |
+Level 2: Standards (common + conditional Java + tool opt + MCP discovery)
+    |
+Level 3: Execution (15 steps: Step 0 through Step 14)
+    |-- Step 0:  Task Analysis + Prompt Generation
+    |-- Step 1:  Plan Mode Decision
+    |-- Step 2:  Plan Execution (conditional, complexity-based model)
+    |-- Step 3:  Task/Phase Breakdown
+    |-- Step 4:  TOON Refinement
+    |-- Step 5:  Skill & Agent Selection (RAG cross-session boost)
+    |-- Step 6:  Skill Validation & Download
+    |-- Step 7:  Final Prompt Generation (3 files)
+    |-- Step 8:  GitHub Issue Creation
+    |-- Step 9:  Branch Creation + Git Setup
+    |-- Step 10: Implementation Execution
+    |-- Step 11: Pull Request & Code Review (review loop)
+    |-- Step 12: Issue Closure
+    |-- Step 13: Documentation Update
+    |-- Step 14: Final Summary
+```
+
 ### Directory Layout
 
 ```
 /
-+-- scripts/              # Pipeline scripts and hooks
-|   +-- langgraph_engine/ # Core LangGraph orchestration (72 modules)
-|   +-- architecture/     # Architecture system (83 modules)
-+-- policies/             # 43 policy definitions
-|   +-- 01-sync-system/   # Level 1 policies
-|   +-- 02-standards/     # Level 2 policies
-|   +-- 03-execution/     # Level 3 policies
-+-- src/mcp/              # 11 FastMCP servers (102 tools, 8,400+ LOC)
-+-- tests/                # Test suite (476 tests, 30 files)
-+-- docs/                 # Documentation (40 files)
++-- scripts/                          # Pipeline scripts and hooks
+|   +-- langgraph_engine/             # Core orchestration (75 modules: 70 root + 5 subgraphs)
+|   +-- architecture/                 # Architecture system (83 modules)
++-- policies/                         # 44 policy definitions (43 .md + 1 .json)
+|   +-- 01-sync-system/               # Level 1 policies
+|   +-- 02-standards-system/          # Level 2 policies
+|   +-- 03-execution-system/          # Level 3 policies (14 steps + failure prevention)
++-- src/mcp/                          # 11 FastMCP servers (103 tools, 8,400+ LOC)
++-- tests/                            # 45 test files (38 root + 2 integration + 5 other)
++-- docs/                             # 40 documentation files
++-- rules/                            # 5 coding standard definitions
 ```
 
 ### Key Components
 
 | Component | Location | Purpose |
 |-----------|----------|---------|
-| Orchestrator | scripts/langgraph_engine/orchestrator.py | Main StateGraph pipeline |
-| Flow State | scripts/langgraph_engine/flow_state.py | TypedDict state definition |
-| Level -1 | scripts/langgraph_engine/subgraphs/level_minus1.py | Auto-fix (encoding) |
-| Level 1 | scripts/langgraph_engine/subgraphs/level1_sync.py | Session/context sync |
-| Level 2 | scripts/langgraph_engine/subgraphs/level2_standards.py | Standards enforcement |
-| Level 3 | scripts/langgraph_engine/subgraphs/level3_execution_v2.py | 14-step execution |
+| Orchestrator | scripts/langgraph_engine/orchestrator.py | Main StateGraph pipeline (59K) |
+| Flow State | scripts/langgraph_engine/flow_state.py | TypedDict state definition (45K) |
+| RAG Integration | scripts/langgraph_engine/rag_integration.py | Vector DB decision caching (16K) |
+| Level -1 | scripts/langgraph_engine/subgraphs/level_minus1.py | Auto-fix enforcement (28K) |
+| Level 1 | scripts/langgraph_engine/subgraphs/level1_sync.py | Session/context sync + TOON (37K) |
+| Level 2 | scripts/langgraph_engine/subgraphs/level2_standards.py | Standards loading (15K) |
+| Level 3 v2 | scripts/langgraph_engine/subgraphs/level3_execution_v2.py | 14-step execution with RAG (36K) |
+| Level 3 v1 | scripts/langgraph_engine/subgraphs/level3_execution.py | Original 14-step pipeline (97K) |
 | Hooks | scripts/pre-tool-enforcer.py, post-tool-tracker.py | Tool enforcement |
 | Session Bridge | src/mcp/session_hooks.py | MCP direct import bridge |
 
@@ -59,9 +92,9 @@ All registered in `~/.claude/settings.json`. Version synced via `scripts/sync-ve
 
 | Server | File | Tools | Purpose |
 |--------|------|-------|---------|
-| git-ops | git_mcp_server.py | 14 | Git (branch, commit, push, pull, stash, post-merge cleanup) |
-| github-api | github_mcp_server.py | 12 | GitHub (PR, issue, merge, label, build validate, merge cycle) |
-| session-mgr | session_mcp_server.py | 14 | Session (create, chain, tag, accumulate, finalize, work items) |
+| git-ops | git_mcp_server.py | 14 | Git (branch, commit, push, pull, stash, diff, fetch, post-merge cleanup) |
+| github-api | github_mcp_server.py | 12 | GitHub (PR, issue, merge, label, build validate, full merge cycle) |
+| session-mgr | session_mcp_server.py | 14 | Session (create, chain, tag, accumulate, finalize, work items, search) |
 | policy-enforcement | enforcement_mcp_server.py | 10 | Policy compliance, flow-trace, module health, system health |
 | llm-provider | llm_mcp_server.py | 8 | LLM (4 providers, hybrid GPU-first, async health, cached) |
 | token-optimizer | token_optimization_mcp_server.py | 10 | Token reduction (AST nav, smart read, dedup, 60-85% savings) |
@@ -71,20 +104,21 @@ All registered in `~/.claude/settings.json`. Version synced via `scripts/sync-ve
 | skill-manager | skill_manager_mcp_server.py | 8 | Skill lifecycle (load, search, validate, rank, conflicts) |
 | vector-db | vector_db_mcp_server.py | 11 | Vector RAG (Qdrant, 4 collections, semantic search, bulk index, node decisions) |
 
-### RAG Integration (NEW)
+### RAG Integration
 
 Every LangGraph node stores its decision in Vector DB (`node_decisions` collection).
 Before LLM calls, the pipeline checks RAG for similar past decisions.
-If confidence > threshold, RAG result replaces LLM call (saving inference time).
+If confidence >= step-specific threshold, RAG result replaces LLM call (saving inference time).
 
 Key module: `scripts/langgraph_engine/rag_integration.py`
 Collections: `node_decisions`, `sessions`, `flow_traces`, `tool_calls`
+Default threshold: 0.82 (step-specific: 0.75-0.90)
 
 ### Execution Modes
 
 ```
 Hook Mode (default, CLAUDE_HOOK_MODE=1):
-  Steps 0-7 -> PreToolUse hook -> output prompt to Claude
+  Steps 0-7  -> PreToolUse hook -> output prompt to Claude
   Steps 8-14 -> Stop hook auto-executes (PR, issue close, docs, summary)
 
 Full Mode (CLAUDE_HOOK_MODE=0):
@@ -102,6 +136,7 @@ Full Mode (CLAUDE_HOOK_MODE=0):
 - **Format:** Follow PEP 8 conventions
 - **Testing:** All new code requires tests
 - **Paths:** Always use path_resolver.py for cross-platform paths
+- **Imports:** Lazy imports to avoid import-time side effects
 
 ### Running the Pipeline
 
@@ -112,7 +147,17 @@ python scripts/3-level-flow.py --task "your task"
 ### Testing
 
 ```bash
+# All tests
 pytest tests/
+
+# MCP server tests
+pytest tests/test_*mcp*.py
+
+# Integration tests
+pytest tests/integration/
+
+# RAG tests
+pytest tests/test_rag_integration.py
 ```
 
 ---
@@ -129,10 +174,11 @@ pytest tests/
 ## Configuration
 
 See environment variables in `.env.example`:
-- Ollama endpoint configuration
-- Claude API keys
-- GitHub token
-- Debug modes
+- `OLLAMA_ENDPOINT` - Ollama server URL
+- `ANTHROPIC_API_KEY` - Claude API key
+- `GITHUB_TOKEN` - GitHub personal access token
+- `CLAUDE_DEBUG` - Debug mode (0/1)
+- `CLAUDE_HOOK_MODE` - Hook mode (1) or Full mode (0)
 
 ---
 
