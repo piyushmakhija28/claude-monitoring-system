@@ -763,20 +763,22 @@ class TestGenerateDynamicMessage(unittest.TestCase):
         self.assertIn('Sir', spoken_text)
         mock_delete.assert_called_with(flag)
 
-    def test_mock_max_retries_speak_receives_default_message(self):
+    def test_mock_llm_failure_speak_receives_default_message(self):
         """
-        When context is empty and max retries exceeded, speak must receive
+        v4.2.0: When Ollama unavailable (LLM returns None), speak must receive
         the output of get_work_done_default() - not an empty string.
         """
+        from urllib.error import URLError
         flag = _tmp_flag(self.tmp, '.session-work-done', '')
-        no_key = Path(self.tmp) / 'no-key'
         expected_default = get_work_done_default()
 
         with patch.object(_mod, 'SESSION_START_FLAG', Path(self.tmp) / '.absent'), \
+             patch.object(_mod, 'SESSION_START_FLAG_PID', Path(self.tmp) / '.absent-pid'), \
              patch.object(_mod, 'TASK_COMPLETE_FLAG', Path(self.tmp) / '.absent2'), \
+             patch.object(_mod, 'TASK_COMPLETE_FLAG_PID', Path(self.tmp) / '.absent2-pid'), \
              patch.object(_mod, 'WORK_DONE_FLAG', flag), \
-             patch.object(_mod, 'API_KEY_FILE', no_key), \
-             patch.object(_mod, 'increment_retry', return_value=False), \
+             patch.object(_mod, 'WORK_DONE_FLAG_PID', Path(self.tmp) / '.wd-pid'), \
+             patch.object(_mod.urllib_request, 'urlopen', side_effect=URLError('offline')), \
              patch.object(_mod, 'speak') as mock_speak, \
              patch.object(_mod, 'delete_flag'):
             with self.assertRaises(SystemExit):
