@@ -211,6 +211,56 @@ def read_hook_stdin():
 # FLAG FILE HELPERS
 # =============================================================================
 
+def read_flag(flag_path):
+    """Read a flag file's content. Returns stripped text or empty string.
+
+    Non-destructive: does NOT delete the flag file after reading.
+    """
+    if not flag_path.exists():
+        return ''
+    try:
+        raw = flag_path.read_text(encoding='utf-8').strip()
+        return raw
+    except Exception:
+        return ''
+
+
+def increment_retry(flag_path, max_retries=3):
+    """Increment retry counter in a flag file. Returns True if retries remaining.
+
+    For plain text flags: creates JSON with retries=1.
+    For JSON flags: increments the retries field.
+    Returns False when max_retries exceeded or on read error for .json files.
+    """
+    try:
+        if flag_path.suffix == '.json':
+            # JSON flag: read, increment, write
+            try:
+                raw = flag_path.read_text(encoding='utf-8')
+                data = json.loads(raw)
+            except (FileNotFoundError, json.JSONDecodeError):
+                return False
+        else:
+            # Plain text flag: wrap in JSON dict
+            data = {'retries': 0}
+            if flag_path.exists():
+                try:
+                    content = flag_path.read_text(encoding='utf-8').strip()
+                    data['content'] = content
+                except Exception:
+                    pass
+
+        current = data.get('retries', 0)
+        if current >= max_retries:
+            return False
+
+        data['retries'] = current + 1
+        flag_path.write_text(json.dumps(data), encoding='utf-8')
+        return True
+    except Exception:
+        return False
+
+
 def read_flag_message(flag_path):
     """
     Read a flag file's ORIGINAL MESSAGE content.

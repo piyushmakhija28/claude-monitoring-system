@@ -31,7 +31,7 @@ from unittest.mock import patch, MagicMock
 # Bootstrap: load stop-notifier.py as a module and register in sys.modules
 # so that patch('stop_notifier.X') works correctly.
 # ---------------------------------------------------------------------------
-_SCRIPT_PATH = Path(__file__).parent / 'stop-notifier.py'
+_SCRIPT_PATH = Path(__file__).parent.parent / 'scripts' / 'stop-notifier.py'
 
 import importlib.util
 _spec = importlib.util.spec_from_file_location('stop_notifier', str(_SCRIPT_PATH))

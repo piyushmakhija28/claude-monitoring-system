@@ -4,14 +4,14 @@
 # ============================================================================
 # LANGGRAPH ORCHESTRATION (3-Level Flow Engine)
 # ============================================================================
-langgraph>=0.2.0            # StateGraph orchestration for parallel + conditional execution
-langchain-core>=0.3.0       # Core primitives (TypedDict, Annotated)
+langgraph==0.2.0            # StateGraph orchestration for parallel + conditional execution
+langchain-core==0.3.0       # Core primitives (TypedDict, Annotated)
 
 # ============================================================================
 # GITHUB AUTOMATION & GIT OPERATIONS
 # ============================================================================
-PyGithub>=2.1.1             # GitHub API wrapper for issue/PR management
-GitPython>=3.1.40           # Git operations
+PyGithub==2.1.1             # GitHub API wrapper for issue/PR management
+GitPython==3.1.40           # Git operations
 
 # ============================================================================
 # CODE GRAPH ANALYSIS (Dependency Graph Complexity)
@@ -22,13 +22,13 @@ lizard>=1.17.0              # Multi-language cyclomatic complexity (Python/Java/
 # ============================================================================
 # LLM & AI INTEGRATION
 # ============================================================================
-anthropic>=0.50.0           # Anthropic SDK for Claude API
+anthropic==0.50.0           # Anthropic SDK for Claude API
 requests>=2.31.0            # HTTP requests for Ollama API
 
 # ============================================================================
 # SYSTEM & UTILITIES
 # ============================================================================
-python-dotenv>=1.0.1        # Environment variable management
+python-dotenv==1.0.1        # Environment variable management
 psutil>=5.9.8               # System monitoring
 loguru>=0.7.0               # Structured logging
 rich>=13.0.0                # Beautiful terminal output (progress bars, colors, tables)

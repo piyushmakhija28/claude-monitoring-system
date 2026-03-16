@@ -690,8 +690,97 @@ def step9_branch_creation_node(state: FlowState) -> Dict[str, Any]:
     )
 
 
+def _build_retry_history_context(state) -> str:
+    """Build complete retry history context for inclusion in execution prompt.
+
+    Returns empty string on first attempt (retry_count == 0).
+    On retries, builds a formatted block showing:
+    - Previous attempt summaries
+    - Current issues to fix (truncated to first 10)
+    - Retry status with remaining attempts
+    - FINAL ATTEMPT warning when no retries remain
+    """
+    retry_count = state.get("step11_retry_count", 0)
+    if retry_count == 0:
+        return ""
+
+    retry_messages = state.get("step11_retry_messages", [])
+    review_issues = state.get("step11_review_issues", [])
+    max_retries = 3
+    remaining = max(0, max_retries - retry_count)
+
+    lines = []
+    lines.append("=" * 70)
+    lines.append("COMPLETE RETRY HISTORY")
+    lines.append("=" * 70)
+    lines.append("")
+    lines.append("PREVIOUS ATTEMPTS (What was fixed):")
+    lines.append("-" * 70)
+
+    for i, msg in enumerate(retry_messages, 1):
+        lines.append("")
+        lines.append("  Attempt %d:" % i)
+        lines.append("  %s" % msg)
+
+    lines.append("")
+    lines.append("CURRENT ISSUES TO FIX:")
+    lines.append("-" * 70)
+
+    display_issues = review_issues[:10]
+    for i, issue in enumerate(display_issues, 1):
+        lines.append("  %d. %s" % (i, issue))
+
+    if len(review_issues) > 10:
+        lines.append("  ... and %d more issues" % (len(review_issues) - 10))
+
+    lines.append("")
+    lines.append("RETRY STATUS:")
+    lines.append("-" * 70)
+    lines.append("  Current Attempt: #%d of %d" % (retry_count, max_retries))
+    lines.append("  Remaining Attempts: %d" % remaining)
+
+    if remaining == 0:
+        lines.append("")
+        lines.append("FINAL ATTEMPT - PR will be blocked for manual review")
+
+    lines.append("")
+    lines.append("=" * 70)
+
+    return "\n".join(lines)
+
+
 def step10_implementation_note(state: FlowState) -> Dict[str, Any]:
-    """Step 10: Implementation Execution with LLM fallback and full error handling."""
+    """Step 10: Implementation Execution with LLM fallback, retry history, and full error handling."""
+
+    # Build retry context before execution
+    retry_count = state.get("step11_retry_count", 0)
+    history = _build_retry_history_context(state)
+    has_retry = retry_count > 0
+
+    # Build execution prompt (with retry history if applicable)
+    base_prompt = state.get("step7_execution_prompt", "")
+    if has_retry:
+        issues = state.get("step11_review_issues", [])
+        issue_lines = "\n".join("- %s" % issue for issue in issues)
+        exec_prompt = (
+            "%s\n\n"
+            "[RETRY #%d] Fix the following code review issues while keeping\n"
+            "previous fixes:\n\n"
+            "CURRENT ISSUES TO FIX:\n"
+            "%s\n\n"
+            "IMPORTANT:\n"
+            "- Do NOT undo previous fixes (shown in history above)\n"
+            "- Fix ONLY the current issues listed above\n"
+            "- Keep all working code from previous attempts\n"
+            "- Run tests to verify fixes if possible\n\n"
+            "Original implementation prompt:\n"
+            "---\n"
+            "%s\n"
+            "---\n\n"
+            "Please fix the issues above and re-implement."
+        ) % (history, retry_count, issue_lines, base_prompt)
+    else:
+        exec_prompt = base_prompt
 
     def _with_llm_fallback(st):
         """
@@ -741,7 +830,7 @@ def step10_implementation_note(state: FlowState) -> Dict[str, Any]:
                 # Re-raise; _run_step will catch and return fallback_result
             raise
 
-    return _run_step(
+    result = _run_step(
         10, "Implementation Execution",
         _with_llm_fallback,
         state,
@@ -754,6 +843,17 @@ def step10_implementation_note(state: FlowState) -> Dict[str, Any]:
             "step10_user_message_loaded": False,
         },
     )
+
+    # Merge retry context into result
+    result["step10_execution_prompt"] = exec_prompt
+    result["step10_has_retry_context"] = has_retry
+    result["step10_status"] = result.get("step10_status", result.get("step10_implementation_status", "OK"))
+    result["step10_message"] = result.get(
+        "step10_message",
+        "Step 10 executed (retry=%d)" % retry_count
+    )
+
+    return result
 
 
 def step11_pull_request_node(state: FlowState) -> Dict[str, Any]:

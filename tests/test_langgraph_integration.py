@@ -14,7 +14,6 @@ from subprocess import run
 # Add scripts to path
 sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
 
-from langgraph_engine.subgraphs.level1_sync import run_policy_script
 from langgraph_engine.subgraphs.level2_standards import (
     load_policies_from_directory,
     run_standards_loader_script,

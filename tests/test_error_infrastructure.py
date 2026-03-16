@@ -13,7 +13,7 @@ import tempfile
 from pathlib import Path
 
 # Add scripts to path
-sys.path.insert(0, str(Path(__file__).parent / "scripts" / "langgraph_engine"))
+sys.path.insert(0, str(Path(__file__).parent.parent / "scripts" / "langgraph_engine"))
 
 from error_logger import ErrorLogger
 from backup_manager import BackupManager

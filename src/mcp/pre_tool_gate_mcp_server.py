@@ -35,6 +35,9 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from utils.path_resolver import get_config_dir
+
 from mcp.server.fastmcp import FastMCP
 
 mcp = FastMCP(
@@ -43,7 +46,7 @@ mcp = FastMCP(
 )
 
 # Paths
-MEMORY_PATH = Path.home() / ".claude" / "memory"
+MEMORY_PATH = get_config_dir()
 FLAG_DIR = Path.home() / ".claude"
 CURRENT_SESSION_FILE = MEMORY_PATH / ".current-session.json"
 LOGS_PATH = MEMORY_PATH / "logs" / "sessions"

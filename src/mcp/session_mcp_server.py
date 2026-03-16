@@ -16,16 +16,20 @@ import random
 import re
 import shutil
 import string
+import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from utils.path_resolver import get_config_dir
 
 from mcp.server.fastmcp import FastMCP
 
 mcp = FastMCP("session-mgr", instructions="Session management with direct file I/O")
 
 # Base paths
-MEMORY_PATH = Path.home() / ".claude" / "memory"
+MEMORY_PATH = get_config_dir()
 SESSIONS_PATH = MEMORY_PATH / "sessions"
 STATE_PATH = MEMORY_PATH / ".state"
 CHAIN_INDEX_FILE = MEMORY_PATH / ".chain-index.json"
@@ -52,6 +56,48 @@ def _ensure_dirs(project: str = None):
     STATE_PATH.mkdir(parents=True, exist_ok=True)
     if project:
         (SESSIONS_PATH / project).mkdir(parents=True, exist_ok=True)
+
+
+def safe_load_session(session_file):
+    """Load a session JSON file with corruption recovery.
+
+    Tries the primary file first. If it fails JSON parsing, tries:
+    1. The .bak backup file
+    2. Returns a minimal valid session dict as last resort
+
+    Args:
+        session_file: Path or str to the session JSON file
+
+    Returns:
+        dict: The loaded session data, or a minimal recovery dict
+    """
+    session_path = Path(session_file)
+
+    # Try primary file
+    try:
+        data = json.loads(session_path.read_text(encoding="utf-8"))
+        if isinstance(data, dict):
+            return data
+    except (json.JSONDecodeError, IOError, ValueError):
+        pass
+
+    # Try .bak backup
+    bak_path = session_path.with_suffix(session_path.suffix + ".bak")
+    try:
+        if bak_path.exists():
+            data = json.loads(bak_path.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                return data
+    except (json.JSONDecodeError, IOError, ValueError):
+        pass
+
+    # Last resort: return minimal valid session
+    return {
+        "session_id": session_path.stem,
+        "status": "recovered",
+        "recovered_at": datetime.now().isoformat(),
+        "recovery_reason": "primary and backup files corrupted or missing",
+    }
 
 
 @mcp.tool()

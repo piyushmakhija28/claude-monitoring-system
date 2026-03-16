@@ -126,7 +126,7 @@ class ClaudeCredentialsManager:
             credentials = json.loads(decrypted_data.decode())
 
             return credentials.get('api_key')
-        except:
+        except (IOError, json.JSONDecodeError, KeyError, ValueError):
             return None
 
     def get_credentials(self):
@@ -145,7 +145,7 @@ class ClaudeCredentialsManager:
 
             decrypted_data = self.cipher.decrypt(encrypted_data)
             return json.loads(decrypted_data.decode())
-        except:
+        except (IOError, json.JSONDecodeError, ValueError):
             return None
 
     def delete_credentials(self):
@@ -363,7 +363,7 @@ class AutoSessionTracker:
         try:
             with open(self.auto_tracking_config, 'r') as f:
                 return json.load(f)
-        except:
+        except (IOError, json.JSONDecodeError):
             return {'enabled': False}
 
     def sync_sessions(self):

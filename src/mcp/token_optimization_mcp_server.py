@@ -28,9 +28,13 @@ import hashlib
 import json
 import os
 import re
+import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from utils.path_resolver import get_config_dir
 
 from mcp.server.fastmcp import FastMCP
 
@@ -40,7 +44,7 @@ mcp = FastMCP(
 )
 
 # Paths
-MEMORY_PATH = Path.home() / ".claude" / "memory"
+MEMORY_PATH = get_config_dir()
 LOGS_PATH = MEMORY_PATH / "logs"
 OPTIMIZATION_LOG = LOGS_PATH / "tool-optimization.jsonl"
 CONTEXT_BUDGET_BYTES = 200 * 1024  # 200KB budget

@@ -8,6 +8,7 @@ Verifies that Claude gets complete feedback history showing:
 """
 
 import pytest
+import tempfile
 from pathlib import Path
 import sys
 
@@ -34,7 +35,7 @@ class TestRetryHistoryTracking:
             step11_retry_messages=[],
             step11_review_issues=[],
             step7_execution_prompt="Initial prompt",
-            session_dir="/tmp/test"
+            session_dir=str(getattr(self, '_tmp', Path(tempfile.mkdtemp())))
         )
 
         history = _build_retry_history_context(state)
@@ -53,7 +54,7 @@ class TestRetryHistoryTracking:
             step11_retry_messages=["Fixed print() statement in main function"],
             step11_review_issues=["Missing logger import"],
             step7_execution_prompt="Original prompt",
-            session_dir="/tmp/test"
+            session_dir=str(getattr(self, '_tmp', Path(tempfile.mkdtemp())))
         )
 
         history = _build_retry_history_context(state)
@@ -86,7 +87,7 @@ class TestRetryHistoryTracking:
                 "Unused variable 'result'"
             ],
             step7_execution_prompt="Original prompt",
-            session_dir="/tmp/test"
+            session_dir=str(getattr(self, '_tmp', Path(tempfile.mkdtemp())))
         )
 
         history = _build_retry_history_context(state)
@@ -116,7 +117,7 @@ class TestRetryHistoryTracking:
             ],
             step11_review_issues=["Issue C"],
             step7_execution_prompt="Original prompt",
-            session_dir="/tmp/test"
+            session_dir=str(getattr(self, '_tmp', Path(tempfile.mkdtemp())))
         )
 
         history = _build_retry_history_context(state)
@@ -143,7 +144,7 @@ class TestRetryHistoryTracking:
                 "No docstring in main function"
             ],
             step7_execution_prompt="Implement the feature...",
-            session_dir="/tmp/test"
+            session_dir=str(getattr(self, '_tmp', Path(tempfile.mkdtemp())))
         )
 
         result = step10_implementation_note(state)
@@ -177,7 +178,7 @@ class TestRetryHistoryTracking:
             step11_retry_messages=["Fixed previous issue"],
             step11_review_issues=issues,
             step7_execution_prompt="Prompt",
-            session_dir="/tmp/test"
+            session_dir=str(getattr(self, '_tmp', Path(tempfile.mkdtemp())))
         )
 
         history = _build_retry_history_context(state)

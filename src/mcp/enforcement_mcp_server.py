@@ -15,16 +15,20 @@ Resources (2):
 """
 
 import json
+import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from utils.path_resolver import get_config_dir
 
 from mcp.server.fastmcp import FastMCP
 
 mcp = FastMCP("policy-enforcement", instructions="Policy enforcement and compliance tracking")
 
 # Paths
-MEMORY_PATH = Path.home() / ".claude" / "memory"
+MEMORY_PATH = get_config_dir()
 ENFORCER_STATE_FILE = MEMORY_PATH / ".blocking-enforcer-state.json"
 LOGS_PATH = MEMORY_PATH / "logs" / "sessions"
 CURRENT_SESSION_FILE = MEMORY_PATH / ".current-session.json"

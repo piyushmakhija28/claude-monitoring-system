@@ -21,6 +21,7 @@ Backward Compatible:
 import sys
 import os
 import json
+import threading
 from pathlib import Path
 from datetime import datetime
 
@@ -209,11 +210,48 @@ def run_langgraph_engine(session_id: str = "", project_root: str = "", user_mess
     return result
 
 
+def _validate_environment() -> None:
+    """Validate required environment variables and directories.
+
+    Prints warnings only - never blocks execution.
+    Called at the start of main() before the pipeline runs.
+    """
+    # Check LLM_PROVIDER env var
+    llm_provider = os.environ.get("LLM_PROVIDER", "").strip()
+    if not llm_provider:
+        print(
+            "[WARN] LLM_PROVIDER env var is not set. "
+            "LLM routing may fall back to defaults.",
+            file=sys.stderr,
+        )
+
+    # Check ~/.claude/memory/ directory exists
+    memory_dir = Path.home() / ".claude" / "memory"
+    if not memory_dir.exists():
+        print(
+            f"[WARN] Memory directory not found: {memory_dir}. "
+            "Session memory features may not work.",
+            file=sys.stderr,
+        )
+
+    # Check policies/ directory relative to this script
+    policies_dir = _this_scripts_dir.parent / "policies"
+    if not policies_dir.exists():
+        print(
+            f"[WARN] Policies directory not found: {policies_dir}. "
+            "Policy enforcement may be skipped.",
+            file=sys.stderr,
+        )
+
+
 def main():
     """Main entry point."""
     global DEBUG  # Allow modifying global DEBUG variable
 
     try:
+        # Validate environment before anything else (warnings only, never blocks)
+        _validate_environment()
+
         # Check if LangGraph is available
         if not _LANGGRAPH_AVAILABLE:
             print(
@@ -265,7 +303,39 @@ def main():
         print(f"[DEBUG]   project_root={project_root}", file=sys.stderr)
         print(f"[DEBUG]   user_message length={len(user_message) if user_message else 0}", file=sys.stderr)
 
-        result = run_langgraph_engine(session_id, project_root, user_message)
+        # --- Orchestration timeout (300s, Windows-compatible) ---
+        ORCHESTRATION_TIMEOUT_SEC = 300
+        _timeout_event = threading.Event()
+        _result_holder: list = []
+        _error_holder: list = []
+
+        def _run_engine() -> None:
+            try:
+                _result_holder.append(
+                    run_langgraph_engine(session_id, project_root, user_message)
+                )
+            except Exception as exc:
+                _error_holder.append(exc)
+            finally:
+                _timeout_event.set()
+
+        engine_thread = threading.Thread(target=_run_engine, daemon=True)
+        engine_thread.start()
+
+        finished = _timeout_event.wait(timeout=ORCHESTRATION_TIMEOUT_SEC)
+        if not finished:
+            print(
+                f"[ERROR] {SCRIPT_NAME}: Orchestration timed out after "
+                f"{ORCHESTRATION_TIMEOUT_SEC} seconds.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+        if _error_holder:
+            raise _error_holder[0]
+
+        result = _result_holder[0]
+        # --- End timeout block ---
 
         # Write flow-trace.json (backward compatible format)
         trace_file = write_flow_trace_json(result)

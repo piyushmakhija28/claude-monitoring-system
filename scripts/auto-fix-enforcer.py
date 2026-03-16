@@ -274,7 +274,7 @@ class AutoFixEnforcer:
                 version = result.stdout.strip()
                 print(f"   [CHECK] Python available: {version}")
                 return True
-        except:
+        except Exception:
             pass
 
         self.failures.append({
@@ -572,9 +572,9 @@ class AutoFixEnforcer:
                                      capture_output=True, timeout=2,
                                      encoding='utf-8', errors='replace')
                         running += 1
-                    except:
+                    except Exception:
                         stopped += 1
-                except:
+                except Exception:
                     stopped += 1
             else:
                 stopped += 1
@@ -611,7 +611,7 @@ class AutoFixEnforcer:
                 else:
                     print("   [CHECK] Git repository clean")
                 return True
-        except:
+        except Exception:
             print("   [INFO]  Not in a git repository (or git not available)")
 
         return True
@@ -691,7 +691,7 @@ class AutoFixEnforcer:
                         )
                         if fix_result.returncode == 0 and fix_result.stdout and '[OK] Fixed' in fix_result.stdout:
                             fixed_count += 1
-                    except:
+                    except Exception:
                         pass  # Skip files that can't be fixed
 
                 if fixed_count > 0:
@@ -748,7 +748,7 @@ class AutoFixEnforcer:
                 _unlock_file(f)
 
             return True
-        except:
+        except Exception:
             return False
 
     def auto_fix_failures(self):
