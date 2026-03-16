@@ -697,9 +697,25 @@ def check_context_read_complete(tool_name):
             return hints, blocks
 
         # Existing project AND enforcement applies = block writes until context is read
-        # TODO V2: Check if context was actually read (look for metadata in flag)
-        # For now: fail-open (allow tool)
-        pass
+        # V2: Check if context was actually read via flow-trace metadata
+        context_read = False
+        try:
+            trace_path = Path.home() / ".claude" / "logs" / "flow-trace.json"
+            if trace_path.exists():
+                import json
+                trace_data = json.loads(trace_path.read_text(encoding="utf-8"))
+                pipeline = trace_data.get("pipeline", [])
+                for entry in pipeline:
+                    if entry.get("step") == "LEVEL_1_CONTEXT":
+                        context_read = True
+                        break
+            if not context_read:
+                blocks.append(
+                    "Context not yet read for this session. "
+                    "Wait for Level 1 sync to complete before writing."
+                )
+        except Exception:
+            pass  # fail-open on parse errors
 
     except Exception:
         # If we can't check the flag, fail-open (allow the tool)

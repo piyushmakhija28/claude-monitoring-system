@@ -1,4 +1,4 @@
-# Claude Workflow Engine v7.4.0 - System Requirements Specification
+# Claude Workflow Engine v7.5.0 - System Requirements Specification
 
 **Document Version:** 2.0
 **Release Date:** 2026-03-16
@@ -16,7 +16,7 @@ Claude Workflow Engine v7.3.0 is a 3-level LangGraph-based orchestration pipelin
 
 | Metric | Value |
 |--------|-------|
-| **Version** | 7.4.0 |
+| **Version** | 7.5.0 |
 | **MCP Servers** | 10 |
 | **MCP Tools** | 95 |
 | **LangGraph Modules** | 72 |

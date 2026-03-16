@@ -12,7 +12,7 @@ from pathlib import Path
 
 # Ensure the project root (parent of scripts/) is on the path so the
 # langgraph_engine package can be imported with its relative imports intact.
-_project_root = Path(__file__).parent.parent.parent
+_project_root = Path(__file__).parent.parent
 if str(_project_root / "scripts") not in sys.path:
     sys.path.insert(0, str(_project_root / "scripts"))
 
@@ -235,7 +235,7 @@ def test_ac8_utf8_ascii_safe():
         "standards_integration.py",
         "standards_schema.py",
     ]
-    engine_dir = Path(__file__).parent
+    engine_dir = Path(__file__).parent.parent / "scripts" / "langgraph_engine"
     for fname in files:
         fpath = engine_dir / fname
         content = fpath.read_text(encoding="utf-8")

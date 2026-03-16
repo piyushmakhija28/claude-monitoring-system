@@ -97,10 +97,27 @@ def bump_version(project_root):
 
         major, minor, patch = int(parts[0]), int(parts[1]), int(parts[2])
 
-        # Bump MINOR by default (feature/bug fixes)
-        # TODO: Could check commit message for 'BREAKING:' to bump MAJOR
-        minor += 1
-        patch = 0
+        # Determine bump type from latest commit message
+        commit_msg = ""
+        try:
+            import subprocess
+            result = subprocess.run(
+                ["git", "log", "-1", "--format=%s"],
+                capture_output=True, text=True, cwd=str(project_root)
+            )
+            commit_msg = result.stdout.strip().lower()
+        except Exception:
+            pass
+
+        if "breaking:" in commit_msg or "breaking change" in commit_msg:
+            major += 1
+            minor = 0
+            patch = 0
+        elif commit_msg.startswith("fix") or "bug" in commit_msg:
+            patch += 1
+        else:
+            minor += 1
+            patch = 0
 
         new_version = f"{major}.{minor}.{patch}"
         version_file.write_text(new_version + '\n', encoding='utf-8')
