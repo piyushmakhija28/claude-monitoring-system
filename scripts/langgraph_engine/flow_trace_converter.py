@@ -62,25 +62,44 @@ def convert_flow_state_to_trace(state: FlowState) -> Dict[str, Any]:
             },
         })
 
-    # Level 1
+    # Level 1 - Session + Context (pre-tool-enforcer checks for BOTH)
     if state.get("level1_status"):
         pipeline.append({
-            "step": "LEVEL_1_CONTEXT",
-            "name": "Context Management (Level 1 Parallel)",
+            "step": "LEVEL_1_SESSION",
+            "name": "Session Init (Level 1)",
             "level": 1,
             "order": 1,
             "is_blocking": False,
             "timestamp": timestamp,
+            "duration_ms": state.get("level_durations", {}).get("level1_session", 0),
+            "input": {
+                "purpose": "Create session and initialize session directory",
+            },
+            "policy_output": {
+                "session_id": session_id,
+                "session_created": True,
+            },
+            "decision": f"Session created - {session_id}",
+            "passed_to_next": {
+                "session_id": session_id,
+            },
+        })
+        pipeline.append({
+            "step": "LEVEL_1_CONTEXT",
+            "name": "Context Sync (Level 1 Parallel)",
+            "level": 1,
+            "order": 2,
+            "is_blocking": False,
+            "timestamp": timestamp,
             "duration_ms": state.get("level_durations", {}).get("level1", 0),
             "input": {
-                "purpose": "Load context, sessions, preferences, patterns in parallel",
+                "purpose": "Load context, calculate complexity, compress TOON",
             },
             "policy_output": {
                 "context_loaded": state.get("context_loaded", False),
                 "context_percentage": state.get("context_percentage", 0),
-                "session_chain_loaded": state.get("session_chain_loaded", False),
-                "preferences_loaded": state.get("preferences_loaded", False),
-                "patterns_detected": state.get("patterns_detected", []),
+                "complexity_score": state.get("complexity_score", 0),
+                "toon_compressed": state.get("toon_compressed", False),
             },
             "decision": f"Level 1 completed - {state.get('level1_status')}",
             "passed_to_next": {
@@ -93,9 +112,9 @@ def convert_flow_state_to_trace(state: FlowState) -> Dict[str, Any]:
     if state.get("level2_status"):
         pipeline.append({
             "step": "LEVEL_2_STANDARDS",
-            "name": "Rules/Standards System",
+            "name": "Standards System",
             "level": 2,
-            "order": 2,
+            "order": 3,
             "is_blocking": False,
             "timestamp": timestamp,
             "duration_ms": state.get("level_durations", {}).get("level2", 0),
@@ -114,43 +133,97 @@ def convert_flow_state_to_trace(state: FlowState) -> Dict[str, Any]:
             },
         })
 
-    # Level 3 - All 12 steps
+    # Level 3 - All 15 steps (Step 0-14)
+    # Maps to: orchestrator.py level3_step0 through level3_step14
     level3_steps = [
-        ("LEVEL_3_STEP_3_0", "Prompt Generation", "step0_prompt", state.get("step0_prompt")),
-        ("LEVEL_3_STEP_3_1", "Task Breakdown", "step1_tasks", state.get("step1_tasks")),
-        ("LEVEL_3_STEP_3_2", "Plan Mode Decision", "step2_plan_mode", state.get("step2_plan_mode")),
-        ("LEVEL_3_STEP_3_3", "Context Read Check", "step3_context_read", state.get("step3_context_read")),
-        ("LEVEL_3_STEP_3_4", "Model Selection", "step4_model", state.get("step4_model")),
-        ("LEVEL_3_STEP_3_5", "Skill/Agent Selection", "step5_skill", state.get("step5_skill")),
-        ("LEVEL_3_STEP_3_6", "Tool Optimization", "step6_tool_hints", state.get("step6_tool_hints")),
-        ("LEVEL_3_STEP_3_7", "Auto-Recommendations", "step7_recommendations", state.get("step7_recommendations")),
-        ("LEVEL_3_STEP_3_8", "Progress Tracking", "step8_progress", state.get("step8_progress")),
-        ("LEVEL_3_STEP_3_9", "Git Commit Prep", "step9_commit_ready", state.get("step9_commit_ready")),
-        ("LEVEL_3_STEP_3_10", "Session Save", "step10_session", state.get("step10_session")),
-        ("LEVEL_3_STEP_3_11", "Failure Prevention", "failure_prevention", state.get("failure_prevention")),
+        ("LEVEL_3_STEP_0", "Task Analysis", "step0_task_type", {
+            "task_type": state.get("step0_task_type"),
+            "complexity": state.get("step0_complexity"),
+            "reasoning": state.get("step0_reasoning"),
+            "task_count": state.get("step0_task_count"),
+        }),
+        ("LEVEL_3_STEP_1", "Plan Mode Decision", "step1_plan_required", {
+            "plan_required": state.get("step1_plan_required"),
+            "reasoning": state.get("step1_reasoning"),
+        }),
+        ("LEVEL_3_STEP_2", "Plan Execution", "step2_plan_status", {
+            "plan_status": state.get("step2_plan_status"),
+            "phases": state.get("step2_phases"),
+        }),
+        ("LEVEL_3_STEP_3", "Task Breakdown", "step3_validation_status", {
+            "task_count": state.get("step3_task_count"),
+            "validation_status": state.get("step3_validation_status"),
+        }),
+        ("LEVEL_3_STEP_4", "TOON Refinement", "step4_refinement_status", {
+            "refinement_status": state.get("step4_refinement_status"),
+            "complexity_adjusted": state.get("step4_complexity_adjusted"),
+        }),
+        ("LEVEL_3_STEP_5", "Skill Agent Selection", "step5_skill", {
+            "skill": state.get("step5_skill"),
+            "agent": state.get("step5_agent"),
+            "confidence": state.get("step5_confidence"),
+        }),
+        ("LEVEL_3_STEP_6", "Skill Validation", "step6_validation_status", {
+            "skill_ready": state.get("step6_skill_ready"),
+            "agent_ready": state.get("step6_agent_ready"),
+            "validation_status": state.get("step6_validation_status"),
+        }),
+        ("LEVEL_3_STEP_7", "Final Prompt Generation", "step7_prompt_saved", {
+            "prompt_saved": state.get("step7_prompt_saved"),
+        }),
+        ("LEVEL_3_STEP_8", "GitHub Issue Creation", "step8_status", {
+            "issue_id": state.get("step8_issue_id"),
+            "issue_created": state.get("step8_issue_created"),
+            "status": state.get("step8_status"),
+        }),
+        ("LEVEL_3_STEP_9", "Branch Creation", "step9_status", {
+            "branch_name": state.get("step9_branch_name"),
+            "branch_created": state.get("step9_branch_created"),
+            "status": state.get("step9_status"),
+        }),
+        ("LEVEL_3_STEP_10", "Implementation", "step10_status", {
+            "implementation_status": state.get("step10_implementation_status"),
+            "tasks_executed": state.get("step10_tasks_executed"),
+            "modified_files": state.get("step10_modified_files"),
+        }),
+        ("LEVEL_3_STEP_11", "Pull Request Review", "step11_status", {
+            "review_passed": state.get("step11_review_passed"),
+            "retry_count": state.get("step11_retry_count"),
+            "status": state.get("step11_status"),
+        }),
+        ("LEVEL_3_STEP_12", "Issue Closure", "step12_status", {
+            "issue_closed": state.get("step12_issue_closed"),
+            "status": state.get("step12_status"),
+        }),
+        ("LEVEL_3_STEP_13", "Documentation Update", "step13_documentation_status", {
+            "updates_prepared": state.get("step13_updates_prepared"),
+            "status": state.get("step13_documentation_status"),
+        }),
+        ("LEVEL_3_STEP_14", "Final Summary", "step14_status", {
+            "status": state.get("step14_status"),
+            "summary": state.get("step14_summary"),
+        }),
     ]
 
-    for step_num, (step_id, step_name, state_key, step_value) in enumerate(level3_steps):
+    for step_num, (step_id, step_name, state_key, step_output) in enumerate(level3_steps):
         pipeline.append({
             "step": step_id,
             "name": step_name,
             "level": 3,
-            "order": 3 + step_num,
+            "order": 4 + step_num,
             "is_blocking": False,
             "timestamp": timestamp,
             "duration_ms": state.get("level_durations", {}).get(state_key, 0),
             "input": {},
-            "policy_output": {
-                "result": step_value,
-            },
-            "decision": f"Step {step_num} executed",
+            "policy_output": step_output,
+            "decision": f"Step {step_num} - {step_name}",
             "passed_to_next": {},
         })
 
     # Build final trace
     trace = {
         "meta": {
-            "flow_version": "5.0.0-langgraph",  # New version using LangGraph
+            "flow_version": "7.5.0-langgraph",
             "script": "3-level-flow.py (LangGraph Engine)",
             "mode": "langgraph-orchestration",
             "flow_start": state.get("timestamp"),
@@ -168,10 +241,15 @@ def convert_flow_state_to_trace(state: FlowState) -> Dict[str, Any]:
         "final_decision": {
             "timestamp": datetime.now().isoformat(),
             "session_id": session_id,
+            "task_type": state.get("step0_task_type", "General Task"),
+            "complexity": state.get("step0_complexity", 5),
             "context_pct": state.get("context_percentage", 0),
             "standards_active": state.get("standards_count", 0),
             "model_selected": state.get("step4_model", "haiku"),
             "skill_or_agent": state.get("step5_skill") or state.get("step5_agent", ""),
+            "plan_required": state.get("step1_plan_required", False),
+            "issue_id": state.get("step8_issue_id", ""),
+            "branch_name": state.get("step9_branch_name", ""),
             "proceed": state.get("final_status") != "BLOCKED",
             "summary": f"Status={state.get('final_status')} Context={(state.get('context_percentage') or 0):.1f}%",
         },

@@ -2,17 +2,14 @@
   "permissions": {
     "defaultMode": "default"
   },
-  "model": "haiku",
   "hooks": {
     "UserPromptSubmit": [
       {
         "hooks": [
           {
             "type": "command",
-            "command": "python.exe C:/Users/techd/.claude/scripts/3-level-flow.py",
-            "timeout": 75,
-            "statusMessage": "🔒 FULL POLICY ENFORCEMENT: Level -1 → Level 1 → Level 2 → Level 3 (All 15 steps)",
-            "async": false
+            "command": "python C:/Users/techd/.claude/scripts/3-level-flow.py",
+            "timeout": 120
           }
         ]
       }
@@ -23,10 +20,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python.exe C:/Users/techd/.claude/scripts/pre-tool-enforcer.py",
-            "timeout": 12,
-            "statusMessage": "Level 3.6/3.7: Tool optimization + blocking enforcement...",
-            "async": false
+            "command": "python C:/Users/techd/.claude/scripts/pre-tool-enforcer.py",
+            "timeout": 12
           }
         ]
       }
@@ -37,10 +32,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python.exe C:/Users/techd/.claude/scripts/post-tool-tracker.py",
-            "timeout": 30,
-            "statusMessage": "Level 3.9-3.12: Progress + GitHub issue/close + flags...",
-            "async": false
+            "command": "python C:/Users/techd/.claude/scripts/post-tool-tracker.py",
+            "timeout": 30
           }
         ]
       },
@@ -49,10 +42,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python.exe C:/Users/techd/.claude/scripts/post-tool-tracker.py",
-            "timeout": 10,
-            "statusMessage": "Level 3.9: Progress tracking...",
-            "async": false
+            "command": "python C:/Users/techd/.claude/scripts/post-tool-tracker.py",
+            "timeout": 10
           }
         ]
       }
@@ -62,10 +53,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python.exe C:/Users/techd/.claude/scripts/stop-notifier.py",
-            "timeout": 60,
-            "statusMessage": "Level 3.10: Session save + voice...",
-            "async": false
+            "command": "python C:/Users/techd/.claude/scripts/stop-notifier.py",
+            "timeout": 60
           }
         ]
       }

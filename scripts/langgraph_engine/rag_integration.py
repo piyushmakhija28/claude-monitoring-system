@@ -337,7 +337,7 @@ class RAGLayer:
         # type: (...) -> bool
         """Store full session summary in sessions collection for cross-session learning.
 
-        Called at pipeline end (output_node) to capture the complete picture.
+        Called at pipeline end (level3_output) to capture the complete picture.
         """
         if not self.available:
             return False

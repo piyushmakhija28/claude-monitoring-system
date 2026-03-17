@@ -127,10 +127,10 @@ def route_after_level_minus1_fix(state: FlowState) -> Literal["level_minus1_unic
     return "level_minus1_unicode"
 
 
-def route_context_threshold(state: FlowState) -> Literal["emergency_archive", "level2_common_standards"]:
+def route_context_threshold(state: FlowState) -> Literal["level2_emergency_archive", "level2_common_standards"]:
     """Route based on context usage threshold."""
     if state.get(StepKeys.CONTEXT_THRESHOLD_EXCEEDED):
-        return "emergency_archive"
+        return "level2_emergency_archive"
     return "level2_common_standards"
 
 
@@ -1047,7 +1047,7 @@ def create_flow_graph(hook_mode: bool = False):
     # ========================================================================
     # LEVEL 2: STANDARDS SYSTEM (conditional Java routing)
     # ========================================================================
-    graph.add_node("emergency_archive", emergency_archive)
+    graph.add_node("level2_emergency_archive", emergency_archive)
     graph.add_node("level2_common_standards", node_common_standards)
     graph.add_node("level2_java_standards", node_java_standards)
     graph.add_node("level2_tool_optimization", node_tool_optimization_standards)
@@ -1055,7 +1055,7 @@ def create_flow_graph(hook_mode: bool = False):
     graph.add_node("level2_merge", level2_merge_node)
 
     # Emergency archive routes to standards
-    graph.add_edge("emergency_archive", "level2_common_standards")
+    graph.add_edge("level2_emergency_archive", "level2_common_standards")
 
     # Tool optimization and MCP discovery run in parallel with common standards
     graph.add_edge("level1_cleanup", "level2_tool_optimization")
@@ -1081,8 +1081,8 @@ def create_flow_graph(hook_mode: bool = False):
     graph.add_edge("level2_merge", "level2_select_standards")
 
     # Optimize context after Level 2 (compress for Level 3 consumption)
-    graph.add_node("optimize_after_level2", optimize_context_after_level2)
-    graph.add_edge("level2_select_standards", "optimize_after_level2")
+    graph.add_node("level2_optimize_context", optimize_context_after_level2)
+    graph.add_edge("level2_select_standards", "level2_optimize_context")
 
     # ========================================================================
     # LEVEL 3: EXECUTION SYSTEM - 14-STEP PIPELINE (v2 WORKFLOW.MD COMPLIANT)
@@ -1090,19 +1090,19 @@ def create_flow_graph(hook_mode: bool = False):
 
     # Bridge node: session_path → session_dir
     graph.add_node("level3_init", level3_init_node)
-    graph.add_edge("optimize_after_level2", "level3_init")
+    graph.add_edge("level2_optimize_context", "level3_init")
 
     # Step 0: Task Analysis (MUST run before Step 1 - provides task_type, complexity, tasks)
     graph.add_node("level3_step0", step0_task_analysis_node)
     graph.add_edge("level3_init", "level3_step0")
 
     # Standards integration hook: Step 1 - before plan mode decision
-    graph.add_node("standards_hook_step1", apply_integration_step1)
-    graph.add_edge("level3_step0", "standards_hook_step1")
+    graph.add_node("level3_standards_hook_step1", apply_integration_step1)
+    graph.add_edge("level3_step0", "level3_standards_hook_step1")
 
     # Step 1: Plan Mode Decision (LOCAL LLM - Ollama)
     graph.add_node("level3_step1", step1_plan_mode_decision_node)
-    graph.add_edge("standards_hook_step1", "level3_step1")
+    graph.add_edge("level3_standards_hook_step1", "level3_step1")
 
     # CONDITIONAL: plan_required → step2 | direct → step3
     graph.add_conditional_edges(
@@ -1115,12 +1115,12 @@ def create_flow_graph(hook_mode: bool = False):
     )
 
     # Standards integration hook: Step 2 - during plan execution
-    graph.add_node("standards_hook_step2", apply_integration_step2)
+    graph.add_node("level3_standards_hook_step2", apply_integration_step2)
 
     # Step 2: Plan Execution (only when plan_required=True)
     graph.add_node("level3_step2", step2_plan_execution_node)
-    graph.add_edge("level3_step2", "standards_hook_step2")
-    graph.add_edge("standards_hook_step2", "level3_step3")
+    graph.add_edge("level3_step2", "level3_standards_hook_step2")
+    graph.add_edge("level3_standards_hook_step2", "level3_step3")
 
     # Step 3: Task Breakdown
     graph.add_node("level3_step3", step3_task_breakdown_node)
@@ -1134,12 +1134,12 @@ def create_flow_graph(hook_mode: bool = False):
     graph.add_edge("level3_step4", "level3_step5")
 
     # Standards integration hook: Step 5 - after skill selection (validates skill vs project)
-    graph.add_node("standards_hook_step5", apply_integration_step5)
-    graph.add_edge("level3_step5", "standards_hook_step5")
+    graph.add_node("level3_standards_hook_step5", apply_integration_step5)
+    graph.add_edge("level3_step5", "level3_standards_hook_step5")
 
     # Step 6: Skill Validation & Download (RESTORED)
     graph.add_node("level3_step6", step6_skill_validation_node)
-    graph.add_edge("standards_hook_step5", "level3_step6")
+    graph.add_edge("level3_standards_hook_step5", "level3_step6")
 
     # Step 7: Final Prompt Generation (LOCAL LLM)
     graph.add_node("level3_step7", step7_final_prompt_node)
@@ -1167,9 +1167,9 @@ def create_flow_graph(hook_mode: bool = False):
         graph.add_node("level3_merge", level3_v2_merge_node)
         graph.add_edge("level3_step9", "level3_merge")
 
-        graph.add_node("output_node", output_node)
-        graph.add_edge("level3_merge", "output_node")
-        graph.add_edge("output_node", END)
+        graph.add_node("level3_output", output_node)
+        graph.add_edge("level3_merge", "level3_output")
+        graph.add_edge("level3_output", END)
 
         try:
             checkpointer = CheckpointerManager.get_default_checkpointer(use_sqlite=True)
@@ -1189,12 +1189,12 @@ def create_flow_graph(hook_mode: bool = False):
 
     # Standards integration hook: Step 10 (code review) - builds compliance checklist
     # Runs after step10, before step11, so PR review has the checklist available
-    graph.add_node("standards_hook_step10", apply_integration_step10)
-    graph.add_edge("level3_step10", "standards_hook_step10")
+    graph.add_node("level3_standards_hook_step10", apply_integration_step10)
+    graph.add_edge("level3_step10", "level3_standards_hook_step10")
 
     # Step 11: PR Creation & Merge
     graph.add_node("level3_step11", step11_pull_request_node)
-    graph.add_edge("standards_hook_step10", "level3_step11")
+    graph.add_edge("level3_standards_hook_step10", "level3_step11")
 
     # Step 11 → Conditional Routing (retry loop or continue to closure)
     graph.add_conditional_edges(
@@ -1214,12 +1214,12 @@ def create_flow_graph(hook_mode: bool = False):
     graph.add_edge("level3_step12", "level3_step13")
 
     # Standards integration hook: Step 13 - documentation requirements from standards
-    graph.add_node("standards_hook_step13", apply_integration_step13)
-    graph.add_edge("level3_step13", "standards_hook_step13")
+    graph.add_node("level3_standards_hook_step13", apply_integration_step13)
+    graph.add_edge("level3_step13", "level3_standards_hook_step13")
 
     # Step 14: Final Summary + Voice Notification
     graph.add_node("level3_step14", step14_final_summary_node)
-    graph.add_edge("standards_hook_step13", "level3_step14")
+    graph.add_edge("level3_standards_hook_step13", "level3_step14")
 
     # Merge node
     graph.add_node("level3_merge", level3_v2_merge_node)
@@ -1228,9 +1228,9 @@ def create_flow_graph(hook_mode: bool = False):
     # ========================================================================
     # OUTPUT
     # ========================================================================
-    graph.add_node("output_node", output_node)
-    graph.add_edge("level3_merge", "output_node")
-    graph.add_edge("output_node", END)
+    graph.add_node("level3_output", output_node)
+    graph.add_edge("level3_merge", "level3_output")
+    graph.add_edge("level3_output", END)
 
     # Compile graph with SqliteSaver checkpointer for state persistence
     # Enables resume from any step if pipeline is interrupted
