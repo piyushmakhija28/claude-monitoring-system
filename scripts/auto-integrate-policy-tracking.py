@@ -296,10 +296,7 @@ def integrate_batch(batch_name: str = 'critical') -> list:
             'scripts/pre-tool-enforcer.py',
         ],
         'high': [
-            'scripts/architecture/01-sync-system/session-management/session-chaining-policy.py',
-            'scripts/architecture/01-sync-system/session-management/session-memory-policy.py',
-            'scripts/architecture/01-sync-system/context-management/session-pruning-policy.py',
-            'scripts/architecture/03-execution-system/00-prompt-generation/prompt-generation-policy.py',
+            # Migrated to MCP servers (session-mgr, policy-enforcement, llm-provider)
         ],
         'all': [
             # All 28 scripts would go here
