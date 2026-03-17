@@ -756,6 +756,26 @@ def check_level1_sync_complete(tool_name):
         # Fail-open: trace not available yet, do not block
         return hints, blocks
 
+    # TTL: auto-expire blocking after 90 seconds if flow-trace is stale
+    # (prevents permanent blocking when pipeline ran but trace was not updated)
+    try:
+        _trace_path_l1 = (
+            Path.home() / '.claude' / 'memory' / 'logs' / 'sessions'
+            / current_session_id / 'flow-trace.json'
+        )
+        if _trace_path_l1.exists():
+            _trace_age_l1 = (
+                datetime.now()
+                - datetime.fromtimestamp(os.path.getmtime(str(_trace_path_l1)))
+            ).total_seconds()
+            if _trace_age_l1 > 90:
+                hints.append(
+                    '[HINT] Level 1 check skipped - flow-trace is older than 90s (stale flag)'
+                )
+                return hints, blocks
+    except Exception:
+        pass
+
     # Level 1 is complete when both key pipeline steps are present
     level1_context_done = _pipeline_step_present(raw_trace, 'LEVEL_1_CONTEXT')
     level1_session_done = _pipeline_step_present(raw_trace, 'LEVEL_1_SESSION')
@@ -811,6 +831,26 @@ def check_level2_standards_complete(tool_name):
     if raw_trace is None:
         # Fail-open: trace not available yet, do not block
         return hints, blocks
+
+    # TTL: auto-expire blocking after 90 seconds if flow-trace is stale
+    # (prevents permanent blocking when pipeline ran but trace was not updated)
+    try:
+        _trace_path_l2 = (
+            Path.home() / '.claude' / 'memory' / 'logs' / 'sessions'
+            / current_session_id / 'flow-trace.json'
+        )
+        if _trace_path_l2.exists():
+            _trace_age_l2 = (
+                datetime.now()
+                - datetime.fromtimestamp(os.path.getmtime(str(_trace_path_l2)))
+            ).total_seconds()
+            if _trace_age_l2 > 90:
+                hints.append(
+                    '[HINT] Level 2 check skipped - flow-trace is older than 90s (stale flag)'
+                )
+                return hints, blocks
+    except Exception:
+        pass
 
     # Check for any Level 2 step name variant (3-level-flow.py uses different names
     # across versions: LEVEL_2_STANDARDS (older), LEVEL_2_1_COMMON + LEVEL_2_2_MICROSERVICES (newer))
