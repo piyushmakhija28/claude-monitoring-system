@@ -2,16 +2,18 @@
 MCP Base Infrastructure - Reusable OOP foundations for all MCP servers.
 
 Design Patterns Applied:
-  - Builder Pattern:    MCPResponse for structured response construction
-  - Decorator Pattern:  @mcp_tool_handler for cross-cutting error handling
-  - Singleton Pattern:  LazyClient for shared resource initialization
-  - Repository Pattern: AtomicJsonStore, JsonlAppender for data persistence
-  - Strategy Pattern:   Pluggable serializers via MCPResponse
+  - Builder Pattern:    ``MCPResponse`` for structured response construction
+  - Decorator Pattern:  ``@mcp_tool_handler`` for cross-cutting error handling
+  - Singleton Pattern:  ``LazyClient`` for shared resource initialization
+  - Repository Pattern: ``AtomicJsonStore``, ``JsonlAppender`` for data persistence
 
-Usage:
+Public API::
+
     from base import MCPResponse, mcp_tool_handler, AtomicJsonStore, LazyClient
+    from base.response import to_json, success, error
+    from base.clients import GitRepoClient, GitHubApiClient, QdrantManager, EmbeddingManager
 
-Version: 1.0.0
+Version: 1.1.0
 Windows-Safe: ASCII only (cp1252 compatible)
 """
 

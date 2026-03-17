@@ -5,9 +5,10 @@ Design Pattern: Decorator (structural)
   - Wraps tool functions with standardized error handling
   - Eliminates 109 identical try/except blocks across 11 servers
   - Adds optional logging, timing, and response normalization
-  - Zero overhead when not needed (decorator is opt-in)
+  - Includes ``error_type`` in error responses for programmatic handling
 
-Before (repeated 109 times):
+Before (repeated 109 times)::
+
     @mcp.tool()
     def my_tool(arg: str) -> str:
         try:
@@ -15,10 +16,9 @@ Before (repeated 109 times):
             return _json({"success": True, "result": result})
         except SomeError as e:
             return _json({"success": False, "error": str(e)})
-        except Exception as e:
-            return _json({"success": False, "error": str(e)})
 
-After:
+After::
+
     @mcp.tool()
     @mcp_tool_handler
     def my_tool(arg: str) -> dict:
@@ -29,10 +29,11 @@ Windows-Safe: ASCII only (cp1252 compatible)
 """
 
 import functools
-import json
 import time
 import traceback
 from typing import Callable, Optional, Tuple, Type, Union
+
+from .response import _serialize
 
 
 def mcp_tool_handler(
@@ -46,18 +47,25 @@ def mcp_tool_handler(
 
     The decorated function should return a dict (not JSON string).
     The decorator handles:
-      1. Wrapping return dict with {"success": True, ...}
-      2. Catching exceptions and returning {"success": False, "error": ...}
-      3. JSON serialization of the final response
-      4. Optional execution timing
+
+    1. Wrapping return dict with ``{"success": True, ...}``
+    2. Catching exceptions and returning ``{"success": False, "error": ..., "error_type": ...}``
+    3. JSON serialization of the final response via shared ``_serialize()``
+    4. Optional execution timing via ``log_duration``
 
     Args:
-        func: The tool function to decorate (auto-detected when used without parens)
-        error_types: Tuple of exception types to catch (default: all Exception)
-        include_traceback: Include traceback snippet in error response
-        log_duration: Add duration_ms to response
+        func: The tool function to decorate (auto-detected when used without parens).
+        error_types: Tuple of exception types to catch (default: all ``Exception``).
+            Only ``Exception`` subclasses are accepted; ``BaseException`` subclasses
+            like ``KeyboardInterrupt`` and ``SystemExit`` are never caught.
+        include_traceback: If True, include last 500 chars of traceback in error response.
+        log_duration: If True, add ``duration_ms`` field to response.
 
-    Usage:
+    Returns:
+        Decorated function that returns a JSON string.
+
+    Usage::
+
         # Simple (no args):
         @mcp.tool()
         @mcp_tool_handler
@@ -74,6 +82,11 @@ def mcp_tool_handler(
     def decorator(fn: Callable) -> Callable:
         @functools.wraps(fn)
         def wrapper(*args, **kwargs) -> str:
+            """Wrapper that handles serialization and error catching.
+
+            Returns:
+                JSON string with ``success`` field and tool results or error details.
+            """
             start = time.time() if log_duration else 0
 
             try:
@@ -94,7 +107,7 @@ def mcp_tool_handler(
                             (time.time() - start) * 1000
                         )
 
-                    return json.dumps(result, indent=2, default=str)
+                    return _serialize(result)
 
                 # If function returns None, treat as success with no data
                 if result is None:
@@ -103,19 +116,16 @@ def mcp_tool_handler(
                         payload["duration_ms"] = round(
                             (time.time() - start) * 1000
                         )
-                    return json.dumps(payload, indent=2, default=str)
+                    return _serialize(payload)
 
                 # Anything else, wrap it
-                return json.dumps(
-                    {"success": True, "data": result},
-                    indent=2,
-                    default=str,
-                )
+                return _serialize({"success": True, "data": result})
 
             except error_types as e:
                 err_payload = {
                     "success": False,
                     "error": str(e),
+                    "error_type": type(e).__name__,
                 }
                 if include_traceback:
                     err_payload["traceback"] = traceback.format_exc()[-500:]
@@ -123,7 +133,7 @@ def mcp_tool_handler(
                     err_payload["duration_ms"] = round(
                         (time.time() - start) * 1000
                     )
-                return json.dumps(err_payload, indent=2, default=str)
+                return _serialize(err_payload)
 
         return wrapper
 
@@ -134,25 +144,41 @@ def mcp_tool_handler(
 
 
 def validate_params(*required_params: str):
-    """Decorator that validates required parameters before tool execution.
+    """Decorator that validates required parameters are not None before execution.
 
-    Usage:
+    Only checks that required parameters are present and not ``None``.
+    Does NOT reject falsy values like ``0``, ``False``, or ``""`` --
+    those are valid parameter values.
+
+    Args:
+        *required_params: Names of parameters that must not be ``None``.
+
+    Returns:
+        Decorator function.
+
+    Raises:
+        ValueError: If any required parameter is missing or ``None``.
+
+    Usage::
+
         @mcp.tool()
         @validate_params("session_id", "branch")
         @mcp_tool_handler
         def my_tool(session_id: str, branch: str) -> dict:
             ...
 
-    Raises ValueError with clear message listing missing params.
+    Note:
+        This decorator only checks keyword arguments. Ensure the framework
+        passes parameters as kwargs (FastMCP does this by default).
     """
 
     def decorator(fn: Callable) -> Callable:
         @functools.wraps(fn)
         def wrapper(*args, **kwargs) -> Union[str, dict]:
-            # Check kwargs for missing required params
+            """Validates required params are not None before calling the tool."""
             missing = [
                 p for p in required_params
-                if p not in kwargs or not kwargs[p]
+                if p not in kwargs or kwargs[p] is None
             ]
             if missing:
                 raise ValueError(
