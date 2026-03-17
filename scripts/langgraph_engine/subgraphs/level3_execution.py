@@ -39,8 +39,14 @@ from ..flow_state import FlowState
 # ============================================================================
 
 
-def call_execution_script(script_name: str, args: list = None) -> dict:
-    """Call a Level 3 execution script and return parsed output."""
+def call_execution_script(script_name: str, args: list = None, model_tier: str = None) -> dict:
+    """Call a Level 3 execution script and return parsed output.
+
+    Args:
+        script_name: Name of the script (without .py) in architecture/03-execution-system/
+        args: Command-line arguments to pass
+        model_tier: Optional model tier ('fast', 'balanced', 'quality') passed via MODEL_TIER env var
+    """
     import os
 
     DEBUG = os.getenv("CLAUDE_DEBUG") == "1"
@@ -70,6 +76,11 @@ def call_execution_script(script_name: str, args: list = None) -> dict:
         if DEBUG:
             print(f"[L3-DEBUG] Running: {script_name}", file=sys.stderr)
 
+        # Build env with optional MODEL_TIER
+        env = os.environ.copy()
+        if model_tier:
+            env["MODEL_TIER"] = model_tier
+
         result = subprocess.run(
             cmd,
             capture_output=True,
@@ -77,7 +88,8 @@ def call_execution_script(script_name: str, args: list = None) -> dict:
             encoding='utf-8',
             errors='replace',
             timeout=30,
-            cwd=scripts_dir
+            cwd=scripts_dir,
+            env=env,
         )
 
         if DEBUG:
@@ -157,10 +169,18 @@ def step0_task_analysis(state: FlowState) -> dict:
         print(f"[L3-DEBUG] State keys: {list(state.keys())[:5]}", file=sys.stderr)
         print(f"[L3] -> Step 0 user_message: {user_message[:50] if user_message else 'EMPTY'}...", file=sys.stderr)
 
+    # Run anti-hallucination enforcement before prompt generation (non-blocking)
+    try:
+        ah_result = call_execution_script("anti-hallucination-enforcement", ["--enforce"])
+        if DEBUG and ah_result.get("status") != "SCRIPT_NOT_FOUND":
+            print(f"[L3-DEBUG] Anti-hallucination: {ah_result.get('status', 'unknown')}", file=sys.stderr)
+    except Exception:
+        pass  # Anti-hallucination failure is never fatal
+
     # Run task analysis
     args = [user_message] if user_message else []
     args.append(f"--context={json.dumps(context_data)}")
-    analysis_result = call_execution_script("prompt-generator", args)
+    analysis_result = call_execution_script("prompt-generator", args, model_tier="fast")
 
     task_type = analysis_result.get("task_type", "General Task")
     complexity = analysis_result.get("complexity", 5)
@@ -172,7 +192,7 @@ def step0_task_analysis(state: FlowState) -> dict:
     # PART B: TASK BREAKDOWN
     args = [user_message] if user_message else []
     args.extend([f"--task-type={task_type}"])
-    breakdown_result = call_execution_script("task-auto-analyzer", args)
+    breakdown_result = call_execution_script("task-auto-analyzer", args, model_tier="fast")
 
     if DEBUG:
         print(f"[L3] -> Step 0 Breakdown END: {breakdown_result.get('task_count', 1)} tasks", file=sys.stderr)
@@ -234,7 +254,7 @@ def step1_plan_mode_decision(state: FlowState) -> dict:
         "--analyze",
         f"--context={json.dumps(context_data)}"
     ]
-    result = call_execution_script("auto-plan-mode-suggester", args)
+    result = call_execution_script("auto-plan-mode-suggester", args, model_tier="fast")
 
     return {
         "step1_plan_required": result.get("plan_required", False),
@@ -731,7 +751,7 @@ def step5_skill_agent_selection(state: FlowState) -> dict:
     if context_file:
         args.append(f"--context-file={context_file}")
 
-    result = call_execution_script("auto-skill-agent-selector", args)
+    result = call_execution_script("auto-skill-agent-selector", args, model_tier="balanced")
 
     # Cleanup temp file
     if context_file:
@@ -756,6 +776,22 @@ def step5_skill_agent_selection(state: FlowState) -> dict:
     # Primary skill/agent (first in list) for backward compat
     selected_skill_name = selected_skills[0] if selected_skills else ""
     selected_agent_name = selected_agents[0] if selected_agents else ""
+
+    # --- Cross-session RAG boost: re-rank skills based on historical success ---
+    try:
+        from ..skill_selection_criteria import _get_rag_skill_boost
+        task_info = {"task_type": task_type, "complexity": complexity}
+        boosted = []
+        for sk in selected_skills:
+            boost = _get_rag_skill_boost(task_info, {"name": sk})
+            boosted.append((sk, boost))
+        # Re-sort if any skill gets meaningful boost
+        if any(b > 0.05 for _, b in boosted):
+            boosted.sort(key=lambda x: x[1], reverse=True)
+            selected_skills = [sk for sk, _ in boosted]
+            selected_skill_name = selected_skills[0] if selected_skills else selected_skill_name
+    except Exception:
+        pass  # RAG boost failure is non-blocking
 
     # --- Post-selection conflict resolution ---
     # Build minimal skill/agent dicts for ConflictResolver
@@ -855,6 +891,50 @@ def step5_skill_agent_selection(state: FlowState) -> dict:
 
 # ===== STEP 6: SKILL VALIDATION & DOWNLOAD =====
 
+
+def _try_download_skill(skill_name: str, skills_dir: Path) -> bool:
+    """Attempt to download a missing skill from the global library repo.
+
+    Uses sync-library.py if available, otherwise tries direct git sparse checkout.
+    Returns True if skill was successfully downloaded.
+    """
+    try:
+        sync_script = Path(__file__).parent.parent.parent / "sync-library.py"
+        if sync_script.exists():
+            result = subprocess.run(
+                [sys.executable, str(sync_script), "--skill", skill_name],
+                capture_output=True, text=True, encoding='utf-8', errors='replace',
+                timeout=15,
+            )
+            # Check if file now exists
+            skill_path = skills_dir / skill_name / "SKILL.md"
+            skill_path_lower = skills_dir / skill_name / "skill.md"
+            return skill_path.exists() or skill_path_lower.exists()
+    except Exception:
+        pass
+    return False
+
+
+def _try_download_agent(agent_name: str, agents_dir: Path) -> bool:
+    """Attempt to download a missing agent from the global library repo.
+
+    Returns True if agent was successfully downloaded.
+    """
+    try:
+        sync_script = Path(__file__).parent.parent.parent / "sync-library.py"
+        if sync_script.exists():
+            result = subprocess.run(
+                [sys.executable, str(sync_script), "--agent", agent_name],
+                capture_output=True, text=True, encoding='utf-8', errors='replace',
+                timeout=15,
+            )
+            agent_path = agents_dir / agent_name / "agent.md"
+            return agent_path.exists()
+    except Exception:
+        pass
+    return False
+
+
 def step6_skill_validation_download(state: FlowState) -> dict:
     """Step 6: Skill Validation & Download - Verify selected skills exist and download if needed.
 
@@ -882,14 +962,21 @@ def step6_skill_validation_download(state: FlowState) -> dict:
     if skill_name:
         skills_dir = Path.home() / ".claude" / "skills"
         skill_path = skills_dir / skill_name / "skill.md"
+        # Also check uppercase SKILL.md (convention in claude-global-library)
+        skill_path_upper = skills_dir / skill_name / "SKILL.md"
 
-        if skill_path.exists():
+        if skill_path.exists() or skill_path_upper.exists():
             validation_results["skill_exists"] = True
         else:
-            validation_results["validation_errors"].append(
-                f"Skill '{skill_name}' not found locally. Would download from repository."
-            )
-            validation_results["downloaded"].append(skill_name)
+            # Attempt download via sync-library script (non-blocking)
+            downloaded = _try_download_skill(skill_name, skills_dir)
+            if downloaded:
+                validation_results["skill_exists"] = True
+                validation_results["downloaded"].append(skill_name)
+            else:
+                validation_results["validation_errors"].append(
+                    f"Skill '{skill_name}' not found locally and download failed."
+                )
 
     # Check if agent exists
     if agent_name:
@@ -899,10 +986,15 @@ def step6_skill_validation_download(state: FlowState) -> dict:
         if agent_path.exists():
             validation_results["agent_exists"] = True
         else:
-            validation_results["validation_errors"].append(
-                f"Agent '{agent_name}' not found locally. Would download from repository."
-            )
-            validation_results["downloaded"].append(agent_name)
+            # Attempt download via sync-library script (non-blocking)
+            downloaded = _try_download_agent(agent_name, agents_dir)
+            if downloaded:
+                validation_results["agent_exists"] = True
+                validation_results["downloaded"].append(agent_name)
+            else:
+                validation_results["validation_errors"].append(
+                    f"Agent '{agent_name}' not found locally and download failed."
+                )
 
     # NEW: Validate any selected MCPs (MCP Integration Phase 1)
     mcp_results = {

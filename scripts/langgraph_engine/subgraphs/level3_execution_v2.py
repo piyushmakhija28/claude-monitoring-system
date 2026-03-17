@@ -45,7 +45,7 @@ except ImportError:
 
 from ..flow_state import FlowState
 from ..step_logger import write_level_log
-from ..rag_integration import rag_store_after_node, get_rag_layer
+from ..rag_integration import rag_store_after_node, rag_lookup_before_llm, get_rag_layer
 from .level3_execution import (
     step0_task_analysis,
     step1_plan_mode_decision,
@@ -240,6 +240,13 @@ def _write_step_log(
 
 
 # ---------------------------------------------------------------------------
+# RAG-eligible steps: these make LLM calls that can be short-circuited by RAG
+# ---------------------------------------------------------------------------
+# Steps 3,4,6 have no LLM; Steps 9-14 are unique per task; Step 10 is implementation
+_RAG_ELIGIBLE_STEPS = {0, 1, 2, 5, 7, 8}
+
+
+# ---------------------------------------------------------------------------
 # Core step execution wrapper
 # ---------------------------------------------------------------------------
 
@@ -291,6 +298,45 @@ def _run_step(
     print(f"\n[STEP {step_number:02d}] {step_label} - START", file=sys.stderr)
     logger.info(f"\n[STEP {step_number:02d}] {step_label} - START")
     step_start = time.time()
+
+    # --- RAG lookup before LLM call (fail-open) ---
+    if step_number in _RAG_ELIGIBLE_STEPS:
+        try:
+            user_msg = state.get("user_message", "") or ""
+            rag_query = f"{step_label} {user_msg[:200]}"
+            step_key = f"step{step_number}"
+            rag_result = rag_lookup_before_llm(step=step_key, query=rag_query, state=dict(state))
+            if rag_result and rag_result.get("rag_hit"):
+                duration = time.time() - step_start
+                cached_decision = rag_result.get("decision", {})
+                confidence = rag_result.get("confidence", 0.0)
+                print(
+                    f"[STEP {step_number:02d}] {step_label} - RAG HIT "
+                    f"(confidence={confidence:.2f}, {duration*1000:.0f}ms)",
+                    file=sys.stderr,
+                )
+                logger.info(
+                    f"[STEP {step_number:02d}] {step_label} - RAG HIT "
+                    f"(confidence={confidence:.2f})"
+                )
+                # Add RAG metadata to cached result
+                cached_decision[f"step{step_number}_rag_hit"] = True
+                cached_decision[f"step{step_number}_rag_confidence"] = confidence
+                cached_decision[f"step{step_number}_execution_time_ms"] = duration * 1000
+                # Write step log
+                _write_step_log(state, step_number, step_label, "RAG_HIT", duration, cached_decision)
+                # Record metric
+                if metrics:
+                    try:
+                        metrics.record_step(step=step_number, duration=duration, status="RAG_HIT")
+                    except Exception:
+                        pass
+                return cached_decision
+            else:
+                print(f"[STEP {step_number:02d}] {step_label} - RAG MISS", file=sys.stderr)
+        except Exception as rag_exc:
+            # Fail-open: RAG errors never block pipeline
+            logger.debug(f"[STEP {step_number:02d}] RAG lookup failed (non-fatal): {rag_exc}")
 
     # --- Timeout enforcement ---
     # Load timeout table; gracefully degrade if module unavailable

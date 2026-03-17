@@ -284,3 +284,61 @@ class TestSkillSelectionRAGBoost:
         # Should get pattern boost for matching "python" and "flask"
         assert boost > 0
         assert boost <= 0.15
+
+
+class TestRAGLookupInRunStep:
+    """Test RAG lookup wiring in _run_step (level3_execution_v2.py)."""
+
+    def test_rag_eligible_steps_defined(self):
+        from langgraph_engine.subgraphs.level3_execution_v2 import _RAG_ELIGIBLE_STEPS
+        assert _RAG_ELIGIBLE_STEPS == {0, 1, 2, 5, 7, 8}
+
+    @patch("langgraph_engine.subgraphs.level3_execution_v2.rag_lookup_before_llm")
+    def test_run_step_calls_rag_for_eligible_step(self, mock_rag_lookup):
+        from langgraph_engine.subgraphs.level3_execution_v2 import _run_step
+        mock_rag_lookup.return_value = None  # RAG miss
+        dummy_fn = MagicMock(return_value={"step0_task_type": "Bug Fix"})
+        state = {"user_message": "fix auth bug", "session_id": "s1"}
+        result = _run_step(0, "Task Analysis", dummy_fn, state)
+        # RAG should have been called
+        mock_rag_lookup.assert_called_once()
+        # step_fn should still be called (RAG miss)
+        dummy_fn.assert_called_once()
+
+    @patch("langgraph_engine.subgraphs.level3_execution_v2.rag_lookup_before_llm")
+    def test_run_step_skips_rag_for_non_eligible_step(self, mock_rag_lookup):
+        from langgraph_engine.subgraphs.level3_execution_v2 import _run_step
+        dummy_fn = MagicMock(return_value={"step3_tasks_validated": []})
+        state = {"user_message": "fix auth bug", "session_id": "s1"}
+        result = _run_step(3, "Task Breakdown", dummy_fn, state)
+        # RAG should NOT be called for step 3
+        mock_rag_lookup.assert_not_called()
+        dummy_fn.assert_called_once()
+
+    @patch("langgraph_engine.subgraphs.level3_execution_v2.rag_lookup_before_llm")
+    def test_run_step_returns_cached_on_rag_hit(self, mock_rag_lookup):
+        from langgraph_engine.subgraphs.level3_execution_v2 import _run_step
+        mock_rag_lookup.return_value = {
+            "rag_hit": True,
+            "confidence": 0.92,
+            "decision": {"step0_task_type": "Bug Fix", "step0_complexity": 3},
+        }
+        dummy_fn = MagicMock(return_value={})
+        state = {"user_message": "fix auth bug", "session_id": "s1"}
+        result = _run_step(0, "Task Analysis", dummy_fn, state)
+        # step_fn should NOT be called (RAG hit)
+        dummy_fn.assert_not_called()
+        assert result["step0_task_type"] == "Bug Fix"
+        assert result["step0_rag_hit"] is True
+        assert result["step0_rag_confidence"] == 0.92
+
+    @patch("langgraph_engine.subgraphs.level3_execution_v2.rag_lookup_before_llm")
+    def test_run_step_continues_on_rag_error(self, mock_rag_lookup):
+        from langgraph_engine.subgraphs.level3_execution_v2 import _run_step
+        mock_rag_lookup.side_effect = RuntimeError("Vector DB down")
+        dummy_fn = MagicMock(return_value={"step0_task_type": "Feature"})
+        state = {"user_message": "add feature", "session_id": "s1"}
+        result = _run_step(0, "Task Analysis", dummy_fn, state)
+        # Should fail-open: step_fn called despite RAG error
+        dummy_fn.assert_called_once()
+        assert result["step0_task_type"] == "Feature"

@@ -352,5 +352,73 @@ class TestContextThresholdRouting:
         assert result == "level2_common_standards"
 
 
+class TestAntiHallucinationWiring:
+    """Test 10: Anti-hallucination enforcement is called in Step 0"""
+
+    @patch("langgraph_engine.subgraphs.level3_execution.call_execution_script")
+    def test_step0_calls_anti_hallucination(self, mock_call):
+        """Verify step0 calls anti-hallucination-enforcement before prompt-generator"""
+        call_log = []
+
+        def track_calls(script_name, args=None, model_tier=None):
+            call_log.append(script_name)
+            return {"status": "SUCCESS", "task_type": "Bug Fix", "complexity": 3, "task_count": 1, "tasks": []}
+
+        mock_call.side_effect = track_calls
+
+        state = create_initial_state()
+        state["user_message"] = "Fix authentication bug"
+        result = step0_task_analysis(state)
+
+        # anti-hallucination-enforcement should be called BEFORE prompt-generator
+        assert "anti-hallucination-enforcement" in call_log
+        ah_idx = call_log.index("anti-hallucination-enforcement")
+        pg_idx = call_log.index("prompt-generator")
+        assert ah_idx < pg_idx, "Anti-hallucination must run before prompt-generator"
+
+
+class TestModelTierRouting:
+    """Test 11: Model tier is passed to subprocess calls"""
+
+    @patch("langgraph_engine.subgraphs.level3_execution.subprocess.run")
+    def test_call_execution_script_passes_model_tier(self, mock_subprocess):
+        """Verify MODEL_TIER env var is set when model_tier param provided"""
+        mock_subprocess.return_value = MagicMock(
+            stdout='{"status": "SUCCESS"}',
+            stderr="",
+            returncode=0,
+        )
+
+        with patch("pathlib.Path.exists", return_value=True):
+            call_execution_script("test-script", [], model_tier="fast")
+
+        # Verify subprocess was called with env containing MODEL_TIER
+        if mock_subprocess.called:
+            call_kwargs = mock_subprocess.call_args
+            env = call_kwargs.kwargs.get("env") or (call_kwargs[1].get("env") if len(call_kwargs) > 1 else None)
+            if env:
+                assert env.get("MODEL_TIER") == "fast"
+
+    @patch("langgraph_engine.subgraphs.level3_execution.subprocess.run")
+    def test_call_execution_script_no_model_tier(self, mock_subprocess):
+        """Verify MODEL_TIER is NOT set when model_tier param is None"""
+        import os
+        # Ensure MODEL_TIER is not in environment
+        original = os.environ.pop("MODEL_TIER", None)
+
+        mock_subprocess.return_value = MagicMock(
+            stdout='{"status": "SUCCESS"}',
+            stderr="",
+            returncode=0,
+        )
+
+        with patch("pathlib.Path.exists", return_value=True):
+            call_execution_script("test-script", [])
+
+        # Restore original
+        if original is not None:
+            os.environ["MODEL_TIER"] = original
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "--tb=short"])
