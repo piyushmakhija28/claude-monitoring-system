@@ -2,7 +2,7 @@
 
 **The first AI tool that follows full SDLC** - from task analysis to merged PR, automatically.
 
-**Version:** 7.5.0 | **Status:** Alpha | **Last Updated:** 2026-03-17
+**Version:** 7.5.0 | **Status:** Alpha | **Last Updated:** 2026-03-18
 
 ---
 
@@ -74,7 +74,7 @@ Level 3:  EXECUTION         15 steps (Step 0-14): Full SDLC automation
 | **GitHub Automation** | 8-9 | Issue creation with semantic labels, branch creation with stash safety |
 | **Implementation** | 10 | Code execution with system prompt context (95%+ quality with full context) |
 | **Review & Closure** | 11-12 | PR creation with code review loop (max 3 retries), issue closure with summary |
-| **Finalization** | 13-14 | Documentation update, execution summary + voice notification |
+| **Finalization** | 13-14 | Documentation + UML diagram generation, execution summary + voice notification |
 
 ### Execution Modes
 
@@ -99,7 +99,7 @@ Full Mode (CLAUDE_HOOK_MODE=0):
 - Checkpoint recovery (resume from any step after crash)
 - Signal handling (Ctrl+C graceful recovery)
 
-### 11 MCP Servers (109 tools)
+### 12 MCP Servers (123 tools)
 
 All servers use FastMCP protocol (stdio JSON-RPC), registered in `~/.claude/settings.json`:
 
@@ -116,6 +116,7 @@ All servers use FastMCP protocol (stdio JSON-RPC), registered in `~/.claude/sett
 | standards-loader | 7 | Standards (project detect, framework detect, hot-reload) |
 | skill-manager | 8 | Skill lifecycle (load, search, validate, rank, conflicts) |
 | vector-db | 11 | Vector RAG (Qdrant, 4 collections, semantic search, node decisions) |
+| uml-diagram | 14 | UML generation (12 diagram types, AST + LLM, Mermaid/PlantUML, Kroki.io rendering) |
 
 ### RAG Integration (Vector DB Decision Caching)
 
@@ -314,10 +315,11 @@ claude-insight/
 |   +-- post-tool-tracker.py          # PostToolUse hook
 |   +-- stop-notifier.py              # Stop hook (voice notification)
 |
-+-- src/mcp/                          # 11 FastMCP servers (109 tools)
++-- src/mcp/                          # 12 FastMCP servers (123 tools)
 +-- policies/                         # 49 policy definitions
-+-- tests/                            # 46 test files (1366+ tests)
++-- tests/                            # 47 test files (1400+ tests)
 +-- docs/                             # 40 documentation files
++-- docs/uml/                         # Auto-generated UML diagrams (12 types)
 +-- rules/                            # 5 coding standard definitions
 |
 +-- VERSION                           # Single source of truth (7.5.0)
@@ -335,13 +337,14 @@ claude-insight/
 |--------|-------|
 | Pipeline Levels | 4 (Level -1, 1, 2, 3) |
 | Execution Steps | 15 (Step 0 - Step 14) |
-| MCP Servers | 11 |
-| MCP Tools | 109 |
+| MCP Servers | 12 |
+| MCP Tools | 123 |
 | LangGraph Engine Modules | 76 (70 root + 6 subgraphs) |
 | Policy Files | 49 (48 .md + 1 .json) |
-| Test Files | 46 |
-| Test Functions | 1366+ |
-| Total Python Files | 258+ |
+| Test Files | 47 |
+| Test Functions | 1400+ |
+| Total Python Files | 261+ |
+| UML Diagram Types | 12 |
 | Documentation Files | 40 |
 | RAG Collections | 4 |
 | Supported Languages | 20+ |
@@ -368,7 +371,8 @@ See `.env.example` for all options:
 
 | Version | Date | Highlights |
 |---------|------|------------|
-| **7.5.0** | 2026-03-17 | Gap analysis fixes, all 49 policies complete, code graph analyzer, Level 1 integration |
+| **7.5.0** | 2026-03-18 | UML diagram generation (12 types), 12th MCP server (uml-diagram, 14 tools), AST + LLM hybrid |
+| 7.5.0 | 2026-03-17 | Gap analysis fixes, all 49 policies complete, code graph analyzer, Level 1 integration |
 | 7.5.0 | 2026-03-16 | RAG integration, 11th MCP server (vector-db), cross-session learning, 109 tools |
 | 7.4.0 | 2026-03-16 | Dynamic versioning, SRS rewrite, MCP health checks |
 | 7.3.0 | 2026-03-16 | 10 MCP servers (91 tools), hook migration to MCP imports |

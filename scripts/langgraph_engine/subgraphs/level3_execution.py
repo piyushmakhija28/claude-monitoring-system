@@ -165,9 +165,31 @@ def step0_task_analysis(state: FlowState) -> dict:
         }
     }
 
+    # SDLC Read Phase: Detect project documentation state
+    doc_info = {"is_fresh_project": False, "srs_exists": False,
+                "readme_exists": False, "claude_md_exists": False}
+    try:
+        from ..level3_documentation_manager import Level3DocumentationManager
+        doc_manager = Level3DocumentationManager(
+            project_root=state.get("project_root", "."),
+            session_dir=state.get("session_dir", "")
+        )
+        doc_info = doc_manager.detect_project_docs()
+
+        # Inject doc summaries into context for better task analysis
+        if not doc_info.get("is_fresh_project", False):
+            doc_summaries = doc_manager.summarize_existing_docs(
+                state.get("context_data", {})
+            )
+            if doc_summaries:
+                context_data["documentation"] = doc_summaries
+    except Exception:
+        pass  # Doc detection failure is never fatal
+
     if DEBUG:
         print(f"[L3-DEBUG] State keys: {list(state.keys())[:5]}", file=sys.stderr)
         print(f"[L3] -> Step 0 user_message: {user_message[:50] if user_message else 'EMPTY'}...", file=sys.stderr)
+        print(f"[L3-DEBUG] Docs found: {doc_info.get('docs_found', [])}", file=sys.stderr)
 
     # Run anti-hallucination enforcement before prompt generation (non-blocking)
     try:
@@ -206,7 +228,9 @@ def step0_task_analysis(state: FlowState) -> dict:
             "tasks": breakdown_result.get("tasks", []),
             "script_output": breakdown_result
         },
-        "step0_task_count": breakdown_result.get("task_count", 1)
+        "step0_task_count": breakdown_result.get("task_count", 1),
+        "is_fresh_project": doc_info.get("is_fresh_project", False),
+        "step0_docs_found": doc_info,
     }
 
 
@@ -2147,94 +2171,53 @@ See PR for details."""
 # ===== STEP 13: PROJECT DOCUMENTATION UPDATE =====
 
 def step13_project_documentation_update(state: FlowState) -> dict:
-    """Step 13: Project Documentation Update - Update CLAUDE.md with insights.
+    """Step 13: Documentation - CREATE for new projects, UPDATE for existing.
 
-    Updates project documentation with:
-    - Detected technologies and patterns
-    - Execution summary and decisions
-    - Recommended skills/agents for future tasks
-    - Architecture insights
+    Circular SDLC cycle: Step 0 reads docs, Step 13 writes/updates them.
+    - Fresh projects: Creates SRS, README, CLAUDE.md, CHANGELOG via DocumentationGenerator
+    - Existing projects: Smart per-file updates (CLAUDE.md insight, CHANGELOG entry, etc.)
     """
     from pathlib import Path
 
     try:
-        project_root = Path(state.get("project_root", "."))
-        claude_md = project_root / "CLAUDE.md"
+        from ..level3_documentation_manager import Level3DocumentationManager
 
-        # Build documentation updates
-        updates = []
+        manager = Level3DocumentationManager(
+            project_root=state.get("project_root", "."),
+            session_dir=state.get("session_dir", "") or state.get("session_path", "")
+        )
 
-        # Add detected technologies
-        patterns = state.get("patterns_detected", [])
-        if patterns:
-            updates.append(f"## Detected Technologies\n\n{', '.join(patterns)}\n")
+        is_fresh = state.get("is_fresh_project", False)
 
-        # Add execution summary
-        task_type = state.get("step0_task_type", "Unknown")
-        complexity = state.get("step0_complexity", 5)
-        updates.append(f"## Last Execution Summary\n\n- Task Type: {task_type}\n- Complexity: {complexity}/10\n")
+        if is_fresh:
+            result = manager.create_all_docs(dict(state))
+        else:
+            result = manager.update_existing_docs(dict(state))
 
-        # Add recommended resources
-        skill = state.get("step5_skill", "")
-        agent = state.get("step5_agent", "")
-        if skill or agent:
-            updates.append(f"## Recommended Resources\n\n")
-            if skill:
-                updates.append(f"- Skill: {skill}\n")
-            if agent:
-                updates.append(f"- Agent: {agent}\n")
-
-        # Add modified files from Step 10
-        modified_files = state.get("step10_modified_files", [])
-        if modified_files:
-            updates.append(f"## Modified Files\n\n")
-            for f in modified_files[:20]:
-                updates.append(f"- {f}\n")
-
-        # Actually write documentation to session folder
-        updated_files = []
-        import os
+        # Also write session-dir audit file (preserves existing behavior)
         session_path = state.get("session_dir") or state.get("session_path", "")
-        if session_path and updates:
+        if session_path:
             try:
+                import json as _json
                 doc_file = Path(session_path) / "execution-docs.md"
-                content = f"# Execution Documentation\n\n**Generated**: {__import__('datetime').datetime.now().isoformat()}\n\n"
-                content += "\n".join(updates)
+                task_type = state.get("step0_task_type", "Unknown")
+                complexity = state.get("step0_complexity", 5)
+                content = "# Execution Documentation\n\n"
+                content += "**Generated**: %s\n\n" % __import__('datetime').datetime.now().isoformat()
+                content += "- Task Type: %s\n" % task_type
+                content += "- Complexity: %d/10\n" % complexity
+                content += "- Documentation Status: %s\n" % result.get("step13_documentation_status", "OK")
+                content += "- Files Updated: %s\n" % ", ".join(result.get("step13_updated_files", []))
                 doc_file.write_text(content, encoding='utf-8')
-                updated_files.append(str(doc_file))
-                logger.info(f"Documentation written to {doc_file}")
-            except Exception as write_err:
-                logger.warning(f"Could not write execution docs: {write_err}")
-
-        # Also append execution insight to project CLAUDE.md (non-destructive append)
-        if claude_md.exists() and updates:
-            try:
-                existing = claude_md.read_text(encoding='utf-8', errors='replace')
-                # Only append if not already present (check by timestamp marker)
-                marker = f"<!-- execution-insight-{state.get('session_id', 'unknown')} -->"
-                if marker not in existing:
-                    insight = f"\n\n{marker}\n"
-                    insight += f"## Latest Execution Insight\n\n"
-                    insight += f"- **Task**: {task_type} (complexity {complexity}/10)\n"
-                    if skill:
-                        insight += f"- **Skill**: {skill}\n"
-                    if agent:
-                        insight += f"- **Agent**: {agent}\n"
-                    if modified_files:
-                        insight += f"- **Files Modified**: {len(modified_files)}\n"
-                    insight += f"- **Date**: {__import__('datetime').datetime.now().strftime('%Y-%m-%d')}\n"
-
-                    claude_md.write_text(existing + insight, encoding='utf-8')
-                    updated_files.append(str(claude_md))
-                    logger.info(f"Appended execution insight to {claude_md}")
-            except Exception as append_err:
-                logger.warning(f"Could not append to CLAUDE.md: {append_err}")
+            except Exception:
+                pass  # Audit file is non-critical
 
         return {
-            "step13_updates_prepared": len(updates) > 0,
-            "step13_update_count": len(updates),
-            "step13_updated_files": updated_files,
-            "step13_documentation_status": "OK"
+            "step13_updates_prepared": True,
+            "step13_update_count": len(result.get("step13_updated_files", [])),
+            "step13_updated_files": result.get("step13_updated_files", []),
+            "step13_documentation_status": result.get("step13_documentation_status", "OK"),
+            "step13_docs_created": result.get("step13_docs_created", []),
         }
 
     except Exception as e:

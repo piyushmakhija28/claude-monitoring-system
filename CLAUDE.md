@@ -3,7 +3,7 @@
 **Project:** Claude Workflow Engine
 **Version:** 7.5.0
 **Type:** LangGraph Orchestration Pipeline with RAG
-**Last Updated:** 2026-03-16
+**Last Updated:** 2026-03-18
 
 ---
 
@@ -19,9 +19,9 @@ Claude Workflow Engine is a 3-level LangGraph-based orchestration pipeline for a
 | **Frameworks** | LangGraph 1.0.10+, LangChain, FastMCP, Qdrant |
 | **Status** | Active Development |
 | **Primary Location** | scripts/langgraph_engine/ |
-| **MCP Servers** | 11 (109 tools) |
-| **Total Python Files** | 258 |
-| **Test Files** | 45 |
+| **MCP Servers** | 12 (123 tools) |
+| **Total Python Files** | 261 |
+| **Test Files** | 47 |
 
 ---
 
@@ -50,7 +50,7 @@ Level 3: Execution (15 steps: Step 0 through Step 14)
     |-- Step 10: Implementation Execution
     |-- Step 11: Pull Request & Code Review (review loop)
     |-- Step 12: Issue Closure
-    |-- Step 13: Documentation Update
+    |-- Step 13: Documentation Update + UML Diagram Generation
     |-- Step 14: Final Summary
 ```
 
@@ -59,15 +59,16 @@ Level 3: Execution (15 steps: Step 0 through Step 14)
 ```
 /
 +-- scripts/                          # Pipeline scripts and hooks
-|   +-- langgraph_engine/             # Core orchestration (76 modules: 70 root + 6 subgraph files)
+|   +-- langgraph_engine/             # Core orchestration (78 modules: 72 root + 6 subgraph files)
 |   +-- architecture/                 # Active pipeline scripts (6 scripts + 1 data file)
 +-- policies/                         # 49 policy definitions (48 .md + 1 .json)
 |   +-- 01-sync-system/               # Level 1 policies
 |   +-- 02-standards-system/          # Level 2 policies
 |   +-- 03-execution-system/          # Level 3 policies (15 steps: 0-14 + failure prevention)
-+-- src/mcp/                          # 11 FastMCP servers (109 tools, 8,400+ LOC)
-+-- tests/                            # 45 test files (38 root + 2 integration + 5 other)
++-- src/mcp/                          # 12 FastMCP servers (123 tools, 8,800+ LOC)
++-- tests/                            # 47 test files (40 root + 2 integration + 5 other)
 +-- docs/                             # 40 documentation files
++-- docs/uml/                         # Auto-generated UML diagrams (12 types)
 +-- rules/                            # 5 coding standard definitions
 ```
 
@@ -84,9 +85,11 @@ Level 3: Execution (15 steps: Step 0 through Step 14)
 | Level 3 v2 | scripts/langgraph_engine/subgraphs/level3_execution_v2.py | 15-step execution with RAG (36K) - ACTIVE |
 | Level 3 v1 | scripts/langgraph_engine/subgraphs/level3_execution.py | Original pipeline (97K) - DEPRECATED, v2 is used |
 | Hooks | scripts/pre-tool-enforcer.py, post-tool-tracker.py | Tool enforcement |
+| UML Generators | scripts/langgraph_engine/uml_generators.py | 12 UML diagram types (AST + LLM) |
+| Doc Manager | scripts/langgraph_engine/level3_documentation_manager.py | Circular SDLC doc cycle (Step 0/13) |
 | Session Bridge | src/mcp/session_hooks.py | MCP direct import bridge |
 
-### MCP Servers (11 servers, 109 tools)
+### MCP Servers (12 servers, 123 tools)
 
 All registered in `~/.claude/settings.json`. Version synced via `scripts/sync-version.py`.
 
@@ -103,6 +106,7 @@ All registered in `~/.claude/settings.json`. Version synced via `scripts/sync-ve
 | standards-loader | standards_loader_mcp_server.py | 7 | Standards (project detect, framework detect, hot-reload) |
 | skill-manager | skill_manager_mcp_server.py | 8 | Skill lifecycle (load, search, validate, rank, conflicts) |
 | vector-db | vector_db_mcp_server.py | 11 | Vector RAG (Qdrant, 4 collections, semantic search, bulk index, node decisions) |
+| uml-diagram | uml_diagram_mcp_server.py | 14 | UML generation (12 diagram types, AST + LLM, Mermaid/PlantUML, Kroki.io) |
 
 ### RAG Integration
 
@@ -182,13 +186,13 @@ See environment variables in `.env.example`:
 
 ---
 
-**Last Updated:** 2026-03-16
+**Last Updated:** 2026-03-18
 
 
 <!-- execution-insight- -->
 ## Latest Execution Insight
 
-- **Task**: Bug Fix (complexity 4/10)
+- **Task**: New Feature (complexity 7/10)
 - **Skill**: langgraph-core
-- **Agent**: spring-boot-microservices
-- **Date**: 2026-03-15
+- **Agent**: python-backend-engineer
+- **Date**: 2026-03-18

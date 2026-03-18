@@ -376,6 +376,7 @@ class FlowState(TypedDict, total=False):
     step0_reasoning: str               # Reasoning for task analysis
     step0_tasks: Dict                  # Broken down tasks
     step0_task_count: int              # Number of tasks identified
+    step0_docs_found: Optional[Dict[str, Any]]  # Which project docs exist (SDLC read phase)
     step0_error: Optional[str]
 
     # Step 1: Plan Mode Decision (PHASE 2A - Renamed from step2_plan_mode)
@@ -489,6 +490,7 @@ class FlowState(TypedDict, total=False):
     step13_update_count: int                   # Number of updates
     step13_documentation_status: Optional[str] # Update status (OK/ERROR)
     step13_updated_files: Optional[List[str]]  # Files that were updated
+    step13_docs_created: Optional[List[str]]   # Files created (fresh project SDLC)
     step13_execution_time_ms: Optional[float]
     step13_error: Optional[str]
 
@@ -600,6 +602,7 @@ class StepKeys:
     REASONING = "step0_reasoning"
     TASKS = "step0_tasks"
     TASK_COUNT = "step0_task_count"
+    STEP0_DOCS_FOUND = "step0_docs_found"
     STEP0_ERROR = "step0_error"
 
     # ------------------------------------------------------------------
@@ -701,6 +704,7 @@ class StepKeys:
     # ------------------------------------------------------------------
     DOCUMENTATION_STATUS = "step13_documentation_status"
     UPDATE_COUNT = "step13_update_count"
+    STEP13_DOCS_CREATED = "step13_docs_created"
     STEP13_ERROR = "step13_error"
 
     # ------------------------------------------------------------------
