@@ -290,7 +290,7 @@ def ask_level_minus1_fix(state: FlowState) -> dict:
     import sys
 
     # Track attempt count FIRST
-    attempt = state.get("level_minus1_attempt", 0) + 1
+    attempt = state.get("level_minus1_retry_count", 0) + 1
 
     # Check if we've exceeded max attempts
     if attempt > MAX_LEVEL_MINUS1_ATTEMPTS:
@@ -312,7 +312,7 @@ def ask_level_minus1_fix(state: FlowState) -> dict:
 
         return {
             "level_minus1_user_choice": "force_continue",
-            "level_minus1_attempt": attempt,
+            "level_minus1_retry_count": attempt,
             "level_minus1_max_attempts_reached": True,
             "level_minus1_fatal_failure": True,
         }
@@ -370,7 +370,7 @@ def ask_level_minus1_fix(state: FlowState) -> dict:
 
     return {
         "level_minus1_user_choice": user_choice,
-        "level_minus1_attempt": attempt,
+        "level_minus1_retry_count": attempt,
         "level_minus1_failed_checks": failed_checks,
     }
 
@@ -648,7 +648,7 @@ def route_after_user_choice(state: FlowState) -> str:
     - If "force_continue": max attempts reached, exit to Level 1
     """
     choice = state.get("level_minus1_user_choice", "auto-fix").lower()
-    attempt = state.get("level_minus1_attempt", 0)
+    attempt = state.get("level_minus1_retry_count", 0)
 
     if choice == "force_continue":
         # Max attempts reached, forced progression to Level 1

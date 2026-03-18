@@ -98,6 +98,7 @@ node_encoding_validation = _level_minus1_mod.node_encoding_validation
 node_windows_path_check = _level_minus1_mod.node_windows_path_check
 level_minus1_merge_node = _level_minus1_mod.level_minus1_merge_node
 route_after_level_minus1_merge = _level_minus1_mod.route_after_level_minus1_merge
+fix_level_minus1_issues = _level_minus1_mod.fix_level_minus1_issues
 
 
 # ---------------------------------------------------------------------------

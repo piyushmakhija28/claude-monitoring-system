@@ -16,6 +16,7 @@ All 15 steps (Step 0-14) implemented with:
 - RecoveryHandler for signal handling (Ctrl+C)
 """
 
+import os
 import sys
 import time
 import json
