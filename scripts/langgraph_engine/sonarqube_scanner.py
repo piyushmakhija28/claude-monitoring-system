@@ -4,13 +4,19 @@ SonarQube Scanner Integration
 Integrates SonarQube/SonarCloud scanning into the pipeline after Step 10
 (implementation) to detect bugs, vulnerabilities, and code smells.
 
-If sonar-scanner CLI is not installed the module degrades gracefully:
-  - Returns {installed: False, scan_success: False} immediately
-  - Logs at DEBUG level only (SonarQube is optional)
-  - Never crashes or blocks the pipeline
+API-FIRST design: all issue retrieval goes through the SonarQube REST API
+(urllib only, no SDK).  The sonar-scanner CLI is used only for triggering a
+new scan; results are always fetched via the API regardless of whether the
+CLI ran.
 
-For users without SonarQube a lightweight fallback scanner is provided
-using Python stdlib (AST + regex) to catch basic issues.
+Degradation chain:
+  1. API available  -> fetch issues + measures via REST API
+  2. API unavailable, CLI available -> CLI scan; results via report-task.txt
+  3. Neither available -> run_basic_scan() fallback (AST + regex, Python only)
+
+Configuration is read from environment variables; see get_sonar_config() for
+the full list.  Defaults point at http://localhost:9000 so a local SonarQube
+instance works out of the box.
 
 All functions are standalone (no class state) so they can be imported and
 called directly from the pipeline or from tests without any setup.
@@ -19,19 +25,62 @@ called directly from the pipeline or from tests without any setup.
 from __future__ import annotations
 
 import ast
+import base64
 import json
 import logging
 import os
 import re
 import subprocess
 import time
+import urllib.error
+import urllib.parse
+import urllib.request
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Internal helpers
+# Configuration (env vars + defaults)
+# ---------------------------------------------------------------------------
+
+_DEFAULT_SONAR_URL = "http://localhost:9000"
+
+
+def get_sonar_config() -> Dict[str, Any]:
+    """Get SonarQube configuration from environment.
+
+    Reads all SonarQube settings from environment variables and returns a
+    single config dict.  Never raises; missing values are represented as
+    empty strings or False.
+
+    Environment variables:
+        SONAR_HOST_URL       - Base URL of the SonarQube/SonarCloud server
+                               (default: http://localhost:9000)
+        SONAR_TOKEN          - Authentication token (user or project token)
+        SONAR_PROJECT_KEY    - Project key for API calls
+        SONAR_ORGANIZATION   - Organization key (required for SonarCloud)
+
+    Returns:
+        Dict with keys:
+            host_url (str):       Server base URL.
+            token (str):          Auth token, or empty string if not set.
+            project_key (str):    Project key, or empty string if not set.
+            organization (str):   Organization key, or empty string if not set.
+            is_cloud (bool):      True when the host URL contains sonarcloud.io.
+    """
+    host_url = os.environ.get("SONAR_HOST_URL", _DEFAULT_SONAR_URL)
+    return {
+        "host_url": host_url,
+        "token": os.environ.get("SONAR_TOKEN", ""),
+        "project_key": os.environ.get("SONAR_PROJECT_KEY", ""),
+        "organization": os.environ.get("SONAR_ORGANIZATION", ""),
+        "is_cloud": "sonarcloud.io" in host_url,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Internal helpers - low-level utilities
 # ---------------------------------------------------------------------------
 
 def _read_lines_around(file_path: str, line: int, context: int = 10) -> str:
@@ -75,58 +124,116 @@ def _parse_report_task(report_task_path: Path) -> Dict[str, str]:
     return result
 
 
-def _fetch_sonar_issues(
-    sonar_host_url: str,
-    project_key: str,
-    sonar_token: Optional[str],
-    created_after: Optional[str] = None,
-) -> List[Dict[str, Any]]:
-    """Call the SonarQube REST API to fetch issues for *project_key*.
+def _build_auth_header(token: str) -> str:
+    """Build an HTTP Basic auth header value from a SonarQube token.
 
-    Lazy-imports *urllib* so there is no top-level dependency on network libs.
+    SonarQube uses HTTP Basic auth with the token as the username and an
+    empty password: base64("token:").
 
     Args:
-        sonar_host_url:  Base URL of SonarQube/SonarCloud (e.g. http://localhost:9000).
-        project_key:     Project key from sonar-project.properties.
-        sonar_token:     Optional SONAR_TOKEN for authenticated requests.
-        created_after:   ISO-8601 datetime string to filter recent issues only.
+        token: SonarQube user or project authentication token.
 
     Returns:
-        List of issue dicts as returned by the SonarQube API.
+        String suitable for use as an Authorization header value.
     """
+    token_bytes = f"{token}:".encode("utf-8")
+    return "Basic " + base64.b64encode(token_bytes).decode("ascii")
+
+
+# ---------------------------------------------------------------------------
+# SonarQube REST API client (urllib only, no SDK)
+# ---------------------------------------------------------------------------
+
+def _sonar_api_get(
+    endpoint: str,
+    params: Optional[Dict[str, str]] = None,
+    config: Optional[Dict[str, Any]] = None,
+) -> Optional[Dict[str, Any]]:
+    """Call the SonarQube REST API via GET.
+
+    Args:
+        endpoint: API path, e.g. "/api/issues/search".
+        params:   Optional query parameters dict.
+        config:   Sonar config dict from get_sonar_config().  If None, calls
+                  get_sonar_config() internally.
+
+    Returns:
+        Parsed JSON response dict, or None on any error.
+    """
+    if config is None:
+        config = get_sonar_config()
+
     try:
-        import urllib.request
-        import urllib.parse
-        import base64
-
-        params: Dict[str, str] = {
-            "componentKeys": project_key,
-            "ps": "500",
-        }
-        if created_after:
-            params["createdAfter"] = created_after
-
-        url = (
-            sonar_host_url.rstrip("/")
-            + "/api/issues/search?"
-            + urllib.parse.urlencode(params)
-        )
+        base = config["host_url"].rstrip("/")
+        url = base + endpoint
+        if params:
+            url = url + "?" + urllib.parse.urlencode(params)
 
         req = urllib.request.Request(url)
-        if sonar_token:
-            token_bytes = f"{sonar_token}:".encode("utf-8")
-            req.add_header(
-                "Authorization",
-                "Basic " + base64.b64encode(token_bytes).decode("ascii"),
-            )
+        token = config.get("token", "")
+        if token:
+            req.add_header("Authorization", _build_auth_header(token))
+        req.add_header("Accept", "application/json")
 
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-            return data.get("issues", [])
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            return json.loads(resp.read().decode("utf-8"))
 
+    except urllib.error.HTTPError as exc:
+        logger.debug("SonarQube API GET %s failed: HTTP %d", endpoint, exc.code)
+        return None
+    except urllib.error.URLError as exc:
+        logger.debug("SonarQube API GET %s unreachable: %s", endpoint, exc.reason)
+        return None
     except Exception as exc:
-        logger.debug("SonarQube API call failed: %s", exc)
-        return []
+        logger.debug("SonarQube API GET %s error: %s", endpoint, exc)
+        return None
+
+
+def _sonar_api_post(
+    endpoint: str,
+    data: Optional[Dict[str, str]] = None,
+    config: Optional[Dict[str, Any]] = None,
+) -> Optional[Dict[str, Any]]:
+    """Call the SonarQube REST API via POST.
+
+    Args:
+        endpoint: API path, e.g. "/api/projects/create".
+        data:     Optional form data dict (sent as application/x-www-form-urlencoded).
+        config:   Sonar config dict from get_sonar_config().  If None, calls
+                  get_sonar_config() internally.
+
+    Returns:
+        Parsed JSON response dict, or None on any error.
+    """
+    if config is None:
+        config = get_sonar_config()
+
+    try:
+        base = config["host_url"].rstrip("/")
+        url = base + endpoint
+
+        encoded_data = urllib.parse.urlencode(data or {}).encode("utf-8")
+        req = urllib.request.Request(url, data=encoded_data, method="POST")
+        req.add_header("Content-Type", "application/x-www-form-urlencoded")
+        req.add_header("Accept", "application/json")
+
+        token = config.get("token", "")
+        if token:
+            req.add_header("Authorization", _build_auth_header(token))
+
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            body = resp.read().decode("utf-8")
+            return json.loads(body) if body.strip() else {}
+
+    except urllib.error.HTTPError as exc:
+        logger.debug("SonarQube API POST %s failed: HTTP %d", endpoint, exc.code)
+        return None
+    except urllib.error.URLError as exc:
+        logger.debug("SonarQube API POST %s unreachable: %s", endpoint, exc.reason)
+        return None
+    except Exception as exc:
+        logger.debug("SonarQube API POST %s error: %s", endpoint, exc)
+        return None
 
 
 def _sonar_issue_to_finding(issue: Dict[str, Any]) -> Dict[str, Any]:
@@ -145,32 +252,47 @@ def _sonar_issue_to_finding(issue: Dict[str, Any]) -> Dict[str, Any]:
         "type": issue.get("type", "UNKNOWN"),
         "rule": issue.get("rule", ""),
         "message": issue.get("message", ""),
+        # Additional fields from API that enrich the finding
+        "status": issue.get("status", ""),
+        "effort": issue.get("effort", ""),
+        "debt": issue.get("debt", ""),
+        "tags": issue.get("tags", []),
     }
 
 
 # ---------------------------------------------------------------------------
-# Public API
+# Public API - installation detection
 # ---------------------------------------------------------------------------
 
 def detect_sonar_installation() -> Dict[str, Any]:
-    """Check whether sonar-scanner CLI is installed and configured.
+    """Check whether sonar-scanner CLI is installed and whether the API is reachable.
 
-    Runs ``sonar-scanner --version`` with a short timeout to avoid blocking
-    the pipeline.  Also checks for *sonar-project.properties* in the working
-    directory and reads SONAR_HOST_URL / SONAR_TOKEN from the environment.
+    Performs two independent checks:
+      1. CLI check: runs ``sonar-scanner --version`` with a short timeout.
+      2. API check: calls GET /api/system/status on the configured host URL.
+         This succeeds even without sonar-scanner CLI, as long as the server
+         is running.  When the API is reachable, scanning can work via the
+         API alone (for SonarCloud or if a CI/CD system triggered the scan).
+
+    Also reads *sonar-project.properties* for the host URL when SONAR_HOST_URL
+    is not set in the environment.
 
     Returns:
         Dict with keys:
-            installed (bool):       True if sonar-scanner CLI was found.
-            version (str | None):   Reported version string, or None.
-            config_found (bool):    True if sonar-project.properties exists.
-            sonar_host_url (str | None): Value from env or config, or None.
+            installed (bool):        True if sonar-scanner CLI was found.
+            version (str | None):    Reported CLI version string, or None.
+            config_found (bool):     True if sonar-project.properties exists.
+            sonar_host_url (str | None): Resolved host URL, or None.
+            api_available (bool):    True if the SonarQube REST API responded.
+            server_status (str):     "UP", "STARTING", "DOWN", or "UNKNOWN".
     """
     result: Dict[str, Any] = {
         "installed": False,
         "version": None,
         "config_found": False,
         "sonar_host_url": None,
+        "api_available": False,
+        "server_status": "UNKNOWN",
     }
 
     # 1. Check CLI availability
@@ -183,7 +305,6 @@ def detect_sonar_installation() -> Dict[str, Any]:
         )
         if proc.returncode == 0:
             result["installed"] = True
-            # Extract version from output (e.g. "SonarScanner 5.0.1.3006")
             for raw_line in (proc.stdout + proc.stderr).splitlines():
                 if "sonarscanner" in raw_line.lower() or "sonar scanner" in raw_line.lower():
                     result["version"] = raw_line.strip()
@@ -200,7 +321,10 @@ def detect_sonar_installation() -> Dict[str, Any]:
     result["config_found"] = config_path.exists()
 
     # 3. Determine host URL (env takes precedence over config file)
-    host_url = os.environ.get("SONAR_HOST_URL")
+    config = get_sonar_config()
+    host_url = config["host_url"] if config["host_url"] != _DEFAULT_SONAR_URL else None
+
+    # Fall back to sonar-project.properties if env not set
     if not host_url and result["config_found"]:
         try:
             for raw_line in config_path.read_text(encoding="utf-8").splitlines():
@@ -211,40 +335,351 @@ def detect_sonar_installation() -> Dict[str, Any]:
         except Exception as exc:
             logger.debug("Could not read sonar-project.properties: %s", exc)
 
-    result["sonar_host_url"] = host_url or None
+    # Use env value if available even if it is the default
+    if not host_url:
+        env_url = os.environ.get("SONAR_HOST_URL", "")
+        host_url = env_url if env_url else _DEFAULT_SONAR_URL
+
+    result["sonar_host_url"] = host_url
+
+    # 4. API health check: GET /api/system/status
+    api_config = dict(config)
+    api_config["host_url"] = host_url
+    status_data = _sonar_api_get("/api/system/status", config=api_config)
+    if status_data is not None:
+        server_status = status_data.get("status", "UNKNOWN")
+        result["api_available"] = server_status == "UP"
+        result["server_status"] = server_status
+        logger.debug(
+            "SonarQube API at %s responded: status=%s", host_url, server_status
+        )
+    else:
+        logger.debug("SonarQube API at %s not reachable", host_url)
+
     return result
 
+
+# ---------------------------------------------------------------------------
+# Public API - SonarQube REST API wrappers
+# ---------------------------------------------------------------------------
+
+def get_project_issues(
+    project_key: Optional[str] = None,
+    config: Optional[Dict[str, Any]] = None,
+    severities: Optional[List[str]] = None,
+    types: Optional[List[str]] = None,
+    page_size: int = 100,
+) -> List[Dict[str, Any]]:
+    """Get issues from the SonarQube API for a project.
+
+    Calls GET /api/issues/search and returns all issues up to *page_size*.
+    SonarQube handles language detection and project creation; the user only
+    needs a project that has been analysed at least once (or SonarCloud with
+    GitHub auto-analysis enabled).
+
+    Args:
+        project_key: Project key.  Falls back to SONAR_PROJECT_KEY env var.
+        config:      Sonar config dict.  If None, calls get_sonar_config().
+        severities:  Optional list of severity filters, e.g. ["CRITICAL", "MAJOR"].
+        types:       Optional list of type filters, e.g. ["BUG", "VULNERABILITY"].
+        page_size:   Maximum number of issues to return (max 500 per SonarQube
+                     API page).
+
+    Returns:
+        List of finding dicts in the pipeline's standard format.
+        Returns an empty list if the API is unavailable or the project has no
+        issues.
+    """
+    if config is None:
+        config = get_sonar_config()
+
+    key = project_key or config.get("project_key", "")
+    if not key:
+        logger.debug("get_project_issues: no project_key available")
+        return []
+
+    params: Dict[str, str] = {
+        "componentKeys": key,
+        "ps": str(min(page_size, 500)),
+    }
+    if severities:
+        params["severities"] = ",".join(severities)
+    if types:
+        params["types"] = ",".join(types)
+    if config.get("organization"):
+        params["organization"] = config["organization"]
+
+    data = _sonar_api_get("/api/issues/search", params=params, config=config)
+    if data is None:
+        return []
+
+    raw_issues = data.get("issues", [])
+    return [_sonar_issue_to_finding(issue) for issue in raw_issues]
+
+
+def get_project_measures(
+    project_key: Optional[str] = None,
+    config: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Get project quality measures from the SonarQube API.
+
+    Calls GET /api/measures/component and returns a normalized dict of the
+    most important quality metrics.
+
+    Args:
+        project_key: Project key.  Falls back to SONAR_PROJECT_KEY env var.
+        config:      Sonar config dict.  If None, calls get_sonar_config().
+
+    Returns:
+        Dict with keys:
+            bugs (int):            Number of open bug issues.
+            vulnerabilities (int): Number of open vulnerability issues.
+            code_smells (int):     Number of open code smell issues.
+            coverage (float):      Test coverage percentage (0-100), or -1.0
+                                   if not available.
+            duplications (float):  Duplicated lines density percentage, or -1.0
+                                   if not available.
+            lines (int):           Total lines of code.
+            quality_gate (str):    "OK", "ERROR", "WARN", or "UNKNOWN".
+            raw (dict):            Raw metric key-value map from the API.
+        Returns all numeric fields as their zero/default values if the API
+        is unavailable.
+    """
+    if config is None:
+        config = get_sonar_config()
+
+    key = project_key or config.get("project_key", "")
+
+    default: Dict[str, Any] = {
+        "bugs": 0,
+        "vulnerabilities": 0,
+        "code_smells": 0,
+        "coverage": -1.0,
+        "duplications": -1.0,
+        "lines": 0,
+        "quality_gate": "UNKNOWN",
+        "raw": {},
+    }
+
+    if not key:
+        logger.debug("get_project_measures: no project_key available")
+        return default
+
+    metric_keys = (
+        "bugs,vulnerabilities,code_smells,coverage,"
+        "duplicated_lines_density,ncloc,sqale_rating,alert_status"
+    )
+    params: Dict[str, str] = {
+        "component": key,
+        "metricKeys": metric_keys,
+    }
+    if config.get("organization"):
+        params["organization"] = config["organization"]
+
+    data = _sonar_api_get("/api/measures/component", params=params, config=config)
+    if data is None:
+        return default
+
+    component = data.get("component", {})
+    measures = component.get("measures", [])
+
+    raw: Dict[str, str] = {}
+    for m in measures:
+        raw[m["metric"]] = m.get("value", "")
+
+    def _int(key_name: str) -> int:
+        try:
+            return int(raw.get(key_name, 0) or 0)
+        except (ValueError, TypeError):
+            return 0
+
+    def _float(key_name: str) -> float:
+        try:
+            return float(raw.get(key_name, -1.0) or -1.0)
+        except (ValueError, TypeError):
+            return -1.0
+
+    alert_status = raw.get("alert_status", "UNKNOWN")
+    if alert_status not in ("OK", "ERROR", "WARN"):
+        alert_status = "UNKNOWN"
+
+    return {
+        "bugs": _int("bugs"),
+        "vulnerabilities": _int("vulnerabilities"),
+        "code_smells": _int("code_smells"),
+        "coverage": _float("coverage"),
+        "duplications": _float("duplicated_lines_density"),
+        "lines": _int("ncloc"),
+        "quality_gate": alert_status,
+        "raw": raw,
+    }
+
+
+def get_quality_gate_status(
+    project_key: Optional[str] = None,
+    config: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Get quality gate status from the SonarQube API.
+
+    Calls GET /api/qualitygates/project_status and returns the gate result
+    along with the individual condition outcomes.
+
+    Args:
+        project_key: Project key.  Falls back to SONAR_PROJECT_KEY env var.
+        config:      Sonar config dict.  If None, calls get_sonar_config().
+
+    Returns:
+        Dict with keys:
+            status (str):       "OK", "ERROR", "WARN", or "UNKNOWN".
+            conditions (list):  List of condition dicts from the API (may be
+                                empty if the API is unavailable).
+            passed (bool):      True when status is "OK".
+    """
+    if config is None:
+        config = get_sonar_config()
+
+    key = project_key or config.get("project_key", "")
+
+    default: Dict[str, Any] = {
+        "status": "UNKNOWN",
+        "conditions": [],
+        "passed": False,
+    }
+
+    if not key:
+        logger.debug("get_quality_gate_status: no project_key available")
+        return default
+
+    params: Dict[str, str] = {"projectKey": key}
+    if config.get("organization"):
+        params["organization"] = config["organization"]
+
+    data = _sonar_api_get(
+        "/api/qualitygates/project_status", params=params, config=config
+    )
+    if data is None:
+        return default
+
+    gate_data = data.get("projectStatus", {})
+    status = gate_data.get("status", "UNKNOWN")
+    if status not in ("OK", "ERROR", "WARN"):
+        status = "UNKNOWN"
+
+    return {
+        "status": status,
+        "conditions": gate_data.get("conditions", []),
+        "passed": status == "OK",
+    }
+
+
+def create_sonar_project(
+    project_key: str,
+    project_name: str,
+    config: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Create a SonarQube project via the API (first-time local setup).
+
+    Calls POST /api/projects/create.  Most users will not need this because:
+      - SonarCloud auto-creates projects from GitHub repositories.
+      - Local SonarQube creates the project automatically on the first scan.
+
+    This function is provided for programmatic first-time setup of local
+    SonarQube instances where the project must exist before the first scan.
+
+    Args:
+        project_key:  Unique project key (e.g. "my-org_my-repo").
+        project_name: Human-readable project name.
+        config:       Sonar config dict.  If None, calls get_sonar_config().
+
+    Returns:
+        Dict with keys:
+            created (bool):  True if the project was successfully created.
+            key (str):       Project key (same as input on success).
+            name (str):      Project name (same as input on success).
+            error (str):     Error message if created is False.
+    """
+    if config is None:
+        config = get_sonar_config()
+
+    post_data: Dict[str, str] = {
+        "project": project_key,
+        "name": project_name,
+    }
+    if config.get("organization"):
+        post_data["organization"] = config["organization"]
+
+    data = _sonar_api_post("/api/projects/create", data=post_data, config=config)
+    if data is None:
+        return {
+            "created": False,
+            "key": project_key,
+            "name": project_name,
+            "error": "API call failed or server unreachable",
+        }
+
+    # API returns {"project": {"key": ..., "name": ..., ...}} on success
+    project_data = data.get("project", {})
+    if project_data:
+        return {
+            "created": True,
+            "key": project_data.get("key", project_key),
+            "name": project_data.get("name", project_name),
+            "error": "",
+        }
+
+    # If the response has an "errors" field the project already exists or
+    # there was a validation problem
+    errors = data.get("errors", [])
+    error_msg = "; ".join(e.get("msg", "") for e in errors) if errors else "Unknown error"
+    return {
+        "created": False,
+        "key": project_key,
+        "name": project_name,
+        "error": error_msg,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Public API - scan execution
+# ---------------------------------------------------------------------------
 
 def run_sonar_scan(
     project_root: str,
     modified_files: Optional[List[str]] = None,
+    config: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Run sonar-scanner and return parsed findings.
 
-    Executes the sonar-scanner CLI against *project_root*.  If
-    *modified_files* is provided the scan is narrowed to those paths using
-    ``-Dsonar.inclusions``.
+    Execution strategy:
+      1. Try the sonar-scanner CLI (existing behaviour) if installed.
+      2. ALWAYS fetch results via the SonarQube REST API after the CLI scan,
+         regardless of the CLI outcome.  This gives richer data than
+         report-task.txt alone.
+      3. If the CLI is not installed but the API is reachable, fetch existing
+         results from the last scan (triggered externally or by CI/CD).
 
-    After the scan completes the function reads
-    ``.scannerwork/report-task.txt`` to locate the project key and then
-    calls the SonarQube REST API to retrieve issue details.
-
-    If sonar-scanner is not installed the function returns immediately with
+    If neither the CLI nor the API is available the function returns with
     ``scan_success=False`` and does **not** raise.
 
     Args:
         project_root:    Absolute path to the project root directory.
         modified_files:  Optional list of relative file paths to restrict
                          the scan scope.
+        config:          Sonar config dict.  If None, calls get_sonar_config().
 
     Returns:
         Dict with keys:
-            scan_success (bool):     True if the scan completed without error.
-            findings (list):         List of finding dicts (may be empty).
-            summary (dict):          Aggregated bug/vulnerability/smell counts.
-            scan_duration_ms (int):  Wall-clock scan time in milliseconds.
-            error (str | None):      Error message if scan_success is False.
+            scan_success (bool):        True if results were obtained.
+            findings (list):            List of finding dicts.
+            summary (dict):             Aggregated counts + quality gate.
+            scan_duration_ms (int):     Wall-clock time in milliseconds.
+            error (str | None):         Error message if scan_success is False.
+            api_used (bool):            True if results came from the REST API.
+            cli_ran (bool):             True if sonar-scanner CLI was executed.
     """
+    if config is None:
+        config = get_sonar_config()
+
     empty_result: Dict[str, Any] = {
         "scan_success": False,
         "findings": [],
@@ -257,121 +692,405 @@ def run_sonar_scan(
         },
         "scan_duration_ms": 0,
         "error": None,
+        "api_used": False,
+        "cli_ran": False,
     }
 
-    # Guard: check installation first
     install_info = detect_sonar_installation()
-    if not install_info["installed"]:
-        logger.debug(
-            "sonar-scanner not installed; skipping scan of %s", project_root
-        )
-        empty_result["error"] = "sonar-scanner not installed"
-        return empty_result
-
     root_path = Path(project_root)
-    if not root_path.exists():
-        empty_result["error"] = f"project_root does not exist: {project_root}"
-        return empty_result
 
-    # Build CLI command
-    cmd: List[str] = [
-        "sonar-scanner",
-        f"-Dsonar.projectBaseDir={root_path}",
-    ]
-    if modified_files:
-        inclusions = ",".join(modified_files)
-        cmd.append(f"-Dsonar.inclusions={inclusions}")
+    if not root_path.exists():
+        result = dict(empty_result)
+        result["error"] = f"project_root does not exist: {project_root}"
+        return result
 
     scan_start = time.monotonic()
-    scan_start_iso = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime())
 
-    try:
-        proc = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            cwd=str(root_path),
-            timeout=300,  # 5 minute timeout
+    # ------------------------------------------------------------------
+    # Step 1: Run sonar-scanner CLI if available
+    # ------------------------------------------------------------------
+    cli_ran = False
+    cli_error: Optional[str] = None
+
+    if install_info["installed"]:
+        cmd: List[str] = [
+            "sonar-scanner",
+            f"-Dsonar.projectBaseDir={root_path}",
+        ]
+        if modified_files:
+            inclusions = ",".join(modified_files)
+            cmd.append(f"-Dsonar.inclusions={inclusions}")
+
+        try:
+            proc = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                cwd=str(root_path),
+                timeout=300,
+            )
+            cli_ran = True
+            if proc.returncode != 0:
+                cli_error = f"sonar-scanner exited with code {proc.returncode}"
+                logger.warning("sonar-scanner non-zero exit: %s", proc.stderr[:500])
+        except subprocess.TimeoutExpired:
+            cli_ran = True
+            cli_error = "sonar-scanner timed out after 300 seconds"
+            logger.warning("SonarQube scan timed out for %s", project_root)
+        except Exception as exc:
+            cli_ran = False
+            cli_error = str(exc)
+            logger.warning("SonarQube scan failed to start: %s", exc)
+
+    # ------------------------------------------------------------------
+    # Step 2: Resolve project key for API calls
+    # ------------------------------------------------------------------
+    # Priority: env var > sonar-project.properties > report-task.txt
+    api_config = dict(config)
+    project_key = api_config.get("project_key", "")
+
+    if not project_key:
+        # Try sonar-project.properties
+        props_path = root_path / "sonar-project.properties"
+        if props_path.exists():
+            try:
+                for raw_line in props_path.read_text(encoding="utf-8").splitlines():
+                    if raw_line.startswith("sonar.projectKey"):
+                        _, _, project_key = raw_line.partition("=")
+                        project_key = project_key.strip()
+                        break
+            except Exception as exc:
+                logger.debug("Could not read sonar-project.properties: %s", exc)
+
+    if not project_key and cli_ran:
+        # Fall back to report-task.txt written by the CLI
+        report_task_path = root_path / ".scannerwork" / "report-task.txt"
+        report_info = _parse_report_task(report_task_path)
+        project_key = report_info.get("projectKey", "")
+        # Also pick up server URL from report if not configured
+        if not api_config.get("host_url") or api_config["host_url"] == _DEFAULT_SONAR_URL:
+            server_from_report = report_info.get("serverUrl", "")
+            if server_from_report:
+                api_config["host_url"] = server_from_report
+
+    if project_key:
+        api_config["project_key"] = project_key
+
+    # ------------------------------------------------------------------
+    # Step 3: Fetch results via REST API
+    # ------------------------------------------------------------------
+    api_used = False
+    findings: List[Dict[str, Any]] = []
+    measures: Dict[str, Any] = {}
+    gate_status: Dict[str, Any] = {}
+
+    if install_info["api_available"] and project_key:
+        findings = get_project_issues(project_key=project_key, config=api_config)
+        measures = get_project_measures(project_key=project_key, config=api_config)
+        gate_status = get_quality_gate_status(project_key=project_key, config=api_config)
+        api_used = True
+        logger.debug(
+            "Fetched %d issues via SonarQube API for project %s",
+            len(findings),
+            project_key,
         )
-    except subprocess.TimeoutExpired:
-        elapsed = int((time.monotonic() - scan_start) * 1000)
-        result = dict(empty_result)
-        result["scan_duration_ms"] = elapsed
-        result["error"] = "sonar-scanner timed out after 300 seconds"
-        logger.warning("SonarQube scan timed out for %s", project_root)
-        return result
-    except Exception as exc:
-        elapsed = int((time.monotonic() - scan_start) * 1000)
-        result = dict(empty_result)
-        result["scan_duration_ms"] = elapsed
-        result["error"] = str(exc)
-        logger.warning("SonarQube scan failed: %s", exc)
-        return result
+    elif cli_ran and not install_info["api_available"]:
+        # CLI ran but API is not reachable; parse report-task.txt for minimal
+        # quality gate info and leave findings empty
+        report_task_path = root_path / ".scannerwork" / "report-task.txt"
+        report_info = _parse_report_task(report_task_path)
+        raw_gate = report_info.get("qualityGateStatus", "UNKNOWN")
+        gate_status = {
+            "status": raw_gate if raw_gate in ("OK", "WARN", "ERROR") else "UNKNOWN",
+            "conditions": [],
+            "passed": raw_gate == "OK",
+        }
 
     elapsed_ms = int((time.monotonic() - scan_start) * 1000)
 
-    if proc.returncode != 0:
+    # ------------------------------------------------------------------
+    # Step 4: Build result dict
+    # ------------------------------------------------------------------
+    # Determine scan success
+    if api_used:
+        scan_success = True
+        error = None
+    elif cli_ran and cli_error is None:
+        scan_success = True
+        error = None
+    elif cli_ran and cli_error:
+        scan_success = False
+        error = cli_error
+    elif not install_info["installed"] and not install_info["api_available"]:
         result = dict(empty_result)
         result["scan_duration_ms"] = elapsed_ms
-        result["error"] = f"sonar-scanner exited with code {proc.returncode}"
-        logger.warning("sonar-scanner non-zero exit: %s", proc.stderr[:500])
+        result["error"] = "sonar-scanner not installed and API not reachable"
         return result
-
-    # Parse report-task.txt for project key and server URL
-    report_task_path = root_path / ".scannerwork" / "report-task.txt"
-    report_info = _parse_report_task(report_task_path)
-
-    project_key = report_info.get("projectKey", "")
-    server_url = report_info.get("serverUrl", install_info.get("sonar_host_url") or "")
-    sonar_token = os.environ.get("SONAR_TOKEN")
-
-    # Fetch issues from API
-    raw_issues: List[Dict[str, Any]] = []
-    if project_key and server_url:
-        raw_issues = _fetch_sonar_issues(
-            server_url, project_key, sonar_token, created_after=scan_start_iso
-        )
     else:
-        logger.debug(
-            "Could not determine project key or server URL; "
-            "issue list will be empty (check sonar-project.properties)"
-        )
+        scan_success = False
+        error = cli_error or "Unknown scan failure"
 
-    findings = [_sonar_issue_to_finding(issue) for issue in raw_issues]
-
-    # Build summary from findings
-    bugs = sum(1 for f in findings if f["type"] == "BUG")
-    vulnerabilities = sum(1 for f in findings if f["type"] == "VULNERABILITY")
-    code_smells = sum(1 for f in findings if f["type"] == "CODE_SMELL")
-
-    # Quality gate status from report-task.txt (if available)
-    quality_gate_status = report_info.get("qualityGateStatus", "UNKNOWN")
-    if quality_gate_status not in ("OK", "WARN", "ERROR"):
-        quality_gate_status = "UNKNOWN"
-    quality_gate = "PASSED" if quality_gate_status == "OK" else (
-        "FAILED" if quality_gate_status == "ERROR" else "UNKNOWN"
-    )
-
-    return {
-        "scan_success": True,
-        "findings": findings,
-        "summary": {
+    # Build summary from API measures (preferred) or findings list
+    if measures:
+        quality_gate_str = measures.get("quality_gate", "UNKNOWN")
+        summary: Dict[str, Any] = {
+            "bugs": measures.get("bugs", 0),
+            "vulnerabilities": measures.get("vulnerabilities", 0),
+            "code_smells": measures.get("code_smells", 0),
+            "coverage_pct": measures.get("coverage") if measures.get("coverage", -1.0) >= 0 else None,
+            "quality_gate": "PASSED" if quality_gate_str == "OK" else (
+                "FAILED" if quality_gate_str == "ERROR" else "UNKNOWN"
+            ),
+        }
+    else:
+        bugs = sum(1 for f in findings if f.get("type") == "BUG")
+        vulnerabilities = sum(1 for f in findings if f.get("type") == "VULNERABILITY")
+        code_smells = sum(1 for f in findings if f.get("type") == "CODE_SMELL")
+        gate_str = gate_status.get("status", "UNKNOWN")
+        summary = {
             "bugs": bugs,
             "vulnerabilities": vulnerabilities,
             "code_smells": code_smells,
-            "coverage_pct": None,  # Requires coverage reports; not parsed here
-            "quality_gate": quality_gate,
-        },
+            "coverage_pct": None,
+            "quality_gate": "PASSED" if gate_str == "OK" else (
+                "FAILED" if gate_str == "ERROR" else "UNKNOWN"
+            ),
+        }
+
+    return {
+        "scan_success": scan_success,
+        "findings": findings,
+        "summary": summary,
         "scan_duration_ms": elapsed_ms,
-        "error": None,
+        "error": error,
+        "api_used": api_used,
+        "cli_ran": cli_ran,
     }
 
+
+# ---------------------------------------------------------------------------
+# Public API - GitHub issue creation
+# ---------------------------------------------------------------------------
+
+def create_issues_for_findings(
+    project_root: str,
+    findings: List[Dict[str, Any]],
+    max_issues: int = 5,
+) -> Dict[str, Any]:
+    """Create GitHub issues for Critical/Major SonarQube findings.
+
+    Reuses the existing Level 3 GitHub infrastructure in this order:
+      1. MCP github_create_issue tool (same as Step 8 in the pipeline).
+      2. Level3GitHubWorkflow from level3_steps8to12_github.py.
+      3. gh CLI as final fallback.
+
+    At most *max_issues* GitHub issues are created per call to avoid spam.
+    Only CRITICAL, BLOCKER, and MAJOR severity findings are promoted to issues.
+
+    Args:
+        project_root:  Path to the project root (used as cwd for gh CLI).
+        findings:      List of finding dicts to consider.
+        max_issues:    Hard cap on the number of issues created (default 5).
+
+    Returns:
+        Dict with keys:
+            issues_created (int):   Number of GitHub issues created.
+            issue_ids (list):       GitHub issue numbers as ints.
+            skipped (int):          Findings not promoted to a GitHub issue.
+            method_used (str):      "mcp", "workflow", "gh_cli", or "none".
+    """
+    result: Dict[str, Any] = {
+        "issues_created": 0,
+        "issue_ids": [],
+        "skipped": 0,
+        "method_used": "none",
+    }
+
+    # Filter to actionable severity levels
+    actionable = [
+        f for f in findings
+        if f.get("severity", "").upper() in ("CRITICAL", "BLOCKER", "MAJOR")
+    ]
+    result["skipped"] = len(findings) - len(actionable)
+
+    if not actionable:
+        logger.debug("No critical/major findings; no GitHub issues will be created")
+        return result
+
+    to_create = actionable[:max_issues]
+    result["skipped"] += len(actionable) - len(to_create)
+
+    # ------------------------------------------------------------------
+    # Build issue payload for each finding
+    # ------------------------------------------------------------------
+    def _build_issue_payload(finding: Dict[str, Any]) -> Dict[str, str]:
+        severity = finding.get("severity", "UNKNOWN")
+        finding_type = finding.get("type", "UNKNOWN")
+        file_path = finding.get("file", "unknown")
+        line_no = finding.get("line", 0)
+        rule = finding.get("rule", "")
+        message = finding.get("message", "No message")
+        title = f"[SonarQube] {severity} {finding_type}: {message[:80]}"
+        body = (
+            f"## SonarQube Finding\n\n"
+            f"**Severity:** {severity}\n"
+            f"**Type:** {finding_type}\n"
+            f"**Rule:** {rule}\n"
+            f"**File:** `{file_path}` (line {line_no})\n\n"
+            f"### Message\n\n{message}\n\n"
+            f"*Auto-detected by the Claude Workflow Engine SonarQube scanner.*"
+        )
+        return {"title": title, "body": body}
+
+    # ------------------------------------------------------------------
+    # Method 1: MCP github_create_issue tool
+    # ------------------------------------------------------------------
+    mcp_available = False
+    try:
+        from .github_mcp import create_issue_via_mcp  # type: ignore[import]
+        mcp_available = True
+    except ImportError:
+        pass
+
+    if mcp_available:
+        created = 0
+        for finding in to_create:
+            payload = _build_issue_payload(finding)
+            try:
+                issue_result = create_issue_via_mcp(  # type: ignore[possibly-undefined]
+                    title=payload["title"],
+                    body=payload["body"],
+                    labels=["sonarqube", "auto-detected"],
+                )
+                issue_number = issue_result.get("number")
+                if issue_number:
+                    result["issue_ids"].append(int(issue_number))
+                created += 1
+            except Exception as exc:
+                logger.debug("MCP issue creation failed: %s", exc)
+                result["skipped"] += 1
+        result["issues_created"] = created
+        if created > 0:
+            result["method_used"] = "mcp"
+            return result
+
+    # ------------------------------------------------------------------
+    # Method 2: Level3GitHubWorkflow
+    # ------------------------------------------------------------------
+    workflow_available = False
+    try:
+        from .level3_steps8to12_github import Level3GitHubWorkflow  # type: ignore[import]
+        workflow_available = True
+    except ImportError:
+        pass
+
+    if workflow_available:
+        created = 0
+        try:
+            workflow = Level3GitHubWorkflow()  # type: ignore[possibly-undefined]
+            for finding in to_create:
+                payload = _build_issue_payload(finding)
+                try:
+                    issue_result = workflow.create_issue(
+                        title=payload["title"],
+                        body=payload["body"],
+                        labels=["sonarqube", "auto-detected"],
+                    )
+                    issue_number = issue_result.get("number")
+                    if issue_number:
+                        result["issue_ids"].append(int(issue_number))
+                    created += 1
+                except Exception as exc:
+                    logger.debug("Level3GitHubWorkflow issue creation failed: %s", exc)
+                    result["skipped"] += 1
+        except Exception as exc:
+            logger.debug("Could not instantiate Level3GitHubWorkflow: %s", exc)
+            workflow_available = False
+
+        result["issues_created"] = created
+        if created > 0:
+            result["method_used"] = "workflow"
+            return result
+
+    # ------------------------------------------------------------------
+    # Method 3: gh CLI fallback
+    # ------------------------------------------------------------------
+    try:
+        check = subprocess.run(
+            ["gh", "--version"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        gh_available = check.returncode == 0
+    except Exception:
+        gh_available = False
+
+    if not gh_available:
+        logger.debug(
+            "gh CLI not available; skipping GitHub issue creation for %d findings",
+            len(to_create),
+        )
+        result["skipped"] += len(to_create)
+        return result
+
+    created = 0
+    for finding in to_create:
+        payload = _build_issue_payload(finding)
+        try:
+            proc = subprocess.run(
+                [
+                    "gh", "issue", "create",
+                    "--title", payload["title"],
+                    "--body", payload["body"],
+                    "--label", "sonarqube",
+                    "--label", "auto-detected",
+                ],
+                capture_output=True,
+                text=True,
+                cwd=project_root,
+                timeout=30,
+            )
+            if proc.returncode == 0:
+                url = proc.stdout.strip()
+                try:
+                    issue_number = int(url.rstrip("/").rsplit("/", 1)[-1])
+                    result["issue_ids"].append(issue_number)
+                except ValueError:
+                    pass
+                created += 1
+                logger.debug(
+                    "Created GitHub issue for %s:%d",
+                    finding.get("file", ""),
+                    finding.get("line", 0),
+                )
+            else:
+                logger.debug(
+                    "gh issue create failed (rc=%d): %s",
+                    proc.returncode,
+                    proc.stderr[:200],
+                )
+                result["skipped"] += 1
+        except Exception as exc:
+            logger.debug("gh CLI issue creation error: %s", exc)
+            result["skipped"] += 1
+
+    result["issues_created"] = created
+    if created > 0:
+        result["method_used"] = "gh_cli"
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Public API - finding categorization and fix prompt generation
+# ---------------------------------------------------------------------------
 
 def categorize_findings(findings: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Categorize findings by severity and type for pipeline consumption.
 
     Args:
-        findings: List of finding dicts as returned by ``run_sonar_scan``.
+        findings: List of finding dicts as returned by run_sonar_scan or
+                  get_project_issues.
 
     Returns:
         Dict with keys:
@@ -466,130 +1185,6 @@ def categorize_findings(findings: List[Dict[str, Any]]) -> Dict[str, Any]:
     }
 
 
-def create_issues_for_findings(
-    project_root: str,
-    findings: List[Dict[str, Any]],
-    max_issues: int = 5,
-) -> Dict[str, Any]:
-    """Auto-create GitHub issues for Critical/Major SonarQube findings.
-
-    Uses the ``gh`` CLI (lazy import pattern) to create issues.  If ``gh``
-    is not available or GitHub credentials are not configured the function
-    returns gracefully with ``issues_created=0``.
-
-    At most *max_issues* GitHub issues are created per call to avoid spam.
-    Only CRITICAL and MAJOR severity findings are promoted to issues; lower
-    severity findings are counted as skipped.
-
-    Args:
-        project_root:  Path to the project root (used for context only).
-        findings:      List of finding dicts to consider.
-        max_issues:    Hard cap on the number of issues created (default 5).
-
-    Returns:
-        Dict with keys:
-            issues_created (int):  Number of GitHub issues actually created.
-            issue_ids (list):      GitHub issue numbers as ints.
-            skipped (int):         Findings not promoted to a GitHub issue.
-    """
-    result: Dict[str, Any] = {
-        "issues_created": 0,
-        "issue_ids": [],
-        "skipped": 0,
-    }
-
-    # Filter to only actionable severity levels
-    actionable = [
-        f for f in findings
-        if f.get("severity", "").upper() in ("CRITICAL", "BLOCKER", "MAJOR")
-    ]
-    skipped = len(findings) - len(actionable)
-    result["skipped"] = skipped
-
-    if not actionable:
-        logger.debug("No critical/major findings; no GitHub issues will be created")
-        return result
-
-    # Check gh CLI availability
-    try:
-        check = subprocess.run(
-            ["gh", "--version"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        if check.returncode != 0:
-            logger.debug("gh CLI not available; skipping GitHub issue creation")
-            result["skipped"] += len(actionable)
-            return result
-    except Exception as exc:
-        logger.debug("gh CLI check failed: %s; skipping issue creation", exc)
-        result["skipped"] += len(actionable)
-        return result
-
-    created = 0
-    for finding in actionable:
-        if created >= max_issues:
-            result["skipped"] += len(actionable) - created
-            break
-
-        severity = finding.get("severity", "UNKNOWN")
-        finding_type = finding.get("type", "UNKNOWN")
-        file_path = finding.get("file", "unknown")
-        line_no = finding.get("line", 0)
-        rule = finding.get("rule", "")
-        message = finding.get("message", "No message")
-
-        title = f"[SonarQube] {severity} {finding_type}: {message[:80]}"
-        body = (
-            f"## SonarQube Finding\n\n"
-            f"**Severity:** {severity}\n"
-            f"**Type:** {finding_type}\n"
-            f"**Rule:** {rule}\n"
-            f"**File:** `{file_path}` (line {line_no})\n\n"
-            f"### Message\n\n{message}\n\n"
-            f"*Auto-detected by the Claude Workflow Engine SonarQube scanner.*"
-        )
-
-        try:
-            proc = subprocess.run(
-                [
-                    "gh", "issue", "create",
-                    "--title", title,
-                    "--body", body,
-                    "--label", "sonarqube",
-                    "--label", "auto-detected",
-                ],
-                capture_output=True,
-                text=True,
-                cwd=project_root,
-                timeout=30,
-            )
-            if proc.returncode == 0:
-                # Output is the issue URL; extract number from trailing segment
-                url = proc.stdout.strip()
-                try:
-                    issue_number = int(url.rstrip("/").rsplit("/", 1)[-1])
-                    result["issue_ids"].append(issue_number)
-                except ValueError:
-                    pass
-                created += 1
-                logger.debug("Created GitHub issue for %s:%d", file_path, line_no)
-            else:
-                logger.debug(
-                    "gh issue create failed (rc=%d): %s",
-                    proc.returncode,
-                    proc.stderr[:200],
-                )
-                result["skipped"] += 1
-        except Exception as exc:
-            logger.debug("GitHub issue creation error: %s", exc)
-            result["skipped"] += 1
-
-    result["issues_created"] = created
-    return result
-
-
 def generate_fix_prompt(finding: Dict[str, Any]) -> str:
     """Generate a fix prompt for a single SonarQube finding.
 
@@ -598,8 +1193,8 @@ def generate_fix_prompt(finding: Dict[str, Any]) -> str:
     fix the issue.
 
     Args:
-        finding: A single finding dict from ``run_sonar_scan`` or
-                 ``run_basic_scan``.
+        finding: A single finding dict from run_sonar_scan, get_project_issues,
+                 or run_basic_scan.
 
     Returns:
         A prompt string ready to be sent to an LLM.
@@ -729,8 +1324,9 @@ def run_basic_scan(
                         are scanned.
 
     Returns:
-        Dict with the same schema as ``run_sonar_scan``:
-            scan_success, findings, summary, scan_duration_ms, error.
+        Dict with the same schema as run_sonar_scan:
+            scan_success, findings, summary, scan_duration_ms, error,
+            api_used, cli_ran.
     """
     start = time.monotonic()
     root_path = Path(project_root)
@@ -748,6 +1344,8 @@ def run_basic_scan(
             },
             "scan_duration_ms": 0,
             "error": f"project_root does not exist: {project_root}",
+            "api_used": False,
+            "cli_ran": False,
         }
 
     # Resolve target files
@@ -851,13 +1449,12 @@ def run_basic_scan(
 
         # Count name usages in the source (cheap proxy)
         for name, imp_lineno in import_names.items():
-            # Count occurrences excluding the import line itself
             other_lines = [
-                l for idx, l in enumerate(lines, 1) if idx != imp_lineno
+                line for idx, line in enumerate(lines, 1) if idx != imp_lineno
             ]
             usage_count = sum(
-                1 for l in other_lines
-                if re.search(r"\b" + re.escape(name) + r"\b", l)
+                1 for line in other_lines
+                if re.search(r"\b" + re.escape(name) + r"\b", line)
             )
             if usage_count == 0:
                 findings.append({
@@ -940,6 +1537,8 @@ def run_basic_scan(
         },
         "scan_duration_ms": elapsed_ms,
         "error": None,
+        "api_used": False,
+        "cli_ran": False,
     }
 
 
@@ -950,31 +1549,77 @@ def run_basic_scan(
 def scan_and_report(
     project_root: str,
     modified_files: Optional[List[str]] = None,
+    config: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Full scan pipeline: detect -> scan -> categorize -> report.
 
-    Tries SonarQube first; if not installed falls back to ``run_basic_scan``.
-    The returned dict combines the scan result with the categorized findings.
+    Execution strategy:
+      1. Get config from env vars + defaults.
+      2. Check API availability.
+      3. If API available: fetch issues + measures via REST API (preferred).
+      4. If API not available but CLI installed: run CLI scan.
+      5. If neither: run run_basic_scan() fallback.
+      6. Categorize all findings and return combined report.
 
     Args:
         project_root:   Absolute path to the project root directory.
         modified_files: Optional list of relative file paths to restrict scope.
+        config:         Sonar config dict.  If None, calls get_sonar_config().
 
     Returns:
-        Combined dict containing all keys from ``run_sonar_scan`` plus:
-            sonar_installed (bool):    Whether sonar-scanner was found.
-            scanner_used (str):        "sonarqube" or "basic".
-            categories (dict):         Output of ``categorize_findings``.
+        Combined dict containing all keys from run_sonar_scan plus:
+            sonar_installed (bool):   Whether sonar-scanner CLI was found.
+            api_available (bool):     Whether the SonarQube API responded.
+            scanner_used (str):       "sonarqube_api", "sonarqube_cli", or "basic".
+            categories (dict):        Output of categorize_findings().
+            measures (dict):          Output of get_project_measures() if available.
+            quality_gate (dict):      Output of get_quality_gate_status() if available.
     """
+    if config is None:
+        config = get_sonar_config()
+
     install_info = detect_sonar_installation()
     sonar_installed = install_info["installed"]
+    api_available = install_info["api_available"]
 
-    if sonar_installed:
-        scan_result = run_sonar_scan(project_root, modified_files)
-        scanner_used = "sonarqube"
-    else:
+    project_key = config.get("project_key", "")
+    # Try sonar-project.properties if env not set
+    if not project_key:
+        props_path = Path(project_root) / "sonar-project.properties"
+        if props_path.exists():
+            try:
+                for raw_line in props_path.read_text(encoding="utf-8").splitlines():
+                    if raw_line.startswith("sonar.projectKey"):
+                        _, _, project_key = raw_line.partition("=")
+                        project_key = project_key.strip()
+                        break
+            except Exception as exc:
+                logger.debug("Could not read sonar-project.properties: %s", exc)
+        if project_key:
+            config = dict(config)
+            config["project_key"] = project_key
+
+    measures: Dict[str, Any] = {}
+    quality_gate: Dict[str, Any] = {}
+    scanner_used = "basic"
+
+    if api_available and project_key:
+        # API-first: fetch everything from the REST API
+        scan_result = run_sonar_scan(project_root, modified_files, config=config)
+        measures = get_project_measures(project_key=project_key, config=config)
+        quality_gate = get_quality_gate_status(project_key=project_key, config=config)
+        scanner_used = "sonarqube_api"
+    elif sonar_installed:
+        # CLI fallback: trigger a new scan, results from report-task.txt + API
         logger.debug(
-            "SonarQube not installed; using lightweight basic scanner for %s",
+            "SonarQube API not available; using CLI for %s", project_root
+        )
+        scan_result = run_sonar_scan(project_root, modified_files, config=config)
+        scanner_used = "sonarqube_cli"
+    else:
+        # Basic fallback: no SonarQube at all
+        logger.debug(
+            "SonarQube not available; using lightweight basic scanner for %s",
             project_root,
         )
         scan_result = run_basic_scan(project_root, modified_files)
@@ -986,6 +1631,9 @@ def scan_and_report(
     return {
         **scan_result,
         "sonar_installed": sonar_installed,
+        "api_available": api_available,
         "scanner_used": scanner_used,
         "categories": categories,
+        "measures": measures,
+        "quality_gate": quality_gate,
     }
