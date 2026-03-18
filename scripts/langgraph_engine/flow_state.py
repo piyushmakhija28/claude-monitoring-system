@@ -404,6 +404,8 @@ class FlowState(TypedDict, total=False):
     step2_impact_analysis: Optional[Dict]          # CallGraph impact before change
     step2_graph_risk_level: Optional[str]          # "low", "medium", "high"
     step2_affected_methods: Optional[List[str]]    # Methods that could break
+    step2_plan_validated: Optional[bool]           # Whether plan passed CallGraph validation
+    step2_plan_validation_issues: Optional[List[str]]  # Validation issues found (empty = passed)
 
     # Step 3: Task Breakdown Validation (PHASE 2A - Renamed from step3_breakdown)
     step3_tasks_validated: Optional[List[Dict]]      # Validated task list

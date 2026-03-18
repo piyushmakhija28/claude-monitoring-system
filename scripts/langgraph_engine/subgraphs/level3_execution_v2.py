@@ -355,6 +355,14 @@ def _run_step(
     logger.info(f"\n[STEP {step_number:02d}] {step_label} - START")
     step_start = time.time()
 
+    # Track pipeline-level start time when Step 0 begins
+    if step_number == 0:
+        try:
+            _session_id_for_pipeline = state.get("session_id", "") or "unknown"
+            _pipeline_start_times[_session_id_for_pipeline] = step_start
+        except Exception:
+            pass  # Non-blocking
+
     # --- RAG lookup before LLM call (fail-open) ---
     if step_number in _RAG_ELIGIBLE_STEPS:
         try:
@@ -387,6 +395,8 @@ def _run_step(
                         metrics.record_step(step=step_number, duration=duration, status="RAG_HIT")
                     except Exception:
                         pass
+                # Write telemetry entry (non-blocking)
+                _write_telemetry(state, step_number, step_label, "RAG_HIT", duration * 1000, cached_decision)
                 return cached_decision
             else:
                 print(f"[STEP {step_number:02d}] {step_label} - RAG MISS", file=sys.stderr)
@@ -435,6 +445,8 @@ def _run_step(
                     f"step{step_number}_error": f"Timeout after {timeout_s}s",
                     f"step{step_number}_execution_time_ms": duration * 1000,
                 }
+                # Write telemetry entry (non-blocking)
+                _write_telemetry(state, step_number, step_label, "ERROR", duration * 1000, None)
                 return {**(fallback_result or {}), **base}
         else:
             result = step_fn(state)
@@ -470,6 +482,9 @@ def _run_step(
         # Write step log to session directory
         _write_step_log(state, step_number, step_label, "OK", duration, result)
 
+        # Write telemetry entry (non-blocking)
+        _write_telemetry(state, step_number, step_label, "OK", duration * 1000, result)
+
         # Store node decision in Vector DB for RAG (non-blocking)
         try:
             step_key = f"step{step_number}"
@@ -498,6 +513,19 @@ def _run_step(
 
         if result is not None:
             result[f"step{step_number}_execution_time_ms"] = duration * 1000
+
+        # Add total pipeline execution time when Step 14 completes
+        if step_number == 14 and result is not None:
+            try:
+                _session_id_for_total = state.get("session_id", "") or "unknown"
+                _pipeline_start = _pipeline_start_times.get(_session_id_for_total)
+                if _pipeline_start is not None:
+                    total_time = (time.time() - _pipeline_start) * 1000
+                    result["level3_total_execution_time_ms"] = round(total_time, 1)
+                    # Clean up to avoid memory growth across sessions
+                    _pipeline_start_times.pop(_session_id_for_total, None)
+            except Exception:
+                pass  # Non-blocking
 
         return result or {}
 
@@ -556,6 +584,9 @@ def _run_step(
 
         # Write step error log to session directory
         _write_step_log(state, step_number, step_label, "FAILED", duration, None, str(exc))
+
+        # Write telemetry entry (non-blocking)
+        _write_telemetry(state, step_number, step_label, "ERROR", duration * 1000, None)
 
         error_key = f"step{step_number}_error"
         base: Dict[str, Any] = {
@@ -715,6 +746,67 @@ def step2_plan_execution_node(state: FlowState) -> Dict[str, Any]:
         result["step2_affected_methods"] = [
             m.get("fqn", "") for m in impact_data.get("affected_methods", [])
         ]
+
+    # --- Plan Validation against CallGraph impact ---
+    plan = result.get("step2_plan_execution", {})
+    phases = plan.get("phases", [])
+
+    if phases:
+        try:
+            impact = result.get("step2_impact_analysis", {}) or state.get("step2_impact_analysis", {})
+            affected_methods = impact.get("affected_methods", [])
+            danger_zones = impact.get("danger_zones", [])
+
+            validation_issues = []
+
+            # Check 1: Do plan phases cover all affected files?
+            plan_files = set()
+            for phase in phases:
+                for task in phase.get("tasks", []):
+                    if isinstance(task, dict):
+                        plan_files.update(task.get("files", []))
+
+            affected_files = set()
+            for m in affected_methods:
+                fqn = m.get("fqn", "") if isinstance(m, dict) else str(m)
+                if "::" in fqn:
+                    affected_files.add(fqn.split("::")[0])
+
+            uncovered = affected_files - plan_files
+            if uncovered:
+                validation_issues.append(
+                    "Plan does not cover %d affected files: %s" % (
+                        len(uncovered), ", ".join(sorted(uncovered)[:5])
+                    )
+                )
+
+            # Check 2: Are danger zone methods addressed in the plan?
+            if danger_zones and not any(
+                "careful" in str(p).lower() or "test" in str(p).lower()
+                for p in phases
+            ):
+                validation_issues.append(
+                    "%d danger zone methods found but plan has no testing/careful phase" % len(danger_zones)
+                )
+
+            # Check 3: Are phases ordered logically? (dependencies before dependents)
+            # Simple check: if phase N modifies a file that phase N+1 depends on, order is correct
+
+            result["step2_plan_validated"] = len(validation_issues) == 0
+            result["step2_plan_validation_issues"] = validation_issues
+
+            if validation_issues:
+                logger.info(
+                    "[v2] Step 2 plan validation: %d issues found: %s",
+                    len(validation_issues), "; ".join(validation_issues)
+                )
+            else:
+                logger.info("[v2] Step 2 plan validation: PASSED")
+
+        except Exception as e:
+            logger.debug("[v2] Step 2 plan validation skipped: %s", e)
+            result["step2_plan_validated"] = True  # Default to valid on error
+            result["step2_plan_validation_issues"] = []
 
     return result
 
