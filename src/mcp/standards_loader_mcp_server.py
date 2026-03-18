@@ -238,7 +238,24 @@ def load_standards(project_path: str = ".") -> str:
         project_path: Path to project root
     """
     try:
+        import time
         root = Path(project_path).resolve()
+
+        # Check cache freshness before full load
+        cache_key = str(root)
+        if cache_key in _standards_cache:
+            cached_data, cached_ts = _standards_cache[cache_key]
+            age = time.time() - cached_ts
+            if age < _STANDARDS_CACHE_TTL:
+                # Check if any watched dir has changed
+                dirs_changed = any(
+                    _check_standards_changed(d)
+                    for d in _get_watched_dirs()
+                    if Path(d).exists()
+                )
+                if not dirs_changed:
+                    cached_data["from_cache"] = True
+                    return to_json(cached_data)
 
         # Detect project
         pt_result = json.loads(detect_project_type(str(root)))
@@ -294,7 +311,7 @@ def load_standards(project_path: str = ".") -> str:
         # 6. Resolve conflicts (higher priority wins)
         merged_rules = _resolve_conflicts(all_standards)
 
-        return to_json({
+        result_data = {
             "success": True,
             "project_type": project_type,
             "framework": framework,
@@ -308,7 +325,14 @@ def load_standards(project_path: str = ".") -> str:
             "conflict_count": len(conflicts),
             "merged_rules": merged_rules,
             "traceability": traceability,
-        })
+            "standards_last_loaded_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "from_cache": False,
+        }
+
+        # Store in cache
+        _standards_cache[cache_key] = (result_data, time.time())
+
+        return to_json(result_data)
     except Exception as e:
         return to_json({"success": False, "error": str(e)})
 
@@ -575,11 +599,41 @@ def list_available_standards(source: str = "all") -> str:
 # TOOL 7: RELOAD STANDARDS (invalidate cache on file changes)
 # =============================================================================
 
-# Standards cache with TTL
-_standards_cache = {}
+# Standards cache with TTL and file modification tracking
+_standards_cache = {}   # {cache_key: (data, timestamp)}
 _cache_timestamp = 0
 _CACHE_TTL = 300  # 5 minutes default
+_STANDARDS_CACHE_TTL = 300  # 5 minutes
+_standards_mtimes = {}  # {file_path: last_mtime}
 _file_watcher_active = False
+
+
+def _check_standards_changed(standards_dir) -> bool:
+    """Check if any .md file in standards dir changed since last load.
+    Returns True if any file is new or modified.
+    """
+    changed = False
+    current = {}
+    try:
+        for md_file in Path(standards_dir).rglob("*.md"):
+            try:
+                mtime = md_file.stat().st_mtime
+                current[str(md_file)] = mtime
+                if str(md_file) not in _standards_mtimes:
+                    changed = True  # New file
+                elif _standards_mtimes[str(md_file)] != mtime:
+                    changed = True  # Modified file
+            except OSError:
+                pass
+    except Exception:
+        pass
+    # Check for deleted files
+    for old_path in _standards_mtimes:
+        if old_path not in current:
+            changed = True
+    _standards_mtimes.clear()
+    _standards_mtimes.update(current)
+    return changed
 
 
 def _get_watched_dirs():
@@ -654,6 +708,34 @@ def reload_standards(project_path: str = ".", start_watcher: bool = True) -> str
         start_watcher: If True, start file watcher for auto-reload
     """
     try:
+        import time
+
+        # Check if any files actually changed before doing full reload
+        dirs_changed = any(
+            _check_standards_changed(d)
+            for d in _get_watched_dirs()
+            if Path(d).exists()
+        )
+
+        # If no changes and cache is fresh, return cached result
+        cache_key = str(Path(project_path).resolve())
+        if not dirs_changed and cache_key in _standards_cache:
+            cached_data, cached_ts = _standards_cache[cache_key]
+            age = time.time() - cached_ts
+            if age < _STANDARDS_CACHE_TTL:
+                return to_json({
+                    "success": True,
+                    "reloaded": False,
+                    "from_cache": True,
+                    "standards_loaded": cached_data.get("standards_loaded", 0),
+                    "project_type": cached_data.get("project_type", "unknown"),
+                    "framework": cached_data.get("framework", "unknown"),
+                    "standards_last_loaded_at": cached_data.get("standards_last_loaded_at", ""),
+                    "watcher": {},
+                    "watched_dirs": [str(d) for d in _get_watched_dirs()],
+                })
+
+        # Changes detected or cache stale - do full reload
         _invalidate_cache()
 
         watcher_status = {}
@@ -666,9 +748,11 @@ def reload_standards(project_path: str = ".", start_watcher: bool = True) -> str
         return to_json({
             "success": True,
             "reloaded": True,
+            "from_cache": False,
             "standards_loaded": result.get("standards_loaded", 0),
             "project_type": result.get("project_type", "unknown"),
             "framework": result.get("framework", "unknown"),
+            "standards_last_loaded_at": result.get("standards_last_loaded_at", ""),
             "watcher": watcher_status,
             "watched_dirs": [str(d) for d in _get_watched_dirs()],
         })

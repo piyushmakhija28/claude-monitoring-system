@@ -63,6 +63,17 @@ def node_unicode_fix(state: FlowState) -> dict:
     print(f"[L-1 UNICODE FIX] state['project_root'] at entry: '{state.get('project_root', 'MISSING')}'", file=sys.stderr)
     updates = {}
     try:
+        project_root_raw = state.get("project_root", ".")
+        _pr = Path(project_root_raw)
+        if not _pr.exists() or not _pr.is_dir():
+            import logging as _logging
+            _logging.getLogger(__name__).warning(
+                "project_root '%s' does not exist, skipping unicode check", _pr
+            )
+            updates["unicode_check"] = True
+            updates["unicode_check_error"] = None
+            return updates
+
         if sys.platform != "win32":
             # Non-Windows - skip check
             updates["unicode_check"] = True
@@ -134,11 +145,26 @@ def node_encoding_validation(state: FlowState) -> dict:
             return updates
 
         project_root = Path(state.get("project_root", "."))
+        if not project_root.exists() or not project_root.is_dir():
+            import logging as _logging
+            _logging.getLogger(__name__).warning(
+                "project_root '%s' does not exist, skipping encoding check", project_root
+            )
+            updates["encoding_check"] = True
+            updates["encoding_check_error"] = None
+            return updates
+
         py_files = list(project_root.glob("**/*.py"))
+        if len(py_files) > 500:
+            import logging as _logging
+            _logging.getLogger(__name__).warning(
+                "project_root has %d Python files (>500), capping scan at 500", len(py_files)
+            )
+            py_files = py_files[:500]
 
         non_ascii_files = []
 
-        for py_file in py_files[:50]:  # Check first 50 Python files
+        for py_file in py_files:  # Scan all Python files (capped at 500)
             try:
                 content = py_file.read_bytes()
                 # Check if content is pure ASCII
@@ -190,10 +216,25 @@ def node_windows_path_check(state: FlowState) -> dict:
             return updates
 
         project_root = Path(state.get("project_root", "."))
+        if not project_root.exists() or not project_root.is_dir():
+            import logging as _logging
+            _logging.getLogger(__name__).warning(
+                "project_root '%s' does not exist, skipping path check", project_root
+            )
+            updates["windows_path_check"] = True
+            updates["windows_path_check_error"] = None
+            return updates
 
         # Check for obvious backslash paths in .py files
+        _path_files = list(project_root.glob("**/*.py"))
+        if len(_path_files) > 500:
+            import logging as _logging
+            _logging.getLogger(__name__).warning(
+                "project_root has %d Python files (>500), capping scan at 500", len(_path_files)
+            )
+            _path_files = _path_files[:500]
         issues = []
-        for py_file in list(project_root.glob("**/*.py"))[:20]:
+        for py_file in _path_files:
             try:
                 content = py_file.read_text(encoding="utf-8", errors="ignore")
                 # Look for hardcoded Windows paths (C:\, D:\, etc.)
@@ -388,9 +429,15 @@ def fix_level_minus1_issues(state: FlowState) -> dict:
         try:
             project_root = Path(state.get("project_root", "."))
             py_files = list(project_root.glob("**/*.py"))
+            if len(py_files) > 500:
+                import logging as _logging
+                _logging.getLogger(__name__).warning(
+                    "project_root has %d Python files (>500), capping fix scan at 500", len(py_files)
+                )
+                py_files = py_files[:500]
 
             non_ascii_files = []
-            for py_file in py_files[:50]:
+            for py_file in py_files:
                 try:
                     content = py_file.read_bytes()
                     content.decode("ascii")
@@ -415,7 +462,14 @@ def fix_level_minus1_issues(state: FlowState) -> dict:
             fixed_files = []
             issues = []
 
-            for py_file in list(project_root.glob("**/*.py"))[:50]:
+            _fix_files = list(project_root.glob("**/*.py"))
+            if len(_fix_files) > 500:
+                import logging as _logging
+                _logging.getLogger(__name__).warning(
+                    "project_root has %d Python files (>500), capping path fix at 500", len(_fix_files)
+                )
+                _fix_files = _fix_files[:500]
+            for py_file in _fix_files:
                 try:
                     # Step 1: Backup file before modification
                     backup and backup.backup_file(str(py_file), "Level -1", "Before path fix")
@@ -427,7 +481,7 @@ def fix_level_minus1_issues(state: FlowState) -> dict:
 
                         # Pattern 1: Replace Windows drive paths (C:\, D:\, etc.)
                         # Matches: C:\path\to\file or "C:\\path\\to\\file"
-                        content = re.sub(r'([A-Z]):\\([\\]*)', r'\1:/\2', content)
+                        content = re.sub(r'([A-Za-z]):\\([\\]*)', r'\1:/\2', content)
                         content = re.sub(r'\\\\([\\]*)', r'/', content)
 
                         # Pattern 2: Replace standalone backslash paths in strings
@@ -442,7 +496,7 @@ def fix_level_minus1_issues(state: FlowState) -> dict:
                                 line = line.replace('\\\\', '/')
                                 # Replace single backslashes that look like path separators
                                 # (but not escape sequences like \n, \t, \r, etc.)
-                                line = re.sub(r'(?<!\\)\\(?![\\ntrv"\'])', '/', line)
+                                line = re.sub(r'(?<!\\)\\(?![\\ntrvxa0-9"\'])', '/', line)
                             new_lines.append(line)
 
                         content = '\n'.join(new_lines)

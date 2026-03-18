@@ -283,6 +283,9 @@ def main():
             elif arg in ("--summary", "-s"):
                 DEBUG = True
                 print(f"[DEBUG]   -> DEBUG=True", file=sys.stderr)
+            elif arg == "--dry-run":
+                os.environ["CLAUDE_DRY_RUN"] = "1"
+                print(f"[DEBUG]   -> dry-run mode enabled", file=sys.stderr)
             elif arg in ("--help", "-h"):
                 print(f"{SCRIPT_NAME} - LangGraph 3-Level Flow Engine v{VERSION}")
                 print("Usage: python 3-level-flow.py [options]")
