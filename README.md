@@ -69,11 +69,11 @@ Level 3:  EXECUTION         15 steps (Step 0-14): Full SDLC automation
 
 | Phase | Steps | What Happens |
 |-------|-------|-------------|
-| **Analysis & Planning** | 0-2 | Task analysis, complexity scoring, plan mode decision; Step 2: CallGraph impact analysis before planning |
-| **Preparation** | 3-7 | Task breakdown, TOON refinement, skill/agent selection, prompt generation |
+| **Analysis & Planning** | 0-2 | Task analysis, complexity scoring, plan mode decision; Step 2: Plan Execution + **CallGraph impact analysis** + plan validation |
+| **Preparation** | 3-7 | Step 3: Task Breakdown + **CallGraph file-to-phase mapping**; Step 4: TOON Refinement + **phase-scoped context injection**; skill/agent selection, prompt generation |
 | **GitHub Automation** | 8-9 | Issue creation with semantic labels, branch creation with stash safety |
-| **Implementation** | 10 | Code execution with system prompt context (95%+ quality with full context); pre-change snapshot + implementation context from CallGraph |
-| **Review & Closure** | 11-12 | PR creation with post-change CallGraph diff + breaking change detection, code review loop (max 3 retries), issue closure with summary |
+| **Implementation** | 10 | Implementation + **CallGraph snapshot + context** + SonarQube scan + auto-test generation |
+| **Review & Closure** | 11-12 | PR + Code Review + **CallGraph diff + breaking change detection + quality gate**, review loop (max 3 retries), issue closure with summary |
 | **Finalization** | 13-14 | Documentation + UML diagram generation (13 types), execution summary + voice notification |
 
 ### Execution Modes
@@ -261,6 +261,27 @@ Step 11: review_change_impact(pre_change_snapshot, new_snapshot) -> PR review fi
 
 The single data source for all 13 UML diagram types is also the call graph - `uml_generators.py` reads the graph once and produces any diagram type from it, ensuring diagrams always reflect the actual code structure.
 
+### Key Modules
+
+| Module | File | Purpose |
+|--------|------|---------|
+| Orchestrator | orchestrator.py | Main StateGraph pipeline (59K) |
+| Flow State | flow_state.py | TypedDict state definition (200+ fields) |
+| RAG Integration | rag_integration.py | Vector DB decision caching, cross-session learning |
+| Call Graph Analyzer | call_graph_analyzer.py | Pipeline impact analysis (6 functions for Steps 2/3/4/10/11) |
+| Phase-Scoped Context | call_graph_analyzer.py | extract_phase_subgraph + get_phase_scoped_context |
+| Dependency Resolver | build_dependency_resolver.py | 5-language build file parsing (Python/Java/Node/Go/Rust) |
+| User Interaction | user_interaction.py | InteractionManager + 6 step-specific question generators |
+| SonarQube Scanner | sonarqube_scanner.py | API-first SonarQube + lightweight fallback scanner |
+| Sonar Auto-Fixer | sonar_auto_fixer.py | Fix-verify loop (template fixes + LLM fixes) |
+| Test Generator | test_generator.py | Template-based unit tests (Python/Java/TS/Go) |
+| Integration Test Gen | integration_test_generator.py | CallGraph call-path-based integration tests |
+| Coverage Analyzer | coverage_analyzer.py | AST-based coverage, risk-prioritized untested methods |
+| Quality Gate | quality_gate.py | 4-gate enforcement (SonarQube, coverage, breaking, tests) |
+| Metrics Aggregator | metrics_aggregator.py | Session/step/LLM/tool statistics from logs |
+| UML Generators | uml_generators.py | 13 UML diagram types (AST + LLM) |
+| Doc Manager | level3_documentation_manager.py | Circular SDLC doc cycle (Step 0/13) |
+
 ### LangGraph Orchestration (78 modules)
 
 - StateGraph with 200+ typed state fields
@@ -269,24 +290,28 @@ The single data source for all 13 UML diagram types is also the call graph - `um
 - Checkpoint recovery (resume from any step after crash)
 - Signal handling (Ctrl+C graceful recovery)
 
-### 12 MCP Servers (124 tools)
+### 15 MCP Servers (141 tools)
 
 All servers use FastMCP protocol (stdio JSON-RPC), registered in `~/.claude/settings.json`:
 
-| Server | Tools | Purpose |
-|--------|-------|---------|
-| git-ops | 14 | Git operations (branch, commit, push, pull, stash, diff, fetch, cleanup) |
-| github-api | 12 | GitHub (issue, PR, merge, label, build validate, full merge cycle) |
-| session-mgr | 14 | Session lifecycle (create, chain, tag, accumulate, finalize, work items) |
-| policy-enforcement | 11 | Policy compliance, flow-trace, module health, system health |
-| llm-provider | 8 | LLM access (4 providers, hybrid GPU-first, model selection) |
-| token-optimizer | 10 | Token reduction (AST navigation, smart read, dedup, 60-85% savings) |
-| pre-tool-gate | 8 | Pre-tool validation (8 policy checks, skill hints) |
-| post-tool-tracker | 6 | Post-tool tracking (progress, commit readiness, stats) |
-| standards-loader | 7 | Standards (project detect, framework detect, hot-reload) |
-| skill-manager | 8 | Skill lifecycle (load, search, validate, rank, conflicts) |
-| vector-db | 11 | Vector RAG (Qdrant, 4 collections, semantic search, node decisions) |
-| uml-diagram | 15 | UML generation (13 diagram types, AST + LLM, Mermaid/PlantUML, Kroki.io rendering) |
+| Server | File | Tools | Purpose |
+|--------|------|-------|---------|
+| git-ops | git_mcp_server.py | 14 | Git operations (branch, commit, push, pull, stash, diff, fetch, cleanup) |
+| github-api | github_mcp_server.py | 12 | GitHub (issue, PR, merge, label, build validate, full merge cycle) |
+| session-mgr | session_mcp_server.py | 14 | Session lifecycle (create, chain, tag, accumulate, finalize, work items) |
+| policy-enforcement | enforcement_mcp_server.py | 11 | Policy compliance, flow-trace, module health, system health |
+| llm-router | llm_router_mcp_server.py | 4 | Intelligent LLM routing, step classification, model selection |
+| llm-provider | llm_mcp_server.py | 8 | LLM access (4 providers, hybrid GPU-first, model selection) (legacy, kept for backward compat) |
+| ollama-provider | ollama_mcp_server.py | 5 | Local Ollama GPU inference, model discovery, pull |
+| anthropic-provider | anthropic_mcp_server.py | 4 | Direct Anthropic Claude API, cost estimation |
+| openai-provider | openai_mcp_server.py | 4 | Direct OpenAI GPT API, cost estimation |
+| token-optimizer | token_optimization_mcp_server.py | 10 | Token reduction (AST navigation, smart read, dedup, 60-85% savings) |
+| pre-tool-gate | pre_tool_gate_mcp_server.py | 8 | Pre-tool validation (8 policy checks, skill hints) |
+| post-tool-tracker | post_tool_tracker_mcp_server.py | 6 | Post-tool tracking (progress, commit readiness, stats) |
+| standards-loader | standards_loader_mcp_server.py | 7 | Standards (project detect, framework detect, hot-reload) |
+| skill-manager | skill_manager_mcp_server.py | 8 | Skill lifecycle (load, search, validate, rank, conflicts) |
+| vector-db | vector_db_mcp_server.py | 11 | Vector RAG (Qdrant, 4 collections, semantic search, node decisions) |
+| uml-diagram | uml_diagram_mcp_server.py | 15 | UML generation (13 diagram types, AST + LLM, Mermaid/PlantUML, Kroki.io rendering) |
 
 ### RAG Integration (Vector DB Decision Caching)
 
@@ -598,6 +623,93 @@ Claude Workflow Engine does **everything a software engineer does:**
 
 ---
 
+## Quality Intelligence Pipeline
+
+After implementation (Step 10), the system runs a complete quality pipeline:
+
+```
+Step 10: Implementation Complete
+    |
+    v
+SonarQube Scan (API-first, configurable)
+    |-- GET /api/issues/search -> bugs, vulnerabilities, code smells
+    |-- GET /api/measures/component -> coverage, duplications
+    |-- GET /api/qualitygates/project_status -> quality gate
+    |-- Fallback: lightweight AST+regex scanner if SonarQube unavailable
+    |
+    v
+Auto-Fix Loop (max 3 iterations)
+    |-- Template fixes: bare except, eval, unused imports, hardcoded creds
+    |-- Re-scan after fix to verify
+    |-- Remaining issues flagged for LLM/human review
+    |
+    v
+Test Generation
+    |-- Unit tests: pytest (Python), JUnit5 (Java), Jest (TS), testing (Go)
+    |-- Integration tests: CallGraph call-path-based
+    |-- Coverage analysis: risk-prioritized untested methods
+    |
+    v
+Quality Gate Enforcement
+    |-- Gate 1: SonarQube (no CRITICAL/BLOCKER findings)
+    |-- Gate 2: Coverage (>= 70% threshold, configurable)
+    |-- Gate 3: Breaking Changes (CallGraph diff, no signature breaks)
+    |-- Gate 4: Tests Exist (every modified file has test coverage)
+    |-- Result: MERGE / FIX_AND_RETRY / MANUAL_REVIEW
+    |
+    v
+Step 11: PR + Code Review (with quality gate results)
+```
+
+### Quality Gate Configuration
+
+Quality gates are configurable via `.quality-gate.json` in your project root:
+
+```json
+{
+    "sonar_block_on_critical": true,
+    "coverage_threshold": 70.0,
+    "coverage_drop_threshold": 5.0,
+    "allow_breaking_changes": false,
+    "require_tests_for_modified": true,
+    "max_cyclomatic_increase": 10
+}
+```
+
+SonarQube is configurable via environment variables:
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| SONAR_HOST_URL | http://localhost:9000 | SonarQube server URL |
+| SONAR_TOKEN | (none) | Authentication token |
+| SONAR_PROJECT_KEY | (auto-detect) | Project identifier |
+| SONAR_ORGANIZATION | (none) | SonarCloud organization |
+
+---
+
+## Multi-Language Standards
+
+The pipeline loads language-specific coding standards and injects them into prompts. Level 2 auto-detects your project language and loads the appropriate rules.
+
+| Language | Standards File | Lines | Key Topics |
+|----------|---------------|-------|------------|
+| Universal | 01-common-standards.md | 469 | 12 categories of universal rules |
+| Python/Flask | 02-backend-standards.md | 609 | PEP 8, type hints, async patterns |
+| Java/Spring | 03-microservices-standards.md | 868 | Spring Boot, DI, JPA patterns |
+| Frontend/React | 04-frontend-standards.md | 858 | Component patterns, state management |
+| Security | 05-security-standards.md | 630 | OWASP, auth, encryption |
+| TypeScript | 06-typescript-standards.md | 482 | Strict mode, no any, generics |
+| Go | 07-go-standards.md | 624 | Error handling, goroutines, interfaces |
+| Rust | 08-rust-standards.md | 517 | Ownership, Result/Option, unsafe |
+| Swift | 09-swift-standards.md | 616 | Optionals, SwiftUI, protocols |
+| Kotlin | 10-kotlin-standards.md | 531 | Coroutines, sealed classes, Compose |
+
+**Total: 6,204 lines of standards across 10 files, 8 languages.**
+
+Level 2 also runs linter validation (ruff/flake8) when available - violations feed into Step 11 code review.
+
+---
+
 ## Configuration
 
 All configuration is done through environment variables in `.env` (copy from `.env.example`). No hardcoded paths exist anywhere in the codebase - everything resolves through `path_resolver.py`.
@@ -704,6 +816,7 @@ export CLAUDE_HOME=/path/to/your/.claude
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| **v1.2.0 - v1.2.1** | 2026-03-18 | CallGraph-driven pipeline intelligence (Steps 2/3/4/10/11), phase-scoped context, 15 MCP servers (split LLM into Ollama + Anthropic + OpenAI + Router), Quality Intelligence Layer (SonarQube API-first, auto-fix, test gen, coverage, quality gates), 5 new language standards (TypeScript, Go, Rust, Swift, Kotlin), user interaction system, dependency resolver, metrics aggregator, dry-run mode, telemetry, plan validation, Level 2 enforcement |
 | **7.6.0** | 2026-03-18 | Call graph builder (class-level FQN, impact analysis, 47 tests), path standardization (30+ hardcoded paths removed, env var overrides) |
 | 7.5.0 | 2026-03-18 | UML diagram generation (13 types), 12th MCP server (uml-diagram, 15 tools), AST + LLM hybrid, call_graph_analyzer.py (4 pipeline functions) |
 | 7.5.0 | 2026-03-17 | Gap analysis fixes, all 49 policies complete, code graph analyzer, Level 1 integration |
