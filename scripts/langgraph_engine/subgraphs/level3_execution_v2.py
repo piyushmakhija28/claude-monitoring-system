@@ -1334,6 +1334,22 @@ def step10_implementation_note(state: FlowState) -> Dict[str, Any]:
             except Exception as e:
                 logger.debug("[v2] Step 10 test generation skipped: %s", e)
 
+            # 3b. Generate integration tests from call paths
+            try:
+                from ..integration_test_generator import generate_integration_tests
+                integ_result = generate_integration_tests(
+                    project_root, modified_files,
+                    call_graph=pre_change_graph if pre_change_graph else None
+                )
+                result["step10_generated_integration_tests"] = integ_result
+                if integ_result.get("paths_tested", 0) > 0:
+                    logger.info(
+                        "[v2] Step 10 generated integration tests for %d call paths",
+                        integ_result.get("paths_tested", 0),
+                    )
+            except Exception as e:
+                logger.debug("[v2] Step 10 integration test generation skipped: %s", e)
+
             # 4. Coverage analysis
             try:
                 from ..coverage_analyzer import suggest_test_scope

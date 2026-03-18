@@ -23,6 +23,8 @@ Python 3.8+ compatible. ASCII-only (cp1252-safe).
 
 import ast
 import json
+import os
+import re
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple, Any
 
