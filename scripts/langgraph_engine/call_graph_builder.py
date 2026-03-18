@@ -804,7 +804,24 @@ class CallGraphBuilder:
                 break
         return found
 
-    def _analyze_file(self, py_file):
+    def _analyze_file(self, src_file):
+        """Route a source file to the correct language parser.
+
+        Returns a visitor object (or None on failure) whose .classes,
+        .methods, and .edges attributes match the _CallGraphVisitor shape.
+        """
+        ext = src_file.suffix.lower()
+        if ext == ".py":
+            return self._analyze_python(src_file)
+        elif ext == ".java":
+            return self._analyze_java(src_file)
+        elif ext in (".ts", ".tsx"):
+            return self._analyze_typescript(src_file)
+        elif ext == ".kt":
+            return self._analyze_kotlin(src_file)
+        return None
+
+    def _analyze_python(self, py_file):
         """Parse a single Python file and extract call graph data.
 
         Returns a _CallGraphVisitor or None on parse failure.
@@ -825,6 +842,480 @@ class CallGraphBuilder:
 
         visitor = _CallGraphVisitor(str(py_file), rel_path)
         visitor.visit(tree)
+        return visitor
+
+    def _analyze_java(self, java_file):
+        """Parse a Java file using regex for classes, methods, and calls.
+
+        This is best-effort regex parsing; it will not catch every pattern
+        but covers the common cases without requiring an external parser.
+
+        Returns a _RegexVisitor or None on read failure.
+        """
+        try:
+            source = java_file.read_text(encoding="utf-8", errors="ignore")
+            rel_path = str(java_file.relative_to(self.project_root)).replace(os.sep, "/")
+        except (OSError, ValueError):
+            try:
+                rel_path = java_file.name
+                source = java_file.read_text(encoding="utf-8", errors="ignore")
+            except OSError:
+                return None
+
+        visitor = _RegexVisitor(str(java_file), rel_path)
+
+        # --- Class detection ---
+        # Matches: public/private/protected [abstract|final] class ClassName
+        #          [extends Base] [implements I1, I2]
+        class_pat = re.compile(
+            r'(?:public|private|protected)?\s*'
+            r'(?:abstract\s+|final\s+)?'
+            r'class\s+(\w+)'
+            r'(?:\s+extends\s+(\w+))?'
+            r'(?:\s+implements\s+([\w,\s]+?))?'
+            r'\s*\{',
+            re.MULTILINE,
+        )
+
+        # Track last seen class for method attribution (simple linear scan)
+        # Map: class name -> FQN (only supports one top-level class per scan)
+        class_fqn_map = {}
+        current_class = None
+
+        for m in class_pat.finditer(source):
+            cls_name = m.group(1)
+            bases = []
+            if m.group(2):
+                bases.append(m.group(2).strip())
+            if m.group(3):
+                bases.extend(
+                    b.strip() for b in m.group(3).split(",") if b.strip()
+                )
+
+            fqn = "%s::%s" % (rel_path, cls_name)
+            line = source[: m.start()].count("\n") + 1
+            visitor.classes.append(
+                make_class_node(fqn, cls_name, rel_path, line, bases)
+            )
+            class_fqn_map[cls_name] = fqn
+            # Use first class as the default owner for methods found below
+            if current_class is None:
+                current_class = cls_name
+
+        # --- Method detection ---
+        # Matches: [visibility] [static] [final] ReturnType methodName(params)
+        method_pat = re.compile(
+            r'(?:public|private|protected)\s+'
+            r'(?:static\s+)?(?:final\s+)?(?:synchronized\s+)?'
+            r'(?:[\w<>\[\]]+)\s+'
+            r'(\w+)\s*'
+            r'\(([^)]*)\)'
+            r'(?:\s+throws\s+[\w,\s]+)?'
+            r'\s*\{',
+            re.MULTILINE,
+        )
+
+        # Walk the source keeping a rough idea of which class we are in
+        # by tracking brace depth relative to each class definition start.
+        # For simplicity: assign method to the last class seen before the method.
+        class_positions = []
+        for m in class_pat.finditer(source):
+            cls_name = m.group(1)
+            class_positions.append((m.start(), cls_name))
+
+        def _owner_at(pos):
+            """Return the class name that owns the code at position pos."""
+            owner = None
+            for cpos, cname in class_positions:
+                if cpos <= pos:
+                    owner = cname
+            return owner
+
+        for m in method_pat.finditer(source):
+            method_name = m.group(1)
+            params_raw = m.group(2).strip()
+            params = []
+            if params_raw:
+                for p in params_raw.split(","):
+                    p = p.strip()
+                    if p:
+                        # "Type varName" -> keep "varName" only
+                        parts = p.split()
+                        params.append(parts[-1] if parts else p)
+
+            owner_name = _owner_at(m.start())
+            parent_fqn = class_fqn_map.get(owner_name) if owner_name else None
+
+            if parent_fqn:
+                fqn = "%s::%s.%s" % (rel_path, owner_name, method_name)
+            else:
+                fqn = "%s::%s" % (rel_path, method_name)
+
+            line = source[: m.start()].count("\n") + 1
+            visibility = "+"  # all captured methods have explicit visibility keyword
+
+            visitor.methods.append(make_method_node(
+                fqn, method_name, rel_path, line,
+                parent_class=parent_fqn,
+                params=params,
+                visibility=visibility,
+            ))
+
+            # Register method in parent class node
+            if parent_fqn:
+                for cls in visitor.classes:
+                    if cls["id"] == parent_fqn:
+                        cls["methods"].append(fqn)
+                        break
+
+        # --- Call detection ---
+        # Matches: receiver.method( patterns
+        call_pat = re.compile(r'(\w+)\.(\w+)\s*\(')
+        for m in call_pat.finditer(source):
+            receiver = m.group(1)
+            method = m.group(2)
+            line = source[: m.start()].count("\n") + 1
+            visitor.edges.append(make_call_edge(
+                "unknown",
+                "%s.%s" % (receiver, method),
+                line,
+                "method_call",
+            ))
+
+        return visitor
+
+    def _analyze_typescript(self, ts_file):
+        """Parse a TypeScript/TSX file using regex.
+
+        Covers: classes, methods (regular and arrow), function declarations,
+        and obj.method() call patterns.
+
+        Returns a _RegexVisitor or None on read failure.
+        """
+        try:
+            source = ts_file.read_text(encoding="utf-8", errors="ignore")
+            rel_path = str(ts_file.relative_to(self.project_root)).replace(os.sep, "/")
+        except (OSError, ValueError):
+            try:
+                rel_path = ts_file.name
+                source = ts_file.read_text(encoding="utf-8", errors="ignore")
+            except OSError:
+                return None
+
+        visitor = _RegexVisitor(str(ts_file), rel_path)
+
+        # --- Class detection ---
+        # Matches: [export] [abstract] class ClassName [extends Base] [implements I1]
+        class_pat = re.compile(
+            r'(?:export\s+)?(?:abstract\s+)?class\s+(\w+)'
+            r'(?:\s+extends\s+(\w+))?'
+            r'(?:\s+implements\s+([\w,\s<>]+?))?'
+            r'\s*\{',
+            re.MULTILINE,
+        )
+
+        class_fqn_map = {}
+        class_positions = []
+
+        for m in class_pat.finditer(source):
+            cls_name = m.group(1)
+            bases = []
+            if m.group(2):
+                bases.append(m.group(2).strip())
+            if m.group(3):
+                bases.extend(
+                    b.strip().split("<")[0]  # strip generics
+                    for b in m.group(3).split(",")
+                    if b.strip()
+                )
+
+            fqn = "%s::%s" % (rel_path, cls_name)
+            line = source[: m.start()].count("\n") + 1
+            visitor.classes.append(
+                make_class_node(fqn, cls_name, rel_path, line, bases)
+            )
+            class_fqn_map[cls_name] = fqn
+            class_positions.append((m.start(), cls_name))
+
+        def _owner_at(pos):
+            owner = None
+            for cpos, cname in class_positions:
+                if cpos <= pos:
+                    owner = cname
+            return owner
+
+        # --- Regular method detection ---
+        # Matches: [access modifier] [async] methodName(params)[: ReturnType] {
+        method_pat = re.compile(
+            r'(?:(?:public|private|protected|static|async)\s+)*'
+            r'(?:async\s+)?'
+            r'(\w+)\s*'
+            r'(?:<[^>]*>)?\s*'   # optional generics
+            r'\(([^)]*)\)'
+            r'(?:\s*:\s*[\w<>\[\]|&\s]+?)?'   # optional return type
+            r'\s*\{',
+            re.MULTILINE,
+        )
+
+        # Keywords that should not be treated as method names
+        _TS_KEYWORDS = frozenset({
+            "if", "else", "for", "while", "do", "switch", "try", "catch",
+            "finally", "return", "new", "delete", "typeof", "void", "class",
+            "import", "export", "function", "const", "let", "var", "of", "in",
+        })
+
+        for m in method_pat.finditer(source):
+            method_name = m.group(1)
+            if method_name in _TS_KEYWORDS:
+                continue
+
+            params_raw = m.group(2).strip()
+            params = []
+            if params_raw:
+                for p in params_raw.split(","):
+                    p = p.strip()
+                    if p:
+                        # "paramName: Type" -> keep "paramName"
+                        params.append(p.split(":")[0].split("=")[0].strip())
+
+            owner_name = _owner_at(m.start())
+            parent_fqn = class_fqn_map.get(owner_name) if owner_name else None
+
+            if parent_fqn:
+                fqn = "%s::%s.%s" % (rel_path, owner_name, method_name)
+            else:
+                fqn = "%s::%s" % (rel_path, method_name)
+
+            line = source[: m.start()].count("\n") + 1
+            visibility = "-" if method_name.startswith("_") else "+"
+
+            visitor.methods.append(make_method_node(
+                fqn, method_name, rel_path, line,
+                parent_class=parent_fqn,
+                params=params,
+                visibility=visibility,
+            ))
+
+            if parent_fqn:
+                for cls in visitor.classes:
+                    if cls["id"] == parent_fqn:
+                        cls["methods"].append(fqn)
+                        break
+
+        # --- Arrow function properties in classes ---
+        # Matches: methodName = (params) =>
+        arrow_pat = re.compile(
+            r'(\w+)\s*=\s*(?:async\s+)?\(([^)]*)\)\s*(?::\s*[\w<>\[\]|&\s]+?)?\s*=>',
+            re.MULTILINE,
+        )
+        for m in arrow_pat.finditer(source):
+            method_name = m.group(1)
+            if method_name in _TS_KEYWORDS:
+                continue
+
+            params_raw = m.group(2).strip()
+            params = []
+            if params_raw:
+                for p in params_raw.split(","):
+                    p = p.strip()
+                    if p:
+                        params.append(p.split(":")[0].split("=")[0].strip())
+
+            owner_name = _owner_at(m.start())
+            parent_fqn = class_fqn_map.get(owner_name) if owner_name else None
+
+            if parent_fqn:
+                fqn = "%s::%s.%s" % (rel_path, owner_name, method_name)
+            else:
+                fqn = "%s::%s" % (rel_path, method_name)
+
+            # Skip if already added by method_pat
+            existing_ids = {mth["id"] for mth in visitor.methods}
+            if fqn in existing_ids:
+                continue
+
+            line = source[: m.start()].count("\n") + 1
+            visitor.methods.append(make_method_node(
+                fqn, method_name, rel_path, line,
+                parent_class=parent_fqn,
+                params=params,
+                visibility="-" if method_name.startswith("_") else "+",
+            ))
+
+            if parent_fqn:
+                for cls in visitor.classes:
+                    if cls["id"] == parent_fqn:
+                        cls["methods"].append(fqn)
+                        break
+
+        # --- Standalone function declarations ---
+        func_pat = re.compile(
+            r'(?:export\s+)?(?:default\s+)?(?:async\s+)?function\s+(\w+)\s*'
+            r'(?:<[^>]*>)?\s*\(([^)]*)\)',
+            re.MULTILINE,
+        )
+        for m in func_pat.finditer(source):
+            func_name = m.group(1)
+            params_raw = m.group(2).strip()
+            params = []
+            if params_raw:
+                for p in params_raw.split(","):
+                    p = p.strip()
+                    if p:
+                        params.append(p.split(":")[0].split("=")[0].strip())
+
+            fqn = "%s::%s" % (rel_path, func_name)
+            existing_ids = {mth["id"] for mth in visitor.methods}
+            if fqn in existing_ids:
+                continue
+
+            line = source[: m.start()].count("\n") + 1
+            visitor.methods.append(make_method_node(
+                fqn, func_name, rel_path, line,
+                parent_class=None,
+                params=params,
+                visibility="+",
+            ))
+
+        # --- Call detection ---
+        call_pat = re.compile(r'(\w+)\.(\w+)\s*\(')
+        for m in call_pat.finditer(source):
+            receiver = m.group(1)
+            method = m.group(2)
+            line = source[: m.start()].count("\n") + 1
+            visitor.edges.append(make_call_edge(
+                "unknown",
+                "%s.%s" % (receiver, method),
+                line,
+                "method_call",
+            ))
+
+        return visitor
+
+    def _analyze_kotlin(self, kt_file):
+        """Parse a Kotlin file using regex.
+
+        Covers: class/data class/sealed class, fun methodName(params): Type,
+        suspend fun, companion object, and obj.method() call patterns.
+
+        Returns a _RegexVisitor or None on read failure.
+        """
+        try:
+            source = kt_file.read_text(encoding="utf-8", errors="ignore")
+            rel_path = str(kt_file.relative_to(self.project_root)).replace(os.sep, "/")
+        except (OSError, ValueError):
+            try:
+                rel_path = kt_file.name
+                source = kt_file.read_text(encoding="utf-8", errors="ignore")
+            except OSError:
+                return None
+
+        visitor = _RegexVisitor(str(kt_file), rel_path)
+
+        # --- Class detection ---
+        # Matches: [modifiers] class/interface/object ClassName [: Base1, Base2]
+        class_pat = re.compile(
+            r'(?:(?:open|abstract|sealed|data|inner|enum|annotation|companion)\s+)*'
+            r'(?:class|interface|object)\s+(\w+)'
+            r'(?:\s*<[^>]*>)?'           # optional generics
+            r'(?:[^{:]*:\s*([\w<>,\s()]+?))?'  # optional supertype list
+            r'\s*[{(]',
+            re.MULTILINE,
+        )
+
+        class_fqn_map = {}
+        class_positions = []
+
+        for m in class_pat.finditer(source):
+            cls_name = m.group(1)
+            bases = []
+            if m.group(2):
+                for b in m.group(2).split(","):
+                    b = b.strip().split("<")[0].split("(")[0].strip()
+                    if b:
+                        bases.append(b)
+
+            fqn = "%s::%s" % (rel_path, cls_name)
+            line = source[: m.start()].count("\n") + 1
+            visitor.classes.append(
+                make_class_node(fqn, cls_name, rel_path, line, bases)
+            )
+            class_fqn_map[cls_name] = fqn
+            class_positions.append((m.start(), cls_name))
+
+        def _owner_at(pos):
+            owner = None
+            for cpos, cname in class_positions:
+                if cpos <= pos:
+                    owner = cname
+            return owner
+
+        # --- Function detection ---
+        # Matches: [modifiers] fun [<generics>] functionName(params)[: ReturnType]
+        fun_pat = re.compile(
+            r'(?:(?:public|private|protected|internal|override|open|abstract'
+            r'|suspend|inline|infix|operator|external|tailrec)\s+)*'
+            r'fun\s+'
+            r'(?:<[^>]*>\s*)?'       # optional generics before name
+            r'(\w+)\s*'
+            r'\(([^)]*)\)'
+            r'(?:\s*:\s*[\w<>\[\]?!]+)?',  # optional return type
+            re.MULTILINE,
+        )
+
+        _KT_KEYWORDS = frozenset({"if", "else", "for", "while", "when", "return"})
+
+        for m in fun_pat.finditer(source):
+            func_name = m.group(1)
+            if func_name in _KT_KEYWORDS:
+                continue
+
+            params_raw = m.group(2).strip()
+            params = []
+            if params_raw:
+                for p in params_raw.split(","):
+                    p = p.strip()
+                    if p:
+                        # "paramName: Type = default" -> keep "paramName"
+                        params.append(p.split(":")[0].split("=")[0].strip())
+
+            owner_name = _owner_at(m.start())
+            parent_fqn = class_fqn_map.get(owner_name) if owner_name else None
+
+            if parent_fqn:
+                fqn = "%s::%s.%s" % (rel_path, owner_name, func_name)
+            else:
+                fqn = "%s::%s" % (rel_path, func_name)
+
+            line = source[: m.start()].count("\n") + 1
+            visibility = "-" if func_name.startswith("_") else "+"
+
+            visitor.methods.append(make_method_node(
+                fqn, func_name, rel_path, line,
+                parent_class=parent_fqn,
+                params=params,
+                visibility=visibility,
+            ))
+
+            if parent_fqn:
+                for cls in visitor.classes:
+                    if cls["id"] == parent_fqn:
+                        cls["methods"].append(fqn)
+                        break
+
+        # --- Call detection ---
+        call_pat = re.compile(r'(\w+)\.(\w+)\s*\(')
+        for m in call_pat.finditer(source):
+            receiver = m.group(1)
+            method = m.group(2)
+            line = source[: m.start()].count("\n") + 1
+            visitor.edges.append(make_call_edge(
+                "unknown",
+                "%s.%s" % (receiver, method),
+                line,
+                "method_call",
+            ))
+
         return visitor
 
 
