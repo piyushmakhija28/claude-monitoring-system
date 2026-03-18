@@ -834,6 +834,25 @@ def node_context_loader(state: FlowState) -> dict:
                             "cache_hit": False,
                             "load_time_ms": elapsed_ms,
                         })
+        # Telemetry
+        try:
+            import json as _json_tel, time as _time_tel
+            from pathlib import Path as _Path_tel
+            _sid_tel = state.get("session_id", result.get("session_id", ""))
+            if _sid_tel:
+                _tdir_tel = _Path_tel.home() / ".claude" / "logs" / "telemetry"
+                _tdir_tel.mkdir(parents=True, exist_ok=True)
+                _tfile_tel = _tdir_tel / ("%s.jsonl" % _sid_tel)
+                _entry_tel = {
+                    "level": 1,
+                    "node": "node_context_loader",
+                    "status": "OK" if not result.get("error") else "ERROR",
+                    "timestamp": _time_tel.strftime("%Y-%m-%dT%H:%M:%S"),
+                }
+                with open(str(_tfile_tel), "a", encoding="utf-8") as _f_tel:
+                    _f_tel.write(_json_tel.dumps(_entry_tel) + "\n")
+        except Exception:
+            pass  # Non-blocking
         return result
 
     except Exception as e:
@@ -853,6 +872,25 @@ def node_context_loader(state: FlowState) -> dict:
         }
         write_level_log(state, "level1", "context-loader", "FAILED",
                         _time_mod.time() - loader_start, None, str(e))
+        # Telemetry
+        try:
+            import json as _json_tel, time as _time_tel
+            from pathlib import Path as _Path_tel
+            _sid_tel = state.get("session_id", result.get("session_id", ""))
+            if _sid_tel:
+                _tdir_tel = _Path_tel.home() / ".claude" / "logs" / "telemetry"
+                _tdir_tel.mkdir(parents=True, exist_ok=True)
+                _tfile_tel = _tdir_tel / ("%s.jsonl" % _sid_tel)
+                _entry_tel = {
+                    "level": 1,
+                    "node": "node_context_loader",
+                    "status": "ERROR",
+                    "timestamp": _time_tel.strftime("%Y-%m-%dT%H:%M:%S"),
+                }
+                with open(str(_tfile_tel), "a", encoding="utf-8") as _f_tel:
+                    _f_tel.write(_json_tel.dumps(_entry_tel) + "\n")
+        except Exception:
+            pass  # Non-blocking
         return result
 
 
@@ -1036,13 +1074,32 @@ def node_toon_compression(state: FlowState) -> dict:
                             "schema_valid": integrity_ok,
                             "compression_ratio": len(files_loaded),
                         })
+        # Telemetry
+        try:
+            import json as _json_tel, time as _time_tel
+            from pathlib import Path as _Path_tel
+            _sid_tel = state.get("session_id", result.get("session_id", ""))
+            if _sid_tel:
+                _tdir_tel = _Path_tel.home() / ".claude" / "logs" / "telemetry"
+                _tdir_tel.mkdir(parents=True, exist_ok=True)
+                _tfile_tel = _tdir_tel / ("%s.jsonl" % _sid_tel)
+                _entry_tel = {
+                    "level": 1,
+                    "node": "node_toon_compression",
+                    "status": "OK" if not result.get("error") else "ERROR",
+                    "timestamp": _time_tel.strftime("%Y-%m-%dT%H:%M:%S"),
+                }
+                with open(str(_tfile_tel), "a", encoding="utf-8") as _f_tel:
+                    _f_tel.write(_json_tel.dumps(_entry_tel) + "\n")
+        except Exception:
+            pass  # Non-blocking
         return result
 
     except Exception as e:
         print("[TOON COMPRESSION] ERROR: {}".format(e), file=sys.stderr)
         write_level_log(state, "level1", "toon-compression", "FAILED",
                         _time_mod.time() - _step_start, None, str(e))
-        return {
+        _err_result = {
             "toon_saved": False,
             "toon_error": str(e),
             "toon_object": {},
@@ -1050,6 +1107,26 @@ def node_toon_compression(state: FlowState) -> dict:
             "toon_schema_valid": False,
             "toon_schema_errors": [str(e)],
         }
+        # Telemetry
+        try:
+            import json as _json_tel, time as _time_tel
+            from pathlib import Path as _Path_tel
+            _sid_tel = state.get("session_id", "")
+            if _sid_tel:
+                _tdir_tel = _Path_tel.home() / ".claude" / "logs" / "telemetry"
+                _tdir_tel.mkdir(parents=True, exist_ok=True)
+                _tfile_tel = _tdir_tel / ("%s.jsonl" % _sid_tel)
+                _entry_tel = {
+                    "level": 1,
+                    "node": "node_toon_compression",
+                    "status": "ERROR",
+                    "timestamp": _time_tel.strftime("%Y-%m-%dT%H:%M:%S"),
+                }
+                with open(str(_tfile_tel), "a", encoding="utf-8") as _f_tel:
+                    _f_tel.write(_json_tel.dumps(_entry_tel) + "\n")
+        except Exception:
+            pass  # Non-blocking
+        return _err_result
 
 
 # ============================================================================
@@ -1091,6 +1168,25 @@ def level1_merge_node(state: FlowState) -> dict:
         "toon_present": bool(state.get("toon_object")),
         "context_percentage": state.get("context_percentage", 0),
     })
+    # Telemetry
+    try:
+        import json as _json_tel, time as _time_tel
+        from pathlib import Path as _Path_tel
+        _sid_tel = state.get("session_id", updates.get("session_id", ""))
+        if _sid_tel:
+            _tdir_tel = _Path_tel.home() / ".claude" / "logs" / "telemetry"
+            _tdir_tel.mkdir(parents=True, exist_ok=True)
+            _tfile_tel = _tdir_tel / ("%s.jsonl" % _sid_tel)
+            _entry_tel = {
+                "level": 1,
+                "node": "level1_merge_node",
+                "status": "OK" if not updates.get("error") else "ERROR",
+                "timestamp": _time_tel.strftime("%Y-%m-%dT%H:%M:%S"),
+            }
+            with open(str(_tfile_tel), "a", encoding="utf-8") as _f_tel:
+                _f_tel.write(_json_tel.dumps(_entry_tel) + "\n")
+    except Exception:
+        pass  # Non-blocking
     return updates
 
 
