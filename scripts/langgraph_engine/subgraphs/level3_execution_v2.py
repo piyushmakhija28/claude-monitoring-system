@@ -18,9 +18,13 @@ All 15 steps (Step 0-14) implemented with:
 
 import sys
 import time
+import json
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, Any, Optional
+
+# Pipeline-level timing: maps session_id -> pipeline start time (float)
+_pipeline_start_times: Dict[str, float] = {}
 
 # Lazy import: avoid import-time side effects from timeout_wrapper
 def _get_timeout_wrapper():
@@ -244,6 +248,51 @@ def _write_step_log(
 # ---------------------------------------------------------------------------
 # Steps 3,4,6 have no LLM; Steps 9-14 are unique per task; Step 10 is implementation
 _RAG_ELIGIBLE_STEPS = {0, 1, 2, 5, 7, 8}
+
+
+# ---------------------------------------------------------------------------
+# Telemetry writer - appends one JSONL line per step to ~/.claude/logs/telemetry/
+# ---------------------------------------------------------------------------
+
+def _write_telemetry(
+    state: FlowState,
+    step_number: int,
+    step_name: str,
+    status: str,
+    duration_ms: float,
+    result: Optional[Dict[str, Any]] = None,
+) -> None:
+    """Append one telemetry entry for the completed step to a JSONL file.
+
+    File path: ~/.claude/logs/telemetry/{session_id}.jsonl
+    Non-blocking: all errors are silently swallowed.
+    ASCII-only strings used throughout for cp1252 compatibility.
+    """
+    try:
+        session_id = state.get("session_id", "") or "unknown"
+        telemetry_entry = {
+            "session_id": session_id,
+            "step": step_number,
+            "step_name": step_name,
+            "status": status,
+            "duration_ms": round(duration_ms, 1),
+            "timestamp": datetime.now().isoformat(),
+            "llm_called": bool(
+                result.get("step%d_llm_invoked" % step_number, False)
+                if result else False
+            ),
+            "modified_files_count": len(
+                result.get("step%d_modified_files" % step_number, [])
+                if result else []
+            ),
+        }
+        telemetry_dir = Path.home() / ".claude" / "logs" / "telemetry"
+        telemetry_dir.mkdir(parents=True, exist_ok=True)
+        telemetry_file = telemetry_dir / ("%s.jsonl" % session_id)
+        with open(telemetry_file, "a", encoding="utf-8") as f:
+            f.write(json.dumps(telemetry_entry) + "\n")
+    except Exception:
+        pass  # Non-blocking
 
 
 # ---------------------------------------------------------------------------
