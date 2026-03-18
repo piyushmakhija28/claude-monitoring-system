@@ -322,97 +322,28 @@ def complexity_report(project_path: str) -> dict:
 # ============================================================================
 
 def _extract_method_call_stack(project_root: Path) -> dict:
-    """Extract method call relationships from Python files using AST.
+    """Extract method call relationships using proper call graph builder.
 
-    Builds a call graph: which functions call which other functions.
-    Returns max call depth, total unique calls, and entry points.
+    Uses CallGraphBuilder with AST NodeVisitor to maintain class context,
+    producing a proper call stack with FQN-based class->method->method mapping.
 
     Args:
         project_root: Path to project root
 
     Returns:
-        Dict with max_depth, total_calls, entry_points, or empty dict on failure.
+        Dict with call graph metrics, or empty dict on failure.
     """
-    import ast
-
     try:
-        excluded = {"__pycache__", ".venv", "venv", "node_modules", ".git", "dist", "build"}
+        from .call_graph_builder import get_call_graph_metrics
+        return get_call_graph_metrics(str(project_root))
+    except ImportError:
+        pass
 
-        # Collect all function/method definitions and their calls
-        definitions = {}  # func_name -> file_path
-        calls = {}  # caller -> [callees]
-
-        py_files = [
-            f for f in project_root.rglob("*.py")
-            if not any(part in excluded for part in f.parts)
-        ]
-
-        for py_file in py_files[:200]:  # Limit to 200 files
-            try:
-                source = py_file.read_text(encoding='utf-8', errors='ignore')
-                tree = ast.parse(source, filename=str(py_file))
-            except (SyntaxError, ValueError):
-                continue
-
-            current_func = None
-            for node in ast.walk(tree):
-                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                    func_key = f"{py_file.stem}.{node.name}"
-                    definitions[func_key] = str(py_file.relative_to(project_root))
-                    current_func = func_key
-                    if func_key not in calls:
-                        calls[func_key] = []
-
-                elif isinstance(node, ast.Call) and current_func:
-                    # Extract callee name
-                    if isinstance(node.func, ast.Name):
-                        calls[current_func].append(node.func.id)
-                    elif isinstance(node.func, ast.Attribute):
-                        calls[current_func].append(node.func.attr)
-
-        if not calls:
-            return {}
-
-        # Calculate max call depth (BFS from each entry point)
-        all_callees = set()
-        for callee_list in calls.values():
-            all_callees.update(callee_list)
-
-        # Entry points: functions defined but never called by other functions
-        defined_names = {k.split('.')[-1] for k in definitions}
-        entry_points = [
-            name for name in defined_names
-            if name not in all_callees and not name.startswith('_')
-        ]
-
-        # Calculate max depth via iterative traversal
-        max_depth = 0
-        for func_key in calls:
-            visited = set()
-            stack = [(func_key, 0)]
-            while stack:
-                current, depth = stack.pop()
-                if current in visited:
-                    continue
-                visited.add(current)
-                max_depth = max(max_depth, depth)
-                for callee in calls.get(current, []):
-                    # Find matching definition
-                    for def_key in definitions:
-                        if def_key.endswith(f".{callee}"):
-                            stack.append((def_key, depth + 1))
-                            break
-
-        total_calls = sum(len(v) for v in calls.values())
-
-        return {
-            "max_depth": max_depth,
-            "total_calls": total_calls,
-            "total_functions": len(definitions),
-            "entry_points": sorted(entry_points)[:20],
-        }
-
-    except Exception:
+    # Fallback: try absolute import
+    try:
+        from call_graph_builder import get_call_graph_metrics
+        return get_call_graph_metrics(str(project_root))
+    except (ImportError, Exception):
         return {}
 
 
@@ -454,12 +385,17 @@ def calculate_graph_complexity(
                     graph_metrics = cached['graph_metrics']
                     cyclomatic_avg = cached.get('cyclomatic_metrics', {}).get('avg_cyclomatic', 0.0)
 
-                    # Enrich with method call stack analysis
+                    # Enrich with call graph (class->method->method mapping)
                     call_stack = _extract_method_call_stack(project_root)
-                    if call_stack:
-                        graph_metrics['method_call_depth'] = call_stack.get('max_depth', 0)
-                        graph_metrics['method_call_count'] = call_stack.get('total_calls', 0)
+                    if call_stack and call_stack.get('call_graph_available'):
+                        graph_metrics['method_call_depth'] = call_stack.get('method_call_depth', 0)
+                        graph_metrics['method_call_count'] = call_stack.get('method_call_count', 0)
+                        graph_metrics['total_classes'] = call_stack.get('total_classes', 0)
+                        graph_metrics['total_methods'] = call_stack.get('total_methods', 0)
                         graph_metrics['entry_points'] = call_stack.get('entry_points', [])
+                        graph_metrics['resolved_ratio'] = call_stack.get('resolved_ratio', 0.0)
+                        graph_metrics['avg_method_complexity'] = call_stack.get('avg_method_complexity', 0.0)
+                        graph_metrics['max_method_complexity'] = call_stack.get('max_method_complexity', 0)
 
                     return graph_score, graph_metrics, cyclomatic_avg
             except (json.JSONDecodeError, KeyError):
@@ -518,12 +454,17 @@ def calculate_graph_complexity(
         except Exception:
             pass
 
-        # Enrich with method call stack analysis
+        # Enrich with call graph (class->method->method mapping)
         call_stack = _extract_method_call_stack(project_root)
-        if call_stack:
-            graph_metrics['method_call_depth'] = call_stack.get('max_depth', 0)
-            graph_metrics['method_call_count'] = call_stack.get('total_calls', 0)
+        if call_stack and call_stack.get('call_graph_available'):
+            graph_metrics['method_call_depth'] = call_stack.get('method_call_depth', 0)
+            graph_metrics['method_call_count'] = call_stack.get('method_call_count', 0)
+            graph_metrics['total_classes'] = call_stack.get('total_classes', 0)
+            graph_metrics['total_methods'] = call_stack.get('total_methods', 0)
             graph_metrics['entry_points'] = call_stack.get('entry_points', [])
+            graph_metrics['resolved_ratio'] = call_stack.get('resolved_ratio', 0.0)
+            graph_metrics['avg_method_complexity'] = call_stack.get('avg_method_complexity', 0.0)
+            graph_metrics['max_method_complexity'] = call_stack.get('max_method_complexity', 0)
 
         return graph_score, graph_metrics, cyclomatic_avg
 

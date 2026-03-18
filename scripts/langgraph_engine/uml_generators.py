@@ -241,12 +241,70 @@ class UMLAstAnalyzer:
         return graph
 
     def extract_call_chains(self, file_path, entry_func=None):
-        """Extract static call chains from a file.
+        """Extract static call chains from a file with class context.
+
+        Uses CallGraphBuilder's AST NodeVisitor to maintain class->method
+        hierarchy instead of flat ast.walk() which loses class context.
 
         Returns list of call chain dicts:
-        [{caller, callee, file}]
+        [{caller, callee, file, caller_fqn, callee_fqn, line, call_type}]
         """
         file_path = Path(file_path)
+
+        # Try new call graph builder (maintains class context)
+        try:
+            from .call_graph_builder import _CallGraphVisitor
+        except ImportError:
+            try:
+                from call_graph_builder import _CallGraphVisitor
+            except ImportError:
+                _CallGraphVisitor = None
+
+        if _CallGraphVisitor is not None:
+            try:
+                source = file_path.read_text(encoding="utf-8", errors="replace")
+                tree = ast.parse(source, filename=str(file_path))
+
+                try:
+                    rel_path = str(file_path.relative_to(self.project_root))
+                except ValueError:
+                    rel_path = file_path.name
+                rel_path = rel_path.replace("\\", "/")
+
+                visitor = _CallGraphVisitor(str(file_path), rel_path)
+                visitor.visit(tree)
+
+                chains = []
+                for edge in visitor.edges:
+                    if edge["type"] == "inheritance":
+                        continue
+
+                    caller_fqn = edge["from"]
+                    callee_raw = edge["to"]
+
+                    # Extract simple names for backward compatibility
+                    caller_name = caller_fqn.split("::")[-1] if "::" in caller_fqn else caller_fqn
+                    callee_name = callee_raw.split("::")[-1] if "::" in callee_raw else callee_raw
+                    callee_name = callee_name.split(".")[-1] if "." in callee_name else callee_name
+
+                    if entry_func and not caller_name.endswith(entry_func):
+                        continue
+
+                    chains.append({
+                        "caller": caller_name,
+                        "callee": callee_name,
+                        "file": str(file_path),
+                        "caller_fqn": caller_fqn,
+                        "callee_fqn": callee_raw,
+                        "line": edge.get("line", 0),
+                        "call_type": edge.get("type", "call"),
+                    })
+
+                return chains
+            except Exception:
+                pass  # Fall through to legacy
+
+        # Legacy fallback (no class context)
         chains = []
         try:
             source = file_path.read_text(encoding="utf-8", errors="replace")

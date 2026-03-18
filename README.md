@@ -91,7 +91,26 @@ Full Mode (CLAUDE_HOOK_MODE=0):
 
 ## Key Technologies
 
-### LangGraph Orchestration (76 modules)
+### Call Graph Analysis (Class-Level Code Intelligence)
+
+Built-in AST-based call graph builder that maps every class, method, and function call with full context:
+
+```
+Before (v7.5.0):  211 file nodes, 515 import edges (flat, no class context)
+After  (v7.6.0):  566 classes, 3686 methods, 25,948 call edges (with FQN + line numbers)
+```
+
+| Capability | Description |
+|-----------|-------------|
+| **FQN Tracking** | Every node has `module.py::ClassName.method` format |
+| **Class Context** | `self.method()` resolves to same-class methods (AST NodeVisitor, not walk) |
+| **Call Paths** | Full chains: `main -> run_engine -> Manager.invoke -> Client.get` |
+| **Impact Analysis** | "Change this method, these 15 callers are affected" |
+| **Per-Method Complexity** | Cyclomatic complexity per method (not just per file) |
+| **Inheritance Tracking** | `Child extends Base` edges with line numbers |
+| **Edge Resolution** | 30%+ call edges resolved to exact FQN definitions |
+
+### LangGraph Orchestration (78 modules)
 
 - StateGraph with 200+ typed state fields
 - Parallel execution via `Send()` API (Level 1: 4 concurrent tasks)
@@ -304,10 +323,11 @@ pytest --cov=scripts --cov-report=html tests/
 claude-insight/
 |
 +-- scripts/
-|   +-- langgraph_engine/             # Core orchestration (76 modules)
+|   +-- langgraph_engine/             # Core orchestration (78 modules)
 |   |   +-- orchestrator.py           # Main StateGraph pipeline
 |   |   +-- flow_state.py             # TypedDict state (200+ fields)
 |   |   +-- rag_integration.py        # Vector DB decision caching
+|   |   +-- call_graph_builder.py     # Class-level call stack (FQN, impact analysis)
 |   |   +-- subgraphs/               # Level -1, 1, 2, 3 implementations
 |   +-- architecture/                 # Helper scripts (sync, standards, execution)
 |   +-- 3-level-flow.py               # Entry point
@@ -317,7 +337,7 @@ claude-insight/
 |
 +-- src/mcp/                          # 12 FastMCP servers (123 tools)
 +-- policies/                         # 49 policy definitions
-+-- tests/                            # 47 test files (1400+ tests)
++-- tests/                            # 48 test files (1450+ tests)
 +-- docs/                             # 40 documentation files
 +-- docs/uml/                         # Auto-generated UML diagrams (12 types)
 +-- rules/                            # 5 coding standard definitions
@@ -339,10 +359,10 @@ claude-insight/
 | Execution Steps | 15 (Step 0 - Step 14) |
 | MCP Servers | 12 |
 | MCP Tools | 123 |
-| LangGraph Engine Modules | 76 (70 root + 6 subgraphs) |
+| LangGraph Engine Modules | 78 (72 root + 6 subgraphs) |
 | Policy Files | 49 (48 .md + 1 .json) |
-| Test Files | 47 |
-| Test Functions | 1400+ |
+| Test Files | 48 |
+| Test Functions | 1450+ |
 | Total Python Files | 261+ |
 | UML Diagram Types | 12 |
 | Documentation Files | 40 |
@@ -371,7 +391,8 @@ See `.env.example` for all options:
 
 | Version | Date | Highlights |
 |---------|------|------------|
-| **7.5.0** | 2026-03-18 | UML diagram generation (12 types), 12th MCP server (uml-diagram, 14 tools), AST + LLM hybrid |
+| **7.6.0** | 2026-03-18 | Call graph builder (class-level FQN, impact analysis, 47 tests), replaces flat file graph |
+| 7.5.0 | 2026-03-18 | UML diagram generation (12 types), 12th MCP server (uml-diagram, 14 tools), AST + LLM hybrid |
 | 7.5.0 | 2026-03-17 | Gap analysis fixes, all 49 policies complete, code graph analyzer, Level 1 integration |
 | 7.5.0 | 2026-03-16 | RAG integration, 11th MCP server (vector-db), cross-session learning, 109 tools |
 | 7.4.0 | 2026-03-16 | Dynamic versioning, SRS rewrite, MCP health checks |
