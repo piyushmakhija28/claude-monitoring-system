@@ -10,6 +10,8 @@ Functions:
     get_implementation_context    - Step 10 (Implement): call paths + entry points
     review_change_impact          - Step 11 (Review): diff two call graph snapshots
     snapshot_call_graph           - Helper: capture pre-change snapshot
+    extract_phase_subgraph        - Extract subgraph for a specific phase (no rebuild)
+    get_phase_scoped_context      - Focused context per phase/task (no rebuild)
 
 All functions are fail-safe: they return a fallback dict with
 call_graph_available=False on any error rather than raising.
@@ -764,3 +766,289 @@ def snapshot_call_graph(project_root):
     except Exception as exc:
         logger.error("snapshot_call_graph failed: %s", exc, exc_info=True)
         return {"call_graph_available": False}
+
+
+# ---------------------------------------------------------------------------
+# Phase-scoped context extraction (no graph rebuild - works on snapshot)
+# ---------------------------------------------------------------------------
+
+def extract_phase_subgraph(snapshot, phase_files):
+    """Extract a subgraph containing only nodes/edges relevant to phase_files.
+
+    Works on a snapshot dict (from snapshot_call_graph or CallGraph.to_dict()),
+    does NOT rebuild the graph.
+
+    Includes:
+    - All methods defined in phase_files
+    - Their direct callers (1 hop up)
+    - Their direct callees (1 hop down)
+    - Edges between any of these nodes
+
+    Args:
+        snapshot: Dict from CallGraph.to_dict() or snapshot_call_graph().
+        phase_files: List of relative file paths for this phase.
+
+    Returns:
+        Dict with: nodes (classes, methods), edges, stats, phase_files.
+        Returns empty structure if snapshot is invalid.
+    """
+    empty = {
+        "nodes": {"classes": [], "methods": []},
+        "edges": [],
+        "stats": {"methods_in_scope": 0, "edges_in_scope": 0, "files_in_scope": 0},
+        "phase_files": list(phase_files) if phase_files else [],
+    }
+
+    if not snapshot or not phase_files:
+        return empty
+
+    nodes_data = snapshot.get("nodes", {})
+    all_methods = nodes_data.get("methods", [])
+    all_classes = nodes_data.get("classes", [])
+    all_edges = snapshot.get("edges", [])
+
+    # Normalize phase file paths (forward slashes, no leading ./)
+    norm_phase = set()
+    for f in phase_files:
+        nf = str(f).replace("\\", "/").lstrip("./")
+        norm_phase.add(nf)
+
+    # Step 1: Find all method FQNs defined in phase_files
+    phase_method_fqns = set()
+    for m in all_methods:
+        mfile = m.get("file", "").replace("\\", "/").lstrip("./")
+        if mfile in norm_phase:
+            phase_method_fqns.add(m.get("id", ""))
+
+    if not phase_method_fqns:
+        return empty
+
+    # Step 2: Expand 1 hop - find direct callers and callees
+    expanded_fqns = set(phase_method_fqns)
+    for edge in all_edges:
+        if edge.get("type") == "inheritance":
+            continue
+        from_fqn = edge.get("from", "")
+        to_fqn = edge.get("to", "")
+        # If a phase method is the callee, add its caller (1 hop up)
+        if to_fqn in phase_method_fqns and from_fqn:
+            expanded_fqns.add(from_fqn)
+        # If a phase method is the caller, add its callee (1 hop down)
+        if from_fqn in phase_method_fqns and to_fqn:
+            expanded_fqns.add(to_fqn)
+
+    # Step 3: Filter methods to expanded set
+    scope_methods = [
+        m for m in all_methods if m.get("id", "") in expanded_fqns
+    ]
+
+    # Step 4: Filter classes that own any in-scope methods
+    scope_class_fqns = set()
+    for m in scope_methods:
+        pc = m.get("parent_class")
+        if pc:
+            scope_class_fqns.add(pc)
+    scope_classes = [
+        c for c in all_classes if c.get("id", "") in scope_class_fqns
+    ]
+
+    # Step 5: Filter edges to only those between in-scope nodes
+    scope_edges = []
+    for edge in all_edges:
+        from_fqn = edge.get("from", "")
+        to_fqn = edge.get("to", "")
+        if from_fqn in expanded_fqns and to_fqn in expanded_fqns:
+            scope_edges.append(edge)
+
+    # Collect files in scope
+    scope_files = set()
+    for m in scope_methods:
+        f = m.get("file", "")
+        if f:
+            scope_files.add(f)
+
+    return {
+        "nodes": {"classes": scope_classes, "methods": scope_methods},
+        "edges": scope_edges,
+        "stats": {
+            "methods_in_scope": len(scope_methods),
+            "methods_in_phase": len(phase_method_fqns),
+            "edges_in_scope": len(scope_edges),
+            "files_in_scope": len(scope_files),
+            "classes_in_scope": len(scope_classes),
+        },
+        "phase_files": list(phase_files),
+        "expanded_files": sorted(scope_files),
+    }
+
+
+def get_phase_scoped_context(snapshot, phase_files, phase_description=""):
+    """Get focused CallGraph context for a single phase/task.
+
+    Uses the ALREADY BUILT snapshot (no graph rebuild). Extracts only the
+    subgraph relevant to this phase and computes phase-specific risk.
+
+    Args:
+        snapshot: Dict from snapshot_call_graph() or CallGraph.to_dict().
+        phase_files: List of relative file paths for this phase.
+        phase_description: Human-readable phase description for context.
+
+    Returns dict:
+    {
+        "phase_description": str,
+        "phase_files": [...],
+        "subgraph": {nodes, edges, stats},
+        "danger_zones": [{"fqn": ..., "callers_count": N}],
+        "safe_change_zones": [fqn, ...],
+        "entry_points": [fqn, ...],
+        "cross_phase_callers": [{"fqn": ..., "file": ..., "calls_into": ...}],
+        "risk_level": "low/medium/high",
+        "summary": str,
+        "call_graph_available": bool,
+    }
+    """
+    fallback = {
+        "phase_description": phase_description,
+        "phase_files": list(phase_files) if phase_files else [],
+        "subgraph": {"nodes": {"classes": [], "methods": []}, "edges": [], "stats": {}},
+        "danger_zones": [],
+        "safe_change_zones": [],
+        "entry_points": [],
+        "cross_phase_callers": [],
+        "risk_level": "low",
+        "summary": "No call graph data available",
+        "call_graph_available": False,
+    }
+
+    if not snapshot or not snapshot.get("call_graph_available", True):
+        return fallback
+    if not phase_files:
+        fallback["call_graph_available"] = True
+        fallback["summary"] = "No phase files specified"
+        return fallback
+
+    try:
+        # Extract subgraph for this phase
+        subgraph = extract_phase_subgraph(snapshot, phase_files)
+        scope_methods = subgraph["nodes"]["methods"]
+        scope_edges = subgraph["edges"]
+
+        if not scope_methods:
+            fallback["call_graph_available"] = True
+            fallback["summary"] = "No methods found in phase files"
+            return fallback
+
+        # Normalize phase files for comparison
+        norm_phase = set()
+        for f in phase_files:
+            norm_phase.add(str(f).replace("\\", "/").lstrip("./"))
+
+        # Identify phase-internal method FQNs
+        phase_method_fqns = set()
+        for m in scope_methods:
+            mfile = m.get("file", "").replace("\\", "/").lstrip("./")
+            if mfile in norm_phase:
+                phase_method_fqns.add(m.get("id", ""))
+
+        # Count callers for each phase method (from the full snapshot, not subgraph)
+        all_edges = snapshot.get("edges", [])
+        caller_counts = {}  # fqn -> count of unique callers
+        cross_phase_callers = []
+
+        for edge in all_edges:
+            if edge.get("type") == "inheritance":
+                continue
+            to_fqn = edge.get("to", "")
+            from_fqn = edge.get("from", "")
+            if to_fqn in phase_method_fqns:
+                if to_fqn not in caller_counts:
+                    caller_counts[to_fqn] = set()
+                caller_counts[to_fqn].add(from_fqn)
+
+                # Track callers from OUTSIDE the phase
+                if from_fqn not in phase_method_fqns:
+                    # Find the file of the caller
+                    caller_file = ""
+                    if "::" in from_fqn:
+                        caller_file = from_fqn.split("::")[0]
+                    cross_phase_callers.append({
+                        "fqn": from_fqn,
+                        "file": caller_file,
+                        "calls_into": to_fqn,
+                    })
+
+        # Classify danger zones and safe zones
+        danger_zones = []
+        safe_zones = []
+        max_callers = 0
+
+        for fqn in phase_method_fqns:
+            count = len(caller_counts.get(fqn, set()))
+            if count > max_callers:
+                max_callers = count
+            if count >= 5:
+                danger_zones.append({"fqn": fqn, "callers_count": count})
+            elif count == 0:
+                safe_zones.append(fqn)
+
+        # Sort danger zones by callers descending
+        danger_zones.sort(key=lambda d: d["callers_count"], reverse=True)
+
+        # Find entry points: phase methods not called by other phase methods
+        phase_callees = set()
+        for edge in scope_edges:
+            if edge.get("type") == "inheritance":
+                continue
+            from_fqn = edge.get("from", "")
+            to_fqn = edge.get("to", "")
+            if from_fqn in phase_method_fqns:
+                phase_callees.add(to_fqn)
+
+        entry_points = []
+        for fqn in phase_method_fqns:
+            m_name = fqn.split("::")[-1] if "::" in fqn else fqn
+            m_name = m_name.split(".")[-1] if "." in m_name else m_name
+            if not m_name.startswith("_") and fqn not in phase_callees:
+                entry_points.append(fqn)
+
+        # Risk level based on phase scope
+        if max_callers >= 8 or len(danger_zones) >= 3:
+            risk_level = "high"
+        elif max_callers >= 3 or len(cross_phase_callers) >= 5:
+            risk_level = "medium"
+        else:
+            risk_level = "low"
+
+        # Build summary
+        summary_parts = [
+            "Phase: %d methods in %d files" % (
+                len(phase_method_fqns), len(norm_phase)
+            ),
+        ]
+        if danger_zones:
+            summary_parts.append(
+                "%d danger zone(s)" % len(danger_zones)
+            )
+        if cross_phase_callers:
+            summary_parts.append(
+                "%d cross-phase caller(s)" % len(cross_phase_callers)
+            )
+        summary_parts.append("risk=%s" % risk_level)
+
+        return {
+            "phase_description": phase_description,
+            "phase_files": list(phase_files),
+            "subgraph": subgraph,
+            "danger_zones": danger_zones[:10],
+            "safe_change_zones": sorted(safe_zones)[:20],
+            "entry_points": sorted(entry_points)[:15],
+            "cross_phase_callers": cross_phase_callers[:15],
+            "risk_level": risk_level,
+            "summary": " | ".join(summary_parts),
+            "call_graph_available": True,
+        }
+
+    except Exception as exc:
+        logger.error("get_phase_scoped_context failed: %s", exc, exc_info=True)
+        fallback["call_graph_available"] = False
+        return fallback

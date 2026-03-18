@@ -407,12 +407,21 @@ class FlowState(TypedDict, total=False):
     step3_execution_time_ms: Optional[float]
     step3_error: Optional[str]
 
+    # Step 3: CallGraph phase-file mapping
+    step3_phase_file_map: Optional[Dict]           # {task_id: [files]} from graph analysis
+    step3_graph_snapshot: Optional[Dict]            # Cached graph snapshot for Step 4 reuse
+
     # Step 4: TOON Refinement (PHASE 2A - Kept as is)
     step4_toon_refined: Optional[Dict]         # Refined TOON object
     step4_refinement_status: Optional[str]     # Refinement status
     step4_complexity_adjusted: Optional[int]   # Adjusted complexity
     step4_execution_time_ms: Optional[float]
     step4_error: Optional[str]
+
+    # Step 4: Phase-scoped CallGraph context
+    step4_phase_contexts: Optional[Dict]           # {task_id: phase_scoped_context} per phase
+    step4_phase_scope_files: Optional[List[str]]   # All files in scope across phases
+    step4_old_context_cleared: Optional[bool]      # Whether broad context was replaced with phase context
 
     # Step 5: Skill & Agent Selection (PHASE 2A - Renamed from step6_skill)
     step5_skill: str                           # Selected skill name
@@ -644,6 +653,8 @@ class StepKeys:
     STEP3_TASK_COUNT = "step3_task_count"
     STEP3_VALIDATION_STATUS = "step3_validation_status"
     STEP3_ERROR = "step3_error"
+    STEP3_PHASE_FILE_MAP = "step3_phase_file_map"
+    STEP3_GRAPH_SNAPSHOT = "step3_graph_snapshot"
 
     # ------------------------------------------------------------------
     # STEP 4: TOON REFINEMENT
@@ -652,6 +663,9 @@ class StepKeys:
     STEP4_REFINEMENT_STATUS = "step4_refinement_status"
     STEP4_COMPLEXITY_ADJUSTED = "step4_complexity_adjusted"
     STEP4_ERROR = "step4_error"
+    STEP4_PHASE_CONTEXTS = "step4_phase_contexts"
+    STEP4_PHASE_SCOPE_FILES = "step4_phase_scope_files"
+    STEP4_OLD_CONTEXT_CLEARED = "step4_old_context_cleared"
 
     # ------------------------------------------------------------------
     # STEP 5: SKILL & AGENT SELECTION

@@ -665,7 +665,7 @@ def step2_plan_execution_node(state: FlowState) -> Dict[str, Any]:
 
 def step3_task_breakdown_node(state: FlowState) -> Dict[str, Any]:
     """Step 3: Task Breakdown Validation with full error handling."""
-    return _run_step(
+    result = _run_step(
         3, "Task Breakdown Validation",
         step3_task_breakdown_validation,
         state,
@@ -677,10 +677,62 @@ def step3_task_breakdown_node(state: FlowState) -> Dict[str, Any]:
         },
     )
 
+    # --- CallGraph: Map files to tasks/phases based on graph analysis ---
+    try:
+        from ..call_graph_analyzer import snapshot_call_graph
+        project_root = state.get("project_root", ".")
+
+        # Get or build the graph snapshot (reuse from Step 2 if available)
+        graph_snapshot = state.get("step2_impact_analysis", {})
+        if not graph_snapshot.get("call_graph_available"):
+            graph_snapshot = snapshot_call_graph(project_root)
+
+        # Map task descriptions to files using graph's method/class names
+        validated_tasks = result.get("step3_tasks_validated", [])
+        phase_file_map = {}
+
+        all_methods = graph_snapshot.get("nodes", {}).get("methods", []) if "nodes" in graph_snapshot else []
+        all_classes = graph_snapshot.get("nodes", {}).get("classes", []) if "nodes" in graph_snapshot else []
+
+        for task in validated_tasks:
+            desc = task.get("description", "").lower()
+            task_id = task.get("id", "unknown")
+            matched_files = set()
+
+            # If task already has files from Step 0, use those
+            if task.get("files"):
+                matched_files.update(task["files"])
+            else:
+                # Match by keyword in class/method names against task description
+                desc_words = set(w for w in desc.replace("-", " ").replace("_", " ").split() if len(w) > 3)
+                for m in all_methods:
+                    m_name = m.get("name", "").lower()
+                    m_file = m.get("file", "")
+                    if any(w in m_name for w in desc_words) and m_file:
+                        matched_files.add(m_file)
+                for c in all_classes:
+                    c_name = c.get("name", "").lower()
+                    c_file = c.get("file", "")
+                    if any(w in c_name for w in desc_words) and c_file:
+                        matched_files.add(c_file)
+
+            phase_file_map[task_id] = sorted(matched_files)
+
+        result["step3_phase_file_map"] = phase_file_map
+        # Store the graph snapshot for reuse in Step 4
+        if "nodes" in graph_snapshot:
+            result["step3_graph_snapshot"] = graph_snapshot
+
+        logger.info("[v2] Step 3 mapped %d tasks to files via CallGraph", len(phase_file_map))
+    except Exception as e:
+        logger.debug("[v2] Step 3 file mapping skipped: %s", e)
+
+    return result
+
 
 def step4_toon_refinement_node(state: FlowState) -> Dict[str, Any]:
     """Step 4: TOON Refinement with full error handling."""
-    return _run_step(
+    result = _run_step(
         4, "TOON Refinement",
         step4_toon_refinement,
         state,
@@ -690,6 +742,48 @@ def step4_toon_refinement_node(state: FlowState) -> Dict[str, Any]:
             "step4_complexity_adjusted": state.get("step0_complexity", 5),
         },
     )
+
+    # --- CallGraph: Inject phase-scoped context, clear old broad context ---
+    try:
+        from ..call_graph_analyzer import get_phase_scoped_context
+
+        # Get graph snapshot (from Step 3 or Step 2)
+        graph_snapshot = (
+            state.get("step3_graph_snapshot")
+            or state.get("step2_impact_analysis", {})
+        )
+
+        # Get phase file mapping from Step 3
+        phase_file_map = state.get("step3_phase_file_map", {})
+
+        if graph_snapshot and phase_file_map:
+            # For each phase/task, get its scoped context
+            phase_contexts = {}
+            all_phase_files = set()
+
+            for task_id, files in phase_file_map.items():
+                if files:
+                    ctx = get_phase_scoped_context(
+                        graph_snapshot, files, task_id
+                    )
+                    phase_contexts[task_id] = ctx
+                    all_phase_files.update(files)
+
+            if phase_contexts:
+                result["step4_phase_contexts"] = phase_contexts
+                result["step4_phase_scope_files"] = sorted(all_phase_files)
+
+                # Clear old broad context - replace with focused phase data
+                result["step4_old_context_cleared"] = True
+
+                logger.info(
+                    "[v2] Step 4 injected %d phase contexts, %d files in scope",
+                    len(phase_contexts), len(all_phase_files),
+                )
+    except Exception as e:
+        logger.debug("[v2] Step 4 phase context skipped: %s", e)
+
+    return result
 
 
 def step5_skill_selection_node(state: FlowState) -> Dict[str, Any]:

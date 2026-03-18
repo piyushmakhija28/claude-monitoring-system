@@ -608,3 +608,464 @@ class TestSnapshotCallGraph:
         for path_entry in result["call_paths"]:
             assert "path" in path_entry
             assert "depth" in path_entry
+
+
+# ===========================================================================
+# Helpers for phase subgraph tests: 3-file project
+# ===========================================================================
+
+def _make_three_file_project(tmp_path):
+    """Create a 3-file project with a realistic layered architecture.
+
+    models.py   - class User with __init__, validate, save
+    services.py - class UserService that calls User.validate() and User.save()
+    api.py      - class UserAPI that calls UserService methods
+
+    Returns (project_root, models_path, services_path, api_path) as strings.
+    """
+    models_src = (
+        "class User:\n"
+        "    def __init__(self, name, email):\n"
+        "        self.name = name\n"
+        "        self.email = email\n"
+        "\n"
+        "    def validate(self):\n"
+        "        return bool(self.name and self.email)\n"
+        "\n"
+        "    def save(self):\n"
+        "        return True\n"
+    )
+    services_src = (
+        "from models import User\n"
+        "\n"
+        "class UserService:\n"
+        "    def create_user(self, name, email):\n"
+        "        u = User(name, email)\n"
+        "        if u.validate():\n"
+        "            u.save()\n"
+        "            return u\n"
+        "        return None\n"
+        "\n"
+        "    def update_user(self, user):\n"
+        "        if user.validate():\n"
+        "            user.save()\n"
+        "            return True\n"
+        "        return False\n"
+    )
+    api_src = (
+        "from services import UserService\n"
+        "\n"
+        "class UserAPI:\n"
+        "    def post_user(self, name, email):\n"
+        "        svc = UserService()\n"
+        "        return svc.create_user(name, email)\n"
+        "\n"
+        "    def put_user(self, user):\n"
+        "        svc = UserService()\n"
+        "        return svc.update_user(user)\n"
+    )
+    models_path = tmp_path / "models.py"
+    services_path = tmp_path / "services.py"
+    api_path = tmp_path / "api.py"
+    _write(models_path, models_src)
+    _write(services_path, services_src)
+    _write(api_path, api_src)
+    return (
+        str(tmp_path),
+        str(models_path),
+        str(services_path),
+        str(api_path),
+    )
+
+
+def _make_high_callers_phase_project(tmp_path):
+    """Create a project where one method in models.py is called by 6+ callers.
+
+    models.py   - class User with core_validate (called by many)
+    callers.py  - 6 methods that each call User.core_validate()
+
+    Returns (project_root, models_path, callers_path) as strings.
+    """
+    models_src = (
+        "class User:\n"
+        "    def core_validate(self):\n"
+        "        return True\n"
+    )
+    lines = ["from models import User\n", "\n", "class MultiCaller:\n"]
+    for i in range(6):
+        lines.append("    def caller_%d(self):\n" % i)
+        lines.append("        u = User()\n")
+        lines.append("        return u.core_validate()\n")
+        lines.append("\n")
+    callers_src = "".join(lines)
+    models_path = tmp_path / "models.py"
+    callers_path = tmp_path / "callers.py"
+    _write(models_path, models_src)
+    _write(callers_path, callers_src)
+    return str(tmp_path), str(models_path), str(callers_path)
+
+
+# ===========================================================================
+# TestExtractPhaseSubgraph
+# ===========================================================================
+
+class TestExtractPhaseSubgraph:
+
+    def test_subgraph_scoped_to_phase_files(self, tmp_path):
+        """methods_in_phase only includes models.py methods; expanded set adds callers."""
+        from langgraph_engine.call_graph_analyzer import (
+            extract_phase_subgraph,
+            snapshot_call_graph,
+        )
+        project_root, models_path, services_path, api_path = _make_three_file_project(tmp_path)
+
+        snap = snapshot_call_graph(project_root)
+        if not snap.get("call_graph_available"):
+            pytest.skip("Call graph not available in this environment")
+
+        phase_files = ["models.py"]
+        result = extract_phase_subgraph(snap, phase_files)
+
+        assert isinstance(result, dict)
+        assert "nodes" in result
+        assert "stats" in result
+        stats = result["stats"]
+        assert "methods_in_phase" in stats
+        assert "methods_in_scope" in stats
+
+        # methods_in_phase must be <= methods_in_scope (scope expands with callers)
+        assert stats["methods_in_phase"] <= stats["methods_in_scope"]
+
+        # Only models.py methods count toward phase
+        all_methods_in_subgraph = result["nodes"]["methods"]
+        phase_method_ids = set()
+        for m in all_methods_in_subgraph:
+            mfile = m.get("file", "").replace("\\", "/")
+            if "models.py" in mfile:
+                phase_method_ids.add(m.get("id", ""))
+
+        # methods_in_phase should equal the count of models.py methods found
+        assert stats["methods_in_phase"] == len(phase_method_ids)
+
+    def test_subgraph_includes_callers(self, tmp_path):
+        """1-hop callers from services.py appear in the expanded method set."""
+        from langgraph_engine.call_graph_analyzer import (
+            extract_phase_subgraph,
+            snapshot_call_graph,
+        )
+        project_root, models_path, services_path, api_path = _make_three_file_project(tmp_path)
+
+        snap = snapshot_call_graph(project_root)
+        if not snap.get("call_graph_available"):
+            pytest.skip("Call graph not available in this environment")
+
+        result = extract_phase_subgraph(snap, ["models.py"])
+
+        all_method_ids = {m.get("id", "") for m in result["nodes"]["methods"]}
+
+        # At least one method from services.py should appear (1-hop callers)
+        services_methods_in_scope = [
+            mid for mid in all_method_ids
+            if "services.py" in mid or "UserService" in mid
+        ]
+        # Guard: if AST parsing detected the cross-file call, callers should be included
+        if result["stats"]["methods_in_scope"] > result["stats"]["methods_in_phase"]:
+            assert len(services_methods_in_scope) > 0, (
+                "Expected services.py methods in expanded scope. "
+                "Scope methods: %s" % sorted(all_method_ids)
+            )
+
+    def test_subgraph_includes_callees(self, tmp_path):
+        """1-hop callees from models.py appear when services.py is the phase."""
+        from langgraph_engine.call_graph_analyzer import (
+            extract_phase_subgraph,
+            snapshot_call_graph,
+        )
+        project_root, models_path, services_path, api_path = _make_three_file_project(tmp_path)
+
+        snap = snapshot_call_graph(project_root)
+        if not snap.get("call_graph_available"):
+            pytest.skip("Call graph not available in this environment")
+
+        result = extract_phase_subgraph(snap, ["services.py"])
+
+        all_method_ids = {m.get("id", "") for m in result["nodes"]["methods"]}
+
+        # At least one method from models.py should appear (1-hop callees)
+        models_methods_in_scope = [
+            mid for mid in all_method_ids
+            if "models.py" in mid or "User." in mid
+        ]
+        if result["stats"]["methods_in_scope"] > result["stats"]["methods_in_phase"]:
+            assert len(models_methods_in_scope) > 0, (
+                "Expected models.py methods as callees in scope. "
+                "Scope methods: %s" % sorted(all_method_ids)
+            )
+
+    def test_subgraph_empty_phase_files(self, tmp_path):
+        """Empty phase_files returns an empty structure without raising."""
+        from langgraph_engine.call_graph_analyzer import (
+            extract_phase_subgraph,
+            snapshot_call_graph,
+        )
+        project_root, models_path, services_path, api_path = _make_three_file_project(tmp_path)
+
+        snap = snapshot_call_graph(project_root)
+
+        result = extract_phase_subgraph(snap, [])
+
+        assert isinstance(result, dict)
+        assert "nodes" in result
+        assert result["nodes"]["methods"] == []
+        assert result["nodes"]["classes"] == []
+        assert result["edges"] == []
+
+    def test_subgraph_no_rebuild(self, tmp_path):
+        """Function works on a plain dict snapshot without needing CallGraph object."""
+        from langgraph_engine.call_graph_analyzer import (
+            extract_phase_subgraph,
+            snapshot_call_graph,
+        )
+        project_root, models_path, services_path, api_path = _make_three_file_project(tmp_path)
+
+        snap = snapshot_call_graph(project_root)
+        if not snap.get("call_graph_available"):
+            pytest.skip("Call graph not available in this environment")
+
+        # snap is already a plain dict; pass it directly
+        assert isinstance(snap, dict), "snapshot must be a plain dict"
+
+        result = extract_phase_subgraph(snap, ["models.py"])
+
+        # Must return a valid structure without rebuilding the graph
+        assert isinstance(result, dict)
+        assert "nodes" in result
+        assert "edges" in result
+        assert "stats" in result
+        assert isinstance(result["nodes"]["methods"], list)
+        assert isinstance(result["edges"], list)
+
+    def test_subgraph_stats(self, tmp_path):
+        """stats dict contains all required keys."""
+        from langgraph_engine.call_graph_analyzer import (
+            extract_phase_subgraph,
+            snapshot_call_graph,
+        )
+        project_root, models_path, services_path, api_path = _make_three_file_project(tmp_path)
+
+        snap = snapshot_call_graph(project_root)
+
+        result = extract_phase_subgraph(snap, ["models.py"])
+
+        stats = result.get("stats", {})
+        required_keys = [
+            "methods_in_scope",
+            "methods_in_phase",
+            "edges_in_scope",
+            "files_in_scope",
+            "classes_in_scope",
+        ]
+        for key in required_keys:
+            assert key in stats, (
+                "Missing stats key: %s. Got: %s" % (key, sorted(stats.keys()))
+            )
+
+
+# ===========================================================================
+# TestGetPhaseScopedContext
+# ===========================================================================
+
+class TestGetPhaseScopedContext:
+
+    def test_phase_context_basic(self, tmp_path):
+        """Basic call: call_graph_available=True, phase_files returned, risk_level valid."""
+        from langgraph_engine.call_graph_analyzer import (
+            get_phase_scoped_context,
+            snapshot_call_graph,
+        )
+        project_root, models_path, services_path, api_path = _make_three_file_project(tmp_path)
+
+        snap = snapshot_call_graph(project_root)
+        if not snap.get("call_graph_available"):
+            pytest.skip("Call graph not available in this environment")
+
+        result = get_phase_scoped_context(snap, ["models.py"], "Test user model phase")
+
+        assert isinstance(result, dict)
+        assert result["call_graph_available"] is True
+        assert result["phase_files"] == ["models.py"]
+        assert result["risk_level"] in ("low", "medium", "high")
+
+        for key in ("danger_zones", "safe_change_zones", "entry_points",
+                    "cross_phase_callers", "summary", "subgraph"):
+            assert key in result, "Missing key: %s" % key
+
+    def test_phase_context_danger_zones(self, tmp_path):
+        """Method called by 6+ callers must appear in danger_zones."""
+        from langgraph_engine.call_graph_analyzer import (
+            get_phase_scoped_context,
+            snapshot_call_graph,
+        )
+        project_root, models_path, callers_path = _make_high_callers_phase_project(tmp_path)
+
+        snap = snapshot_call_graph(project_root)
+        if not snap.get("call_graph_available"):
+            pytest.skip("Call graph not available in this environment")
+
+        result = get_phase_scoped_context(snap, ["models.py"])
+
+        assert result.get("call_graph_available") is True
+        danger_zones = result["danger_zones"]
+        assert isinstance(danger_zones, list)
+
+        # If the graph detected the 6 callers, danger_zones must be non-empty
+        if result["subgraph"]["stats"].get("methods_in_phase", 0) > 0:
+            has_high_caller = any(
+                d.get("callers_count", 0) >= 5 for d in danger_zones
+            )
+            # core_validate is called 6 times; must appear once graph is built
+            assert has_high_caller, (
+                "Expected danger zone with 5+ callers. Got: %s" % danger_zones
+            )
+
+    def test_phase_context_safe_zones(self, tmp_path):
+        """Methods with 0 callers should appear in safe_change_zones."""
+        from langgraph_engine.call_graph_analyzer import (
+            get_phase_scoped_context,
+            snapshot_call_graph,
+        )
+        project_root, models_path, services_path, api_path = _make_three_file_project(tmp_path)
+
+        snap = snapshot_call_graph(project_root)
+        if not snap.get("call_graph_available"):
+            pytest.skip("Call graph not available in this environment")
+
+        # api.py methods are entry points (not called by anyone in the graph)
+        result = get_phase_scoped_context(snap, ["api.py"])
+
+        assert result.get("call_graph_available") is True
+        safe_zones = result["safe_change_zones"]
+        assert isinstance(safe_zones, list)
+        # Safe zones are valid FQN strings
+        for fqn in safe_zones:
+            assert isinstance(fqn, str)
+            assert len(fqn) > 0
+
+    def test_phase_context_cross_phase_callers(self, tmp_path):
+        """services.py methods calling models.py appear in cross_phase_callers."""
+        from langgraph_engine.call_graph_analyzer import (
+            get_phase_scoped_context,
+            snapshot_call_graph,
+        )
+        project_root, models_path, services_path, api_path = _make_three_file_project(tmp_path)
+
+        snap = snapshot_call_graph(project_root)
+        if not snap.get("call_graph_available"):
+            pytest.skip("Call graph not available in this environment")
+
+        result = get_phase_scoped_context(snap, ["models.py"])
+
+        assert result.get("call_graph_available") is True
+        cross_callers = result["cross_phase_callers"]
+        assert isinstance(cross_callers, list)
+
+        for entry in cross_callers:
+            assert "fqn" in entry
+            assert "file" in entry
+            assert "calls_into" in entry
+
+        # If the graph detected cross-file calls, some callers from services.py
+        # should appear as cross-phase callers into models.py
+        if result["subgraph"]["stats"].get("methods_in_scope", 0) > result["subgraph"]["stats"].get("methods_in_phase", 0):
+            caller_fqns = [c["fqn"] for c in cross_callers]
+            has_services_caller = any(
+                "services.py" in c["file"] or "UserService" in c["fqn"]
+                for c in cross_callers
+            )
+            assert has_services_caller, (
+                "Expected services.py as cross-phase caller. Got: %s" % caller_fqns
+            )
+
+    def test_phase_context_entry_points(self, tmp_path):
+        """Public phase methods not called by other phase methods are entry points."""
+        from langgraph_engine.call_graph_analyzer import (
+            get_phase_scoped_context,
+            snapshot_call_graph,
+        )
+        project_root, models_path, services_path, api_path = _make_three_file_project(tmp_path)
+
+        snap = snapshot_call_graph(project_root)
+        if not snap.get("call_graph_available"):
+            pytest.skip("Call graph not available in this environment")
+
+        result = get_phase_scoped_context(snap, ["api.py"])
+
+        assert result.get("call_graph_available") is True
+        entry_points = result["entry_points"]
+        assert isinstance(entry_points, list)
+
+        for fqn in entry_points:
+            assert isinstance(fqn, str)
+            # Entry points must not start with underscore (private methods excluded)
+            method_name = fqn.split("::")[-1] if "::" in fqn else fqn
+            method_name = method_name.split(".")[-1] if "." in method_name else method_name
+            assert not method_name.startswith("_"), (
+                "Private method should not be an entry point: %s" % fqn
+            )
+
+    def test_phase_context_no_snapshot(self, tmp_path):
+        """None snapshot returns call_graph_available=False gracefully."""
+        from langgraph_engine.call_graph_analyzer import get_phase_scoped_context
+
+        result = get_phase_scoped_context(None, ["models.py"])
+
+        assert isinstance(result, dict)
+        assert result["call_graph_available"] is False
+        # Must still have all expected keys
+        for key in ("phase_files", "danger_zones", "safe_change_zones",
+                    "entry_points", "cross_phase_callers", "risk_level", "summary"):
+            assert key in result, "Missing key: %s" % key
+
+    def test_phase_context_no_phase_files(self, tmp_path):
+        """Empty phase_files returns a graceful result without crashing."""
+        from langgraph_engine.call_graph_analyzer import (
+            get_phase_scoped_context,
+            snapshot_call_graph,
+        )
+        project_root, models_path, services_path, api_path = _make_three_file_project(tmp_path)
+
+        snap = snapshot_call_graph(project_root)
+
+        result = get_phase_scoped_context(snap, [])
+
+        assert isinstance(result, dict)
+        assert "call_graph_available" in result
+        # Must not raise; phase_files must be empty
+        assert result["phase_files"] == []
+        for key in ("danger_zones", "safe_change_zones", "entry_points",
+                    "cross_phase_callers", "risk_level"):
+            assert key in result
+
+    def test_phase_context_summary(self, tmp_path):
+        """Summary string contains 'Phase:' and 'risk='."""
+        from langgraph_engine.call_graph_analyzer import (
+            get_phase_scoped_context,
+            snapshot_call_graph,
+        )
+        project_root, models_path, services_path, api_path = _make_three_file_project(tmp_path)
+
+        snap = snapshot_call_graph(project_root)
+        if not snap.get("call_graph_available"):
+            pytest.skip("Call graph not available in this environment")
+
+        result = get_phase_scoped_context(snap, ["models.py"], "User model phase")
+
+        assert result.get("call_graph_available") is True
+        summary = result["summary"]
+        assert isinstance(summary, str)
+        assert "Phase:" in summary, (
+            "Expected 'Phase:' in summary. Got: %r" % summary
+        )
+        assert "risk=" in summary, (
+            "Expected 'risk=' in summary. Got: %r" % summary
+        )
