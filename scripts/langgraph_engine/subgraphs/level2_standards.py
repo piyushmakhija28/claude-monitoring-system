@@ -331,6 +331,182 @@ def node_mcp_plugin_discovery(state: FlowState) -> dict:
 
 
 # ============================================================================
+# STANDARDS ENFORCEMENT NODE
+# ============================================================================
+
+
+def _run_linter(cmd: list, timeout: int = 15) -> "subprocess.CompletedProcess | None":
+    """Run a subprocess command and return the result, or None on any error."""
+    try:
+        return subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout,
+        )
+    except Exception:
+        return None
+
+
+def _detect_linter() -> "tuple[str, list] | tuple[None, None]":
+    """Detect the first available Python linter.
+
+    Returns (linter_name, version_cmd) or (None, None) if none found.
+    """
+    # Try ruff first (modern, fast)
+    result = _run_linter(["ruff", "--version"])
+    if result is not None and result.returncode == 0:
+        return "ruff", ["ruff"]
+
+    # Fallback to flake8
+    result = _run_linter(["flake8", "--version"])
+    if result is not None and result.returncode == 0:
+        return "flake8", ["flake8"]
+
+    return None, None
+
+
+def _run_ruff_check(project_root: str) -> list:
+    """Run ruff on the project src/ directory and return up to 20 violations."""
+    src_path = str(Path(project_root) / "src")
+    if not Path(src_path).exists():
+        src_path = project_root
+
+    result = _run_linter(
+        [
+            "ruff", "check", src_path,
+            "--output-format", "json",
+            "--select", "E,W,F",
+        ],
+        timeout=15,
+    )
+
+    if result is None:
+        return []
+
+    try:
+        violations_raw = json.loads(result.stdout or "[]")
+    except (json.JSONDecodeError, ValueError):
+        return []
+
+    violations = []
+    for item in violations_raw[:20]:
+        violations.append({
+            "file": item.get("filename", ""),
+            "line": item.get("location", {}).get("row", 0),
+            "code": item.get("code", ""),
+            "message": item.get("message", ""),
+            "severity": "warning" if (item.get("code", "") or "").startswith("W") else "error",
+        })
+    return violations
+
+
+def _run_flake8_check(project_root: str) -> list:
+    """Run flake8 on the project src/ directory and return up to 20 violations."""
+    src_path = str(Path(project_root) / "src")
+    if not Path(src_path).exists():
+        src_path = project_root
+
+    result = _run_linter(
+        [
+            "flake8", src_path,
+            "--format", "%(path)s:%(row)d:%(col)d: %(code)s %(text)s",
+            "--select", "E,W,F",
+            "--max-line-length", "120",
+        ],
+        timeout=15,
+    )
+
+    if result is None:
+        return []
+
+    violations = []
+    for line in (result.stdout or "").splitlines()[:20]:
+        # Format: path:row:col: CODE message
+        parts = line.split(":", 3)
+        if len(parts) < 4:
+            continue
+        try:
+            rest = parts[3].strip()
+            code_and_msg = rest.split(" ", 1)
+            code = code_and_msg[0] if code_and_msg else ""
+            message = code_and_msg[1] if len(code_and_msg) > 1 else rest
+            violations.append({
+                "file": parts[0],
+                "line": int(parts[1]),
+                "code": code,
+                "message": message,
+                "severity": "warning" if code.startswith("W") else "error",
+            })
+        except (ValueError, IndexError):
+            continue
+    return violations
+
+
+def node_standards_enforcement(state: FlowState) -> dict:
+    """Run linting on project source files and store violations in state.
+
+    Non-blocking: violations are warnings, not pipeline blockers.
+    Results feed into Step 11 code review for targeted feedback.
+
+    Checks available linters in order: ruff -> flake8.
+    Skips Java and TypeScript linting (optional, rarely available in env).
+    """
+    _step_start = time.time()
+    updates = {}
+
+    try:
+        project_root = state.get("project_root", ".")
+
+        linter_name, _ = _detect_linter()
+
+        if linter_name is None:
+            updates["standards_enforcement_ran"] = False
+            updates["standards_violations"] = []
+            updates["standards_violations_count"] = 0
+            updates["standards_linter_used"] = "none"
+            write_level_log(state, "level2", "standards-enforcement", "SKIPPED",
+                            time.time() - _step_start, {"reason": "no linter found"})
+            return updates
+
+        if linter_name == "ruff":
+            violations = _run_ruff_check(project_root)
+        else:
+            violations = _run_flake8_check(project_root)
+
+        updates["standards_enforcement_ran"] = True
+        updates["standards_violations"] = violations
+        updates["standards_violations_count"] = len(violations)
+        updates["standards_linter_used"] = linter_name
+
+        existing_pipeline = state.get("pipeline") or []
+        updates["pipeline"] = list(existing_pipeline) + [{
+            "node": "node_standards_enforcement",
+            "linter": linter_name,
+            "violations_found": len(violations),
+        }]
+
+        write_level_log(state, "level2", "standards-enforcement", "OK",
+                        time.time() - _step_start, {
+                            "linter": linter_name,
+                            "violations_count": len(violations),
+                        })
+
+    except Exception as e:
+        # Always non-blocking
+        updates["standards_enforcement_ran"] = False
+        updates["standards_violations"] = []
+        updates["standards_violations_count"] = 0
+        updates["standards_linter_used"] = "none"
+        write_level_log(state, "level2", "standards-enforcement", "FAILED",
+                        time.time() - _step_start, None, str(e))
+
+    return updates
+
+
+# ============================================================================
 # MERGE NODE
 # ============================================================================
 
@@ -384,6 +560,7 @@ def create_level2_subgraph():
     graph.add_node("level2_tool_optimization", node_tool_optimization_standards)
     graph.add_node("level2_mcp_plugin_discovery", node_mcp_plugin_discovery)
     graph.add_node("level2_merge", level2_merge_node)
+    graph.add_node("level2_standards_enforcement", node_standards_enforcement)
 
     # Common standards and tool optimization run in parallel
     graph.add_edge(START, "level2_common_standards")
@@ -406,7 +583,10 @@ def create_level2_subgraph():
     graph.add_edge("level2_tool_optimization", "level2_merge")
     graph.add_edge("level2_mcp_plugin_discovery", "level2_merge")
 
+    # Standards enforcement runs AFTER merge, BEFORE Level 3
+    graph.add_edge("level2_merge", "level2_standards_enforcement")
+
     # Done
-    graph.add_edge("level2_merge", END)
+    graph.add_edge("level2_standards_enforcement", END)
 
     return graph.compile()

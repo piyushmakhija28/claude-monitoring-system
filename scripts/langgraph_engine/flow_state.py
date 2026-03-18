@@ -197,6 +197,12 @@ class FlowState(TypedDict, total=False):
     step10_standards_checklist: Optional[Dict]      # Code review compliance checklist
     step13_standards_doc_requirements: Optional[Dict]  # Documentation update requirements
 
+    # Level 2: Standards enforcement (linting, non-blocking)
+    standards_enforcement_ran: Optional[bool]      # True if linter ran successfully
+    standards_violations: Optional[List[Dict]]     # List of {file, line, code, message, severity}
+    standards_violations_count: Optional[int]      # Total violations found (max 20 returned)
+    standards_linter_used: Optional[str]           # Linter used: ruff / flake8 / none
+
     level2_status: str                 # OK / PARTIAL / FAILED
 
     # ===========================================================================
