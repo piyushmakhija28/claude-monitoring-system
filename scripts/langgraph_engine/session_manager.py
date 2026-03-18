@@ -10,6 +10,15 @@ from pathlib import Path
 from datetime import datetime
 from typing import Dict, Any, Optional
 from loguru import logger
+
+try:
+    import sys as _sys
+    _sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
+    from utils.path_resolver import get_session_logs_dir
+    _SESSION_LOGS_DIR = get_session_logs_dir()
+except ImportError:
+    _SESSION_LOGS_DIR = Path.home() / ".claude" / "logs" / "sessions"
+
 from .toon_models import (
     ToonAnalysis, ExecutionBlueprint, ToonWithSkills,
     SessionMetadata, ExecutionLog, serialize_toon, deserialize_toon
@@ -21,7 +30,7 @@ class SessionManager:
 
     def __init__(self, session_id: str):
         self.session_id = session_id
-        self.session_dir = Path.home() / ".claude" / "logs" / "sessions" / session_id
+        self.session_dir = _SESSION_LOGS_DIR / session_id
         self.session_dir.mkdir(parents=True, exist_ok=True)
 
         # Setup logging

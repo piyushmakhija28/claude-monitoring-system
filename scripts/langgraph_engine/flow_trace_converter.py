@@ -15,6 +15,14 @@ from typing import Dict, Any, Optional
 
 from .flow_state import FlowState
 
+try:
+    import sys as _sys
+    _sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
+    from utils.path_resolver import get_claude_home
+    _FLOW_TRACE_MEMORY_DIR = get_claude_home() / "memory"
+except ImportError:
+    _FLOW_TRACE_MEMORY_DIR = Path.home() / ".claude" / "memory"
+
 
 def convert_flow_state_to_trace(state: FlowState) -> Dict[str, Any]:
     """Convert FlowState to flow-trace.json format.
@@ -281,14 +289,7 @@ def write_flow_trace_json(state: FlowState, session_dir: Optional[Path] = None) 
     """
     if session_dir is None:
         session_id = state.get("session_id", "SESSION-UNKNOWN")
-        session_dir = (
-            Path.home()
-            / ".claude"
-            / "memory"
-            / "logs"
-            / "sessions"
-            / session_id
-        )
+        session_dir = _FLOW_TRACE_MEMORY_DIR / "logs" / "sessions" / session_id
 
     session_dir.mkdir(parents=True, exist_ok=True)
 
@@ -335,7 +336,7 @@ def print_flow_checkpoint(state: FlowState, verbose: bool = False) -> None:
     # Save synthesized prompt to file AND print to stdout so Claude Code receives it
     if synthesized_prompt:
         try:
-            synthesis_file = Path.home() / ".claude" / "memory" / "current-synthesis.txt"
+            synthesis_file = _FLOW_TRACE_MEMORY_DIR / "current-synthesis.txt"
             synthesis_file.parent.mkdir(parents=True, exist_ok=True)
             synthesis_file.write_text(synthesized_prompt, encoding="utf-8")
             print(f"  Synthesis: Generated ({len(synthesized_prompt)} chars)")

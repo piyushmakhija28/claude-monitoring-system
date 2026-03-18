@@ -21,20 +21,26 @@ import sys
 from pathlib import Path
 from typing import Literal
 
+try:
+    import sys as _sys
+    _sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
+    from utils.path_resolver import get_intel_ai_path, get_npu_path, get_gpu_path, get_models_path
+    _INTEL_AI_ROOT = get_intel_ai_path()
+    _GPU_PATH = get_gpu_path()
+    _NPU_PATH = get_npu_path()
+    _MODELS_PATH = get_models_path()
+except ImportError:
+    def _resolve_path(env_var, default_parts):
+        """Resolve a path from env var or build from home + parts."""
+        val = os.environ.get(env_var)
+        if val:
+            return Path(val)
+        return Path.home().joinpath(*default_parts)
 
-def _resolve_path(env_var, default_parts):
-    """Resolve a path from env var or build from home + parts."""
-    val = os.environ.get(env_var)
-    if val:
-        return Path(val)
-    return Path.home().joinpath(*default_parts)
-
-
-# Resolve Intel AI paths (cross-platform, no hardcoded usernames)
-_INTEL_AI_ROOT = _resolve_path('INTEL_AI_PATH', ['intel-ai'])
-_GPU_PATH = _resolve_path('INTEL_AI_GPU_PATH', ['intel-ai', 'gpu'])
-_NPU_PATH = _resolve_path('INTEL_AI_NPU_PATH', ['intel-ai', 'npu'])
-_MODELS_PATH = _resolve_path('INTEL_AI_MODELS_PATH', ['intel-ai', 'models'])
+    _INTEL_AI_ROOT = _resolve_path('INTEL_AI_PATH', ['intel-ai'])
+    _GPU_PATH = _resolve_path('INTEL_AI_GPU_PATH', ['intel-ai', 'gpu'])
+    _NPU_PATH = _resolve_path('INTEL_AI_NPU_PATH', ['intel-ai', 'npu'])
+    _MODELS_PATH = _resolve_path('INTEL_AI_MODELS_PATH', ['intel-ai', 'models'])
 
 _EXE_SUFFIX = '.exe' if sys.platform == 'win32' else ''
 

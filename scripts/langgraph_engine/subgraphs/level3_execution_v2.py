@@ -24,6 +24,16 @@ from pathlib import Path
 from datetime import datetime
 from typing import Dict, Any, Optional
 
+try:
+    import sys as _sys
+    _sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent / "src"))
+    from utils.path_resolver import get_telemetry_dir, get_session_logs_dir
+    _LEVEL3V2_TELEMETRY_DIR = get_telemetry_dir()
+    _LEVEL3V2_SESSION_LOGS_DIR = get_session_logs_dir()
+except ImportError:
+    _LEVEL3V2_TELEMETRY_DIR = Path.home() / ".claude" / "logs" / "telemetry"
+    _LEVEL3V2_SESSION_LOGS_DIR = Path.home() / ".claude" / "logs" / "sessions"
+
 # Pipeline-level timing: maps session_id -> pipeline start time (float)
 _pipeline_start_times: Dict[str, float] = {}
 
@@ -287,7 +297,7 @@ def _write_telemetry(
                 if result else []
             ),
         }
-        telemetry_dir = Path.home() / ".claude" / "logs" / "telemetry"
+        telemetry_dir = _LEVEL3V2_TELEMETRY_DIR
         telemetry_dir.mkdir(parents=True, exist_ok=True)
         telemetry_file = telemetry_dir / ("%s.jsonl" % session_id)
         with open(telemetry_file, "a", encoding="utf-8") as f:
@@ -629,7 +639,7 @@ def level3_init_node(state: FlowState) -> Dict[str, Any]:
         # Construct from session_id
         if not session_id:
             session_id = "unknown"
-        session_path = str(Path.home() / ".claude" / "logs" / "sessions" / session_id)
+        session_path = str(_LEVEL3V2_SESSION_LOGS_DIR / session_id)
         Path(session_path).mkdir(parents=True, exist_ok=True)
 
     # Install signal handlers once per session (best-effort, main thread only)

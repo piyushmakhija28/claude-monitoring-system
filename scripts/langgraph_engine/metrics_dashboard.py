@@ -24,6 +24,14 @@ from typing import Dict, Any, List, Optional
 
 logger = logging.getLogger(__name__)
 
+try:
+    import sys as _sys
+    _sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
+    from utils.path_resolver import get_benchmarks_dir
+    _BENCHMARKS_DIR = get_benchmarks_dir()
+except ImportError:
+    _BENCHMARKS_DIR = Path.home() / ".claude" / "logs" / "benchmarks"
+
 
 class MetricsDashboard:
     """Aggregates pipeline execution history into dashboard metrics."""
@@ -32,9 +40,7 @@ class MetricsDashboard:
         if benchmark_dir:
             self.benchmark_dir = Path(benchmark_dir)
         else:
-            self.benchmark_dir = (
-                Path.home() / ".claude" / "logs" / "benchmarks"
-            )
+            self.benchmark_dir = _BENCHMARKS_DIR
 
         if output_dir:
             self.output_dir = Path(output_dir)

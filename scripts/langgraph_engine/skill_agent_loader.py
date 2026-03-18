@@ -18,6 +18,16 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+try:
+    import sys as _sys
+    _sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
+    from utils.path_resolver import get_skills_dir, get_agents_dir
+    _SKILLS_DIR = get_skills_dir()
+    _AGENTS_DIR = get_agents_dir()
+except ImportError:
+    _SKILLS_DIR = Path.home() / ".claude" / "skills"
+    _AGENTS_DIR = Path.home() / ".claude" / "agents"
+
 # Optional performance modules (gracefully degraded if unavailable)
 try:
     from .parallel_executor import parallel_load_all_skills, parallel_load_all_agents
@@ -51,9 +61,8 @@ class SkillAgentLoader:
             use_cache: Enable skill definition cache (7-day TTL). Default True.
             use_parallel: Enable concurrent skill/agent loading. Default True.
         """
-        self.home = Path.home()
-        self.skills_dir = self.home / ".claude" / "skills"
-        self.agents_dir = self.home / ".claude" / "agents"
+        self.skills_dir = _SKILLS_DIR
+        self.agents_dir = _AGENTS_DIR
         self._use_cache = use_cache and _PERF_AVAILABLE
         self._use_parallel = use_parallel and _PERF_AVAILABLE
 

@@ -21,6 +21,16 @@ from typing import Optional, List, Dict, Any, Tuple
 from .error_logger import ErrorLogger
 from .patterns import memoize
 
+try:
+    import sys as _sys
+    _sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
+    from utils.path_resolver import get_policies_dir, get_claude_home
+    _STANDARD_SELECTOR_POLICIES_DIR = get_policies_dir()
+    _STANDARD_SELECTOR_CLAUDE_HOME = get_claude_home()
+except ImportError:
+    _STANDARD_SELECTOR_POLICIES_DIR = Path.home() / ".claude" / "policies"
+    _STANDARD_SELECTOR_CLAUDE_HOME = Path.home() / ".claude"
+
 
 # Priority constants - higher number = higher precedence (wins in conflict resolution)
 PRIORITY_CUSTOM = 4       # Project-local .claude/standards/ or standards/
@@ -319,8 +329,8 @@ def load_team_standards(project_path: str) -> List[Dict[str, Any]]:
     team: List[Dict[str, Any]] = []
 
     search_dirs = [
-        Path.home() / ".claude" / "policies" / "02-standards-system",
-        Path.home() / ".claude" / "standards",
+        _STANDARD_SELECTOR_POLICIES_DIR / "02-standards-system",
+        _STANDARD_SELECTOR_CLAUDE_HOME / "standards",
     ]
 
     for standards_dir in search_dirs:

@@ -17,6 +17,14 @@ from pathlib import Path
 from typing import Dict, List, Optional, Literal
 from dataclasses import dataclass
 
+try:
+    import sys as _sys
+    _sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
+    from utils.path_resolver import get_models_path
+    _MODELS_PATH_DEFAULT = str(get_models_path())
+except ImportError:
+    _MODELS_PATH_DEFAULT = str(Path.home() / 'intel-ai' / 'models')
+
 
 @dataclass
 class ModelInfo:
@@ -60,7 +68,7 @@ class ModelDiscovery:
         if models_path is None:
             models_path = os.getenv(
                 'INTEL_AI_MODELS_PATH',
-                str(Path.home() / 'intel-ai' / 'models'),
+                _MODELS_PATH_DEFAULT,
             )
 
         self.models_path = Path(models_path)

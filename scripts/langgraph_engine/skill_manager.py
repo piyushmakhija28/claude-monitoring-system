@@ -35,6 +35,14 @@ from pathlib import Path
 from typing import Dict, List, Optional, Any, Tuple
 from loguru import logger
 
+try:
+    import sys as _sys
+    _sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
+    from utils.path_resolver import get_skills_dir
+    _SKILLS_ROOT_DEFAULT = get_skills_dir()
+except ImportError:
+    _SKILLS_ROOT_DEFAULT = Path.home() / ".claude" / "skills"
+
 from .dependency_resolver import (
     parse_skill_metadata,
     resolve_dependencies,
@@ -104,7 +112,7 @@ class SkillManager:
             skills_root: Root directory for skill storage. Defaults to ~/.claude/skills/
             github_raw_base: Base URL for GitHub raw content downloads.
         """
-        self.skills_root = skills_root or (Path.home() / ".claude" / "skills")
+        self.skills_root = skills_root or _SKILLS_ROOT_DEFAULT
         self.github_raw_base = github_raw_base.rstrip("/")
 
         # In-memory cache: {cache_key: {"content": str, "metadata": dict, "timestamp": float}}

@@ -26,6 +26,16 @@ from pathlib import Path
 from loguru import logger
 
 try:
+    import sys as _sys
+    _sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent / "src"))
+    from utils.path_resolver import get_skills_dir, get_agents_dir
+    _LEVEL3_SKILLS_DIR = get_skills_dir()
+    _LEVEL3_AGENTS_DIR = get_agents_dir()
+except ImportError:
+    _LEVEL3_SKILLS_DIR = Path.home() / ".claude" / "skills"
+    _LEVEL3_AGENTS_DIR = Path.home() / ".claude" / "agents"
+
+try:
     from langgraph.graph import StateGraph, START, END
     _LANGGRAPH_AVAILABLE = True
 except ImportError:
@@ -984,7 +994,7 @@ def step6_skill_validation_download(state: FlowState) -> dict:
 
     # Check if skill exists
     if skill_name:
-        skills_dir = Path.home() / ".claude" / "skills"
+        skills_dir = _LEVEL3_SKILLS_DIR
         skill_path = skills_dir / skill_name / "skill.md"
         # Also check uppercase SKILL.md (convention in claude-global-library)
         skill_path_upper = skills_dir / skill_name / "SKILL.md"
@@ -1004,7 +1014,7 @@ def step6_skill_validation_download(state: FlowState) -> dict:
 
     # Check if agent exists
     if agent_name:
-        agents_dir = Path.home() / ".claude" / "agents"
+        agents_dir = _LEVEL3_AGENTS_DIR
         agent_path = agents_dir / agent_name / "agent.md"
 
         if agent_path.exists():

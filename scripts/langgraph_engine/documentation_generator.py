@@ -12,6 +12,14 @@ from datetime import datetime
 from typing import Dict, List, Any, Tuple
 from dataclasses import dataclass
 
+try:
+    import sys as _sys
+    _sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
+    from utils.path_resolver import get_session_logs_dir
+    _DOC_SESSION_LOGS_DIR = get_session_logs_dir()
+except ImportError:
+    _DOC_SESSION_LOGS_DIR = Path.home() / ".claude" / "logs" / "sessions"
+
 logger = logging.getLogger(__name__)
 
 # GitHub owner for generated docs (configurable via env var)
@@ -306,7 +314,7 @@ class DocumentationGenerator:
 
     def __init__(self, project_root: str = ".", session_dir: str = None):
         self.root = Path(project_root)
-        self.session_dir = session_dir or str(Path.home() / '.claude' / 'logs' / 'sessions' / 'current')
+        self.session_dir = session_dir or str(_DOC_SESSION_LOGS_DIR / 'current')
         self.analyzer = CodebaseAnalyzer(project_root)
         self.logger = logging.getLogger(__name__)
 

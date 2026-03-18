@@ -28,6 +28,14 @@ from pathlib import Path
 from typing import Dict, List, Optional, Any
 from abc import ABC, abstractmethod
 
+try:
+    import sys as _sys
+    _sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
+    from utils.path_resolver import get_claude_home
+    _MCP_PLUGINS_DIR = get_claude_home() / "mcp" / "plugins"
+except ImportError:
+    _MCP_PLUGINS_DIR = Path.home() / ".claude" / "mcp" / "plugins"
+
 
 class MCPPluginError(Exception):
     """Base exception for MCP plugin operations."""
@@ -149,7 +157,7 @@ class MCPPluginLoader:
             plugins_path: Path to plugins directory. Defaults to ~/.claude/mcp/plugins/
         """
         if plugins_path is None:
-            self.plugins_path = Path.home() / ".claude" / "mcp" / "plugins"
+            self.plugins_path = _MCP_PLUGINS_DIR
         else:
             self.plugins_path = Path(plugins_path)
 

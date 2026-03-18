@@ -21,6 +21,14 @@ from datetime import datetime
 from typing import Literal, Optional
 
 try:
+    import sys as _sys
+    _sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
+    from utils.path_resolver import get_claude_home
+    _ORCHESTRATOR_CLAUDE_HOME = get_claude_home()
+except ImportError:
+    _ORCHESTRATOR_CLAUDE_HOME = Path.home() / ".claude"
+
+try:
     from langgraph.graph import StateGraph, START, END
     _LANGGRAPH_AVAILABLE = True
 except ImportError:
@@ -400,7 +408,7 @@ def save_workflow_memory(state: FlowState) -> dict:
 
         if memory and session_id != "unknown":
             # Save to ~/.claude/memory/sessions/{session_id}/workflow-memory.json
-            memory_dir = Path.home() / ".claude" / "memory" / "logs" / "sessions" / session_id
+            memory_dir = _ORCHESTRATOR_CLAUDE_HOME / "memory" / "logs" / "sessions" / session_id
             memory_dir.mkdir(parents=True, exist_ok=True)
 
             memory_file = memory_dir / "workflow-memory.json"
@@ -661,7 +669,7 @@ def output_node(state: FlowState) -> dict:
     # from Claude Code. Stop-notifier's _resolve_flag checks PID first, then legacy.
     try:
         import os
-        flag_dir = Path.home() / ".claude"
+        flag_dir = _ORCHESTRATOR_CLAUDE_HOME
         start_flag = flag_dir / ".session-start-voice"
         if not start_flag.exists():
             task_type = state.get(StepKeys.TASK_TYPE, "task")

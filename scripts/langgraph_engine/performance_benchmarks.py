@@ -20,6 +20,14 @@ from typing import Dict, Any, Optional, List
 
 logger = logging.getLogger(__name__)
 
+try:
+    import sys as _sys
+    _sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
+    from utils.path_resolver import get_benchmarks_dir
+    _BENCHMARKS_DIR = get_benchmarks_dir()
+except ImportError:
+    _BENCHMARKS_DIR = Path.home() / ".claude" / "logs" / "benchmarks"
+
 
 class PipelineBenchmark:
     """Collects and aggregates performance metrics for a single pipeline run."""
@@ -35,9 +43,7 @@ class PipelineBenchmark:
         if benchmark_dir:
             self.benchmark_dir = Path(benchmark_dir)
         else:
-            self.benchmark_dir = (
-                Path.home() / ".claude" / "logs" / "benchmarks"
-            )
+            self.benchmark_dir = _BENCHMARKS_DIR
 
     def record_step(self, step, duration, status="SUCCESS",
                     rag_hit=False, cache_hit=False, llm_calls=0):
@@ -203,7 +209,7 @@ class PipelineBenchmark:
         if benchmark_dir:
             bdir = Path(benchmark_dir)
         else:
-            bdir = Path.home() / ".claude" / "logs" / "benchmarks"
+            bdir = _BENCHMARKS_DIR
 
         if not bdir.is_dir():
             return []

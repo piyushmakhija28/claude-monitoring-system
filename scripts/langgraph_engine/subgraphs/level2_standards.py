@@ -12,6 +12,16 @@ import subprocess
 from pathlib import Path
 
 try:
+    import sys as _sys
+    _sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent / "src"))
+    from utils.path_resolver import get_policies_dir, get_claude_home
+    _LEVEL2_POLICIES_DIR = get_policies_dir()
+    _LEVEL2_CLAUDE_HOME = get_claude_home()
+except ImportError:
+    _LEVEL2_POLICIES_DIR = Path.home() / ".claude" / "policies"
+    _LEVEL2_CLAUDE_HOME = Path.home() / ".claude"
+
+try:
     from langgraph.graph import StateGraph, START, END
     _LANGGRAPH_AVAILABLE = True
 except ImportError:
@@ -33,7 +43,7 @@ def load_policies_from_directory() -> dict:
         Dict with loaded policies by level
     """
     try:
-        policies_dir = Path.home() / ".claude" / "policies"
+        policies_dir = _LEVEL2_POLICIES_DIR
 
         if not policies_dir.exists():
             return {
@@ -181,7 +191,7 @@ def node_java_standards(state: FlowState) -> dict:
     updates = {}
     try:
         # Load Java standards from policies/02-standards-system/
-        policies_dir = Path.home() / ".claude" / "policies" / "02-standards-system"
+        policies_dir = _LEVEL2_POLICIES_DIR / "02-standards-system"
 
         java_standards = []
         if policies_dir.exists():
@@ -287,7 +297,7 @@ def node_mcp_plugin_discovery(state: FlowState) -> dict:
             "mcp_servers_available": available_mcps,
             "mcp_filesystem_enabled": filesystem_enabled,
             "mcp_plugins_path": str(loader.plugins_path),
-            "mcp_cache_dir": str(Path.home() / ".claude" / "mcp" / "cache"),
+            "mcp_cache_dir": str(_LEVEL2_CLAUDE_HOME / "mcp" / "cache"),
             "mcp_discovered_count": len(plugins),
             "mcp_initialization_status": "PARTIAL" if len(plugins) > 0 else "ERROR",
             "mcp_auto_routing_enabled": filesystem_enabled,  # Enable AUTO-ROUTE if filesystem available

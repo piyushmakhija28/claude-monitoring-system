@@ -15,6 +15,14 @@ from pathlib import Path
 from typing import Optional
 
 try:
+    import sys as _sys
+    _sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
+    from utils.path_resolver import get_claude_home
+    _CHECKPOINTER_DATA_DIR = get_claude_home() / "memory"
+except ImportError:
+    _CHECKPOINTER_DATA_DIR = Path.home() / ".claude" / "memory"
+
+try:
     try:
         from langgraph.checkpoint.memory import MemorySaver
     except ImportError:
@@ -103,7 +111,7 @@ class CheckpointerManager:
             raise RuntimeError("LangGraph not installed. Run: pip install langgraph")
 
         if db_path is None:
-            db_path = Path.home() / ".claude" / "memory" / "langgraph-checkpoints.db"
+            db_path = _CHECKPOINTER_DATA_DIR / "langgraph-checkpoints.db"
 
         db_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -148,7 +156,7 @@ class CheckpointerManager:
             True if successful, False if failed
         """
         if db_path is None:
-            db_path = Path.home() / ".claude" / "memory" / "langgraph-checkpoints.db"
+            db_path = _CHECKPOINTER_DATA_DIR / "langgraph-checkpoints.db"
 
         try:
             db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -171,7 +179,7 @@ class CheckpointerManager:
             Dict with checkpoint statistics
         """
         if db_path is None:
-            db_path = Path.home() / ".claude" / "memory" / "langgraph-checkpoints.db"
+            db_path = _CHECKPOINTER_DATA_DIR / "langgraph-checkpoints.db"
 
         try:
             if not db_path.exists():

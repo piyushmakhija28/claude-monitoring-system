@@ -24,6 +24,16 @@ from typing import Dict, Any, Optional, List, Callable, TypeVar
 from datetime import datetime
 
 from loguru import logger
+
+try:
+    import sys as _sys
+    _sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
+    from utils.path_resolver import get_skills_dir, get_agents_dir
+    _L3REMAINING_SKILLS_DIR = get_skills_dir()
+    _L3REMAINING_AGENTS_DIR = get_agents_dir()
+except ImportError:
+    _L3REMAINING_SKILLS_DIR = Path.home() / ".claude" / "skills"
+    _L3REMAINING_AGENTS_DIR = Path.home() / ".claude" / "agents"
 from .toon_models import ExecutionBlueprint, ToonWithSkills
 from .session_manager import SessionManager
 from .inference_router import get_inference_router
@@ -732,8 +742,7 @@ Be very specific and actionable - mention actual file paths and existing functio
 
     def _scan_available_skills(self) -> List[Dict[str, Any]]:
         """Scan ~/.claude/skills/ and return all available skills with metadata."""
-        home = Path.home()
-        skills_dir = home / ".claude" / "skills"
+        skills_dir = _L3REMAINING_SKILLS_DIR
         available = []
 
         if not skills_dir.exists():
@@ -777,8 +786,7 @@ Be very specific and actionable - mention actual file paths and existing functio
 
     def _scan_available_agents(self) -> List[Dict[str, Any]]:
         """Scan ~/.claude/agents/ and return all available agents with metadata."""
-        home = Path.home()
-        agents_dir = home / ".claude" / "agents"
+        agents_dir = _L3REMAINING_AGENTS_DIR
         available = []
 
         if not agents_dir.exists():
@@ -814,8 +822,7 @@ Be very specific and actionable - mention actual file paths and existing functio
 
     def _download_skill_from_internet(self, skill_name: str, category: str = "backend") -> bool:
         """Download a skill from Claude Code GitHub repository if not available locally."""
-        home = Path.home()
-        skills_dir = home / ".claude" / "skills" / category / skill_name
+        skills_dir = _L3REMAINING_SKILLS_DIR / category / skill_name
 
         if skills_dir.exists():
             logger.info(f"Skill {skill_name} already exists locally")
@@ -993,8 +1000,7 @@ Be very specific and actionable - mention actual file paths and existing functio
         step_start = time.time()
 
         try:
-            home = Path.home()
-            skills_dir = home / ".claude" / "skills"
+            skills_dir = _L3REMAINING_SKILLS_DIR
 
             valid_skills = []
             warnings = []

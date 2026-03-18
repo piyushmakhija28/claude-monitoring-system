@@ -24,6 +24,16 @@ from datetime import datetime
 from typing import Dict, Any, Optional, Iterator
 
 try:
+    import sys as _sys
+    _sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent / "src"))
+    from utils.path_resolver import get_session_logs_dir, get_telemetry_dir
+    _LEVEL1_SESSION_LOGS_DIR = get_session_logs_dir()
+    _LEVEL1_TELEMETRY_DIR = get_telemetry_dir()
+except ImportError:
+    _LEVEL1_SESSION_LOGS_DIR = Path.home() / ".claude" / "logs" / "sessions"
+    _LEVEL1_TELEMETRY_DIR = Path.home() / ".claude" / "logs" / "telemetry"
+
+try:
     from langgraph.graph import StateGraph, START, END
     _LANGGRAPH_AVAILABLE = True
 except ImportError:
@@ -127,7 +137,7 @@ def node_session_loader(state: FlowState) -> dict:
         session_id = f"session-{datetime.now().strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:8]}"
 
         # Create session folder: ~/.claude/logs/sessions/{session_id}/
-        session_path = Path.home() / ".claude" / "logs" / "sessions" / session_id
+        session_path = _LEVEL1_SESSION_LOGS_DIR / session_id
         session_path.mkdir(parents=True, exist_ok=True)
 
         # Save session metadata
@@ -158,7 +168,7 @@ def node_session_loader(state: FlowState) -> dict:
         try:
             _pruner = _load_architecture_script("session-pruner.py")
             if _pruner is not None and hasattr(_pruner, "prune_sessions"):
-                _sessions_dir = Path.home() / ".claude" / "logs" / "sessions"
+                _sessions_dir = _LEVEL1_SESSION_LOGS_DIR
                 _prune_result = _pruner.prune_sessions(_sessions_dir)
                 result["session_pruning_done"] = True
                 result["session_pruning_archived"] = _prune_result.get("archived", 0)
@@ -172,7 +182,7 @@ def node_session_loader(state: FlowState) -> dict:
         try:
             _pref_tracker = _load_architecture_script("preference-tracker.py")
             if _pref_tracker is not None and hasattr(_pref_tracker, "track_preferences"):
-                _sessions_dir = Path.home() / ".claude" / "logs" / "sessions"
+                _sessions_dir = _LEVEL1_SESSION_LOGS_DIR
                 if not state.get("preferences_data"):
                     _prefs = _pref_tracker.track_preferences(_sessions_dir)
                     result["preferences_data"] = _prefs
@@ -189,7 +199,7 @@ def node_session_loader(state: FlowState) -> dict:
             from pathlib import Path as _Path_tel
             _sid_tel = state.get("session_id", result.get("session_id", ""))
             if _sid_tel:
-                _tdir_tel = _Path_tel.home() / ".claude" / "logs" / "telemetry"
+                _tdir_tel = _LEVEL1_TELEMETRY_DIR
                 _tdir_tel.mkdir(parents=True, exist_ok=True)
                 _tfile_tel = _tdir_tel / ("%s.jsonl" % _sid_tel)
                 _entry_tel = {
@@ -215,7 +225,7 @@ def node_session_loader(state: FlowState) -> dict:
             from pathlib import Path as _Path_tel
             _sid_tel = state.get("session_id", result.get("session_id", ""))
             if _sid_tel:
-                _tdir_tel = _Path_tel.home() / ".claude" / "logs" / "telemetry"
+                _tdir_tel = _LEVEL1_TELEMETRY_DIR
                 _tdir_tel.mkdir(parents=True, exist_ok=True)
                 _tfile_tel = _tdir_tel / ("%s.jsonl" % _sid_tel)
                 _entry_tel = {
@@ -283,7 +293,7 @@ def node_complexity_calculation(state: FlowState) -> dict:
                 from pathlib import Path as _Path_tel
                 _sid_tel = state.get("session_id", result.get("session_id", ""))
                 if _sid_tel:
-                    _tdir_tel = _Path_tel.home() / ".claude" / "logs" / "telemetry"
+                    _tdir_tel = _LEVEL1_TELEMETRY_DIR
                     _tdir_tel.mkdir(parents=True, exist_ok=True)
                     _tfile_tel = _tdir_tel / ("%s.jsonl" % _sid_tel)
                     _entry_tel = {
@@ -328,7 +338,7 @@ def node_complexity_calculation(state: FlowState) -> dict:
                         from pathlib import Path as _Path_tel
                         _sid_tel = state.get("session_id", "")
                         if _sid_tel:
-                            _tdir_tel = _Path_tel.home() / ".claude" / "logs" / "telemetry"
+                            _tdir_tel = _LEVEL1_TELEMETRY_DIR
                             _tdir_tel.mkdir(parents=True, exist_ok=True)
                             _tfile_tel = _tdir_tel / ("%s.jsonl" % _sid_tel)
                             _entry_tel = {
@@ -363,7 +373,7 @@ def node_complexity_calculation(state: FlowState) -> dict:
             from pathlib import Path as _Path_tel
             _sid_tel = state.get("session_id", result.get("session_id", ""))
             if _sid_tel:
-                _tdir_tel = _Path_tel.home() / ".claude" / "logs" / "telemetry"
+                _tdir_tel = _LEVEL1_TELEMETRY_DIR
                 _tdir_tel.mkdir(parents=True, exist_ok=True)
                 _tfile_tel = _tdir_tel / ("%s.jsonl" % _sid_tel)
                 _entry_tel = {
@@ -392,7 +402,7 @@ def node_complexity_calculation(state: FlowState) -> dict:
             from pathlib import Path as _Path_tel
             _sid_tel = state.get("session_id", result.get("session_id", ""))
             if _sid_tel:
-                _tdir_tel = _Path_tel.home() / ".claude" / "logs" / "telemetry"
+                _tdir_tel = _LEVEL1_TELEMETRY_DIR
                 _tdir_tel.mkdir(parents=True, exist_ok=True)
                 _tfile_tel = _tdir_tel / ("%s.jsonl" % _sid_tel)
                 _entry_tel = {
@@ -607,7 +617,7 @@ def node_context_loader(state: FlowState) -> dict:
                         from pathlib import Path as _Path_tel
                         _sid_tel = state.get("session_id", "")
                         if _sid_tel:
-                            _tdir_tel = _Path_tel.home() / ".claude" / "logs" / "telemetry"
+                            _tdir_tel = _LEVEL1_TELEMETRY_DIR
                             _tdir_tel.mkdir(parents=True, exist_ok=True)
                             _tfile_tel = _tdir_tel / ("%s.jsonl" % _sid_tel)
                             _entry_tel = {
@@ -840,7 +850,7 @@ def node_context_loader(state: FlowState) -> dict:
             from pathlib import Path as _Path_tel
             _sid_tel = state.get("session_id", result.get("session_id", ""))
             if _sid_tel:
-                _tdir_tel = _Path_tel.home() / ".claude" / "logs" / "telemetry"
+                _tdir_tel = _LEVEL1_TELEMETRY_DIR
                 _tdir_tel.mkdir(parents=True, exist_ok=True)
                 _tfile_tel = _tdir_tel / ("%s.jsonl" % _sid_tel)
                 _entry_tel = {
@@ -878,7 +888,7 @@ def node_context_loader(state: FlowState) -> dict:
             from pathlib import Path as _Path_tel
             _sid_tel = state.get("session_id", result.get("session_id", ""))
             if _sid_tel:
-                _tdir_tel = _Path_tel.home() / ".claude" / "logs" / "telemetry"
+                _tdir_tel = _LEVEL1_TELEMETRY_DIR
                 _tdir_tel.mkdir(parents=True, exist_ok=True)
                 _tfile_tel = _tdir_tel / ("%s.jsonl" % _sid_tel)
                 _entry_tel = {
@@ -1080,7 +1090,7 @@ def node_toon_compression(state: FlowState) -> dict:
             from pathlib import Path as _Path_tel
             _sid_tel = state.get("session_id", result.get("session_id", ""))
             if _sid_tel:
-                _tdir_tel = _Path_tel.home() / ".claude" / "logs" / "telemetry"
+                _tdir_tel = _LEVEL1_TELEMETRY_DIR
                 _tdir_tel.mkdir(parents=True, exist_ok=True)
                 _tfile_tel = _tdir_tel / ("%s.jsonl" % _sid_tel)
                 _entry_tel = {
@@ -1113,7 +1123,7 @@ def node_toon_compression(state: FlowState) -> dict:
             from pathlib import Path as _Path_tel
             _sid_tel = state.get("session_id", "")
             if _sid_tel:
-                _tdir_tel = _Path_tel.home() / ".claude" / "logs" / "telemetry"
+                _tdir_tel = _LEVEL1_TELEMETRY_DIR
                 _tdir_tel.mkdir(parents=True, exist_ok=True)
                 _tfile_tel = _tdir_tel / ("%s.jsonl" % _sid_tel)
                 _entry_tel = {

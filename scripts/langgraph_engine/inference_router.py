@@ -15,6 +15,16 @@ from pathlib import Path
 from typing import Dict, Any, List, Optional, Literal
 from loguru import logger
 
+try:
+    import sys as _sys
+    _sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
+    from utils.path_resolver import get_npu_path, get_gpu_path
+    _NPU_PATH_DEFAULT = str(get_npu_path())
+    _GPU_PATH_DEFAULT = str(get_gpu_path())
+except ImportError:
+    _NPU_PATH_DEFAULT = str(Path.home() / 'intel-ai' / 'npu')
+    _GPU_PATH_DEFAULT = str(Path.home() / 'intel-ai' / 'gpu')
+
 from .ollama_service import OllamaService
 from .npu_service import get_npu_service
 
@@ -38,7 +48,7 @@ class InferenceRouter:
         """
         if npu_path is None:
             npu_path = str(
-                Path(os.getenv('INTEL_AI_NPU_PATH', str(Path.home() / 'intel-ai' / 'npu')))
+                Path(os.getenv('INTEL_AI_NPU_PATH', _NPU_PATH_DEFAULT))
             )
         self.mode = mode.lower()
         self.ollama_endpoint = ollama_endpoint
@@ -78,7 +88,7 @@ class InferenceRouter:
         if not self.ollama and not self.npu:
             gpu_exe = os.getenv(
                 'INTEL_AI_GPU_EXE',
-                str(Path.home() / 'intel-ai' / 'gpu' / 'ollama'),
+                str(Path(_GPU_PATH_DEFAULT) / 'ollama'),
             )
             raise RuntimeError(
                 "No inference backend available (GPU and NPU both failed). "
@@ -257,7 +267,7 @@ def get_inference_router() -> InferenceRouter:
     if not hasattr(get_inference_router, "_instance"):
         mode = os.getenv("INFERENCE_MODE", "auto")
         ollama_endpoint = os.getenv("OLLAMA_ENDPOINT", "http://127.0.0.1:11434")
-        npu_path = os.getenv("INTEL_AI_NPU_PATH", str(Path.home() / "intel-ai" / "npu"))
+        npu_path = os.getenv("INTEL_AI_NPU_PATH", _NPU_PATH_DEFAULT)
 
         get_inference_router._instance = InferenceRouter(
             mode=mode, ollama_endpoint=ollama_endpoint, npu_path=npu_path

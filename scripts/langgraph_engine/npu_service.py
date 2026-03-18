@@ -30,6 +30,14 @@ from pathlib import Path
 from typing import Dict, Any, Optional, List, Literal
 from loguru import logger
 
+try:
+    import sys as _sys
+    _sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
+    from utils.path_resolver import get_npu_path
+    _NPU_PATH_DEFAULT = str(get_npu_path())
+except ImportError:
+    _NPU_PATH_DEFAULT = str(Path.home() / 'intel-ai' / 'npu')
+
 
 class NPUService:
     """Manages Intel AI Boost NPU inference with multiple models."""
@@ -46,7 +54,7 @@ class NPUService:
         if npu_path is None:
             npu_path = os.getenv(
                 'INTEL_AI_NPU_PATH',
-                str(Path.home() / 'intel-ai' / 'npu'),
+                _NPU_PATH_DEFAULT,
             )
         self.npu_path = Path(npu_path)
 

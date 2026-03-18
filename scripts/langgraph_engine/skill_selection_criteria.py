@@ -30,6 +30,14 @@ from pathlib import Path
 from typing import Dict, Any, List, Tuple, Optional, Set
 from loguru import logger
 
+try:
+    import sys as _sys
+    _sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
+    from utils.path_resolver import get_claude_home
+    _SKILL_SELECTION_CLAUDE_HOME = get_claude_home()
+except ImportError:
+    _SKILL_SELECTION_CLAUDE_HOME = Path.home() / ".claude"
+
 
 # ---------------------------------------------------------------------------
 # Cross-session learning: RAG-based skill boost + pattern detection
@@ -45,7 +53,7 @@ def _load_cross_project_patterns():
     if _pattern_cache is not None:
         return _pattern_cache
 
-    patterns_file = Path.home() / ".claude" / "memory" / "cross-project-patterns.json"
+    patterns_file = _SKILL_SELECTION_CLAUDE_HOME / "memory" / "cross-project-patterns.json"
     try:
         if patterns_file.exists():
             _pattern_cache = json.loads(patterns_file.read_text(encoding="utf-8"))
