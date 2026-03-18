@@ -36,6 +36,23 @@ def _merge_lists(current_value, update_value):
     return update_value
 
 
+def _merge_dicts(current_value, update_value):
+    """Reducer for dict fields that may receive concurrent updates.
+
+    Merges dicts (update overwrites existing keys) instead of raising error.
+    Used for: step3_phase_file_map and similar dict fields from parallel nodes.
+    """
+    if current_value is None:
+        return update_value if update_value is not None else {}
+    if update_value is None:
+        return current_value
+    if isinstance(current_value, dict) and isinstance(update_value, dict):
+        merged = dict(current_value)
+        merged.update(update_value)
+        return merged
+    return update_value
+
+
 class FlowState(TypedDict, total=False):
     """Complete state for 3-level architecture execution.
 
@@ -405,6 +422,7 @@ class FlowState(TypedDict, total=False):
     step0_tasks: Dict                  # Broken down tasks
     step0_task_count: int              # Number of tasks identified
     step0_docs_found: Optional[Dict[str, Any]]  # Which project docs exist (SDLC read phase)
+    step0_target_files: Optional[List[str]]    # Target files identified from task analysis
     step0_error: Optional[str]
 
     # Step 1: Plan Mode Decision (PHASE 2A - Renamed from step2_plan_mode)
@@ -438,7 +456,7 @@ class FlowState(TypedDict, total=False):
     step3_error: Optional[str]
 
     # Step 3: CallGraph phase-file mapping
-    step3_phase_file_map: Optional[Dict]           # {task_id: [files]} from graph analysis
+    step3_phase_file_map: Annotated[Optional[Dict], _merge_dicts]  # {task_id: [files]} from graph analysis
     step3_graph_snapshot: Optional[Dict]            # Cached graph snapshot for Step 4 reuse
 
     # Step 4: TOON Refinement (PHASE 2A - Kept as is)
@@ -682,6 +700,7 @@ class StepKeys:
     TASKS = "step0_tasks"
     TASK_COUNT = "step0_task_count"
     STEP0_DOCS_FOUND = "step0_docs_found"
+    STEP0_TARGET_FILES = "step0_target_files"
     STEP0_ERROR = "step0_error"
 
     # ------------------------------------------------------------------

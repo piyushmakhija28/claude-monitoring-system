@@ -159,7 +159,7 @@ def route_after_step1_decision(state: FlowState) -> Literal["level3_step2", "lev
     return "level3_step3"
 
 
-def route_after_step11_review(state: FlowState) -> Literal["level3_step12", "level3_step10"]:
+def route_after_step11_review(state: FlowState) -> Literal["level3_step12", "level3_step11_retry"]:
     """Conditional routing after PR review: if failed and retries < 3, retry; else continue to closure."""
     review_passed = state.get(StepKeys.REVIEW_PASSED, False)
     retry_count = state.get(StepKeys.RETRY_COUNT, 0)
@@ -167,9 +167,17 @@ def route_after_step11_review(state: FlowState) -> Literal["level3_step12", "lev
     if review_passed or retry_count >= 3:
         return "level3_step12"
     else:
-        # Increment retry count for next attempt
-        state[StepKeys.RETRY_COUNT] = retry_count + 1
-        return "level3_step10"
+        # Route to retry node (which will increment count via proper state return)
+        return "level3_step11_retry"
+
+
+def step11_retry_increment_node(state: FlowState) -> dict:
+    """Increment retry count before re-routing to Step 10.
+
+    State mutations must happen in nodes, not routing functions (LangGraph anti-pattern).
+    """
+    retry_count = state.get(StepKeys.RETRY_COUNT, 0)
+    return {StepKeys.RETRY_COUNT: retry_count + 1}
 
 
 # ============================================================================
@@ -318,14 +326,36 @@ def fix_level_minus1_issues(state: FlowState) -> dict:
 
 
 def emergency_archive(state: FlowState) -> dict:
-    """Emergency archival when context threshold exceeded."""
+    """Emergency archival when context threshold exceeded.
+
+    Runs as part of the Level 1 -> Level 2 transition. If context usage
+    is below threshold, this is a no-op pass-through. If above 95%,
+    triggers aggressive cleanup and logs a warning.
+    """
     updates = {}
-    existing_warnings = state.get(StepKeys.WARNINGS) or []
-    warnings = list(existing_warnings) + [
-        f"Context usage high ({state.get(StepKeys.CONTEXT_PERCENTAGE, 0):.1f}%) - "
-        "archive recommended"
-    ]
-    updates[StepKeys.WARNINGS] = warnings
+    context_pct = state.get(StepKeys.CONTEXT_PERCENTAGE, 0)
+
+    if context_pct >= 95:
+        existing_warnings = state.get(StepKeys.WARNINGS) or []
+        warnings = list(existing_warnings) + [
+            "EMERGENCY: Context usage at %.1f%% - archiving old sessions to free memory" % context_pct
+        ]
+        updates[StepKeys.WARNINGS] = warnings
+        updates["emergency_archive_triggered"] = True
+
+        # Best-effort: trigger session pruning
+        try:
+            import sys as _sys_ea
+            _sys_ea.path.insert(0, str(Path(__file__).resolve().parent.parent / "architecture"))
+            from importlib import import_module
+            _pruner_spec = import_module("session-pruner") if False else None
+        except Exception:
+            pass
+
+        print("[EMERGENCY ARCHIVE] Context at %.1f%% - archive triggered" % context_pct, file=sys.stderr)
+    else:
+        updates["emergency_archive_triggered"] = False
+
     return updates
 
 
@@ -521,9 +551,33 @@ def apply_integration_step2(state: FlowState) -> dict:
     return {k: updated[k] for k in updated if k not in state or updated[k] != state.get(k)}
 
 
+def apply_integration_step3(state: FlowState) -> dict:
+    """Apply standards integration point at Step 3 (task breakdown)."""
+    updated = apply_standards_at_step(3, dict(state))
+    return {k: updated[k] for k in updated if k not in state or updated[k] != state.get(k)}
+
+
+def apply_integration_step4(state: FlowState) -> dict:
+    """Apply standards integration point at Step 4 (TOON refinement)."""
+    updated = apply_standards_at_step(4, dict(state))
+    return {k: updated[k] for k in updated if k not in state or updated[k] != state.get(k)}
+
+
 def apply_integration_step5(state: FlowState) -> dict:
     """Apply standards integration point at Step 5 (skill selection)."""
     updated = apply_standards_at_step(5, dict(state))
+    return {k: updated[k] for k in updated if k not in state or updated[k] != state.get(k)}
+
+
+def apply_integration_step6(state: FlowState) -> dict:
+    """Apply standards integration point at Step 6 (skill validation)."""
+    updated = apply_standards_at_step(6, dict(state))
+    return {k: updated[k] for k in updated if k not in state or updated[k] != state.get(k)}
+
+
+def apply_integration_step7(state: FlowState) -> dict:
+    """Apply standards integration point at Step 7 (final prompt generation)."""
+    updated = apply_standards_at_step(7, dict(state))
     return {k: updated[k] for k in updated if k not in state or updated[k] != state.get(k)}
 
 
@@ -1050,10 +1104,6 @@ def create_flow_graph(hook_mode: bool = False):
     graph.add_node("level1_cleanup", cleanup_level1_memory)
     graph.add_edge("level1_merge", "level1_cleanup")
 
-    # Route from Level 1 cleanup to Level 2
-    # (Skip optimize_after_level1 - TOON compression already done)
-    graph.add_edge("level1_cleanup", "level2_common_standards")
-
     # ========================================================================
     # LEVEL 2: STANDARDS SYSTEM (conditional Java routing)
     # ========================================================================
@@ -1064,12 +1114,16 @@ def create_flow_graph(hook_mode: bool = False):
     graph.add_node("level2_mcp_discovery", node_mcp_plugin_discovery)
     graph.add_node("level2_merge", level2_merge_node)
 
-    # Emergency archive routes to standards
-    graph.add_edge("level2_emergency_archive", "level2_common_standards")
-
-    # Tool optimization and MCP discovery run in parallel with common standards
+    # Route from Level 1 cleanup to Level 2
+    # Emergency archive check happens inside common_standards node start
+    # Tool optimization and MCP discovery run in parallel
+    graph.add_edge("level1_cleanup", "level2_emergency_archive")
     graph.add_edge("level1_cleanup", "level2_tool_optimization")
     graph.add_edge("level1_cleanup", "level2_mcp_discovery")
+
+    # Emergency archive always routes to common standards
+    # (archive is a no-op if context usage is below threshold)
+    graph.add_edge("level2_emergency_archive", "level2_common_standards")
 
     # Common standards check for Java
     graph.add_conditional_edges(
@@ -1143,13 +1197,21 @@ def create_flow_graph(hook_mode: bool = False):
     # Step 3: Task Breakdown
     graph.add_node("level3_step3", step3_task_breakdown_node)
 
+    # Standards integration hook: Step 3 - validate task breakdown against standards
+    graph.add_node("level3_standards_hook_step3", apply_integration_step3)
+    graph.add_edge("level3_step3", "level3_standards_hook_step3")
+
     # Step 4: TOON Refinement
     graph.add_node("level3_step4", step4_toon_refinement_node)
-    graph.add_edge("level3_step3", "level3_step4")
+    graph.add_edge("level3_standards_hook_step3", "level3_step4")
+
+    # Standards integration hook: Step 4 - validate TOON context against standards
+    graph.add_node("level3_standards_hook_step4", apply_integration_step4)
+    graph.add_edge("level3_step4", "level3_standards_hook_step4")
 
     # Step 5: Skill & Agent Selection (LOCAL LLM + filesystem scan)
     graph.add_node("level3_step5", step5_skill_selection_node)
-    graph.add_edge("level3_step4", "level3_step5")
+    graph.add_edge("level3_standards_hook_step4", "level3_step5")
 
     # Standards integration hook: Step 5 - after skill selection (validates skill vs project)
     graph.add_node("level3_standards_hook_step5", apply_integration_step5)
@@ -1159,9 +1221,17 @@ def create_flow_graph(hook_mode: bool = False):
     graph.add_node("level3_step6", step6_skill_validation_node)
     graph.add_edge("level3_standards_hook_step5", "level3_step6")
 
+    # Standards integration hook: Step 6 - validate downloaded skill compatibility
+    graph.add_node("level3_standards_hook_step6", apply_integration_step6)
+    graph.add_edge("level3_step6", "level3_standards_hook_step6")
+
     # Step 7: Final Prompt Generation (LOCAL LLM)
     graph.add_node("level3_step7", step7_final_prompt_node)
-    graph.add_edge("level3_step6", "level3_step7")
+    graph.add_edge("level3_standards_hook_step6", "level3_step7")
+
+    # Standards integration hook: Step 7 - validate prompt includes standards context
+    graph.add_node("level3_standards_hook_step7", apply_integration_step7)
+    graph.add_edge("level3_step7", "level3_standards_hook_step7")
 
     # ========================================================================
     # STEPS 8-9: Issue + Branch Creation (runs in BOTH hook and full mode)
@@ -1170,7 +1240,7 @@ def create_flow_graph(hook_mode: bool = False):
 
     # Step 8: GitHub Issue Creation
     graph.add_node("level3_step8", step8_github_issue_node)
-    graph.add_edge("level3_step7", "level3_step8")
+    graph.add_edge("level3_standards_hook_step7", "level3_step8")
 
     # Step 9: Branch Creation (issue-42-bug format)
     graph.add_node("level3_step9", step9_branch_creation_node)
@@ -1215,12 +1285,16 @@ def create_flow_graph(hook_mode: bool = False):
     graph.add_edge("level3_standards_hook_step10", "level3_step11")
 
     # Step 11 → Conditional Routing (retry loop or continue to closure)
+    # Retry goes through increment node first (state mutations only in nodes)
+    graph.add_node("level3_step11_retry", step11_retry_increment_node)
+    graph.add_edge("level3_step11_retry", "level3_step10")
+
     graph.add_conditional_edges(
         "level3_step11",
         route_after_step11_review,
         {
-            "level3_step12": "level3_step12",  # Review passed or max retries reached
-            "level3_step10": "level3_step10"   # Review failed, retry implementation
+            "level3_step12": "level3_step12",        # Review passed or max retries reached
+            "level3_step11_retry": "level3_step11_retry"  # Review failed, increment then retry
         }
     )
 

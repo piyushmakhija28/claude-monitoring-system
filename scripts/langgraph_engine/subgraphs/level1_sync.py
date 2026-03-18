@@ -201,6 +201,7 @@ def node_session_loader(state: FlowState) -> dict:
             # Set PREVIOUS_SESSION_ID for next session
             os.environ["PREVIOUS_SESSION_ID"] = session_id
         except Exception as _chain_exc:
+            result["session_chaining_available"] = False
             print(
                 "[LEVEL 1 SESSION_LOADER] Session chaining skipped: {}".format(_chain_exc),
                 file=sys.stderr,
@@ -225,6 +226,7 @@ def node_session_loader(state: FlowState) -> dict:
                         file=sys.stderr,
                     )
         except Exception as _prune_exc:
+            result["session_pruning_available"] = False
             print(
                 "[LEVEL 1 SESSION_LOADER] Session pruning skipped: {}".format(_prune_exc),
                 file=sys.stderr,
@@ -239,6 +241,7 @@ def node_session_loader(state: FlowState) -> dict:
                     _prefs = _pref_tracker.track_preferences(_sessions_dir)
                     result["preferences_data"] = _prefs
         except Exception as _pref_exc:
+            result["preference_tracking_available"] = False
             print(
                 "[LEVEL 1 SESSION_LOADER] Preference tracking skipped: {}".format(_pref_exc),
                 file=sys.stderr,
@@ -486,6 +489,11 @@ CONTEXT_TIMEOUT_TOTAL = 120
 # Memory limits
 MAX_FILE_SIZE = 1_000_000       # 1 MB: files bigger than this are streamed
 MAX_TOTAL_SIZE = 10_000_000     # 10 MB total loaded bytes across all files
+
+# Context usage thresholds (per context-management-policy.md)
+CONTEXT_THRESHOLD_WARNING = 0.70   # 70% - log warning
+CONTEXT_THRESHOLD_HIGH = 0.85     # 85% - log high warning, consider streaming
+CONTEXT_THRESHOLD_EMERGENCY = 0.95  # 95% - stop loading, trigger cleanup
 
 # Streaming: files larger than this threshold are read in chunks to avoid OOM
 STREAMING_THRESHOLD = 1_000_000   # 1 MB
@@ -794,6 +802,29 @@ def node_context_loader(state: FlowState) -> dict:
                 loaded_bytes = len(content.encode("utf-8", errors="ignore"))
                 total_loaded_bytes += loaded_bytes
 
+                # --- Context threshold monitoring (per policy) ---
+                usage_ratio = total_loaded_bytes / MAX_TOTAL_SIZE if MAX_TOTAL_SIZE > 0 else 0
+                if usage_ratio >= CONTEXT_THRESHOLD_EMERGENCY:
+                    msg = "EMERGENCY: Context usage at {:.0f}% ({} / {} bytes) - stopping further loads".format(
+                        usage_ratio * 100, total_loaded_bytes, MAX_TOTAL_SIZE
+                    )
+                    print("[CONTEXT LOADER] " + msg, file=sys.stderr)
+                    load_warnings.append(msg)
+                    break
+                elif usage_ratio >= CONTEXT_THRESHOLD_HIGH:
+                    msg = "HIGH: Context usage at {:.0f}% ({} / {} bytes) - switching to streaming for remaining files".format(
+                        usage_ratio * 100, total_loaded_bytes, MAX_TOTAL_SIZE
+                    )
+                    print("[CONTEXT LOADER] WARNING: " + msg, file=sys.stderr)
+                    load_warnings.append(msg)
+                elif usage_ratio >= CONTEXT_THRESHOLD_WARNING:
+                    print(
+                        "[CONTEXT LOADER] Context usage at {:.0f}% ({} / {} bytes)".format(
+                            usage_ratio * 100, total_loaded_bytes, MAX_TOTAL_SIZE
+                        ),
+                        file=sys.stderr,
+                    )
+
                 print(
                     "[CONTEXT LOADER] Loaded {} ({} bytes on disk, {} bytes in memory{})".format(
                         label,
@@ -868,6 +899,7 @@ def node_context_loader(state: FlowState) -> dict:
                 if not state.get("patterns_detected"):
                     _detected_patterns = _pattern_mod.detect_patterns(project_root)
         except Exception as _pat_exc:
+            _detected_patterns = None
             print(
                 "[LEVEL 1 CONTEXT LOADER] Pattern detection skipped: {}".format(_pat_exc),
                 file=sys.stderr,
@@ -887,6 +919,7 @@ def node_context_loader(state: FlowState) -> dict:
             "context_hit_rate_pct": cache_stats.get("hit_rate_pct", 0.0),
             "context_streamed_files": streamed_files,
         }
+        result["pattern_detection_available"] = _detected_patterns is not None
         if _detected_patterns is not None:
             result["patterns_detected"] = _detected_patterns
 
@@ -1251,7 +1284,7 @@ def level1_merge_node(state: FlowState) -> dict:
         from pathlib import Path as _Path_tel
         _sid_tel = state.get("session_id", updates.get("session_id", ""))
         if _sid_tel:
-            _tdir_tel = _Path_tel.home() / ".claude" / "logs" / "telemetry"
+            _tdir_tel = _LEVEL1_TELEMETRY_DIR
             _tdir_tel.mkdir(parents=True, exist_ok=True)
             _tfile_tel = _tdir_tel / ("%s.jsonl" % _sid_tel)
             _entry_tel = {

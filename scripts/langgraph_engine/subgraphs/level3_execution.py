@@ -486,7 +486,25 @@ def step2_plan_execution(state: FlowState) -> dict:
             logger.debug("Step2: LLM unavailable or parse failed, using keyword fallback")
             plan = _keyword_plan_fallback(tasks, task_type, complexity)
 
-        return {
+        # CallGraph impact analysis (best-effort, enriches plan with risk data)
+        impact_analysis = None
+        try:
+            from ..call_graph_analyzer import analyze_impact_before_change
+            target_files = []
+            for phase in plan.get("phases", []):
+                for t in phase.get("tasks", []):
+                    if isinstance(t, dict) and t.get("files"):
+                        target_files.extend(t["files"])
+            if target_files:
+                impact_analysis = analyze_impact_before_change(
+                    state.get("project_root", "."), target_files
+                )
+        except ImportError:
+            pass  # CallGraph not available
+        except Exception:
+            pass  # Impact analysis is best-effort
+
+        result = {
             "step2_plan_execution": plan,
             "step2_plan_status": "OK",
             "step2_phases": len(plan["phases"]),
@@ -494,6 +512,9 @@ def step2_plan_execution(state: FlowState) -> dict:
             "step2_model_tier": model_tier,
             "step2_plan_source": plan.get("plan_source", "unknown"),
         }
+        if impact_analysis:
+            result["step2_impact_analysis"] = impact_analysis
+        return result
 
     except Exception as e:
         return {
@@ -1887,6 +1908,24 @@ def step10_implementation_execution(state: FlowState) -> dict:
             user_message = f"Execute the {task_type} based on the breakdown and resources provided."
 
         # ====================================================================
+        # CALLGRAPH: Pre-change snapshot + implementation context
+        # ====================================================================
+
+        pre_change_graph = None
+        call_context = None
+        try:
+            from ..call_graph_analyzer import snapshot_call_graph, get_implementation_context
+            project_root = state.get("project_root", ".")
+            pre_change_graph = snapshot_call_graph(project_root)
+            target_files = state.get("step0_target_files", [])
+            if target_files:
+                call_context = get_implementation_context(project_root, target_files)
+        except ImportError:
+            pass  # CallGraph not available
+        except Exception:
+            pass  # Snapshot is best-effort
+
+        # ====================================================================
         # INVOKE CLAUDE WITH SYSTEM PROMPT (Phase 2 Enhanced)
         # ====================================================================
 
@@ -1952,6 +1991,10 @@ def step10_implementation_execution(state: FlowState) -> dict:
 
             # Full response (for debugging)
             "step10_llm_full_response": llm_response if llm_response else "[No LLM response]",
+
+            # CallGraph data (for Step 11 diff)
+            "step10_pre_change_graph": pre_change_graph,
+            "step10_call_context": call_context,
         }
 
     except Exception as e:
@@ -2055,8 +2098,22 @@ def step11_pull_request_review(state: FlowState) -> dict:
         except Exception as gh_err:
             logger.warning(f"Level3GitHubWorkflow unavailable for PR: {gh_err}. Using fallback.")
 
+        # CallGraph: post-change impact review (best-effort)
+        impact_review = None
+        try:
+            from ..call_graph_analyzer import review_change_impact
+            pre_graph = state.get("step10_pre_change_graph")
+            if pre_graph:
+                impact_review = review_change_impact(
+                    project_root, pre_graph, modified_files
+                )
+        except ImportError:
+            pass
+        except Exception:
+            pass
+
         # Fallback: mark review as passed so pipeline continues
-        return {
+        result = {
             "step11_pr_id": "0",
             "step11_pr_url": "",
             "step11_review_passed": True,
@@ -2065,6 +2122,9 @@ def step11_pull_request_review(state: FlowState) -> dict:
             "step11_retry_count": retry_count,
             "step11_status": "FALLBACK"
         }
+        if impact_review:
+            result["step11_impact_review"] = impact_review
+        return result
 
     except Exception as e:
         return {
@@ -2204,6 +2264,26 @@ def step13_project_documentation_update(state: FlowState) -> dict:
         else:
             result = manager.update_existing_docs(dict(state))
 
+        # UML diagram generation (best-effort, non-blocking)
+        uml_diagrams_generated = []
+        try:
+            from ..uml_generators import UmlGenerators
+            uml_gen = UmlGenerators(
+                project_root=state.get("project_root", "."),
+                output_dir=str(Path(state.get("project_root", ".")) / "docs" / "uml"),
+            )
+            # Generate key diagrams: class, sequence, component
+            for diagram_type in ["class", "component", "sequence"]:
+                try:
+                    uml_gen.generate(diagram_type)
+                    uml_diagrams_generated.append(diagram_type)
+                except Exception:
+                    pass  # Individual diagram failures are non-blocking
+        except ImportError:
+            pass  # UML generators not available
+        except Exception:
+            pass  # UML generation is best-effort
+
         # Also write session-dir audit file (preserves existing behavior)
         session_path = state.get("session_dir") or state.get("session_path", "")
         if session_path:
@@ -2228,6 +2308,7 @@ def step13_project_documentation_update(state: FlowState) -> dict:
             "step13_updated_files": result.get("step13_updated_files", []),
             "step13_documentation_status": result.get("step13_documentation_status", "OK"),
             "step13_docs_created": result.get("step13_docs_created", []),
+            "step13_uml_diagrams": uml_diagrams_generated,
         }
 
     except Exception as e:

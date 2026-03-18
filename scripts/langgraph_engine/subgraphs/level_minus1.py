@@ -172,10 +172,15 @@ def node_encoding_validation(state: FlowState) -> dict:
             except (UnicodeDecodeError, Exception):
                 non_ascii_files.append(str(py_file.relative_to(project_root)))
 
+        # Store full file list in state for downstream visibility
+        updates["encoding_nonascii_files"] = non_ascii_files
+
         if non_ascii_files:
             updates["encoding_check"] = False
             updates["encoding_check_error"] = (
-                f"Non-ASCII Python files found: {', '.join(non_ascii_files[:3])}"
+                f"Non-ASCII Python files found ({len(non_ascii_files)} total): "
+                f"{', '.join(non_ascii_files[:5])}"
+                + (f" ... and {len(non_ascii_files) - 5} more" if len(non_ascii_files) > 5 else "")
             )
         else:
             updates["encoding_check"] = True
@@ -316,7 +321,8 @@ def _load_failure_kb(project_root_str="."):
             })
 
         return entries
-    except Exception:
+    except Exception as exc:
+        print("[LEVEL -1 KB] Failed to load failure KB: %s" % exc, file=sys.stderr)
         return []
 
 
@@ -411,12 +417,22 @@ def ask_level_minus1_fix(state: FlowState) -> dict:
     except Exception:
         pass  # Fail-open
 
-    # Show message to user
+    # Show message to user (including KB suggestions if available)
     message = f"\n[LEVEL -1] VALIDATION CHECKS ({attempt}/{MAX_LEVEL_MINUS1_ATTEMPTS}):\n"
     message += "\n".join(failed_checks)
+
+    if kb_suggestions:
+        message += "\n\n  KB SUGGESTIONS:\n"
+        seen = set()
+        for kb in kb_suggestions:
+            sig = kb.get("signature", "")
+            if sig not in seen:
+                seen.add(sig)
+                message += "    -> %s: %s\n" % (sig, kb.get("prevention", ""))
+
     message += "\n\nOPTIONS:\n"
-    message += "  1. auto-fix   → Attempt repair + retry\n"
-    message += "  2. skip       → Continue anyway (⚠️  NOT RECOMMENDED)\n"
+    message += "  1. auto-fix   -> Attempt repair + retry\n"
+    message += "  2. skip       -> Continue anyway (NOT RECOMMENDED)\n"
 
     # Print message to stdout so it reaches user through hook
     print(message)
@@ -503,86 +519,29 @@ def fix_level_minus1_issues(state: FlowState) -> dict:
             fix_errors.append(error_msg)
             logger and logger.log_error("Level -1", str(e), severity="ERROR", error_type="UnicodeError")
 
-    # Fix 2: Non-ASCII Python files (auto-replace common chars to ASCII)
+    # Fix 2: Non-ASCII Python files - REPORT ONLY (per encoding-validation-policy.md)
+    # Policy: "Cannot auto-fix. Non-ASCII content requires human judgment."
+    # Action: Report non-ASCII files and flag for manual review.
     if not state.get("encoding_check"):
         try:
-            import re as _re_enc
-
-            # ASCII replacement map: smart quotes, em dashes, arrows, bullets
-            _ASCII_MAP = {
-                "\u2018": "'",   # left single quote
-                "\u2019": "'",   # right single quote
-                "\u201c": '"',   # left double quote
-                "\u201d": '"',   # right double quote
-                "\u2013": "-",   # en dash
-                "\u2014": "--",  # em dash
-                "\u2026": "...", # ellipsis
-                "\u2192": "->",  # right arrow
-                "\u2190": "<-",  # left arrow
-                "\u2022": "*",   # bullet
-                "\u00a0": " ",   # non-breaking space
-                "\u00b7": ".",   # middle dot
-            }
-
-            project_root = Path(state.get("project_root", "."))
-            py_files = list(project_root.glob("**/*.py"))
-            if len(py_files) > 500:
-                py_files = py_files[:500]
-
-            fixed_encoding_files = []
-            still_non_ascii = []
-
-            for py_file in py_files:
-                try:
-                    content_bytes = py_file.read_bytes()
-                    content_bytes.decode("ascii")
-                except UnicodeDecodeError:
-                    try:
-                        # Backup before fix
-                        backup and backup.backup_file(str(py_file), "Level -1", "Before encoding fix")
-
-                        content = py_file.read_text(encoding="utf-8", errors="replace")
-                        original = content
-
-                        # Apply known replacements
-                        for char, replacement in _ASCII_MAP.items():
-                            content = content.replace(char, replacement)
-
-                        # Replace remaining non-ASCII with ?
-                        content = _re_enc.sub(r"[^\x00-\x7f]", "?", content)
-
-                        if content != original:
-                            py_file.write_text(content, encoding="utf-8")
-
-                            # Validate after fix
-                            if backup and backup.validate_file_integrity(str(py_file), "Level -1"):
-                                fixed_encoding_files.append(str(py_file.relative_to(project_root)))
-                                logger and logger.log_validation_result(
-                                    "Level -1", "Encoding fix: %s" % py_file.name, True
-                                )
-                            else:
-                                backup and backup.restore_file(str(py_file), "Level -1")
-                                still_non_ascii.append(str(py_file.relative_to(project_root)))
-                        else:
-                            still_non_ascii.append(str(py_file.relative_to(project_root)))
-                    except Exception:
-                        backup and backup.restore_file(str(py_file), "Level -1")
-                        still_non_ascii.append(str(py_file.relative_to(project_root)))
-                except Exception:
-                    pass
-
-            if fixed_encoding_files:
-                fixed_issues.append(
-                    ">> Fixed ASCII encoding in %d files: %s" % (
-                        len(fixed_encoding_files),
-                        ", ".join(fixed_encoding_files[:3]),
+            nonascii_files = state.get("encoding_nonascii_files") or []
+            if nonascii_files:
+                fix_errors.append(
+                    "Non-ASCII files need MANUAL review (%d files): %s%s" % (
+                        len(nonascii_files),
+                        ", ".join(nonascii_files[:5]),
+                        " ... and %d more" % (len(nonascii_files) - 5) if len(nonascii_files) > 5 else "",
                     )
                 )
-            if still_non_ascii:
-                fix_errors.append(
-                    "Non-ASCII files still need review: %s" % ", ".join(still_non_ascii[:3])
+                fixed_issues.append(
+                    ">> Encoding: %d non-ASCII files reported (auto-fix disabled per policy)" % len(nonascii_files)
                 )
-            if not fixed_encoding_files and not still_non_ascii:
+                logger and logger.log_decision(
+                    "Level -1", "Encoding fix skipped",
+                    "Policy requires manual review for non-ASCII content",
+                    chosen_option="report-only"
+                )
+            else:
                 fixed_issues.append(">> All Python files are ASCII-safe")
         except Exception as e:
             fix_errors.append("Could not check encoding: %s" % e)
@@ -628,8 +587,9 @@ def fix_level_minus1_issues(state: FlowState) -> dict:
                                 # Replace double backslashes with single forward slash
                                 line = line.replace('\\\\', '/')
                                 # Replace single backslashes that look like path separators
-                                # (but not escape sequences like \n, \t, \r, etc.)
-                                line = re.sub(r"\\(?![\\ntrvxa0-9\"'])", "/", line)
+                                # Preserve ALL valid Python escape sequences:
+                                # \n \t \r \v \a \b \f \0 \x \u \U \N \s (regex) \' \"
+                                line = re.sub(r"\\(?![\\ntrvxafb0-9\"'uUNs])", "/", line)
                             new_lines.append(line)
 
                         content = '\n'.join(new_lines)

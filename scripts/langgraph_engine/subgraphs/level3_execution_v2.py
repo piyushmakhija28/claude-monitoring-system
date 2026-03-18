@@ -1191,10 +1191,37 @@ def step8_github_issue_node(state: FlowState) -> Dict[str, Any]:
 
 
 def step9_branch_creation_node(state: FlowState) -> Dict[str, Any]:
-    """Step 9: Branch Creation with full error handling."""
+    """Step 9: Branch Creation with network retry and error handling."""
+
+    def _with_network_retry(st):
+        """Git/GitHub calls in step 9 get exponential backoff retry."""
+        last_exc = None
+        for attempt in range(3):
+            try:
+                return step9_branch_creation(st)
+            except Exception as exc:
+                # Retry on network-like errors (connection, timeout, git push)
+                exc_str = str(exc).lower()
+                if any(kw in exc_str for kw in ["timeout", "connection", "network", "remote", "push"]):
+                    last_exc = exc
+                    infra = _get_infra(st)
+                    if infra["error_logger"]:
+                        infra["error_logger"].log_error(
+                            step="Step 9",
+                            error_message=str(exc),
+                            severity="WARNING",
+                            error_type="NetworkError",
+                            recovery_action="Retry %d/3 with backoff" % (attempt + 1),
+                        )
+                    from time import sleep
+                    sleep(2 ** attempt)
+                else:
+                    raise  # Non-network errors: don't retry
+        raise last_exc or RuntimeError("Branch creation failed after 3 retries")
+
     return _run_step(
         9, "Branch Creation",
-        step9_branch_creation,
+        _with_network_retry,
         state,
         fallback_result={
             "step9_branch_name": "fallback-branch",
@@ -1491,15 +1518,41 @@ def step10_implementation_note(state: FlowState) -> Dict[str, Any]:
 
 
 def step11_pull_request_node(state: FlowState) -> Dict[str, Any]:
-    """Step 11: Pull Request & Code Review with full error handling.
+    """Step 11: Pull Request & Code Review with network retry and error handling.
 
     After the standard review, runs CallGraph impact comparison between
     pre-change snapshot (from Step 10) and current state to detect
     breaking changes, orphaned methods, and risk assessment.
     """
+
+    def _with_network_retry(st):
+        """GitHub API calls in step 11 get exponential backoff retry."""
+        last_exc = None
+        for attempt in range(3):
+            try:
+                return step11_pull_request_review(st)
+            except Exception as exc:
+                exc_str = str(exc).lower()
+                if any(kw in exc_str for kw in ["timeout", "connection", "network", "rate", "api"]):
+                    last_exc = exc
+                    infra = _get_infra(st)
+                    if infra["error_logger"]:
+                        infra["error_logger"].log_error(
+                            step="Step 11",
+                            error_message=str(exc),
+                            severity="WARNING",
+                            error_type="NetworkError",
+                            recovery_action="Retry %d/3 with backoff" % (attempt + 1),
+                        )
+                    from time import sleep
+                    sleep(2 ** attempt)
+                else:
+                    raise
+        raise last_exc or RuntimeError("PR creation failed after 3 retries")
+
     result = _run_step(
         11, "Pull Request & Code Review",
-        step11_pull_request_review,
+        _with_network_retry,
         state,
         fallback_result={
             "step11_review_passed": True,   # Allow pipeline to continue on error
@@ -1611,10 +1664,36 @@ def step11_pull_request_node(state: FlowState) -> Dict[str, Any]:
 
 
 def step12_issue_closure_node(state: FlowState) -> Dict[str, Any]:
-    """Step 12: Issue Closure with full error handling."""
+    """Step 12: Issue Closure with network retry and error handling."""
+
+    def _with_network_retry(st):
+        """GitHub API calls in step 12 get exponential backoff retry."""
+        last_exc = None
+        for attempt in range(3):
+            try:
+                return step12_issue_closure(st)
+            except Exception as exc:
+                exc_str = str(exc).lower()
+                if any(kw in exc_str for kw in ["timeout", "connection", "network", "rate", "api"]):
+                    last_exc = exc
+                    infra = _get_infra(st)
+                    if infra["error_logger"]:
+                        infra["error_logger"].log_error(
+                            step="Step 12",
+                            error_message=str(exc),
+                            severity="WARNING",
+                            error_type="NetworkError",
+                            recovery_action="Retry %d/3 with backoff" % (attempt + 1),
+                        )
+                    from time import sleep
+                    sleep(2 ** attempt)
+                else:
+                    raise
+        raise last_exc or RuntimeError("Issue closure failed after 3 retries")
+
     return _run_step(
         12, "Issue Closure",
-        step12_issue_closure,
+        _with_network_retry,
         state,
         fallback_result={
             "step12_issue_closed": False,
