@@ -100,6 +100,15 @@ The system SHALL generate 13 UML diagram types from call graph data:
 #### FR-CG-6: Call Graph as Single Data Source
 UML diagram generation SHALL use the CallGraph as primary data source via adapter methods, falling back to direct AST analysis when CallGraph is unavailable.
 
+#### FR-CG-7: Multi-Language Call Graph
+The system SHALL analyze call graphs for Python (AST-based), Java, TypeScript/TSX, and Kotlin (regex-based) to support polyglot projects.
+
+#### FR-CG-8: Monitoring Backend
+The system SHALL provide a monitoring data layer that collects telemetry from all pipeline levels (Level -1, 1, 2, 3) and aggregates metrics including session counts, step performance, LLM usage, cache hit rates, quality gate history, and SonarQube findings.
+
+#### FR-CG-9: Quality Intelligence Pipeline
+The system SHALL run a quality pipeline after implementation (Step 10) consisting of: SonarQube scan (API-first with fallback), auto-fix loop (template-based, max 3 iterations), unit test generation (4 languages), integration test generation (CallGraph call-path-based), coverage analysis (risk-prioritized), and quality gate enforcement (4 gates configurable via .quality-gate.json).
+
 ---
 
 ## Non-Functional Requirements

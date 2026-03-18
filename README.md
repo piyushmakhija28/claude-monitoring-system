@@ -95,6 +95,8 @@ Full Mode (CLAUDE_HOOK_MODE=0):
 
 The call graph is the **brain** of the engine. It is NOT a simple JSON dependency list - it is a **complete call stack** that maps every class, every method, every function call, and every relationship in the entire codebase. Think of it as a **live X-ray of your code** - it sees everything.
 
+CallGraph supports 4 languages: Python (full AST analysis), Java, TypeScript/TSX, and Kotlin (regex-based parsing for classes, methods, and call edges).
+
 #### Before vs After
 
 ```
@@ -548,13 +550,14 @@ claude-insight/
 | Execution Steps | 15 (Step 0 - Step 14) |
 | MCP Servers | 15 (12 original + 3 focused LLM providers) |
 | MCP Tools | 141 |
-| LangGraph Engine Modules | 90+ (84 root + 6 subgraphs) |
+| LangGraph Engine Modules | 91+ (85 root + 6 subgraphs) |
 | Policy Files | 49 (48 .md + 1 .json) |
 | Standards Files | 10 (8 languages covered) |
-| Test Files | 50+ |
+| Test Files | 54+ |
 | Test Functions | 1550+ |
-| Total Python Files | 275+ |
-| Call Graph | 576 classes, 3,801 methods, 26,960 edges |
+| Total Python Files | 280+ |
+| MCP Tools | 149 |
+| Call Graph | 578 classes, 3,985 methods, 4 languages (Python/Java/TS/Kotlin) |
 | UML Diagram Types | 13 (CallGraph-powered) |
 | Documentation Files | 40+ |
 | RAG Collections | 4 (Qdrant vector DB) |

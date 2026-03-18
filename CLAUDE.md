@@ -1,7 +1,7 @@
 # Claude Workflow Engine - Project Context
 
 **Project:** Claude Workflow Engine
-**Version:** 7.5.0
+**Version:** 7.7.0
 **Type:** LangGraph Orchestration Pipeline with RAG
 **Last Updated:** 2026-03-18
 
@@ -129,8 +129,9 @@ Default threshold: 0.82 (step-specific: 0.75-0.90)
 
 ### CallGraph-Driven Pipeline Intelligence
 
-The pipeline uses a full AST-based call graph (574 classes, 3783 methods) to make
-informed decisions at critical steps instead of blind code generation:
+The pipeline uses a full AST-based call graph (578 classes, 3,985 methods) to make
+informed decisions at critical steps instead of blind code generation.
+CallGraph now supports 4 languages: Python (full AST), Java, TypeScript, Kotlin (regex-based).
 
 ```
 Step 2 (Plan):   analyze_impact_before_change() -> risk_level, danger_zones, affected_methods
