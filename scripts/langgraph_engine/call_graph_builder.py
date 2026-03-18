@@ -392,6 +392,25 @@ def _count_branches(func_node):
 
 
 # =========================================================================
+# Regex Visitor - For non-Python languages (Java, TypeScript, Kotlin)
+# =========================================================================
+
+class _RegexVisitor:
+    """Simple data holder for non-Python languages using regex parsing.
+
+    Holds the same shape of data as _CallGraphVisitor so that
+    CallGraph.add_file_results() works without modification.
+    """
+
+    def __init__(self, file_path, rel_path):
+        self.file_path = file_path
+        self.rel_path = rel_path
+        self.classes = []   # list of class node dicts
+        self.methods = []   # list of method/function node dicts
+        self.edges = []     # list of call edge dicts
+
+
+# =========================================================================
 # Call Graph - Main Data Structure
 # =========================================================================
 
@@ -764,20 +783,25 @@ class CallGraphBuilder:
         return graph
 
     def _discover_files(self):
-        """Find Python source files to analyze."""
+        """Find source files to analyze (Python, Java, TypeScript, Kotlin)."""
         found = []
-        for py_file in self.project_root.rglob("*.py"):
+        extensions = [".py", ".java", ".ts", ".tsx", ".kt"]
+        for ext in extensions:
+            pattern = "**/*" + ext
+            for src_file in self.project_root.glob(pattern):
+                if len(found) >= self.max_files:
+                    break
+                if any(part in EXCLUDED_DIRS for part in src_file.parts):
+                    continue
+                try:
+                    size_kb = src_file.stat().st_size / 1024
+                    if size_kb > MAX_FILE_SIZE_KB:
+                        continue
+                except OSError:
+                    continue
+                found.append(src_file)
             if len(found) >= self.max_files:
                 break
-            if any(part in EXCLUDED_DIRS for part in py_file.parts):
-                continue
-            try:
-                size_kb = py_file.stat().st_size / 1024
-                if size_kb > MAX_FILE_SIZE_KB:
-                    continue
-            except OSError:
-                continue
-            found.append(py_file)
         return found
 
     def _analyze_file(self, py_file):
