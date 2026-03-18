@@ -1,6 +1,13 @@
 # SESSION BLOAT & SUBPROCESS LEAK ANALYSIS
 **Date:** 2026-03-09 11:30
 **Severity:** CRITICAL (causes auto-logout due to context bloat)
+**Status (2026-03-18):** MOSTLY RESOLVED - Phase 1-3 implemented, session pruner active
+
+> **Update:** Most issues below have been addressed:
+> - Flow-trace rotation: Implemented (keeps last N entries)
+> - Session folder cleanup: Session-pruner.py active (30-day max, keep 10)
+> - Hook output verbosity: Reduced (hook-mode aware, non-debug silent)
+> - Remaining: Explicit max trace rotation in some edge-case hooks
 
 ---
 

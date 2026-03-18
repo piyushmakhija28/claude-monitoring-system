@@ -421,6 +421,25 @@ def _run_step(
         except Exception:
             pass  # RAG storage is never fatal
 
+        # Save workflow memory for resume support (non-blocking)
+        try:
+            import json as _json
+            session_dir = state.get("session_dir", "")
+            if session_dir:
+                mem_path = Path(session_dir) / "workflow-memory.json"
+                mem_data = {
+                    "last_step": step_number,
+                    "last_step_label": step_label,
+                    "last_step_status": "SUCCESS",
+                    "timestamp": datetime.now().isoformat(),
+                    "session_id": state.get("session_id", ""),
+                }
+                mem_path.write_text(
+                    _json.dumps(mem_data, indent=2), encoding="utf-8"
+                )
+        except Exception:
+            pass  # Workflow memory is best-effort
+
         if result is not None:
             result[f"step{step_number}_execution_time_ms"] = duration * 1000
 
@@ -534,10 +553,31 @@ def level3_init_node(state: FlowState) -> Dict[str, Any]:
     except Exception as e:
         logger.debug(f"[v2] Recovery handler install skipped: {e}")
 
-    return {
+    # Load workflow memory from previous run (if resuming)
+    workflow_memory = {}
+    try:
+        import json
+        memory_file = Path(session_path) / "workflow-memory.json"
+        if memory_file.is_file():
+            workflow_memory = json.loads(
+                memory_file.read_text(encoding="utf-8", errors="replace")
+            )
+            logger.info(
+                "[v2] Loaded workflow memory from previous run "
+                "(last_step=%s)", workflow_memory.get("last_step", "?")
+            )
+    except Exception as e:
+        logger.debug("[v2] Workflow memory load skipped: %s" % str(e))
+
+    result = {
         "session_dir": session_path,
         "user_requirement": state.get("user_message", ""),
     }
+    if workflow_memory:
+        result["workflow_memory_file"] = str(
+            Path(session_path) / "workflow-memory.json"
+        )
+    return result
 
 
 # ============================================================================

@@ -1033,6 +1033,33 @@ def main():
     except Exception as e:
         log_s('[SESSION-ARCHIVE] Skipped: ' + str(e))
 
+    # 2b. Session log pruning - prune old sessions (30-day max, keep 10)
+    # Architecture: 01-sync-system/session-pruner.py
+    try:
+        pruner_script = script_dir / 'architecture' / '01-sync-system' / 'session-pruner.py'
+        if pruner_script.exists():
+            _prune_ok = False
+            for _attempt in range(1, 4):
+                try:
+                    _r = subprocess.run(
+                        [sys.executable, str(pruner_script), '--max-age', '30', '--keep-min', '10'],
+                        timeout=15, capture_output=True
+                    )
+                    if _r.returncode == 0:
+                        _prune_ok = True
+                        break
+                    if _attempt < 3:
+                        log_s('[RETRY ' + str(_attempt) + '/3] session-pruner failed, retrying...')
+                except Exception:
+                    if _attempt < 3:
+                        log_s('[RETRY ' + str(_attempt) + '/3] session-pruner error, retrying...')
+            if _prune_ok:
+                log_s('[SESSION-PRUNE] Old session logs pruned')
+            else:
+                log_s('[POLICY-WARN] session-pruner failed after 3 retries')
+    except Exception as e:
+        log_s('[SESSION-PRUNE] Skipped: ' + str(e))
+
     # 3. Failure detection analysis - learn from errors (3 retries)
     # Architecture: 03-execution-system/failure-prevention/common-failures-prevention.py --analyze
     try:

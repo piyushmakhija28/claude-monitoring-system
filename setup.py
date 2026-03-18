@@ -35,8 +35,11 @@ setup(
     license='MIT',
 
     # Package configuration
-    packages=find_packages(where='src'),
-    package_dir={'': 'src'},
+    packages=find_packages(where='src') + find_packages(where='scripts'),
+    package_dir={
+        '': 'src',
+        'langgraph_engine': 'scripts/langgraph_engine',
+    },
     include_package_data=True,
 
     # Dependencies
@@ -46,7 +49,7 @@ setup(
     # Entry points
     entry_points={
         'console_scripts': [
-            'claude-workflow=scripts.3-level-flow:main',
+            'claude-workflow=langgraph_engine.run_pipeline:main',
         ],
     },
 
