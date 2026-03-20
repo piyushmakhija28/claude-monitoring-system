@@ -20,8 +20,8 @@ Claude Workflow Engine is a 3-level LangGraph-based orchestration pipeline for a
 | **Status** | Active Development |
 | **Primary Location** | scripts/langgraph_engine/ |
 | **MCP Servers** | 19 (323 tools) |
-| **Total Python Files** | 290+ |
-| **Test Files** | 66 |
+| **Total Python Files** | 295+ |
+| **Test Files** | 69 |
 | **Call Graph** | 578 classes, 3,985 methods, 4 languages (Python/Java/TS/Kotlin) |
 
 ---
@@ -41,16 +41,16 @@ Level 3: Execution (15 steps: Step 0 through Step 14)
     |-- Step 0:  Task Analysis + Prompt Generation
     |-- Step 1:  Plan Mode Decision
     |-- Step 2:  Plan Execution (CallGraph impact analysis + complexity-based model)
-    |-- Step 3:  Task/Phase Breakdown
+    |-- Step 3:  Task/Phase Breakdown + Figma component extraction (ENABLE_FIGMA)
     |-- Step 4:  TOON Refinement
     |-- Step 5:  Skill & Agent Selection (RAG cross-session boost)
     |-- Step 6:  Skill Validation & Download
-    |-- Step 7:  Final Prompt Generation (3 files)
-    |-- Step 8:  GitHub Issue Creation
-    |-- Step 9:  Branch Creation + Git Setup
-    |-- Step 10: Implementation Execution (CallGraph context + pre-change snapshot)
-    |-- Step 11: Pull Request & Code Review (CallGraph diff + breaking change detection)
-    |-- Step 12: Issue Closure
+    |-- Step 7:  Final Prompt Generation (3 files) + Figma design tokens injection
+    |-- Step 8:  GitHub Issue + Jira Issue creation (ENABLE_JIRA, dual-linked)
+    |-- Step 9:  Branch Creation (Jira key: feature/PROJ-123)
+    |-- Step 10: Implementation + Jira "In Progress" + Figma "started" comment
+    |-- Step 11: PR + Code Review + Jira PR link + Figma design review
+    |-- Step 12: Issue Closure (GitHub + Jira "Done" + Figma "complete" comment)
     |-- Step 13: Documentation Update + UML Diagram Generation
     |-- Step 14: Final Summary
 ```
@@ -60,15 +60,15 @@ Level 3: Execution (15 steps: Step 0 through Step 14)
 ```
 /
 +-- scripts/                          # Pipeline scripts and hooks
-|   +-- langgraph_engine/             # Core orchestration (91 modules: 85 root + 6 subgraph files)
+|   +-- langgraph_engine/             # Core orchestration (92 modules: 86 root + 6 subgraph files)
 |   +-- architecture/                 # Active pipeline scripts (6 scripts + 1 data file)
 +-- policies/                         # 63 policy definitions (62 .md + 1 .json)
 |   +-- 00-auto-fix-system/           # Level -1 policies (Unicode, encoding, paths, recovery)
 |   +-- 01-sync-system/               # Level 1 policies
 |   +-- 02-standards-system/          # Level 2 policies (+ tool optimization, MCP discovery)
 |   +-- 03-execution-system/          # Level 3 policies (15 steps + RAG, CallGraph, QualityGate, hooks)
-+-- src/mcp/                          # 18 FastMCP servers (313 tools, 10,000+ LOC)
-+-- tests/                            # 66 test files
++-- src/mcp/                          # 19 FastMCP servers (323 tools)
++-- tests/                            # 69 test files
 +-- docs/                             # 46 documentation files
 +-- docs/uml/                         # Auto-generated UML diagrams (13 types)
 +-- rules/                            # 10 coding standard definitions
@@ -179,6 +179,27 @@ All integrations are configurable via environment variables (default: disabled):
 | `ENABLE_SONARQUBE` | `0` | SonarQube scan after implementation (Step 10) |
 | `ENABLE_FIGMA` | `0` | Figma design-to-code extraction (Steps 3,7,11) |
 | `ENABLE_CI` | `true` | GitHub Actions CI pipeline |
+
+### Integration Lifecycle (Create -> Update -> Close)
+
+When integrations are enabled, the pipeline manages the full lifecycle:
+
+```
+Jira Lifecycle (ENABLE_JIRA=1):
+  Step 8:  CREATE   -> Jira issue created, cross-linked to GitHub Issue
+  Step 9:  BRANCH   -> Branch named from Jira key (feature/proj-123)
+  Step 10: UPDATE   -> Transition to "In Progress", add start comment
+  Step 11: LINK     -> PR remote-linked to Jira, transition to "In Review"
+  Step 11: MERGE    -> Post-merge comment with PR number and branch
+  Step 12: CLOSE    -> Transition to "Done", add implementation summary
+
+Figma Lifecycle (ENABLE_FIGMA=1):
+  Step 3:  EXTRACT  -> Components extracted for UI task breakdown
+  Step 7:  INJECT   -> Design tokens (colors, typography, spacing) into prompt
+  Step 10: COMMENT  -> "Implementation started" with component list
+  Step 11: REVIEW   -> Design fidelity checklist in code review
+  Step 12: COMMENT  -> "Implementation complete" with PR link
+```
 
 ---
 

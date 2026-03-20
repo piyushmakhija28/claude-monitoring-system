@@ -38,11 +38,11 @@ Engine does:
   Step 5:  Selects skill -> python-core + testing-core
   Step 6:  Validates skills -> Downloaded and ready
   Step 7:  Generates prompt -> system_prompt.txt + user_message.txt
-  Step 8:  Creates GitHub issue -> #42 "bugfix: login timeout"
-  Step 9:  Creates branch -> bugfix/issue-42
-  Step 10: Implements fix -> With full context from Steps 0-7
-  Step 11: Creates PR -> Reviews code, retries if needed (max 3x)
-  Step 12: Closes issue -> With implementation summary
+  Step 8:  Creates GitHub issue #42 + Jira PROJ-123 (dual-linked)
+  Step 9:  Creates branch -> bugfix/proj-123 (from Jira key)
+  Step 10: Implements fix + Jira "In Progress" + Figma "started"
+  Step 11: Creates PR + Jira "In Review" + Figma design review
+  Step 12: Closes issues (GitHub + Jira "Done" + Figma "complete")
   Step 13: Updates docs -> CLAUDE.md + execution-docs.md
   Step 14: Final summary -> execution-summary.txt + voice notification
 ```
@@ -69,12 +69,12 @@ Level 3:  EXECUTION         15 steps (Step 0-14): Full SDLC automation
 
 | Phase | Steps | What Happens |
 |-------|-------|-------------|
-| **Analysis & Planning** | 0-2 | Task analysis, complexity scoring, plan mode decision; Step 2: Plan Execution + **CallGraph impact analysis** + plan validation |
-| **Preparation** | 3-7 | Step 3: Task Breakdown + **CallGraph file-to-phase mapping**; Step 4: TOON Refinement + **phase-scoped context injection**; skill/agent selection, prompt generation |
-| **Issue & Branch Automation** | 8-9 | GitHub Issue + Jira Issue (dual, configurable), branch from Jira key (`feature/PROJ-123`), PR-to-Jira linking |
-| **Implementation** | 10 | Implementation + **CallGraph snapshot + context** + SonarQube scan + auto-test generation |
-| **Review & Closure** | 11-12 | PR + Code Review + **CallGraph diff + breaking change detection + quality gate**, review loop (max 3 retries), issue closure with summary |
-| **Finalization** | 13-14 | Documentation + UML diagram generation (13 types), execution summary + voice notification |
+| **Analysis & Planning** | 0-2 | Task analysis, complexity scoring, plan mode decision; CallGraph impact analysis + plan validation |
+| **Preparation** | 3-7 | Task Breakdown + **Figma component extraction**; TOON Refinement; skill/agent selection; Final Prompt + **Figma design tokens injection** |
+| **Issue & Branch** | 8-9 | GitHub Issue + **Jira Issue** (dual, cross-linked); Branch from **Jira key** (`feature/PROJ-123`) |
+| **Implementation** | 10 | Implementation + CallGraph snapshot; **Jira -> "In Progress"**; **Figma "started" comment** |
+| **Review & Closure** | 11-12 | PR + Code Review + **Jira PR link + "In Review"** + **Figma design fidelity check**; Issue closure (**Jira -> "Done"** + **Figma "complete" comment**) |
+| **Finalization** | 13-14 | Documentation + UML diagrams; execution summary + voice notification |
 
 ### Execution Modes
 
@@ -86,6 +86,40 @@ Hook Mode (default, CLAUDE_HOOK_MODE=1):
 Full Mode (CLAUDE_HOOK_MODE=0):
   Steps 0-14  -> All steps execute sequentially
 ```
+
+### Integration Lifecycle
+
+All integrations follow a complete **Create -> Update -> Close** lifecycle across pipeline steps:
+
+#### Jira Lifecycle (ENABLE_JIRA=1)
+
+| Step | Action | What Happens |
+|------|--------|-------------|
+| Step 8 | **CREATE** | Jira issue created with same title/type as GitHub Issue; cross-link comment added to both |
+| Step 9 | **BRANCH** | Branch named from Jira key: `feature/proj-123` (not `feature/issue-42`) |
+| Step 10 | **UPDATE** | Jira transitioned to "In Progress"; "Implementation started" comment added |
+| Step 11 | **LINK** | PR remote-linked to Jira issue; Jira transitioned to "In Review"; PR comment added |
+| Step 11 | **MERGE** | Post-merge comment with PR number, branch name, and URL |
+| Step 12 | **CLOSE** | Jira transitioned to "Done"; implementation summary comment with files modified |
+
+#### Figma Lifecycle (ENABLE_FIGMA=1)
+
+| Step | Action | What Happens |
+|------|--------|-------------|
+| Step 3 | **EXTRACT** | Figma components extracted -> UI-specific subtasks created |
+| Step 7 | **INJECT** | Design tokens (colors, typography, spacing, shadows, radii) injected into prompt |
+| Step 10 | **COMMENT** | "Implementation started" comment added to Figma file with component list |
+| Step 11 | **REVIEW** | Design fidelity checklist generated (colors match? spacing correct? shadows applied?) |
+| Step 12 | **COMMENT** | "Implementation complete" comment added with PR link |
+
+#### Jenkins Lifecycle (ENABLE_JENKINS=1)
+
+| Step | Action | What Happens |
+|------|--------|-------------|
+| Step 10 | **TRIGGER** | Jenkins build triggered after implementation |
+| Step 11 | **VALIDATE** | Build status checked before PR merge; console output on failure |
+
+All integration operations are **non-blocking** - if any service is unavailable, the pipeline continues with remaining integrations.
 
 ---
 
@@ -284,7 +318,7 @@ The single data source for all 13 UML diagram types is also the call graph - `um
 | UML Generators | uml_generators.py | 13 UML diagram types (AST + LLM) |
 | Doc Manager | level3_documentation_manager.py | Circular SDLC doc cycle (Step 0/13) |
 
-### LangGraph Orchestration (91 modules)
+### LangGraph Orchestration (92 modules)
 
 - StateGraph with 200+ typed state fields
 - Parallel execution via `Send()` API (Level 1: 4 concurrent tasks)
@@ -379,7 +413,10 @@ policies/
 |-----------|--------|---------|
 | **15-Step Pipeline** | COMPLETE | All steps produce real output (not stubs) |
 | **4-Level Architecture** | COMPLETE | Level -1 through Level 3 fully operational |
-| **18 MCP Servers** | COMPLETE | 313 tools, all tested and registered |
+| **19 MCP Servers** | COMPLETE | 323 tools, all tested and registered |
+| **Jira Integration** | COMPLETE | Dual issue tracking, full lifecycle (create/update/close) |
+| **Figma Integration** | COMPLETE | Component extraction, design tokens, fidelity review |
+| **Jenkins Integration** | COMPLETE | Build trigger, validation, console output on failure |
 | **RAG Integration** | COMPLETE | 4 Vector DB collections, step-specific thresholds |
 | **Hook System** | COMPLETE | Pre/post tool enforcement with blocking |
 | **Policy System** | COMPLETE | 63 policies covering all 15 steps |
@@ -390,7 +427,7 @@ policies/
 | **GitHub Integration** | COMPLETE | Issue, branch, PR, merge, review loop |
 | **Standards Enforcement** | COMPLETE | Common + framework-specific with 5 hooks |
 | **Cross-Session Learning** | COMPLETE | RAG pattern detection + skill selection boost |
-| **Test Suite** | COMPLETE | 64 test files, integration tests for all 15 steps |
+| **Test Suite** | COMPLETE | 69+ test files, integration tests for all 15 steps |
 | **Documentation** | COMPLETE | 46 docs, architecture diagrams, guides |
 | **Installation** | COMPLETE | setup.py, requirements.txt, .env.example |
 
@@ -516,7 +553,7 @@ pytest --cov=scripts --cov-report=html tests/
 claude-insight/
 |
 +-- scripts/
-|   +-- langgraph_engine/             # Core orchestration (91 modules)
+|   +-- langgraph_engine/             # Core orchestration (92 modules)
 |   |   +-- orchestrator.py           # Main StateGraph pipeline
 |   |   +-- flow_state.py             # TypedDict state (200+ fields)
 |   |   +-- rag_integration.py        # Vector DB decision caching
@@ -529,9 +566,9 @@ claude-insight/
 |   +-- post-tool-tracker.py          # PostToolUse hook
 |   +-- stop-notifier.py              # Stop hook (voice notification)
 |
-+-- src/mcp/                          # 18 FastMCP servers (313 tools)
++-- src/mcp/                          # 19 FastMCP servers (323 tools)
 +-- policies/                         # 63 policy definitions (62 .md + 1 .json)
-+-- tests/                            # 66 test files
++-- tests/                            # 69 test files
 +-- docs/                             # 46 documentation files
 +-- docs/uml/                         # Auto-generated UML diagrams (13 types)
 +-- rules/                            # 10 coding standard definitions
@@ -553,11 +590,11 @@ claude-insight/
 | Execution Steps | 15 (Step 0 - Step 14) |
 | MCP Servers | 19 (323 tools) |
 | MCP Tools | 323 |
-| LangGraph Engine Modules | 91 (85 root + 6 subgraphs) |
+| LangGraph Engine Modules | 92+ (86 root + 6 subgraphs) |
 | Policy Files | 63 (62 .md + 1 .json) |
 | Standards Files | 10 |
-| Test Files | 66+ |
-| Total Python Files | 290+ |
+| Test Files | 69+ |
+| Total Python Files | 295+ |
 | Call Graph | 578 classes, 3,985 methods, 4 languages (Python/Java/TS/Kotlin) |
 | UML Diagram Types | 13 (CallGraph-powered) |
 | Documentation Files | 46 |
@@ -585,7 +622,8 @@ No other AI coding tool automates the full Software Development Life Cycle. Here
 | **Skill/agent selection (16 skills, 13 agents)** | Yes (Step 5, RAG-powered) | No | No | No | No |
 | **Auto GitHub issue creation** | Yes (Step 8) | No | No | No | No |
 | **Dual issue tracking (GitHub + Jira)** | Yes (configurable) | No | No | No | No |
-| **Figma design-to-code extraction** | Yes (Steps 3,7,11) | No | No | No | No |
+| **Figma design-to-code extraction** | Yes (configurable) | No | No | No | No |
+| **Full integration lifecycle (create/update/close)** | Yes (Jira+Figma+Jenkins) | No | No | No | No |
 | **Auto branch creation** | Yes (Step 9) | No | No | No | No |
 | **Auto PR creation** | Yes (Step 11) | No | No | No | No |
 | **5-layer code review** | Yes (Step 11) | No | No | No | No |

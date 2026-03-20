@@ -10,7 +10,7 @@
 
 ## 1. Executive Summary
 
-Claude Workflow Engine v1.4.1 is a 3-level LangGraph-based orchestration pipeline for automating Claude Code development workflows. It provides 19 FastMCP servers (323 tools), 91 LangGraph engine modules, 63 policy definitions, a RAG integration layer with 4 Vector DB collections, and a comprehensive hook system for pre/post tool enforcement.
+Claude Workflow Engine v1.4.1 is a 3-level LangGraph-based orchestration pipeline for automating Claude Code development workflows. It provides 19 FastMCP servers (323 tools), 92 LangGraph engine modules, 63 policy definitions, a RAG integration layer with 4 Vector DB collections, and a comprehensive hook system for pre/post tool enforcement.
 
 ### Key Statistics
 
@@ -21,14 +21,14 @@ Claude Workflow Engine v1.4.1 is a 3-level LangGraph-based orchestration pipelin
 | **Execution Steps** | 15 (Step 0 through Step 14) |
 | **MCP Servers** | 19 |
 | **MCP Tools** | 323 |
-| **LangGraph Engine Modules** | 91 (85 root + 6 subgraphs) |
+| **LangGraph Engine Modules** | 92 (86 root + 6 subgraphs) |
 | **Policy Files** | 63 (62 .md + 1 .json) |
-| **Test Files** | 66 (63 root + 3 integration) |
-| **Total Python Files** | 290+ |
+| **Test Files** | 69 |
+| **Total Python Files** | 295+ |
 | **RAG Collections** | 4 |
 | **LLM Providers** | 4 (Ollama, Claude CLI, Anthropic API, OpenAI) |
 | **Coding Standards** | 10 rule files |
-| **Documentation Files** | 46 |
+| **Documentation Files** | 47 |
 
 ---
 
@@ -185,12 +185,52 @@ Vector DB Collections (Qdrant):
 | **PostToolUse** | post-tool-tracker.py | post-tool-tracker MCP imports | After every tool call |
 | **Stop** | stop-notifier.py | session_hooks.finalize_session() | Session end (auto PR + Steps 12-14) |
 
-### 3.5 Directory Structure
+### 3.5 Integration Lifecycle Architecture
+
+All external integrations follow a complete lifecycle across pipeline steps:
+
+```
+Integration Lifecycle (Steps 8-12):
+
+  Step 8:  CREATE
+           |-- GitHub Issue (always)
+           |-- Jira Issue (ENABLE_JIRA=1, cross-linked)
+
+  Step 9:  BRANCH
+           |-- Branch from Jira key (ENABLE_JIRA=1): feature/proj-123
+           |-- Branch from GitHub issue (default): feature/issue-42
+
+  Step 10: UPDATE
+           |-- Jira -> "In Progress" transition + comment
+           |-- Figma -> "Implementation started" comment
+           |-- Jenkins -> Build triggered (ENABLE_JENKINS=1)
+
+  Step 11: REVIEW
+           |-- PR -> Jira remote link + "In Review" transition
+           |-- PR -> Figma design fidelity checklist
+           |-- PR -> Jenkins build validation
+           |-- On merge: Jira post-merge comment
+
+  Step 12: CLOSE
+           |-- GitHub Issue closed with summary
+           |-- Jira -> "Done" transition + implementation comment
+           |-- Figma -> "Implementation complete" comment + PR link
+```
+
+| Integration | Flag | Steps | Lifecycle |
+|-------------|------|-------|-----------|
+| **GitHub** | Always on | 8, 9, 11, 12 | Create issue -> branch -> PR -> close |
+| **Jira** | ENABLE_JIRA=1 | 8, 9, 10, 11, 12 | Create -> branch -> In Progress -> In Review -> merge update -> Done |
+| **Figma** | ENABLE_FIGMA=1 | 3, 7, 10, 11, 12 | Extract components -> inject tokens -> started -> review -> complete |
+| **Jenkins** | ENABLE_JENKINS=1 | 10, 11 | Trigger build -> validate before merge |
+| **SonarQube** | ENABLE_SONARQUBE=1 | 10 | Scan after implementation |
+
+### 3.6 Directory Structure
 
 ```
 claude-insight/
 +-- scripts/                          # Pipeline scripts and hooks
-|   +-- langgraph_engine/             # Core orchestration (91 modules: 85 root + 6 subgraph files)
+|   +-- langgraph_engine/             # Core orchestration (92 modules: 86 root + 6 subgraph files)
 |   |   +-- orchestrator.py           # Main StateGraph pipeline
 |   |   +-- flow_state.py             # FlowState TypedDict
 |   |   +-- rag_integration.py        # RAG layer
@@ -201,11 +241,11 @@ claude-insight/
 |   +-- 01-sync-system/               # Level 1 policies
 |   +-- 02-standards-system/          # Level 2 policies
 |   +-- 03-execution-system/          # Level 3 policies (15 steps: 0-14)
-+-- src/mcp/                          # 18 FastMCP servers (313 tools)
++-- src/mcp/                          # 19 FastMCP servers (323 tools)
 |   +-- session_hooks.py              # Bridge: direct Python import for MCP tools
-+-- tests/                            # 66 test files (63 root + 3 integration)
++-- tests/                            # 69 test files
 |   +-- integration/                  # 3 integration test files
-+-- docs/                             # 46 documentation files
++-- docs/                             # 47 documentation files
 +-- rules/                            # 10 coding standard definitions
 +-- VERSION                           # Single source of truth (1.4.1)
 ```
@@ -352,6 +392,8 @@ Activated via `ENABLE_JIRA=1` environment variable. When enabled, Jira runs alon
 | FR-JIRA-04 | Transition Jira issue to "In Review" at Step 11 and link to GitHub PR | jira_transition_issue | Done |
 | FR-JIRA-05 | Transition Jira issue to "Done" and add PR URL comment at Step 12 | jira_close_issue | Done |
 | FR-JIRA-06 | Graceful skip of all Jira steps when ENABLE_JIRA=0 (default) | level3_steps8to12_jira.py | Done |
+| FR-JIRA-07 | Jira transition to "In Progress" on implementation start (Step 10) | jira_transition_issue | Done |
+| FR-JIRA-08 | Post-merge comment with PR details (Step 11) | jira_add_comment | Done |
 
 ### 4.11 Jenkins Integration (FR-JENKINS) - NEW in v1.4.1
 
@@ -376,7 +418,9 @@ Activated via `ENABLE_FIGMA=1` environment variable. Extracts design tokens and 
 | FR-FIGMA-04 | Extract design tokens (colors, typography, spacing, radii, shadows) at Step 7 | figma_extract_design_tokens | Done |
 | FR-FIGMA-05 | Inject formatted design token snippet into Step 7 implementation prompt | FlowState.figma_prompt_snippet | Done |
 | FR-FIGMA-06 | Run design compliance checklist at Step 11 and append to PR review issues | level3_figma_workflow.step11_design_review | Done |
-| FR-FIGMA-07 | Graceful non-blocking skip of all Figma steps when ENABLE_FIGMA=0 (default) | level3_figma_workflow.py | Done |
+| FR-FIGMA-07 | Comment "Implementation started" on Figma file (Step 10) | figma_add_comment | Done |
+| FR-FIGMA-08 | Comment "Implementation complete" with PR link on Figma (Step 12) | figma_add_comment | Done |
+| FR-FIGMA-09 | Graceful non-blocking skip of all Figma steps when ENABLE_FIGMA=0 (default) | level3_figma_workflow.py | Done |
 
 ---
 
@@ -424,8 +468,8 @@ Activated via `ENABLE_FIGMA=1` environment variable. Extracts design tokens and 
 |----|-------------|--------|
 | NFR-MAINT-01 | Single VERSION file as source of truth | Done |
 | NFR-MAINT-02 | Auto-doc generation from @mcp.tool() decorators | Done |
-| NFR-MAINT-03 | Comprehensive test suite (66 files) | Done |
-| NFR-MAINT-04 | MCP health check for all 18 servers | Done |
+| NFR-MAINT-03 | Comprehensive test suite (69 files) | Done |
+| NFR-MAINT-04 | MCP health check for all 19 servers | Done |
 | NFR-MAINT-05 | Structured error hierarchy (WorkflowEngineError) | Done |
 | NFR-MAINT-06 | Lazy imports to avoid import-time side effects | Done |
 
@@ -440,7 +484,7 @@ Activated via `ENABLE_FIGMA=1` environment variable. Extracts design tokens and 
 
 ---
 
-## 6. LangGraph Engine Modules (91 total)
+## 6. LangGraph Engine Modules (92 total)
 
 ### 6.1 Core Modules
 
@@ -510,7 +554,7 @@ Activated via `ENABLE_FIGMA=1` environment variable. Extracts design tokens and 
 
 ## 8. Test Coverage
 
-### 8.1 Test Files (66 total)
+### 8.1 Test Files (69 total)
 
 | Category | Files | Purpose |
 |----------|-------|---------|
