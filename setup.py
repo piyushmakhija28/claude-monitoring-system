@@ -50,6 +50,7 @@ setup(
     entry_points={
         'console_scripts': [
             'claude-workflow=langgraph_engine.run_pipeline:main',
+            'cwe=scripts.cli:main',
         ],
     },
 
