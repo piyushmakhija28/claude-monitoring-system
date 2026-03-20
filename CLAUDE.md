@@ -19,7 +19,7 @@ Claude Workflow Engine is a 3-level LangGraph-based orchestration pipeline for a
 | **Frameworks** | LangGraph 0.2.0+, LangChain, FastMCP (mcp package), Qdrant |
 | **Status** | Active Development |
 | **Primary Location** | scripts/langgraph_engine/ |
-| **MCP Servers** | 18 (313 tools) |
+| **MCP Servers** | 19 (323 tools) |
 | **Total Python Files** | 290+ |
 | **Test Files** | 66 |
 | **Call Graph** | 578 classes, 3,985 methods, 4 languages (Python/Java/TS/Kotlin) |
@@ -99,8 +99,9 @@ Level 3: Execution (15 steps: Step 0 through Step 14)
 | Test Generator | scripts/langgraph_engine/test_generator.py | Template-based unit tests (4 languages) |
 | Coverage Analyzer | scripts/langgraph_engine/coverage_analyzer.py | AST-based coverage, risk-prioritized |
 | Jira Workflow | scripts/langgraph_engine/level3_steps8to12_jira.py | Dual GitHub+Jira integration (Steps 8/9/11/12) |
+| Figma Workflow | scripts/langgraph_engine/level3_figma_workflow.py | Design-to-code (components, tokens, review) (Steps 3/7/11) |
 
-### MCP Servers (18 servers, 313 tools)
+### MCP Servers (19 servers, 323 tools)
 
 All registered in `~/.claude/settings.json`. Version synced via `scripts/sync-version.py`.
 
@@ -120,6 +121,7 @@ All registered in `~/.claude/settings.json`. Version synced via `scripts/sync-ve
 | uml-diagram | uml_diagram_mcp_server.py | 15 | UML generation (13 diagram types, CallGraph + AST + LLM, Mermaid/PlantUML, Kroki.io) |
 | jira-api | jira_mcp_server.py | 10 | Jira (create/search/transition issues, link PRs, Cloud+Server, ADF+plain text) |
 | jenkins-api | jenkins_mcp_server.py | 10 | Jenkins CI/CD (trigger/abort builds, console output, queue, build polling) |
+| figma-api | figma_mcp_server.py | 10 | Figma (file info, components, design tokens, styles, design review) |
 
 ### RAG Integration
 
@@ -175,6 +177,7 @@ All integrations are configurable via environment variables (default: disabled):
 | `ENABLE_JIRA` | `0` | Dual GitHub+Jira issue tracking (Steps 8,9,11,12) |
 | `ENABLE_JENKINS` | `0` | Jenkins build validation (Step 11) |
 | `ENABLE_SONARQUBE` | `0` | SonarQube scan after implementation (Step 10) |
+| `ENABLE_FIGMA` | `0` | Figma design-to-code extraction (Steps 3,7,11) |
 | `ENABLE_CI` | `true` | GitHub Actions CI pipeline |
 
 ---

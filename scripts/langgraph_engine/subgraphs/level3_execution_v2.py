@@ -1009,6 +1009,28 @@ def step3_task_breakdown_node(state: FlowState) -> Dict[str, Any]:
     except Exception as e:
         logger.debug("[v2] Step 3 file mapping skipped: %s", e)
 
+    # -- Figma Integration: extract components to inform task breakdown ----
+    if os.environ.get("ENABLE_FIGMA", "0") == "1":
+        try:
+            from level3_figma_workflow import Level3FigmaWorkflow
+            figma_wf = Level3FigmaWorkflow()
+            file_key = figma_wf.detect_figma_url(state.get("user_message", ""))
+            if file_key:
+                comp_result = figma_wf.step3_extract_components(file_key)
+                result["figma_enabled"] = True
+                result["figma_file_key"] = file_key
+                result["figma_components"] = comp_result.get("components", [])
+                if not comp_result.get("success"):
+                    result["figma_error"] = comp_result.get("error", "Unknown")
+                logger.info(
+                    "[v2] Figma components extracted: %d components",
+                    comp_result.get("total_components", 0),
+                )
+        except Exception as e:
+            logger.warning("[v2] Figma integration (step3) failed (non-blocking): %s", str(e))
+            result["figma_enabled"] = True
+            result["figma_error"] = str(e)
+
     return result
 
 
@@ -1134,7 +1156,7 @@ def step7_final_prompt_node(state: FlowState) -> Dict[str, Any]:
                 "step7_error": f"IOError: {io_err}",
             }
 
-    return _run_step(
+    result = _run_step(
         7, "Final Prompt Generation",
         _with_file_error_handling,
         state,
@@ -1143,6 +1165,35 @@ def step7_final_prompt_node(state: FlowState) -> Dict[str, Any]:
             "step7_error": "Step 7 failed",
         },
     )
+
+    # -- Figma Integration: inject design tokens into prompt snippet -------
+    if os.environ.get("ENABLE_FIGMA", "0") == "1":
+        file_key = state.get("figma_file_key", "")
+        if not file_key:
+            try:
+                from level3_figma_workflow import Level3FigmaWorkflow
+                figma_wf = Level3FigmaWorkflow()
+                file_key = figma_wf.detect_figma_url(state.get("user_message", ""))
+            except Exception as e:
+                logger.warning("[v2] Figma URL detection (step7) failed (non-blocking): %s", str(e))
+        if file_key:
+            try:
+                from level3_figma_workflow import Level3FigmaWorkflow
+                figma_wf = Level3FigmaWorkflow()
+                token_result = figma_wf.step7_extract_design_tokens(file_key)
+                result["figma_enabled"] = True
+                result["figma_file_key"] = file_key
+                result["figma_design_tokens"] = token_result.get("design_tokens", {})
+                result["figma_prompt_snippet"] = token_result.get("prompt_snippet", "")
+                if not token_result.get("success"):
+                    result["figma_error"] = token_result.get("error", "Unknown")
+                logger.info("[v2] Figma design tokens injected into Step 7 prompt")
+            except Exception as e:
+                logger.warning("[v2] Figma integration (step7) failed (non-blocking): %s", str(e))
+                result["figma_enabled"] = True
+                result["figma_error"] = str(e)
+
+    return result
 
 
 def step8_github_issue_node(state: FlowState) -> Dict[str, Any]:
@@ -1714,6 +1765,35 @@ def step11_pull_request_node(state: FlowState) -> Dict[str, Any]:
             result["step11_interaction_questions"] = len(questions)
     except Exception as e:
         logger.debug("[v2] Step 11 user interaction skipped: %s", e)
+
+    # -- Figma Integration: design implementation review ------------------
+    if os.environ.get("ENABLE_FIGMA", "0") == "1":
+        file_key = state.get("figma_file_key", "")
+        if file_key:
+            try:
+                from level3_figma_workflow import Level3FigmaWorkflow
+                figma_wf = Level3FigmaWorkflow()
+                impl_summary = result.get("step11_review_summary", "") or state.get(
+                    "step10_implementation_summary", ""
+                )
+                review_result = figma_wf.step11_design_review(
+                    file_key=file_key,
+                    implementation_summary=impl_summary,
+                )
+                if review_result.get("success"):
+                    existing_issues = result.get("step11_review_issues", [])
+                    checklist_text = review_result.get("checklist_text", "")
+                    if checklist_text:
+                        existing_issues.append("DESIGN REVIEW:\n" + checklist_text)
+                    result["step11_review_issues"] = existing_issues
+                    logger.info(
+                        "[v2] Figma design review completed: %d items",
+                        len(review_result.get("review_items", [])),
+                    )
+                else:
+                    result["figma_error"] = review_result.get("error", "Unknown")
+            except Exception as e:
+                logger.warning("[v2] Figma integration (step11) failed (non-blocking): %s", str(e))
 
     return result
 

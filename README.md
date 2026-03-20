@@ -292,7 +292,7 @@ The single data source for all 13 UML diagram types is also the call graph - `um
 - Checkpoint recovery (resume from any step after crash)
 - Signal handling (Ctrl+C graceful recovery)
 
-### 18 MCP Servers (313 tools)
+### 19 MCP Servers (323 tools)
 
 All servers use FastMCP protocol (stdio JSON-RPC), registered in `~/.claude/settings.json`:
 
@@ -316,6 +316,7 @@ All servers use FastMCP protocol (stdio JSON-RPC), registered in `~/.claude/sett
 | uml-diagram | uml_diagram_mcp_server.py | 15 | UML generation (13 diagram types, AST + LLM, Mermaid/PlantUML, Kroki.io rendering) |
 | jira-api | jira_mcp_server.py | 10 | Jira (create/get/search/transition issues, add comments, link PRs, Cloud + Server) |
 | jenkins-api | jenkins_mcp_server.py | 10 | Jenkins CI/CD (trigger/abort builds, console output, job info, queue, build polling) |
+| figma-api | figma_mcp_server.py | 10 | Figma (file info, components, component sets, design tokens, named styles, design review) |
 
 ### RAG Integration (Vector DB Decision Caching)
 
@@ -550,8 +551,8 @@ claude-insight/
 |--------|-------|
 | Pipeline Levels | 4 (Level -1, 1, 2, 3) |
 | Execution Steps | 15 (Step 0 - Step 14) |
-| MCP Servers | 18 (313 tools) |
-| MCP Tools | 313 |
+| MCP Servers | 19 (323 tools) |
+| MCP Tools | 323 |
 | LangGraph Engine Modules | 91 (85 root + 6 subgraphs) |
 | Policy Files | 63 (62 .md + 1 .json) |
 | Standards Files | 10 |
@@ -584,6 +585,7 @@ No other AI coding tool automates the full Software Development Life Cycle. Here
 | **Skill/agent selection (16 skills, 13 agents)** | Yes (Step 5, RAG-powered) | No | No | No | No |
 | **Auto GitHub issue creation** | Yes (Step 8) | No | No | No | No |
 | **Dual issue tracking (GitHub + Jira)** | Yes (configurable) | No | No | No | No |
+| **Figma design-to-code extraction** | Yes (Steps 3,7,11) | No | No | No | No |
 | **Auto branch creation** | Yes (Step 9) | No | No | No | No |
 | **Auto PR creation** | Yes (Step 11) | No | No | No | No |
 | **5-layer code review** | Yes (Step 11) | No | No | No | No |
@@ -849,6 +851,77 @@ For Jenkins servers with self-signed SSL certificates:
 ```bash
 JENKINS_VERIFY_SSL=false
 ```
+
+---
+
+## Figma Integration
+
+The engine supports Figma for design-to-code workflows, extracting design tokens and components at Steps 3, 7, and 11 to inform implementation with accurate UI specifications.
+
+### Setup
+
+```bash
+# In your .env file:
+ENABLE_FIGMA=1
+FIGMA_ACCESS_TOKEN=figd_...   # Figma > Account Settings > Personal Access Tokens
+FIGMA_TEAM_ID=                # Optional: your Figma team ID
+```
+
+**Generate Access Token:**
+1. Log into Figma
+2. Click your avatar (top-right) > Account Settings
+3. Scroll to "Personal access tokens"
+4. Click "Create new token"
+5. Copy and store securely
+
+### Pipeline Integration
+
+| Step | How Figma Is Used |
+|------|-------------------|
+| Step 3 | Extract component list and pages to inform task breakdown |
+| Step 7 | Extract design tokens (colors, typography, spacing) and inject as prompt snippet |
+| Step 11 | Run design review checklist against implementation summary |
+
+### Available Tools (10)
+
+| Tool | Description |
+|------|-------------|
+| `figma_get_file_info` | Get file metadata (name, pages, last modified) |
+| `figma_get_components` | List all components and component sets in a file |
+| `figma_get_styles` | Get named styles (color, text, effect, grid) |
+| `figma_extract_design_tokens` | Extract color, typography, spacing, radii, and shadow tokens |
+| `figma_get_node` | Get a specific node by ID |
+| `figma_get_images` | Export nodes as images (PNG/SVG/PDF) |
+| `figma_get_comments` | Get all comments in a file |
+| `figma_post_comment` | Post a comment to a file |
+| `figma_get_team_projects` | List projects for a team |
+| `figma_health_check` | Verify Figma API connectivity and token validity |
+
+### MCP Registration
+
+Add to `~/.claude/settings.json`:
+```json
+{
+  "mcpServers": {
+    "figma-api": {
+      "command": "python",
+      "args": ["path/to/src/mcp/figma_mcp_server.py"],
+      "env": {
+        "FIGMA_ACCESS_TOKEN": "figd_your_token_here",
+        "FIGMA_TEAM_ID": ""
+      }
+    }
+  }
+}
+```
+
+### Design Token Extraction
+
+When a Figma URL is detected in the task description, the pipeline automatically:
+1. Extracts the file key from the URL (supports `/file/` and `/design/` URL formats)
+2. Fetches color, typography, spacing, border-radius, and shadow tokens
+3. Formats them as a Markdown snippet and injects it into the Step 7 implementation prompt
+4. Runs a design compliance checklist during Step 11 code review
 
 ---
 

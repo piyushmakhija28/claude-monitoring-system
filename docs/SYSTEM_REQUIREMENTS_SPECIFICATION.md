@@ -10,7 +10,7 @@
 
 ## 1. Executive Summary
 
-Claude Workflow Engine v1.4.1 is a 3-level LangGraph-based orchestration pipeline for automating Claude Code development workflows. It provides 18 FastMCP servers (313 tools), 91 LangGraph engine modules, 63 policy definitions, a RAG integration layer with 4 Vector DB collections, and a comprehensive hook system for pre/post tool enforcement.
+Claude Workflow Engine v1.4.1 is a 3-level LangGraph-based orchestration pipeline for automating Claude Code development workflows. It provides 19 FastMCP servers (323 tools), 91 LangGraph engine modules, 63 policy definitions, a RAG integration layer with 4 Vector DB collections, and a comprehensive hook system for pre/post tool enforcement.
 
 ### Key Statistics
 
@@ -19,8 +19,8 @@ Claude Workflow Engine v1.4.1 is a 3-level LangGraph-based orchestration pipelin
 | **Version** | 1.4.1 |
 | **Pipeline Levels** | 4 (Level -1, Level 1, Level 2, Level 3) |
 | **Execution Steps** | 15 (Step 0 through Step 14) |
-| **MCP Servers** | 18 |
-| **MCP Tools** | 313 |
+| **MCP Servers** | 19 |
+| **MCP Tools** | 323 |
 | **LangGraph Engine Modules** | 91 (85 root + 6 subgraphs) |
 | **Policy Files** | 63 (62 .md + 1 .json) |
 | **Test Files** | 66 (63 root + 3 integration) |
@@ -123,7 +123,7 @@ Level 3: 15-Step Execution Pipeline (Step 0-14)
 RESULT (flow-trace.json + session finalized)
 ```
 
-### 3.2 MCP Server Architecture (18 Servers, 313 Tools)
+### 3.2 MCP Server Architecture (19 Servers, 323 Tools)
 
 All servers use FastMCP framework, communicate via stdio, and are registered in `~/.claude/settings.json`.
 
@@ -147,6 +147,7 @@ All servers use FastMCP framework, communicate via stdio, and are registered in 
 | 16 | **openai-provider** | openai_mcp_server.py | 8 | OpenAI GPT direct access (text generation, health, model list, cost estimation; stdlib-only) |
 | 17 | **jira-api** | jira_mcp_server.py | 12 | Jira issue lifecycle (create, update, transition, comment, search, link to GitHub PR) |
 | 18 | **jenkins-api** | jenkins_mcp_server.py | 8 | Jenkins CI/CD (trigger build, get status, get logs, abort, list jobs, pipeline validation) |
+| 19 | **figma-api** | figma_mcp_server.py | 10 | Figma design-to-code (file info, components, design tokens, named styles, design review) |
 
 ### 3.3 RAG Integration Architecture
 
@@ -362,6 +363,20 @@ Activated via `ENABLE_JENKINS=1` environment variable. Provides CI/CD build vali
 | FR-JENKINS-02 | Poll build status and surface result (SUCCESS/FAILURE/ABORTED) | jenkins_get_build_status | Done |
 | FR-JENKINS-03 | Attach Jenkins build URL and result to PR description | github_update_pr | Done |
 | FR-JENKINS-04 | Block PR merge if Jenkins build fails (Quality Gate integration) | quality_gate.py | Done |
+
+### 4.12 Figma Integration (FR-FIGMA) - NEW in v1.4.1
+
+Activated via `ENABLE_FIGMA=1` environment variable. Extracts design tokens and components from Figma files referenced in task descriptions.
+
+| ID | Requirement | MCP Tool | Status |
+|----|-------------|----------|--------|
+| FR-FIGMA-01 | Detect Figma URL in user task message and extract file key | level3_figma_workflow.detect_figma_url | Done |
+| FR-FIGMA-02 | Extract components and pages at Step 3 to inform task breakdown | figma_get_components | Done |
+| FR-FIGMA-03 | Store extracted component list in FlowState.figma_components | FlowState.figma_components | Done |
+| FR-FIGMA-04 | Extract design tokens (colors, typography, spacing, radii, shadows) at Step 7 | figma_extract_design_tokens | Done |
+| FR-FIGMA-05 | Inject formatted design token snippet into Step 7 implementation prompt | FlowState.figma_prompt_snippet | Done |
+| FR-FIGMA-06 | Run design compliance checklist at Step 11 and append to PR review issues | level3_figma_workflow.step11_design_review | Done |
+| FR-FIGMA-07 | Graceful non-blocking skip of all Figma steps when ENABLE_FIGMA=0 (default) | level3_figma_workflow.py | Done |
 
 ---
 

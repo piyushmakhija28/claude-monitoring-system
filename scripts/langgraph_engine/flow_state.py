@@ -568,6 +568,14 @@ class FlowState(TypedDict, total=False):
     jira_issue_closed: bool                    # Jira issue closed/Done
     jira_error: Optional[str]                  # Last Jira error (non-blocking)
 
+    # -- Figma Integration (optional, ENABLE_FIGMA=1) ----------------------
+    figma_enabled: bool                        # Figma integration active
+    figma_file_key: Optional[str]              # Figma file key extracted from URL
+    figma_design_tokens: Optional[Dict]        # Extracted design tokens (colors, typography, etc.)
+    figma_components: Optional[List]           # Extracted component list
+    figma_prompt_snippet: Optional[str]        # Design token summary injected into prompt
+    figma_error: Optional[str]                 # Last Figma error (non-blocking)
+
     # Step 13: Project Documentation (PHASE 2A - Renamed from existing)
     step13_updates_prepared: bool              # Documentation updates prepared
     step13_update_count: int                   # Number of updates
@@ -832,6 +840,15 @@ class StepKeys:
     JIRA_PR_LINKED = "jira_pr_linked"
     JIRA_ISSUE_CLOSED = "jira_issue_closed"
     JIRA_ERROR = "jira_error"
+
+    # ------------------------------------------------------------------
+    # FIGMA INTEGRATION
+    # ------------------------------------------------------------------
+    FIGMA_ENABLED = "figma_enabled"
+    FIGMA_FILE_KEY = "figma_file_key"
+    FIGMA_DESIGN_TOKENS = "figma_design_tokens"
+    FIGMA_PROMPT_SNIPPET = "figma_prompt_snippet"
+    FIGMA_ERROR = "figma_error"
 
     # ------------------------------------------------------------------
     # STEP 13: DOCUMENTATION
