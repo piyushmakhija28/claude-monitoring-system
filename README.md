@@ -292,7 +292,7 @@ The single data source for all 13 UML diagram types is also the call graph - `um
 - Checkpoint recovery (resume from any step after crash)
 - Signal handling (Ctrl+C graceful recovery)
 
-### 16 MCP Servers (293 tools)
+### 18 MCP Servers (313 tools)
 
 All servers use FastMCP protocol (stdio JSON-RPC), registered in `~/.claude/settings.json`:
 
@@ -314,6 +314,8 @@ All servers use FastMCP protocol (stdio JSON-RPC), registered in `~/.claude/sett
 | skill-manager | skill_manager_mcp_server.py | 8 | Skill lifecycle (load, search, validate, rank, conflicts) |
 | vector-db | vector_db_mcp_server.py | 11 | Vector RAG (Qdrant, 4 collections, semantic search, node decisions) |
 | uml-diagram | uml_diagram_mcp_server.py | 15 | UML generation (13 diagram types, AST + LLM, Mermaid/PlantUML, Kroki.io rendering) |
+| jira-api | jira_mcp_server.py | 10 | Jira (create/get/search/transition issues, add comments, link PRs, Cloud + Server) |
+| jenkins-api | jenkins_mcp_server.py | 10 | Jenkins CI/CD (trigger/abort builds, console output, job info, queue, build polling) |
 
 ### RAG Integration (Vector DB Decision Caching)
 
@@ -548,8 +550,8 @@ claude-insight/
 |--------|-------|
 | Pipeline Levels | 4 (Level -1, 1, 2, 3) |
 | Execution Steps | 15 (Step 0 - Step 14) |
-| MCP Servers | 16 (293 tools) |
-| MCP Tools | 293 |
+| MCP Servers | 18 (313 tools) |
+| MCP Tools | 313 |
 | LangGraph Engine Modules | 90 (84 root + 6 subgraphs) |
 | Policy Files | 63 (62 .md + 1 .json) |
 | Standards Files | 10 |
@@ -685,6 +687,146 @@ SonarQube is configurable via environment variables:
 | SONAR_TOKEN | (none) | Authentication token |
 | SONAR_PROJECT_KEY | (auto-detect) | Project identifier |
 | SONAR_ORGANIZATION | (none) | SonarCloud organization |
+
+---
+
+## Jira Integration
+
+The engine supports Jira as an alternative or complement to GitHub Issues for issue tracking in Steps 8 and 12.
+
+### Setup
+
+1. **Jira Cloud:**
+   ```bash
+   # In your .env file:
+   JIRA_URL=https://your-domain.atlassian.net
+   JIRA_USER=your-email@company.com
+   JIRA_API_TOKEN=your-api-token  # from https://id.atlassian.com/manage-profile/security/api-tokens
+   JIRA_API_VERSION=3
+   ```
+
+2. **Jira Server/Data Center:**
+   ```bash
+   JIRA_URL=https://jira.your-company.com
+   JIRA_USER=your-username
+   JIRA_API_TOKEN=your-personal-access-token
+   JIRA_API_VERSION=2
+   JIRA_AUTH_METHOD=bearer
+   ```
+
+### Available Tools (10)
+
+| Tool | Description |
+|------|-------------|
+| `jira_create_issue` | Create issue with project key, summary, type, description, labels |
+| `jira_get_issue` | Get full issue details by key (e.g., PROJ-123) |
+| `jira_search_issues` | Search using JQL (Jira Query Language) |
+| `jira_transition_issue` | Move issue through workflow states (e.g., To Do -> In Progress -> Done) |
+| `jira_add_comment` | Add comment to an issue |
+| `jira_link_pr` | Link a GitHub PR to a Jira issue via remote links |
+| `jira_list_projects` | List all accessible Jira projects |
+| `jira_get_transitions` | Get available workflow transitions for an issue |
+| `jira_update_issue` | Update issue fields (summary, description, labels, assignee) |
+| `jira_health_check` | Verify Jira server connectivity |
+
+### Pipeline Integration
+
+| Step | How Jira Is Used |
+|------|-----------------|
+| Step 8 | Create Jira issue (alternative to GitHub Issue) |
+| Step 9 | Branch name uses Jira issue key (e.g., `feature/PROJ-123`) |
+| Step 11 | Link PR to Jira issue via `jira_link_pr` |
+| Step 12 | Transition issue to "Done" + add implementation comment |
+
+### MCP Registration
+
+Add to `~/.claude/settings.json`:
+```json
+{
+  "mcpServers": {
+    "jira-api": {
+      "command": "python",
+      "args": ["path/to/src/mcp/jira_mcp_server.py"],
+      "env": {
+        "JIRA_URL": "https://your-domain.atlassian.net",
+        "JIRA_USER": "your-email@company.com",
+        "JIRA_API_TOKEN": "your-token"
+      }
+    }
+  }
+}
+```
+
+---
+
+## Jenkins Integration
+
+The engine supports Jenkins for build validation and CI/CD operations, complementing or replacing GitHub Actions in Step 11.
+
+### Setup
+
+```bash
+# In your .env file:
+JENKINS_URL=https://jenkins.your-company.com
+JENKINS_USER=your-username
+JENKINS_API_TOKEN=your-api-token  # Jenkins > Your Name > Configure > API Token
+```
+
+**Generate API Token:**
+1. Log into Jenkins
+2. Click your username (top-right)
+3. Click "Configure"
+4. Under "API Token", click "Add new Token"
+5. Copy and store securely
+
+### Available Tools (10)
+
+| Tool | Description |
+|------|-------------|
+| `jenkins_trigger_build` | Trigger a build with optional parameters |
+| `jenkins_get_build_status` | Get build result, duration, and status |
+| `jenkins_get_console_output` | Get build console log (auto-truncated to 10K chars) |
+| `jenkins_list_jobs` | List all Jenkins jobs with last build info |
+| `jenkins_get_job_info` | Get detailed job configuration and health |
+| `jenkins_list_builds` | List recent builds for a job |
+| `jenkins_abort_build` | Stop a running build |
+| `jenkins_get_queue_info` | Get build queue status |
+| `jenkins_wait_for_build` | Poll build status until complete (configurable timeout) |
+| `jenkins_health_check` | Verify Jenkins server connectivity |
+
+### Pipeline Integration
+
+| Step | How Jenkins Is Used |
+|------|---------------------|
+| Step 10 | Trigger build after implementation |
+| Step 11 | Validate build passes before PR (alternative to `github_validate_build`) |
+| Step 11 | Get console output for failed builds in code review |
+
+### MCP Registration
+
+Add to `~/.claude/settings.json`:
+```json
+{
+  "mcpServers": {
+    "jenkins-api": {
+      "command": "python",
+      "args": ["path/to/src/mcp/jenkins_mcp_server.py"],
+      "env": {
+        "JENKINS_URL": "https://jenkins.your-company.com",
+        "JENKINS_USER": "your-username",
+        "JENKINS_API_TOKEN": "your-token"
+      }
+    }
+  }
+}
+```
+
+### Self-Signed Certificates
+
+For Jenkins servers with self-signed SSL certificates:
+```bash
+JENKINS_VERIFY_SSL=false
+```
 
 ---
 

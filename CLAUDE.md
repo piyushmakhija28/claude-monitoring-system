@@ -19,7 +19,7 @@ Claude Workflow Engine is a 3-level LangGraph-based orchestration pipeline for a
 | **Frameworks** | LangGraph 0.2.0+, LangChain, FastMCP (mcp package), Qdrant |
 | **Status** | Active Development |
 | **Primary Location** | scripts/langgraph_engine/ |
-| **MCP Servers** | 16 (293 tools) |
+| **MCP Servers** | 18 (313 tools) |
 | **Total Python Files** | 226 |
 | **Test Files** | 64 |
 | **Call Graph** | 578 classes, 3,985 methods, 4 languages (Python/Java/TS/Kotlin) |
@@ -67,7 +67,7 @@ Level 3: Execution (15 steps: Step 0 through Step 14)
 |   +-- 01-sync-system/               # Level 1 policies
 |   +-- 02-standards-system/          # Level 2 policies (+ tool optimization, MCP discovery)
 |   +-- 03-execution-system/          # Level 3 policies (15 steps + RAG, CallGraph, QualityGate, hooks)
-+-- src/mcp/                          # 16 FastMCP servers (293 tools)
++-- src/mcp/                          # 18 FastMCP servers (313 tools)
 +-- tests/                            # 64 test files (61 root + 3 integration)
 +-- docs/                             # 46 documentation files
 +-- docs/uml/                         # Auto-generated UML diagrams (13 types)
@@ -99,7 +99,7 @@ Level 3: Execution (15 steps: Step 0 through Step 14)
 | Test Generator | scripts/langgraph_engine/test_generator.py | Template-based unit tests (4 languages) |
 | Coverage Analyzer | scripts/langgraph_engine/coverage_analyzer.py | AST-based coverage, risk-prioritized |
 
-### MCP Servers (16 servers, 293 tools)
+### MCP Servers (18 servers, 313 tools)
 
 All registered in `~/.claude/settings.json`. Version synced via `scripts/sync-version.py`.
 
@@ -117,6 +117,8 @@ All registered in `~/.claude/settings.json`. Version synced via `scripts/sync-ve
 | skill-manager | skill_manager_mcp_server.py | 8 | Skill lifecycle (load, search, validate, rank, conflicts) |
 | vector-db | vector_db_mcp_server.py | 11 | Vector RAG (Qdrant, 4 collections, semantic search, bulk index, node decisions) |
 | uml-diagram | uml_diagram_mcp_server.py | 15 | UML generation (13 diagram types, CallGraph + AST + LLM, Mermaid/PlantUML, Kroki.io) |
+| jira-api | jira_mcp_server.py | 10 | Jira (create/search/transition issues, link PRs, Cloud+Server, ADF+plain text) |
+| jenkins-api | jenkins_mcp_server.py | 10 | Jenkins CI/CD (trigger/abort builds, console output, queue, build polling) |
 
 ### RAG Integration
 
