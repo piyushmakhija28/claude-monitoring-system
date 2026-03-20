@@ -20,8 +20,8 @@ Claude Workflow Engine is a 3-level LangGraph-based orchestration pipeline for a
 | **Status** | Active Development |
 | **Primary Location** | scripts/langgraph_engine/ |
 | **MCP Servers** | 18 (313 tools) |
-| **Total Python Files** | 226 |
-| **Test Files** | 64 |
+| **Total Python Files** | 290+ |
+| **Test Files** | 66 |
 | **Call Graph** | 578 classes, 3,985 methods, 4 languages (Python/Java/TS/Kotlin) |
 
 ---
@@ -60,15 +60,15 @@ Level 3: Execution (15 steps: Step 0 through Step 14)
 ```
 /
 +-- scripts/                          # Pipeline scripts and hooks
-|   +-- langgraph_engine/             # Core orchestration (90 modules: 84 root + 6 subgraph files)
+|   +-- langgraph_engine/             # Core orchestration (91 modules: 85 root + 6 subgraph files)
 |   +-- architecture/                 # Active pipeline scripts (6 scripts + 1 data file)
 +-- policies/                         # 63 policy definitions (62 .md + 1 .json)
 |   +-- 00-auto-fix-system/           # Level -1 policies (Unicode, encoding, paths, recovery)
 |   +-- 01-sync-system/               # Level 1 policies
 |   +-- 02-standards-system/          # Level 2 policies (+ tool optimization, MCP discovery)
 |   +-- 03-execution-system/          # Level 3 policies (15 steps + RAG, CallGraph, QualityGate, hooks)
-+-- src/mcp/                          # 18 FastMCP servers (313 tools)
-+-- tests/                            # 64 test files (61 root + 3 integration)
++-- src/mcp/                          # 18 FastMCP servers (313 tools, 10,000+ LOC)
++-- tests/                            # 66 test files
 +-- docs/                             # 46 documentation files
 +-- docs/uml/                         # Auto-generated UML diagrams (13 types)
 +-- rules/                            # 10 coding standard definitions
@@ -98,6 +98,7 @@ Level 3: Execution (15 steps: Step 0 through Step 14)
 | Quality Gate | scripts/langgraph_engine/quality_gate.py | 4-gate merge enforcement |
 | Test Generator | scripts/langgraph_engine/test_generator.py | Template-based unit tests (4 languages) |
 | Coverage Analyzer | scripts/langgraph_engine/coverage_analyzer.py | AST-based coverage, risk-prioritized |
+| Jira Workflow | scripts/langgraph_engine/level3_steps8to12_jira.py | Dual GitHub+Jira integration (Steps 8/9/11/12) |
 
 ### MCP Servers (18 servers, 313 tools)
 
@@ -164,6 +165,17 @@ Hook Mode (default, CLAUDE_HOOK_MODE=1):
 Full Mode (CLAUDE_HOOK_MODE=0):
   Steps 0-14  -> All steps execute sequentially
 ```
+
+### Integration Flags
+
+All integrations are configurable via environment variables (default: disabled):
+
+| Flag | Default | Effect |
+|------|---------|--------|
+| `ENABLE_JIRA` | `0` | Dual GitHub+Jira issue tracking (Steps 8,9,11,12) |
+| `ENABLE_JENKINS` | `0` | Jenkins build validation (Step 11) |
+| `ENABLE_SONARQUBE` | `0` | SonarQube scan after implementation (Step 10) |
+| `ENABLE_CI` | `true` | GitHub Actions CI pipeline |
 
 ---
 

@@ -10,7 +10,7 @@
 
 ## 1. Executive Summary
 
-Claude Workflow Engine v1.4.1 is a 3-level LangGraph-based orchestration pipeline for automating Claude Code development workflows. It provides 16 FastMCP servers (293 tools), 90 LangGraph engine modules, 63 policy definitions, a RAG integration layer with 4 Vector DB collections, and a comprehensive hook system for pre/post tool enforcement.
+Claude Workflow Engine v1.4.1 is a 3-level LangGraph-based orchestration pipeline for automating Claude Code development workflows. It provides 18 FastMCP servers (313 tools), 91 LangGraph engine modules, 63 policy definitions, a RAG integration layer with 4 Vector DB collections, and a comprehensive hook system for pre/post tool enforcement.
 
 ### Key Statistics
 
@@ -19,12 +19,12 @@ Claude Workflow Engine v1.4.1 is a 3-level LangGraph-based orchestration pipelin
 | **Version** | 1.4.1 |
 | **Pipeline Levels** | 4 (Level -1, Level 1, Level 2, Level 3) |
 | **Execution Steps** | 15 (Step 0 through Step 14) |
-| **MCP Servers** | 16 |
-| **MCP Tools** | 293 |
-| **LangGraph Engine Modules** | 90 (84 root + 6 subgraphs) |
+| **MCP Servers** | 18 |
+| **MCP Tools** | 313 |
+| **LangGraph Engine Modules** | 91 (85 root + 6 subgraphs) |
 | **Policy Files** | 63 (62 .md + 1 .json) |
-| **Test Files** | 64 (61 root + 3 integration) |
-| **Total Python Files** | 226 |
+| **Test Files** | 66 (63 root + 3 integration) |
+| **Total Python Files** | 290+ |
 | **RAG Collections** | 4 |
 | **LLM Providers** | 4 (Ollama, Claude CLI, Anthropic API, OpenAI) |
 | **Coding Standards** | 10 rule files |
@@ -123,7 +123,7 @@ Level 3: 15-Step Execution Pipeline (Step 0-14)
 RESULT (flow-trace.json + session finalized)
 ```
 
-### 3.2 MCP Server Architecture (16 Servers, 293 Tools)
+### 3.2 MCP Server Architecture (18 Servers, 313 Tools)
 
 All servers use FastMCP framework, communicate via stdio, and are registered in `~/.claude/settings.json`.
 
@@ -145,6 +145,8 @@ All servers use FastMCP framework, communicate via stdio, and are registered in 
 | 14 | **ollama-provider** | ollama_mcp_server.py | 10 | Local Ollama GPU inference (model management, generation, health check; stdlib-only, no SDK) |
 | 15 | **anthropic-provider** | anthropic_mcp_server.py | 8 | Anthropic Claude API direct access (Claude model generation, health, cost estimation) |
 | 16 | **openai-provider** | openai_mcp_server.py | 8 | OpenAI GPT direct access (text generation, health, model list, cost estimation; stdlib-only) |
+| 17 | **jira-api** | jira_mcp_server.py | 12 | Jira issue lifecycle (create, update, transition, comment, search, link to GitHub PR) |
+| 18 | **jenkins-api** | jenkins_mcp_server.py | 8 | Jenkins CI/CD (trigger build, get status, get logs, abort, list jobs, pipeline validation) |
 
 ### 3.3 RAG Integration Architecture
 
@@ -187,7 +189,7 @@ Vector DB Collections (Qdrant):
 ```
 claude-insight/
 +-- scripts/                          # Pipeline scripts and hooks
-|   +-- langgraph_engine/             # Core orchestration (90 modules: 84 root + 6 subgraph files)
+|   +-- langgraph_engine/             # Core orchestration (91 modules: 85 root + 6 subgraph files)
 |   |   +-- orchestrator.py           # Main StateGraph pipeline
 |   |   +-- flow_state.py             # FlowState TypedDict
 |   |   +-- rag_integration.py        # RAG layer
@@ -198,9 +200,9 @@ claude-insight/
 |   +-- 01-sync-system/               # Level 1 policies
 |   +-- 02-standards-system/          # Level 2 policies
 |   +-- 03-execution-system/          # Level 3 policies (15 steps: 0-14)
-+-- src/mcp/                          # 16 FastMCP servers (293 tools)
++-- src/mcp/                          # 18 FastMCP servers (313 tools)
 |   +-- session_hooks.py              # Bridge: direct Python import for MCP tools
-+-- tests/                            # 64 test files (61 root + 3 integration)
++-- tests/                            # 66 test files (63 root + 3 integration)
 |   +-- integration/                  # 3 integration test files
 +-- docs/                             # 46 documentation files
 +-- rules/                            # 10 coding standard definitions
@@ -337,6 +339,30 @@ claude-insight/
 | FR-EXEC-13 | Step 13 | Documentation update (SRS, README, CLAUDE.md) | Done |
 | FR-EXEC-14 | Step 14 | Final summary generation (narrative format) | Done |
 
+### 4.10 Jira Integration (FR-JIRA) - NEW in v1.4.1
+
+Activated via `ENABLE_JIRA=1` environment variable. When enabled, Jira runs alongside GitHub for dual issue tracking.
+
+| ID | Requirement | MCP Tool | Status |
+|----|-------------|----------|--------|
+| FR-JIRA-01 | Create Jira issue at Step 8 alongside GitHub issue | jira_create_issue | Done |
+| FR-JIRA-02 | Store Jira issue key in FlowState for downstream steps | FlowState.jira_issue_key | Done |
+| FR-JIRA-03 | Create Jira sub-task for branch at Step 9 | jira_create_subtask | Done |
+| FR-JIRA-04 | Transition Jira issue to "In Review" at Step 11 and link to GitHub PR | jira_transition_issue | Done |
+| FR-JIRA-05 | Transition Jira issue to "Done" and add PR URL comment at Step 12 | jira_close_issue | Done |
+| FR-JIRA-06 | Graceful skip of all Jira steps when ENABLE_JIRA=0 (default) | level3_steps8to12_jira.py | Done |
+
+### 4.11 Jenkins Integration (FR-JENKINS) - NEW in v1.4.1
+
+Activated via `ENABLE_JENKINS=1` environment variable. Provides CI/CD build validation during PR review.
+
+| ID | Requirement | MCP Tool | Status |
+|----|-------------|----------|--------|
+| FR-JENKINS-01 | Trigger Jenkins build for the feature branch at Step 11 | jenkins_trigger_build | Done |
+| FR-JENKINS-02 | Poll build status and surface result (SUCCESS/FAILURE/ABORTED) | jenkins_get_build_status | Done |
+| FR-JENKINS-03 | Attach Jenkins build URL and result to PR description | github_update_pr | Done |
+| FR-JENKINS-04 | Block PR merge if Jenkins build fails (Quality Gate integration) | quality_gate.py | Done |
+
 ---
 
 ## 5. Non-Functional Requirements
@@ -383,8 +409,8 @@ claude-insight/
 |----|-------------|--------|
 | NFR-MAINT-01 | Single VERSION file as source of truth | Done |
 | NFR-MAINT-02 | Auto-doc generation from @mcp.tool() decorators | Done |
-| NFR-MAINT-03 | Comprehensive test suite (45 files) | Done |
-| NFR-MAINT-04 | MCP health check for all 11 servers | Done |
+| NFR-MAINT-03 | Comprehensive test suite (66 files) | Done |
+| NFR-MAINT-04 | MCP health check for all 18 servers | Done |
 | NFR-MAINT-05 | Structured error hierarchy (WorkflowEngineError) | Done |
 | NFR-MAINT-06 | Lazy imports to avoid import-time side effects | Done |
 
@@ -399,7 +425,7 @@ claude-insight/
 
 ---
 
-## 6. LangGraph Engine Modules (90 total)
+## 6. LangGraph Engine Modules (91 total)
 
 ### 6.1 Core Modules
 
@@ -424,6 +450,7 @@ claude-insight/
 | Level 2 | level2_standards.py | 15K | Standards loading with conditionals |
 | Level 3 v1 | level3_execution.py | 97K | Original pipeline (DEPRECATED) |
 | Level 3 v2 | level3_execution_v2.py | 36K | Refactored v2 with RAG integration |
+| Level 3 Jira | level3_steps8to12_jira.py | 22K | Dual GitHub+Jira integration (Steps 8,9,11,12) |
 
 ---
 
@@ -468,7 +495,7 @@ claude-insight/
 
 ## 8. Test Coverage
 
-### 8.1 Test Files (64 total)
+### 8.1 Test Files (66 total)
 
 | Category | Files | Purpose |
 |----------|-------|---------|

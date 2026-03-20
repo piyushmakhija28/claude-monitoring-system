@@ -284,7 +284,7 @@ The single data source for all 13 UML diagram types is also the call graph - `um
 | UML Generators | uml_generators.py | 13 UML diagram types (AST + LLM) |
 | Doc Manager | level3_documentation_manager.py | Circular SDLC doc cycle (Step 0/13) |
 
-### LangGraph Orchestration (90 modules)
+### LangGraph Orchestration (91 modules)
 
 - StateGraph with 200+ typed state fields
 - Parallel execution via `Send()` API (Level 1: 4 concurrent tasks)
@@ -378,7 +378,7 @@ policies/
 |-----------|--------|---------|
 | **15-Step Pipeline** | COMPLETE | All steps produce real output (not stubs) |
 | **4-Level Architecture** | COMPLETE | Level -1 through Level 3 fully operational |
-| **16 MCP Servers** | COMPLETE | 293 tools, all tested and registered |
+| **18 MCP Servers** | COMPLETE | 313 tools, all tested and registered |
 | **RAG Integration** | COMPLETE | 4 Vector DB collections, step-specific thresholds |
 | **Hook System** | COMPLETE | Pre/post tool enforcement with blocking |
 | **Policy System** | COMPLETE | 63 policies covering all 15 steps |
@@ -515,7 +515,7 @@ pytest --cov=scripts --cov-report=html tests/
 claude-insight/
 |
 +-- scripts/
-|   +-- langgraph_engine/             # Core orchestration (90 modules)
+|   +-- langgraph_engine/             # Core orchestration (91 modules)
 |   |   +-- orchestrator.py           # Main StateGraph pipeline
 |   |   +-- flow_state.py             # TypedDict state (200+ fields)
 |   |   +-- rag_integration.py        # Vector DB decision caching
@@ -528,9 +528,9 @@ claude-insight/
 |   +-- post-tool-tracker.py          # PostToolUse hook
 |   +-- stop-notifier.py              # Stop hook (voice notification)
 |
-+-- src/mcp/                          # 16 FastMCP servers (293 tools)
++-- src/mcp/                          # 18 FastMCP servers (313 tools)
 +-- policies/                         # 63 policy definitions (62 .md + 1 .json)
-+-- tests/                            # 64 test files (61 root + 3 integration)
++-- tests/                            # 66 test files
 +-- docs/                             # 46 documentation files
 +-- docs/uml/                         # Auto-generated UML diagrams (13 types)
 +-- rules/                            # 10 coding standard definitions
@@ -552,14 +552,14 @@ claude-insight/
 | Execution Steps | 15 (Step 0 - Step 14) |
 | MCP Servers | 18 (313 tools) |
 | MCP Tools | 313 |
-| LangGraph Engine Modules | 90 (84 root + 6 subgraphs) |
+| LangGraph Engine Modules | 91 (85 root + 6 subgraphs) |
 | Policy Files | 63 (62 .md + 1 .json) |
 | Standards Files | 10 |
-| Test Files | 64 (61 root + 3 integration) |
-| Total Python Files | 226 |
+| Test Files | 66+ |
+| Total Python Files | 290+ |
 | Call Graph | 578 classes, 3,985 methods, 4 languages (Python/Java/TS/Kotlin) |
 | UML Diagram Types | 13 (CallGraph-powered) |
-| Documentation Files | 40+ |
+| Documentation Files | 46 |
 | RAG Collections | 4 (Qdrant vector DB) |
 | Supported Languages | 20+ |
 | Supported Frameworks | 15+ |
@@ -583,6 +583,7 @@ No other AI coding tool automates the full Software Development Life Cycle. Here
 | **Phase-scoped context (focused, not broad)** | Yes (Step 4) | No | No | No | No |
 | **Skill/agent selection (16 skills, 13 agents)** | Yes (Step 5, RAG-powered) | No | No | No | No |
 | **Auto GitHub issue creation** | Yes (Step 8) | No | No | No | No |
+| **Dual issue tracking (GitHub + Jira)** | Yes (configurable) | No | No | No | No |
 | **Auto branch creation** | Yes (Step 9) | No | No | No | No |
 | **Auto PR creation** | Yes (Step 11) | No | No | No | No |
 | **5-layer code review** | Yes (Step 11) | No | No | No | No |
