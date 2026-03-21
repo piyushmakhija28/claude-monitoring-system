@@ -15,7 +15,7 @@ import sys
 import subprocess
 from pathlib import Path
 from datetime import datetime, timedelta
-from typing import Dict, List, Tuple
+from typing import List, Tuple
 
 
 class PreFlightChecker:

@@ -20,9 +20,7 @@ Python 3.8+ compatible. ASCII-only (cp1252-safe).
 """
 
 import logging
-import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set
 
 logger = logging.getLogger(__name__)
 

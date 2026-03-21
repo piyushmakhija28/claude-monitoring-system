@@ -23,7 +23,6 @@ Each plugin must have:
 
 import json
 import sys
-import os
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 from abc import ABC, abstractmethod

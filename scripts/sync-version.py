@@ -29,14 +29,14 @@ TARGETS = [
     {
         "file": PROJECT_ROOT / "README.md",
         "patterns": [
-            (r"\*\*Version:\*\*\s*[\d.]+", f"**Version:** {{version}}"),
+            (r"\*\*Version:\*\*\s*[\d.]+", "**Version:** {version}"),
             (r"\*\*Last Updated:\*\*\s*\d{4}-\d{2}-\d{2}", f"**Last Updated:** {TODAY}"),
         ],
     },
     {
         "file": PROJECT_ROOT / "CLAUDE.md",
         "patterns": [
-            (r"\*\*Version:\*\*\s*[\d.]+", f"**Version:** {{version}}"),
+            (r"\*\*Version:\*\*\s*[\d.]+", "**Version:** {version}"),
             (r"\*\*Last Updated:\*\*\s*\d{4}-\d{2}-\d{2}", f"**Last Updated:** {TODAY}"),
         ],
     },
@@ -44,11 +44,11 @@ TARGETS = [
         "file": PROJECT_ROOT / "docs" / "SYSTEM_REQUIREMENTS_SPECIFICATION.md",
         "patterns": [
             # Title: # Claude Workflow Engine v7.3.0 - System Requirements Specification
-            (r"# Claude Workflow Engine v[\d.]+ -", f"# Claude Workflow Engine v{{version}} -"),
+            (r"# Claude Workflow Engine v[\d.]+ -", "# Claude Workflow Engine v{version} -"),
             (r"\*\*Last Updated:\*\*\s*\d{4}-\d{2}-\d{2}", f"**Last Updated:** {TODAY}"),
             (r"\*\*Release Date:\*\*\s*\d{4}-\d{2}-\d{2}", f"**Release Date:** {TODAY}"),
             # Version in key stats table: | **Version** | 7.3.0 |
-            (r"(\| \*\*Version\*\* \| )[\d.]+", f"\\g<1>{{version}}"),
+            (r"(\| \*\*Version\*\* \| )[\d.]+", "\\g<1>{version}"),
         ],
     },
 ]
@@ -108,7 +108,7 @@ def main():
             updated += 1
 
     # setup.py reads VERSION dynamically - no update needed
-    print(f"[OK] setup.py reads VERSION dynamically")
+    print("[OK] setup.py reads VERSION dynamically")
 
     print(f"\n=== Done: {updated} file(s) updated, version {version} ===\n")
 

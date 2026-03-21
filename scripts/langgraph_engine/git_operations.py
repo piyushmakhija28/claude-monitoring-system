@@ -12,10 +12,8 @@ Uses: Git CLI (via subprocess) - NOT GitPython
 """
 
 import subprocess
-import os
 from pathlib import Path
 from typing import Dict, Any, Optional, List
-from datetime import datetime
 
 from loguru import logger
 
@@ -328,7 +326,7 @@ class GitOperations:
                 result = self._run_git(["add"] + files, check=False)
 
             if result.get("success"):
-                logger.info(f"✓ Files staged")
+                logger.info("✓ Files staged")
                 return {"success": True, "staged_count": len(files or ["all"])}
             else:
                 logger.error(f"Staging failed: {result.get('stderr')}")

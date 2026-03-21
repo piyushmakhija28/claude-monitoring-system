@@ -18,7 +18,6 @@ import requests
 from pathlib import Path
 from datetime import datetime
 from cryptography.fernet import Fernet
-import base64
 import sys
 
 # Add parent directory to path for imports

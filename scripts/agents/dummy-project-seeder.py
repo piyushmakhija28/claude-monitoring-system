@@ -20,10 +20,9 @@ Sessions simulate:
 """
 
 import json
-import sys
 from pathlib import Path
 from datetime import datetime, timedelta
-from typing import Dict, List
+from typing import Dict
 import random
 import string
 
@@ -381,9 +380,9 @@ class DummyProjectSeeder:
         print("=" * 80)
         print()
         print("Next steps:")
-        print(f"1. Start Flask dashboard:  python run.py")
-        print(f"2. Run pre-flight checks:  python scripts/agents/verify-computer-use-prerequisites.py")
-        print(f"3. Run E2E tests:          python scripts/agents/computer-use-agent.py --run-tests")
+        print("1. Start Flask dashboard:  python run.py")
+        print("2. Run pre-flight checks:  python scripts/agents/verify-computer-use-prerequisites.py")
+        print("3. Run E2E tests:          python scripts/agents/computer-use-agent.py --run-tests")
         print()
 
 

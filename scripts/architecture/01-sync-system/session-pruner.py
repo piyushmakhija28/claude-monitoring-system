@@ -19,15 +19,13 @@ Import usage:
     result = prune_sessions(sessions_dir, max_age_days=30, keep_min=10)
 """
 
-import os
 import sys
-import json
 import tarfile
 import shutil
 import argparse
 from pathlib import Path
 from datetime import datetime, timedelta
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional
 
 
 # ============================================================================
@@ -190,7 +188,6 @@ def _append_to_tar(archive_path: Path, files: List[Path]) -> None:
 
 def _merge_into_tar(archive_path: Path, new_files: List[Path]) -> None:
     """Merge new files into an existing tar.gz by rewriting it."""
-    import tempfile
 
     tmp_path = archive_path.with_suffix(".tmp.tar.gz")
     try:
@@ -355,7 +352,7 @@ def _print_stats(sessions_root: Path) -> None:
         print(f"    Already archived:    {s['archived_sessions']} ({archive_mb:.2f} MB)")
 
     print("\n" + "=" * 60)
-    print(f"Total:")
+    print("Total:")
     print(f"  Active sessions:   {total_active}")
     print(f"  Archivable:        {total_archivable}")
     print(f"  Archived sessions: {total_archived}")

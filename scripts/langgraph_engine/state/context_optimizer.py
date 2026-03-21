@@ -4,7 +4,7 @@ Keeps full outputs in workflow_memory, but sends TOON-formatted data to LLM.
 Uses smart filtering and compression to minimize tokens while maintaining info flow.
 """
 
-from typing import Dict, List, Any, Optional, TYPE_CHECKING
+from typing import Dict, List, Optional, TYPE_CHECKING
 
 from .toon_format import ToonObject
 

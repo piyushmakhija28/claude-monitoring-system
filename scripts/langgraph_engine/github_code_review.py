@@ -43,7 +43,7 @@ def analyze_diff_for_issues(diff_text: str, diff_lines: List[str]) -> List[str]:
     if "password" in diff_text.lower() and "***" not in diff_text:
         issues.append("Warning: Potential exposed credentials or password in code")
 
-    additions = len([l for l in diff_lines if l.startswith("+")])
+    additions = len([line for line in diff_lines if line.startswith("+")])
     if additions > 500:
         issues.append(
             f"Warning: Large addition ({additions} lines) - consider breaking into smaller commits"

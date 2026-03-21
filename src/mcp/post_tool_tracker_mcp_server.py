@@ -21,11 +21,9 @@ Tools (6):
 """
 
 import json
-import os
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -34,7 +32,7 @@ from utils.path_resolver import get_config_dir
 from mcp.server.fastmcp import FastMCP
 from base.response import to_json
 from base.decorators import mcp_tool_handler
-from base.persistence import AtomicJsonStore, JsonlAppender, SessionIdResolver
+from base.persistence import AtomicJsonStore, SessionIdResolver
 
 mcp = FastMCP(
     "post-tool-tracker",

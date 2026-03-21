@@ -78,9 +78,9 @@ class AutoSkillAgentSelector:
         # Extract context
         technologies = self.extract_technologies(structured_prompt)
         complexity_score = complexity.get('score', 0)
-        task_lower = task_type.lower()
+        task_type.lower()
 
-        print(f"\n[CHART] Context Analysis:")
+        print("\n[CHART] Context Analysis:")
         print(f"   Task Type: {task_type}")
         print(f"   Complexity: {complexity_score}")
         print(f"   Technologies: {', '.join(technologies) if technologies else 'None'}")
@@ -112,7 +112,7 @@ class AutoSkillAgentSelector:
 
         # Output
         print(f"\n{'='*80}")
-        print(f"[CHECK] SELECTION COMPLETE")
+        print("[CHECK] SELECTION COMPLETE")
         print(f"{'='*80}")
 
         if selection['skills']:
@@ -126,15 +126,15 @@ class AutoSkillAgentSelector:
                 print(f"   - {agent}")
 
         if not selection['skills'] and not selection['agents']:
-            print(f"\n[CHECK] No additional skills/agents needed")
-            print(f"   Direct execution with base knowledge")
+            print("\n[CHECK] No additional skills/agents needed")
+            print("   Direct execution with base knowledge")
 
-        print(f"\n[CLIPBOARD] Reasoning:")
+        print("\n[CLIPBOARD] Reasoning:")
         for reason in selection['reasoning']:
             print(f"   - {reason}")
 
         if selection['execution_plan']:
-            print(f"\n[TARGET] Execution Plan:")
+            print("\n[TARGET] Execution Plan:")
             for step in selection['execution_plan']:
                 print(f"   {step}")
 
@@ -316,7 +316,7 @@ class AutoSkillAgentSelector:
 
         # Dashboard/Web app specific
         if any(keyword in task_lower for keyword in ['dashboard', 'admin', 'panel', 'web app', 'flask', 'django']):
-            matches['reasoning'].append(f"Dashboard/Web app detected -> Consider ui-ux-designer + Python backend")
+            matches['reasoning'].append("Dashboard/Web app detected -> Consider ui-ux-designer + Python backend")
 
         return matches
 
@@ -354,7 +354,7 @@ class AutoSkillAgentSelector:
 
         elif selection['skills']:
             # Skill-based execution (direct)
-            plan.append(f"1. Direct execution with skills:")
+            plan.append("1. Direct execution with skills:")
             for skill in selection['skills']:
                 plan.append(f"   - Use {skill} knowledge")
 
@@ -367,7 +367,6 @@ class AutoSkillAgentSelector:
 
 def load_skill_definitions() -> dict:
     """Load skill definitions from ~/.claude/skills/"""
-    import os
     skills = {}
     skills_dir = Path.home() / ".claude" / "skills"
 
@@ -408,7 +407,6 @@ def load_skill_definitions() -> dict:
 
 def load_agent_definitions() -> dict:
     """Load agent definitions from ~/.claude/agents/"""
-    import os
     agents = {}
     agents_dir = Path.home() / ".claude" / "agents"
 

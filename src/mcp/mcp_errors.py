@@ -12,7 +12,7 @@ from datetime import datetime
 
 # Re-export from base for convenience
 try:
-    from base.response import to_json, success as mcp_success, error as mcp_error
+    from base.response import to_json, success as mcp_success, error as mcp_error  # noqa: F401
 except ImportError:
     pass  # Fallback: functions below still work standalone
 

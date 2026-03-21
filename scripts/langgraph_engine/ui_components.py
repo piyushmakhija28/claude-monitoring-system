@@ -43,7 +43,7 @@ except ImportError:
 
 from .progress_display import ProgressDisplay, STEP_LABELS, format_step_status
 from .decision_explainer import DecisionExplainer, DecisionExplanation
-from .error_messages import ErrorMessages, FormattedError, format_error
+from .error_messages import ErrorMessages
 
 
 # ---------------------------------------------------------------------------

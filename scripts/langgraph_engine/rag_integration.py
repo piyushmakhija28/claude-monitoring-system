@@ -25,10 +25,8 @@ Usage:
 
 import json
 import sys
-import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
 
 # Add src/mcp to path for vector DB imports
 _SRC_MCP_DIR = Path(__file__).resolve().parent.parent.parent / "src" / "mcp"
@@ -63,10 +61,8 @@ def _get_vector_functions():
             vector_search_similar,
             vector_bulk_index,
             _get_qdrant_client,
-            _get_embedding_model,
             _embed_text,
             _generate_point_id,
-            COLLECTIONS,
         )
         return {
             "search": vector_search_similar,

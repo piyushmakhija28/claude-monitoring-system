@@ -39,7 +39,7 @@ import logging
 import re
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -386,8 +386,8 @@ def enhance_call_graph(
         before_stats = graph.get_stats() if hasattr(graph, "get_stats") else {}
         before_resolved = before_stats.get("resolved_edges", 0)
         before_total = before_stats.get("total_call_edges", 1)
-        before_classes = before_stats.get("total_classes", 0)
-        before_methods = before_stats.get("total_methods", 0)
+        before_stats.get("total_classes", 0)
+        before_stats.get("total_methods", 0)
 
         new_classes = 0
         new_methods = 0
@@ -494,7 +494,7 @@ def get_unresolved_questions(
         )
         return questions
 
-    except Exception as exc:
+    except Exception:
         logger.exception("[BuildDepResolver] get_unresolved_questions failed")
         return []
 
@@ -1042,9 +1042,9 @@ def _build_question(
             f"project root. If external: add '{name}' to your well-known externals list."
         )
         options = [
-            f"Internal - local path: <provide path>",
-            f"External third-party library",
-            f"Skip / not relevant",
+            "Internal - local path: <provide path>",
+            "External third-party library",
+            "Skip / not relevant",
         ]
     else:
         question = (
@@ -1056,9 +1056,9 @@ def _build_question(
             f"If it is internal, provide a local path."
         )
         options = [
-            f"External - well-known library",
-            f"Internal - local path: <provide path>",
-            f"Unknown / ignore",
+            "External - well-known library",
+            "Internal - local path: <provide path>",
+            "Unknown / ignore",
         ]
 
     return {

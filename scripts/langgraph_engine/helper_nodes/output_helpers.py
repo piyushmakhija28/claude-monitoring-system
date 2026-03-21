@@ -29,7 +29,7 @@ def verify_prompt_integrity(state: FlowState) -> bool:
     current = state.get(StepKeys.USER_MESSAGE, "")
 
     if original != current:
-        print(f"[WARNING] PROMPT INTEGRITY VIOLATION!", file=sys.stderr)
+        print("[WARNING] PROMPT INTEGRITY VIOLATION!", file=sys.stderr)
         print(f"  Original: {original[:50]}...", file=sys.stderr)
         print(f"  Current:  {current[:50]}...", file=sys.stderr)
         return False
@@ -281,7 +281,6 @@ def _save_pipeline_execution_log(state: FlowState, final_status: str) -> None:
     - Total pipeline timing
     - Skills/agents selected
     """
-    import json
     from datetime import datetime
 
     session_dir = state.get(StepKeys.SESSION_DIR) or state.get(StepKeys.SESSION_PATH, "")

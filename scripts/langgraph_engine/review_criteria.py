@@ -336,7 +336,7 @@ class ReviewCriteria:
                     domain=DOMAIN_CODE_QUALITY,
                     rule_id="CQ001",
                     severity=SEVERITY_BLOCKING,
-                    message=f"Bare 'except:' clause found",
+                    message="Bare 'except:' clause found",
                     file_path=file_path,
                     suggestion="Use 'except Exception as e:' or a specific exception type",
                 ))
@@ -576,7 +576,6 @@ class ReviewCriteria:
         lines = content.splitlines()
         current_fn: Optional[str] = None
         fn_start: int = 0
-        indent_level: int = 0
 
         for i, line in enumerate(lines):
             fn_match = re.match(r"^(\s*)def (\w+)\s*\(", line)
@@ -586,7 +585,7 @@ class ReviewCriteria:
                     long_fns.append(current_fn)
                 current_fn = fn_match.group(2)
                 fn_start = i
-                indent_level = len(fn_match.group(1))
+                len(fn_match.group(1))
 
         # Check last function
         if current_fn and (len(lines) - fn_start) > max_lines:

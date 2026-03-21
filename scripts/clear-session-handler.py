@@ -68,7 +68,7 @@ while _scripts_root != _scripts_root.parent:
             sys.path.insert(0, str(_scripts_root))
         break
     _scripts_root = _scripts_root.parent
-from policy_tracking_helper import record_policy_execution, record_sub_operation, get_session_id
+from policy_tracking_helper import record_policy_execution  # noqa: E402
 
 # Track hook start time
 _HOOK_START = datetime.now()
@@ -791,7 +791,7 @@ def _finalize_session_summary(session_id):
     # Fallback: old subprocess call
     summary_script = CURRENT_DIR / 'session-summary-manager.py'
     if not summary_script.exists():
-        log_event(f"[WARN] session-summary-manager.py not found, skipping finalize")
+        log_event("[WARN] session-summary-manager.py not found, skipping finalize")
         return
 
     try:
@@ -832,7 +832,7 @@ def _link_session_chain(child_session, parent_session):
     # Fallback: old subprocess call
     chain_script = CURRENT_DIR / 'session-chain-manager.py'
     if not chain_script.exists():
-        log_event(f"[WARN] session-chain-manager.py not found, skipping chain link")
+        log_event("[WARN] session-chain-manager.py not found, skipping chain link")
         return
 
     try:
@@ -899,7 +899,6 @@ def main():
         _src_mcp_dir = Path(__file__).resolve().parent.parent / 'src' / 'mcp'
         if str(_src_mcp_dir) not in sys.path:
             sys.path.insert(0, str(_src_mcp_dir))
-        from session_mcp_server import session_load
         # Warm up session MCP module - session loading now handled by MCP
     except Exception:
         pass  # Non-blocking: session MCP unavailable, hooks still work
@@ -1007,7 +1006,7 @@ def main():
                 ]
                 write_voice_flag(random.choice(clear_messages))
             else:
-                print(f"[SESSION] Warning: Could not create new session")
+                print("[SESSION] Warning: Could not create new session")
                 log_event("Warning: Failed to create new session after /clear")
         else:
             # No existing session - just create a new one

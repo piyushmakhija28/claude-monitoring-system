@@ -18,7 +18,6 @@ import time
 import urllib.request
 import urllib.error
 from pathlib import Path
-from typing import Optional
 
 # Ensure src/mcp/ is in path for base package imports
 sys.path.insert(0, str(Path(__file__).resolve().parent))

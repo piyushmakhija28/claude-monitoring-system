@@ -692,7 +692,7 @@ def generate_gate_report(gate_result: Dict[str, Any]) -> str:
         status_header = "PASSED" if gate_passed else "FAILED"
         gates = gate_result.get("gates", {})
         recommendation = gate_result.get("recommendation", "MANUAL_REVIEW")
-        blocking_gates: List[str] = gate_result.get("blocking_gates", [])
+        gate_result.get("blocking_gates", [])
 
         lines: List[str] = [
             f"## Quality Gate: {status_header}",
@@ -733,7 +733,7 @@ def generate_gate_report(gate_result: Dict[str, Any]) -> str:
                 count = result.get("count", 0)
                 risk = result.get("risk_assessment", "safe")
                 detail = (
-                    f"No breaking changes detected"
+                    "No breaking changes detected"
                     if count == 0
                     else f"{count} breaking change(s); risk={risk}"
                 )
@@ -885,7 +885,7 @@ def get_fix_suggestions(gate_result: Dict[str, Any]) -> List[Dict[str, str]]:
                 suggestions.append({
                     "gate": "tests_exist",
                     "action": (
-                        f"Add test files for: "
+                        "Add test files for: "
                         + ", ".join(file_names)
                         + more
                         + ". Use test_generator.py to scaffold tests automatically."

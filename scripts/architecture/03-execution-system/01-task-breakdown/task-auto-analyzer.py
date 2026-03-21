@@ -194,7 +194,7 @@ class TaskAutoAnalyzer:
                 elif phase['name'] == 'Configuration':
                     phase_tasks.append({
                         'id': task_id,
-                        'title': f"Update application properties",
+                        'title': "Update application properties",
                         'phase': phase['name'],
                         'type': 'config'
                     })
@@ -346,10 +346,10 @@ class TaskAutoAnalyzer:
     def print_result(self, result):
         """Print formatted result"""
         print(f"\n{'='*70}")
-        print(f"[CLIPBOARD] Task Auto-Analyzer (Phase 4 - Full Auto)")
+        print("[CLIPBOARD] Task Auto-Analyzer (Phase 4 - Full Auto)")
         print(f"{'='*70}\n")
 
-        print(f"[CHART] Analysis:")
+        print("[CHART] Analysis:")
         print(f"   Entities: {', '.join(result['entities'])}")
         print(f"   Complexity: {result['complexity_score']}/30")
         print(f"   Estimated Files: {result['estimated_files']}")
@@ -360,7 +360,7 @@ class TaskAutoAnalyzer:
             for i, phase in enumerate(result['phases'], 1):
                 print(f"   {i}. {phase['name']}: {phase['description']}")
 
-        print(f"\n[OK] Tasks Generated:")
+        print("\n[OK] Tasks Generated:")
         current_phase = None
         for task in result['tasks']:
             if task.get('phase') != current_phase:
@@ -379,7 +379,6 @@ def main():
     """CLI usage - outputs JSON for LangGraph"""
     import urllib.request
     import urllib.error
-    import os
 
     # Import shared LLM call helper (Ollama -> Claude CLI fallback)
     try:
@@ -455,7 +454,7 @@ JSON only:"""
         output["status"] = "OK"
         print(json.dumps(output))
 
-    except Exception as e:
+    except Exception:
         # Fallback to simple task breakdown
         analyzer = TaskAutoAnalyzer()
         result = analyzer.auto_analyze(user_message)
@@ -482,7 +481,7 @@ def _estimate_priority(task, result):
     """Estimate task priority based on position and dependencies"""
     task_id = task.get("id", 1)
     total_tasks = result.get("total_tasks", 1)
-    task_type = task.get("type", "")
+    task.get("type", "")
 
     # Early tasks are higher priority
     position_ratio = task_id / total_tasks if total_tasks > 0 else 0.5

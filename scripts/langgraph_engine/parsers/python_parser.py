@@ -8,7 +8,6 @@ ASCII-only (cp1252-safe for Windows).
 """
 
 import ast
-from typing import Any, Dict, List, Set
 
 from .base import AbstractLanguageParser
 from .graph_model import make_class_node, make_call_edge, make_method_node

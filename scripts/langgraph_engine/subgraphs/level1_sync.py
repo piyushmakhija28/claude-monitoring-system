@@ -21,7 +21,6 @@ import time as _time_mod
 import subprocess
 from pathlib import Path
 from datetime import datetime
-from typing import Dict, Any, Optional, Iterator
 
 try:
     import sys as _sys
@@ -34,7 +33,7 @@ except ImportError:
     _LEVEL1_TELEMETRY_DIR = Path.home() / ".claude" / "logs" / "telemetry"
 
 try:
-    from langgraph.graph import StateGraph, START, END
+    from langgraph.graph import StateGraph, START, END  # noqa: F401
     _LANGGRAPH_AVAILABLE = True
 except ImportError:
     _LANGGRAPH_AVAILABLE = False
@@ -50,7 +49,7 @@ except ImportError:
 
 # Level 1 new modules (graceful import fallback)
 try:
-    from ..complexity_calculator import calculate_complexity, should_plan, calculate_graph_complexity
+    from ..complexity_calculator import calculate_complexity, should_plan, calculate_graph_complexity  # noqa: F401
     _COMPLEXITY_CALCULATOR_AVAILABLE = True
 except ImportError:
     _COMPLEXITY_CALCULATOR_AVAILABLE = False
@@ -250,8 +249,8 @@ def node_session_loader(state: FlowState) -> dict:
         write_level_log(result, "level1", "session-loader", "OK", _time_mod.time() - _step_start, result)
         # Telemetry
         try:
-            import json as _json_tel, time as _time_tel
-            from pathlib import Path as _Path_tel
+            import json as _json_tel
+            import time as _time_tel
             _sid_tel = state.get("session_id", result.get("session_id", ""))
             if _sid_tel:
                 _tdir_tel = _LEVEL1_TELEMETRY_DIR
@@ -276,8 +275,8 @@ def node_session_loader(state: FlowState) -> dict:
         write_level_log(state, "level1", "session-loader", "FAILED", _time_mod.time() - _step_start, None, str(e))
         # Telemetry
         try:
-            import json as _json_tel, time as _time_tel
-            from pathlib import Path as _Path_tel
+            import json as _json_tel
+            import time as _time_tel
             _sid_tel = state.get("session_id", result.get("session_id", ""))
             if _sid_tel:
                 _tdir_tel = _LEVEL1_TELEMETRY_DIR
@@ -344,8 +343,8 @@ def node_complexity_calculation(state: FlowState) -> dict:
                             _time_mod.time() - _step_start, result)
             # Telemetry
             try:
-                import json as _json_tel, time as _time_tel
-                from pathlib import Path as _Path_tel
+                import json as _json_tel
+                import time as _time_tel
                 _sid_tel = state.get("session_id", result.get("session_id", ""))
                 if _sid_tel:
                     _tdir_tel = _LEVEL1_TELEMETRY_DIR
@@ -389,8 +388,8 @@ def node_complexity_calculation(state: FlowState) -> dict:
                     }
                     # Telemetry
                     try:
-                        import json as _json_tel, time as _time_tel
-                        from pathlib import Path as _Path_tel
+                        import json as _json_tel
+                        import time as _time_tel
                         _sid_tel = state.get("session_id", "")
                         if _sid_tel:
                             _tdir_tel = _LEVEL1_TELEMETRY_DIR
@@ -424,8 +423,8 @@ def node_complexity_calculation(state: FlowState) -> dict:
                         _time_mod.time() - _step_start, result)
         # Telemetry
         try:
-            import json as _json_tel, time as _time_tel
-            from pathlib import Path as _Path_tel
+            import json as _json_tel
+            import time as _time_tel
             _sid_tel = state.get("session_id", result.get("session_id", ""))
             if _sid_tel:
                 _tdir_tel = _LEVEL1_TELEMETRY_DIR
@@ -453,8 +452,8 @@ def node_complexity_calculation(state: FlowState) -> dict:
                         _time_mod.time() - _step_start, None, str(e))
         # Telemetry
         try:
-            import json as _json_tel, time as _time_tel
-            from pathlib import Path as _Path_tel
+            import json as _json_tel
+            import time as _time_tel
             _sid_tel = state.get("session_id", result.get("session_id", ""))
             if _sid_tel:
                 _tdir_tel = _LEVEL1_TELEMETRY_DIR
@@ -673,8 +672,8 @@ def node_context_loader(state: FlowState) -> dict:
                     }
                     # Telemetry
                     try:
-                        import json as _json_tel, time as _time_tel
-                        from pathlib import Path as _Path_tel
+                        import json as _json_tel
+                        import time as _time_tel
                         _sid_tel = state.get("session_id", "")
                         if _sid_tel:
                             _tdir_tel = _LEVEL1_TELEMETRY_DIR
@@ -946,8 +945,8 @@ def node_context_loader(state: FlowState) -> dict:
                         })
         # Telemetry
         try:
-            import json as _json_tel, time as _time_tel
-            from pathlib import Path as _Path_tel
+            import json as _json_tel
+            import time as _time_tel
             _sid_tel = state.get("session_id", result.get("session_id", ""))
             if _sid_tel:
                 _tdir_tel = _LEVEL1_TELEMETRY_DIR
@@ -984,8 +983,8 @@ def node_context_loader(state: FlowState) -> dict:
                         _time_mod.time() - loader_start, None, str(e))
         # Telemetry
         try:
-            import json as _json_tel, time as _time_tel
-            from pathlib import Path as _Path_tel
+            import json as _json_tel
+            import time as _time_tel
             _sid_tel = state.get("session_id", result.get("session_id", ""))
             if _sid_tel:
                 _tdir_tel = _LEVEL1_TELEMETRY_DIR
@@ -1122,7 +1121,7 @@ def node_toon_compression(state: FlowState) -> dict:
 
         # ---- Subtask 4: Compression integrity validation ----
         # (a) Structural integrity: decompress and verify against original
-        decompressed = _decompress_toon(toon_object)
+        _decompress_toon(toon_object)
         integrity_ok = _verify_toon_integrity(toon_object, context_data)
 
         # (b) Schema validation via toon_schema module
@@ -1186,8 +1185,8 @@ def node_toon_compression(state: FlowState) -> dict:
                         })
         # Telemetry
         try:
-            import json as _json_tel, time as _time_tel
-            from pathlib import Path as _Path_tel
+            import json as _json_tel
+            import time as _time_tel
             _sid_tel = state.get("session_id", result.get("session_id", ""))
             if _sid_tel:
                 _tdir_tel = _LEVEL1_TELEMETRY_DIR
@@ -1219,8 +1218,8 @@ def node_toon_compression(state: FlowState) -> dict:
         }
         # Telemetry
         try:
-            import json as _json_tel, time as _time_tel
-            from pathlib import Path as _Path_tel
+            import json as _json_tel
+            import time as _time_tel
             _sid_tel = state.get("session_id", "")
             if _sid_tel:
                 _tdir_tel = _LEVEL1_TELEMETRY_DIR
@@ -1280,8 +1279,8 @@ def level1_merge_node(state: FlowState) -> dict:
     })
     # Telemetry
     try:
-        import json as _json_tel, time as _time_tel
-        from pathlib import Path as _Path_tel
+        import json as _json_tel
+        import time as _time_tel
         _sid_tel = state.get("session_id", updates.get("session_id", ""))
         if _sid_tel:
             _tdir_tel = _LEVEL1_TELEMETRY_DIR
@@ -1346,14 +1345,14 @@ def cleanup_level1_memory(state: FlowState) -> dict:
     # Log cleanup status
     if os.getenv("CLAUDE_DEBUG") == "1":
         import sys
-        print(f"\n[LEVEL 1 CLEANUP]", file=sys.stderr)
+        print("\n[LEVEL 1 CLEANUP]", file=sys.stderr)
         print(f"  Clearing {len(cleanup_summary['fields_cleared'])} verbose fields...", file=sys.stderr)
         for field in cleanup_summary["fields_cleared"]:
             if f"{field}_size_bytes" in cleanup_summary:
                 size_kb = cleanup_summary[f"{field}_size_bytes"] / 1024
                 print(f"    ✓ {field}: {size_kb:.1f}KB freed", file=sys.stderr)
         print(f"  TOON object preserved: {list(toon.keys())}", file=sys.stderr)
-        print(f"  ✓ Memory cleanup complete\n", file=sys.stderr)
+        print("  ✓ Memory cleanup complete\n", file=sys.stderr)
 
     # ---- Best-effort: estimate context window usage after cleanup ----
     _context_monitor_result = {}

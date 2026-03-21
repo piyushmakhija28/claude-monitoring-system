@@ -325,10 +325,10 @@ def print_flow_checkpoint(state: FlowState, verbose: bool = False) -> None:
     except Exception:
         ollama_status = "DOWN"
 
-    print(f"\n[FLOW CHECKPOINT]")
+    print("\n[FLOW CHECKPOINT]")
     print(f"  Status: {status}")
     if ollama_status == "DOWN":
-        print(f"  WARNING: Ollama is DOWN - LLM steps (0,1,5,8) will use fallback/fail")
+        print("  WARNING: Ollama is DOWN - LLM steps (0,1,5,8) will use fallback/fail")
     print(f"  Session: {session_id}")
     print(f"  Context: {context_pct:.1f}%")
     print(f"  Model: {model}")
@@ -346,9 +346,9 @@ def print_flow_checkpoint(state: FlowState, verbose: bool = False) -> None:
 
         # CRITICAL: Print the ACTUAL synthesized prompt content to stdout
         # This is what Claude Code reads as hook output and uses as context
-        print(f"\n--- SYNTHESIZED CONTEXT (from 3-level pipeline) ---")
+        print("\n--- SYNTHESIZED CONTEXT (from 3-level pipeline) ---")
         print(synthesized_prompt)
-        print(f"--- END SYNTHESIZED CONTEXT ---\n")
+        print("--- END SYNTHESIZED CONTEXT ---\n")
 
     # Print selected skills for Skill tool invocation
     skills = state.get("step5_skills") or []
@@ -362,7 +362,7 @@ def print_flow_checkpoint(state: FlowState, verbose: bool = False) -> None:
 
     if skills:
         print(f"  Selected Skills: {', '.join(skills)}")
-        print(f"  ACTION: Load these skills using /skill-name before implementation")
+        print("  ACTION: Load these skills using /skill-name before implementation")
     if agents:
         print(f"  Selected Agents: {', '.join(agents)}")
 

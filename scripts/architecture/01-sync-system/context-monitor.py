@@ -19,7 +19,6 @@ Import usage:
     # info["estimated_tokens"], info["percentage"], info["recommendation"]
 """
 
-import os
 import sys
 import json
 import argparse
@@ -270,7 +269,7 @@ def _print_human(info: Dict[str, Any]) -> None:
     print(f"  Usable Budget:   {info['usable_tokens']:,}")
     print(f"  Usage:           {info['percentage_display']}")
     print(f"  Zone:            {zone} ({zone_labels.get(zone, zone)})")
-    print(f"\n  Recommendation:")
+    print("\n  Recommendation:")
     print(f"    {info['recommendation']}")
     print()
 

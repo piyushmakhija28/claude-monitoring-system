@@ -19,7 +19,6 @@ Import usage:
     # patterns -> ["python", "flask", "pytest", "docker", ...]
 """
 
-import os
 import sys
 import json
 import argparse
@@ -512,7 +511,7 @@ def scan_all_projects(
 
 def _print_human(detail: Dict[str, Any]) -> None:
     """Print a human-readable pattern detection report."""
-    print(f"\nPattern Detection Report")
+    print("\nPattern Detection Report")
     print("=" * 50)
     print(f"  Project:   {detail['project_root']}")
     print(f"  Detected:  {detail['total_detected']} patterns\n")

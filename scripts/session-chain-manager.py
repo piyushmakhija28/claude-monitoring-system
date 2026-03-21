@@ -37,7 +37,6 @@ Windows-Safe: No Unicode chars (ASCII only, cp1252 compatible)
 """
 
 import sys
-import os
 import json
 import argparse
 from pathlib import Path
@@ -856,7 +855,7 @@ def main():
         if ok:
             print(f"[OK] Linked {args.child} -> parent: {args.parent}")
         else:
-            print(f"[ERROR] Failed to link sessions")
+            print("[ERROR] Failed to link sessions")
             sys.exit(1)
 
     elif args.command == 'tag':
@@ -873,7 +872,7 @@ def main():
             print(f"[OK] Tagged {args.session}: {tags}")
             auto_relate_by_tags(args.session)
         else:
-            print(f"[ERROR] Failed to tag session")
+            print("[ERROR] Failed to tag session")
             sys.exit(1)
 
     elif args.command == 'relate':
@@ -881,7 +880,7 @@ def main():
         if ok:
             print(f"[OK] Related {args.session} <-> {args.related}")
         else:
-            print(f"[ERROR] Failed to relate sessions")
+            print("[ERROR] Failed to relate sessions")
             sys.exit(1)
 
     elif args.command == 'context':
@@ -925,10 +924,10 @@ def main():
                 print(f"[OK] Auto-tagged {args.session}: {tags}")
                 auto_relate_by_tags(args.session)
             else:
-                print(f"[ERROR] Failed to auto-tag")
+                print("[ERROR] Failed to auto-tag")
                 sys.exit(1)
         else:
-            print(f"[INFO] No tags extracted from prompt")
+            print("[INFO] No tags extracted from prompt")
 
     sys.exit(0)
 

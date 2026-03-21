@@ -14,10 +14,8 @@ Python 3.8+ compatible. ASCII-only (cp1252-safe).
 """
 
 import ast
-import os
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Optional
 
 # ---------------------------------------------------------------------------
 # Language detection

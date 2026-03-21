@@ -109,7 +109,7 @@ def call_execution_script(script_name: str, args: list = None, model_tier: str =
         if result.stdout:
             try:
                 return json.loads(result.stdout)
-            except:
+            except Exception:
                 return {
                     "status": "SUCCESS",
                     "exit_code": result.returncode,
@@ -592,7 +592,6 @@ def step4_toon_refinement(state: FlowState) -> dict:
 
     This prepares comprehensive TOON for skill/agent selection in Step 5.
     """
-    import json
 
     try:
         # Get initial TOON from Level 1
@@ -736,7 +735,7 @@ def step5_skill_agent_selection(state: FlowState) -> dict:
             candidate_skills=list(all_skills.keys()),
             candidate_agents=list(all_agents.keys()),
         )
-    except Exception as e:
+    except Exception:
         # Non-blocking: DeepSeek reasoning failure
         pass
 
@@ -956,7 +955,7 @@ def _try_download_skill(skill_name: str, skills_dir: Path) -> bool:
     try:
         sync_script = Path(__file__).parent.parent.parent / "sync-library.py"
         if sync_script.exists():
-            result = subprocess.run(
+            subprocess.run(
                 [sys.executable, str(sync_script), "--skill", skill_name],
                 capture_output=True, text=True, encoding='utf-8', errors='replace',
                 timeout=15,
@@ -978,7 +977,7 @@ def _try_download_agent(agent_name: str, agents_dir: Path) -> bool:
     try:
         sync_script = Path(__file__).parent.parent.parent / "sync-library.py"
         if sync_script.exists():
-            result = subprocess.run(
+            subprocess.run(
                 [sys.executable, str(sync_script), "--agent", agent_name],
                 capture_output=True, text=True, encoding='utf-8', errors='replace',
                 timeout=15,
@@ -1001,7 +1000,6 @@ def step6_skill_validation_download(state: FlowState) -> dict:
 
     This ensures all selected tools are ready before execution.
     """
-    from pathlib import Path
 
     skill_name = state.get("step5_skill", "")
     agent_name = state.get("step5_agent", "")
@@ -1421,7 +1419,7 @@ def step7_final_prompt_generation(state: FlowState) -> dict:
         if detected_fw:
             system_prompt_lines.append(f"- Type: {detected_fw}")
         elif is_java:
-            system_prompt_lines.append(f"- Type: Java/Spring")
+            system_prompt_lines.append("- Type: Java/Spring")
         else:
             # Auto-detect from project files
             proj_type = _detect_project_type_from_files(project_root)
@@ -1433,10 +1431,10 @@ def step7_final_prompt_generation(state: FlowState) -> dict:
         # Read README/SRS snippets for project understanding
         readme_snippet, srs_snippet = _read_project_context_snippets(project_root)
         if readme_snippet:
-            system_prompt_lines.append(f"\n### README Summary")
+            system_prompt_lines.append("\n### README Summary")
             system_prompt_lines.append(readme_snippet)
         if srs_snippet:
-            system_prompt_lines.append(f"\n### SRS Summary")
+            system_prompt_lines.append("\n### SRS Summary")
             system_prompt_lines.append(srs_snippet)
 
         system_prompt_lines.append("")
@@ -1538,7 +1536,6 @@ def _generate_issue_title(user_message: str, task_type: str, complexity: int) ->
     Returns:
         Descriptive title string (max ~80 chars)
     """
-    import os
 
     if not user_message:
         return f"[{task_type}] Task (complexity {complexity}/10)"
@@ -1653,10 +1650,10 @@ def step8_github_issue_creation(state: FlowState) -> dict:
 
         # Build CLEAN issue body (no system prompt dump!)
         body_parts = []
-        body_parts.append(f"## Task Summary")
+        body_parts.append("## Task Summary")
         body_parts.append(f"{user_msg[:500]}")
         body_parts.append("")
-        body_parts.append(f"## Details")
+        body_parts.append("## Details")
         body_parts.append(f"- **Type**: {task_type}")
         body_parts.append(f"- **Complexity**: {complexity}/10")
         body_parts.append(f"- **Framework**: {framework}")
@@ -1669,7 +1666,7 @@ def step8_github_issue_creation(state: FlowState) -> dict:
         # Task breakdown as checklist
         tasks = state.get("step0_tasks", {}).get("tasks", [])
         if tasks:
-            body_parts.append(f"## Implementation Checklist")
+            body_parts.append("## Implementation Checklist")
             for i, task in enumerate(tasks[:10], 1):
                 if isinstance(task, dict):
                     body_parts.append(f"- [ ] {task.get('description', task.get('id'))}")
@@ -1750,7 +1747,7 @@ def step9_branch_creation(state: FlowState) -> dict:
         import os
 
         issue_id = state.get("step8_issue_id", "0")
-        issue_title = state.get("step8_title", "")
+        state.get("step8_title", "")
         task_type = state.get("step0_task_type", "task").lower()
         label = state.get("step8_label", task_type)
         session_path = state.get("session_dir") or os.environ.get("CLAUDE_SESSION_PATH", ".")
@@ -2288,7 +2285,6 @@ def step13_project_documentation_update(state: FlowState) -> dict:
         session_path = state.get("session_dir") or state.get("session_path", "")
         if session_path:
             try:
-                import json as _json
                 doc_file = Path(session_path) / "execution-docs.md"
                 task_type = state.get("step0_task_type", "Unknown")
                 complexity = state.get("step0_complexity", 5)
@@ -2328,7 +2324,6 @@ def step14_final_summary_generation(state: FlowState) -> dict:
     2. ALWAYS save summary to session folder (execution-summary.txt)
     3. Attempt voice notification (best-effort, never blocks)
     """
-    import os
     from datetime import datetime
 
     try:
@@ -2383,9 +2378,9 @@ def step14_final_summary_generation(state: FlowState) -> dict:
         if skill:
             voice_msg += f" Using {skill}."
         if issue_created:
-            voice_msg += f" Issue created."
+            voice_msg += " Issue created."
         if pr_merged:
-            voice_msg += f" PR merged."
+            voice_msg += " PR merged."
         if modified_files:
             voice_msg += f" {len(modified_files)} files modified."
 

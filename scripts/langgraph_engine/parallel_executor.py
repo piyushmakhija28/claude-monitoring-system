@@ -18,9 +18,7 @@ Design principles:
 """
 
 import os
-import re
 import time
-import hashlib
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed, Future
 from pathlib import Path

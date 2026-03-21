@@ -14,7 +14,6 @@ Tools (8):
   skill_rank, skill_detect_conflicts, agent_load_all, agent_load
 """
 
-import json
 import re
 import sys
 from pathlib import Path

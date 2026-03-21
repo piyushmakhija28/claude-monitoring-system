@@ -21,7 +21,7 @@ except ImportError:
 
 from .toon_models import (
     ToonAnalysis, ExecutionBlueprint, ToonWithSkills,
-    SessionMetadata, ExecutionLog, serialize_toon, deserialize_toon
+    SessionMetadata, ExecutionLog, serialize_toon
 )
 
 

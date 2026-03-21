@@ -71,7 +71,7 @@ class StandardsLoader:
                     self.loaded_files.append(policy_name)
                     self.total_size_kb += size_kb
 
-                except Exception as e:
+                except Exception:
                     pass  # Skip files that can't be read
 
             return {

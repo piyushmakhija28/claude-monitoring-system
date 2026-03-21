@@ -14,10 +14,8 @@ Usage:
 Python 3.8+ compatible. ASCII-only (cp1252-safe).
 """
 
-import os
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set
 
 # ---------------------------------------------------------------------------
 # Constants

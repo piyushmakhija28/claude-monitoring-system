@@ -66,7 +66,6 @@ import os
 if os.environ.get("CLAUDE_WORKFLOW_RUNNING") == "1":
     sys.exit(0)
 import json
-import glob as _glob
 from pathlib import Path
 from datetime import datetime, timedelta
 
@@ -114,7 +113,7 @@ while _scripts_root != _scripts_root.parent:
             sys.path.insert(0, str(_scripts_root))
         break
     _scripts_root = _scripts_root.parent
-from policy_tracking_helper import record_policy_execution, record_sub_operation, get_session_id
+from policy_tracking_helper import record_policy_execution  # noqa: E402
 
 # ===================================================================
 # NEW: TOOL OPTIMIZATION INTEGRATION (3.6 Middleware)
@@ -702,7 +701,6 @@ def check_context_read_complete(tool_name):
         try:
             trace_path = Path.home() / ".claude" / "logs" / "flow-trace.json"
             if trace_path.exists():
-                import json
                 trace_data = json.loads(trace_path.read_text(encoding="utf-8"))
                 pipeline = trace_data.get("pipeline", [])
                 for entry in pipeline:

@@ -7,7 +7,6 @@ Creates Jira issues, links PRs, transitions workflow states.
 Version: 1.4.1
 """
 
-import json
 import os
 import sys
 import time

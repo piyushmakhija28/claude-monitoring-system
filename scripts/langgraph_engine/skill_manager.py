@@ -27,12 +27,11 @@ from __future__ import annotations
 
 import os
 import time
-import json
 import hashlib
 import urllib.request
 import urllib.error
 from pathlib import Path
-from typing import Dict, List, Optional, Any, Tuple
+from typing import Dict, List, Optional, Any
 from loguru import logger
 
 try:
@@ -50,11 +49,8 @@ from .dependency_resolver import (
     build_dependency_graph,
 )
 from .version_selector import (
-    check_compatibility,
-    select_best_version,
     handle_deprecated,
     validate_version_set,
-    build_compatibility_matrix,
 )
 from .patterns import SkillRegistry
 

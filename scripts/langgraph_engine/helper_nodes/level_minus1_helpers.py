@@ -86,7 +86,6 @@ def fix_level_minus1_issues(state: FlowState) -> dict:
 
     Then resets Level -1 state for retry.
     """
-    import subprocess
     import sys
 
     DEBUG = os.getenv("CLAUDE_DEBUG") == "1"
@@ -142,7 +141,7 @@ def fix_level_minus1_issues(state: FlowState) -> dict:
         print(f"[OK] Applied: {', '.join(fixes_applied)}")
     if fixes_failed:
         print(f"[!!] Could not fix: {', '.join(fixes_failed)}")
-    print(f"\nRetrying Level -1 checks...")
+    print("\nRetrying Level -1 checks...")
     print('='*70 + "\n")
 
     return updates

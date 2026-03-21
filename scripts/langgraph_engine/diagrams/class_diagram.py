@@ -6,7 +6,6 @@ or CallGraph class/method data.
 """
 
 import logging
-from pathlib import Path
 
 from .base import AbstractDiagramGenerator
 from .templates import simplify_type

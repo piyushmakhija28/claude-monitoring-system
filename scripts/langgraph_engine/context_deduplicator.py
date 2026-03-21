@@ -17,7 +17,7 @@ Usage:
 
 import hashlib
 import sys
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Tuple
 
 
 # Only apply deduplication if it saves more than this fraction of total size

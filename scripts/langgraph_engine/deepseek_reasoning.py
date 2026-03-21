@@ -17,7 +17,6 @@ Reasoning Flow:
 5. Return reasoning trace for Claude to use in final selection
 """
 
-import json
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
 

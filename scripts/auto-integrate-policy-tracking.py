@@ -21,12 +21,8 @@ Version: 1.0.0
 """
 
 import sys
-import os
 import re
-import json
 from pathlib import Path
-from datetime import datetime
-from typing import Tuple, Optional
 
 # Windows-safe encoding
 if sys.platform == 'win32':
@@ -100,7 +96,7 @@ _TRACKING_START_TIME = None
             bool: True if integration successful
         """
         if not self.content:
-            print(f"[ERROR] No content to integrate")
+            print("[ERROR] No content to integrate")
             return False
 
         if self.has_tracking_import():
@@ -230,11 +226,11 @@ _TRACKING_START_TIME = None
                     self.script_path.read_text(encoding='utf-8'),
                     encoding='utf-8'
                 )
-                print(f"  \-- Backup created: {backup_path.name}")
+                print(rf"  \-- Backup created: {backup_path.name}")
 
             # Write modified content
             self.script_path.write_text(self.content, encoding='utf-8')
-            print(f"  \-- [OK] Updated successfully")
+            print(r"  \-- [OK] Updated successfully")
             return True
 
         except Exception as e:

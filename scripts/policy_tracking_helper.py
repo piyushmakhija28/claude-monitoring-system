@@ -13,7 +13,6 @@ Windows-Safe: No Unicode chars (ASCII only, cp1252 compatible)
 """
 
 import sys
-import os
 import json
 from pathlib import Path
 from datetime import datetime

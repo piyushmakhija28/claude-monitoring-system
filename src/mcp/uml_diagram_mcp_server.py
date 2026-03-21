@@ -11,7 +11,6 @@ Tier 3 (LLM-powered): Use Case, Object, Deployment, Communication,
 
 import sys
 from pathlib import Path
-from typing import Optional
 
 # Path setup for local imports
 sys.path.insert(0, str(Path(__file__).resolve().parent))

@@ -12,17 +12,15 @@ These steps integrate with Git and GitHub APIs for complete workflow automation.
 """
 
 import time
-import re
 from typing import Dict, Any, Optional, List
 from datetime import datetime
 
 from loguru import logger
-from .github_integration import GitHubIntegration
 from .github_operation_router import GitHubOperationRouter
 from .git_operations import GitOperations
 from .github_facade import GitHubFacade
 from .ollama_service import OllamaService
-from .builders import CommitMessageBuilder, PRBodyBuilder, IssueBodyBuilder
+from .builders import PRBodyBuilder, IssueBodyBuilder
 from .github_code_review import (
     run_code_review,
     analyze_diff_for_issues,
@@ -34,7 +32,6 @@ from .github_code_review import (
     comment_on_pr_with_review,
 )
 from .github_merge_validation import (
-    check_merge_conflicts_bulletproof,
     detect_git_conflict_markers,
     test_merge_locally,
     detect_project_type_for_validation,

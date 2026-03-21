@@ -6,7 +6,7 @@ Lightweight schema-validated state objects for Level 3 execution.
 """
 
 from pydantic import BaseModel, ConfigDict, Field
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Optional
 from datetime import datetime
 import orjson
 

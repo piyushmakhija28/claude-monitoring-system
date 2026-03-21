@@ -275,7 +275,7 @@ def llm_health_check(force_refresh: bool = False) -> str:
                     }).encode(),
                     method="POST",
                 )
-                with urllib.request.urlopen(req, timeout=10) as resp:
+                with urllib.request.urlopen(req, timeout=10):
                     latency = round((_time.time() - start) * 1000)
                     return {
                         "available": True, "status": "healthy",

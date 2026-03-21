@@ -29,12 +29,9 @@ Resume an interrupted session:
     resume_from_checkpoint(session_id="abc-123", checkpoint_id="abc-123:step-05")
 """
 
-import os
 import sys
 import signal
 import time
-from datetime import datetime
-from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 try:

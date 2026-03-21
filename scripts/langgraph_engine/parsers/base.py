@@ -9,7 +9,6 @@ ASCII-only (cp1252-safe for Windows).
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Set
 
 
 class AbstractLanguageParser(ABC):

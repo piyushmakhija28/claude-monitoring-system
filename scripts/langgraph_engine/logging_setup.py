@@ -8,7 +8,6 @@ Provides:
 4. Session-specific logs with automatic rotation
 """
 
-import sys
 from pathlib import Path
 from datetime import datetime
 from typing import Optional

@@ -60,13 +60,12 @@ except ImportError as e:
     # Log detailed error for debugging
     import sys
     print(f"[IMPORT ERROR] {import_error}", file=sys.stderr)
-    print(f"[DEBUG] Python path:", file=sys.stderr)
+    print("[DEBUG] Python path:", file=sys.stderr)
     for p in sys.path[:5]:
         print(f"  {p}", file=sys.stderr)
 
 # Windows-safe encoding
 if sys.platform == 'win32':
-    import io
     try:
         if hasattr(sys.stdout, 'reconfigure'):
             sys.stdout.reconfigure(encoding='utf-8', errors='replace')
@@ -172,7 +171,7 @@ def run_langgraph_engine(session_id: str = "", project_root: str = "", user_mess
         if user_message:
             print(f"[DEBUG] Message: {user_message[:100]}..." if len(user_message) > 100 else f"[DEBUG] Message: {user_message}")
         else:
-            print(f"[DEBUG] WARNING: No user message captured!")
+            print("[DEBUG] WARNING: No user message captured!")
 
     # Create initial state (session_id now immutable via Annotated reducer)
     initial_state = create_initial_state(session_id, project_root, user_message)
@@ -279,13 +278,13 @@ def main():
                 print(f"[DEBUG]   -> project_root={project_root}", file=sys.stderr)
             elif arg.startswith("--message="):
                 user_message = arg.split("=", 1)[1]
-                print(f"[DEBUG]   -> user_message=...", file=sys.stderr)
+                print("[DEBUG]   -> user_message=...", file=sys.stderr)
             elif arg in ("--summary", "-s"):
                 DEBUG = True
-                print(f"[DEBUG]   -> DEBUG=True", file=sys.stderr)
+                print("[DEBUG]   -> DEBUG=True", file=sys.stderr)
             elif arg == "--dry-run":
                 os.environ["CLAUDE_DRY_RUN"] = "1"
-                print(f"[DEBUG]   -> dry-run mode enabled", file=sys.stderr)
+                print("[DEBUG]   -> dry-run mode enabled", file=sys.stderr)
             elif arg in ("--help", "-h"):
                 print(f"{SCRIPT_NAME} - LangGraph 3-Level Flow Engine v{VERSION}")
                 print("Usage: python 3-level-flow.py [options]")
@@ -302,7 +301,7 @@ def main():
         if not user_message:
             user_message = _capture_user_message()
 
-        print(f"[DEBUG] Before run_langgraph_engine:", file=sys.stderr)
+        print("[DEBUG] Before run_langgraph_engine:", file=sys.stderr)
         print(f"[DEBUG]   session_id={session_id}", file=sys.stderr)
         print(f"[DEBUG]   project_root={project_root}", file=sys.stderr)
         print(f"[DEBUG]   user_message length={len(user_message) if user_message else 0}", file=sys.stderr)

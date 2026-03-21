@@ -195,7 +195,7 @@ class CodebaseAnalyzer:
                     pkg = json.load(f)
                     if pkg.get('scripts', {}).get('test'):
                         return True, 'npm test'
-            except:
+            except Exception:
                 pass
 
         return False, ''
@@ -226,7 +226,7 @@ class CodebaseAnalyzer:
                 with open(req_file) as f:
                     lines = f.readlines()[:10]  # First 10 deps
                     deps.extend([line.strip() for line in lines if line.strip()])
-            except:
+            except Exception:
                 pass
 
         # From package.json
@@ -236,7 +236,7 @@ class CodebaseAnalyzer:
                 with open(pkg_file) as f:
                     pkg = json.load(f)
                     deps.extend(list(pkg.get('dependencies', {}).keys())[:10])
-            except:
+            except Exception:
                 pass
 
         return deps[:15]  # Limit to 15
@@ -250,7 +250,7 @@ class CodebaseAnalyzer:
             if vf_path.exists():
                 try:
                     return vf_path.read_text().strip().split('\n')[0]
-                except:
+                except Exception:
                     pass
 
         # Check package.json
@@ -259,7 +259,7 @@ class CodebaseAnalyzer:
             try:
                 with open(pkg_file) as f:
                     return json.load(f).get('version', '0.1.0')
-            except:
+            except Exception:
                 pass
 
         # Check setup.py
@@ -271,7 +271,7 @@ class CodebaseAnalyzer:
                 match = re.search(r'version\s*=\s*["\']([^"\']+)["\']', content)
                 if match:
                     return match.group(1)
-            except:
+            except Exception:
                 pass
 
         return '0.1.0'

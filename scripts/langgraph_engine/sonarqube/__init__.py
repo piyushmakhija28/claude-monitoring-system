@@ -13,14 +13,14 @@ from typing import Any, Dict, List, Optional
 from .config import get_sonar_config
 from .api_client import (
     detect_sonar_installation,
-    get_project_issues,
+    get_project_issues,  # noqa: F401
     get_project_measures,
     get_quality_gate_status,
     run_sonar_scan,
 )
 from .lightweight_scanner import run_basic_scan
 from .result_aggregator import (
-    aggregate_scan_result,
+    aggregate_scan_result,  # noqa: F401
     categorize_findings,
     generate_fix_prompt,
 )

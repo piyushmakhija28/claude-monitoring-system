@@ -268,7 +268,7 @@ class ConflictResolver:
                     overridden[key] = {
                         "winner": winner_std.get("name"),
                         "winner_value": winner_val,
-                        "losers": [l[0].get("name") for l in losers],
+                        "losers": [item[0].get("name") for item in losers],
                     }
 
         total_conflicts = len([r for r in self.conflict_log if r["conflict_type"] == "standard_setting"])
@@ -455,7 +455,7 @@ class ConflictResolver:
                             conflict_type="skill_explicit",
                             item_a=skill.get("name", "?"),
                             item_b=peer_name,
-                            reason=f"Explicit conflicts_with declaration",
+                            reason="Explicit conflicts_with declaration",
                             resolution=f"Removed '{loser_name}' (lower domain priority)",
                             winner=(skill if loser is peer else peer).get("name"),
                         )

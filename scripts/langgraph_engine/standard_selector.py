@@ -13,10 +13,9 @@ Priority ordering (higher number wins conflicts):
 Uses ErrorLogger from error_logger.py for decision audit trail.
 """
 
-import os
 import json
 from pathlib import Path
-from typing import Optional, List, Dict, Any, Tuple
+from typing import List, Dict, Any
 
 from .error_logger import ErrorLogger
 from .patterns import memoize

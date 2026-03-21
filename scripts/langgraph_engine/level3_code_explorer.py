@@ -10,9 +10,8 @@ WORKFLOW.md SPEC:
 - Search: max_results optimization (max 10 results)
 """
 
-import os
 from pathlib import Path
-from typing import Dict, Any, Optional, List
+from typing import Dict, Optional, List
 
 from loguru import logger
 

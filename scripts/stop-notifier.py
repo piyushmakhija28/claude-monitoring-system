@@ -449,7 +449,7 @@ def generate_dynamic_message(event_type, context=''):
             user_prompt += f" Context: {context}"
 
     elif event_type == 'task_complete':
-        user_prompt = f"A coding task was just completed."
+        user_prompt = "A coding task was just completed."
         if context:
             user_prompt += f" Here is what was done: {context}."
         user_prompt += " Generate a brief completion notification."
@@ -499,7 +499,7 @@ def generate_dynamic_message(event_type, context=''):
     except Exception as e:
         log_s(f"[ollama] Unavailable (local only): {str(e)[:80]} -> using static fallback")
 
-    log_s(f"[llm] Ollama not available - using static fallback message")
+    log_s("[llm] Ollama not available - using static fallback message")
     return None
 
 
@@ -517,7 +517,7 @@ def speak(text):
         return
 
     if not VOICE_ENABLED:
-        log_s(f"[voice] Disabled (VOICE_ENABLED=0 or .voice-disabled flag). Skipping.")
+        log_s("[voice] Disabled (VOICE_ENABLED=0 or .voice-disabled flag). Skipping.")
         return
 
     if not VOICE_SCRIPT.exists():
@@ -835,7 +835,7 @@ def _run_post_implementation_steps():
             return
 
         print(f"[STOP] Detected {commits_ahead} commits on {current_branch}", file=sys.stderr)
-        print(f"[STOP] Running post-implementation steps (11-14)...", file=sys.stderr)
+        print("[STOP] Running post-implementation steps (11-14)...", file=sys.stderr)
 
         # Find session data
         session_dir = _find_latest_session_dir()
@@ -881,7 +881,7 @@ def _step12_close_issue(session_dir):
             sys.path.insert(0, str(_src_mcp))
 
         from github_mcp_server import github_close_issue
-        result = github_close_issue(issue_number=int(issue_id))
+        github_close_issue(issue_number=int(issue_id))
         print(f"[STOP] Step 12: Issue #{issue_id} closed", file=sys.stderr)
 
     except Exception as e:
@@ -967,10 +967,10 @@ def main():
                         log_s('[RETRY ' + str(_attempt) + '/3] auto-commit-enforcer error, retrying...')
             if not _commit_ok:
                 log_s('[POLICY-WARN] auto-commit-enforcer failed after 3 retries')
-    except:
+    except Exception:
         pass
 
-    hook_data = read_hook_stdin()
+    read_hook_stdin()
 
     # =========================================================================
     # SESSION END MAINTENANCE (non-blocking, before voice)

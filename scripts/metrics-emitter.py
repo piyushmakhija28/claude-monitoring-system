@@ -27,7 +27,6 @@ Design rules:
 
 import json
 import os
-import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -269,7 +268,7 @@ if __name__ == '__main__':
     print(f'[metrics-emitter] Wrote 5 test records to: {mf}')
     try:
         with open(mf, 'r', encoding='utf-8') as fh:
-            lines = [l.strip() for l in fh if l.strip()]
+            lines = [line.strip() for line in fh if line.strip()]
         print(f'[metrics-emitter] Total records in file: {len(lines)}')
         print(f'[metrics-emitter] Last record: {lines[-1]}')
     except Exception as e:

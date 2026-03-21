@@ -16,7 +16,7 @@ Convergence exits the loop when:
 """
 
 import re
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, Optional, Tuple
 from loguru import logger
 
 # Quality threshold: plan must score at least this to be considered "ready"

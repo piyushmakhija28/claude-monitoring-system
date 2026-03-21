@@ -85,7 +85,8 @@ jobs:
     strategy:
       fail-fast: false   # Keep running other versions even if one fails
       matrix:
-        python-version: ["3.8", "3.10", "3.12"]
+        # langgraph>=0.2.0 requires Python 3.9+; 3.8 is not supported.
+        python-version: ["3.10", "3.12"]
 
     steps:
       - name: Checkout repository
@@ -95,10 +96,12 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-          cache: pip   # Cache pip packages keyed on requirements.txt hash
+
+      - name: Install uv
+        run: pip install uv
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: uv pip install -r requirements.txt --system
 
       # Validate test discovery without running tests.
       # Fails fast on import errors or broken test file syntax.

@@ -26,12 +26,10 @@ Tools (10):
 import ast as ast_module
 import hashlib
 import json
-import os
 import re
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -171,7 +169,7 @@ def _optimize_read(p: dict):
             ext = path.suffix.lower()
             if ext in (".java", ".py", ".ts", ".tsx") and line_count > 300:
                 suggestions.append(
-                    f"Consider ast_navigate_code for structure (80-95% savings)"
+                    "Consider ast_navigate_code for structure (80-95% savings)"
                 )
 
         except Exception:

@@ -15,20 +15,17 @@ Tools (14):
 
 import json
 import random
-import re
 import shutil
 import string
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Optional
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from utils.path_resolver import get_config_dir
 
 from mcp.server.fastmcp import FastMCP
-from base.response import to_json
 from base.decorators import mcp_tool_handler
 from base.persistence import AtomicJsonStore
 
@@ -918,8 +915,8 @@ def session_finalize(session_id: str) -> dict:
         "",
         "## Overview",
         "",
-        f"| Metric | Value |",
-        f"|--------|-------|",
+        "| Metric | Value |",
+        "|--------|-------|",
         f"| Skills Used | {', '.join(data.get('skills_used', [])) or 'None'} |",
         f"| Task Types | {', '.join(data.get('task_types', [])) or 'None'} |",
         f"| Models Used | {', '.join(data.get('models_used', [])) or 'None'} |",
@@ -970,7 +967,7 @@ def session_finalize(session_id: str) -> dict:
                 md_lines.append(f"- **{d.get('policy', '')}**: {d.get('decision', '')}")
             md_lines.append("")
 
-    md_lines.append(f"---")
+    md_lines.append("---")
     md_lines.append(f"*Generated at {datetime.now().isoformat()[:19]}*")
 
     summary_md = "\n".join(md_lines)

@@ -33,7 +33,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from mcp.server.fastmcp import FastMCP
 
-from base.response import to_json
 from base.decorators import mcp_tool_handler
 from base.clients import QdrantManager, EmbeddingManager
 

@@ -152,11 +152,11 @@ def cmd_list(args: argparse.Namespace) -> int:
             )
 
         print()
-        print(f"To resume from the last checkpoint:")
+        print("To resume from the last checkpoint:")
         print(f"  python -m scripts.langgraph_engine.run_pipeline resume --session {session_id}")
         if checkpoints:
             last = checkpoints[-1]
-            print(f"To resume from a specific step:")
+            print("To resume from a specific step:")
             print(
                 f"  python -m scripts.langgraph_engine.run_pipeline resume "
                 f"--session {session_id} --checkpoint {last['checkpoint_id']}"

@@ -554,7 +554,7 @@ def _get_file_skill(file_path, tech_stack=None):
     1. Exact filename match (dockerfile, pom.xml, etc.)
     2. File extension match with tech_stack context for disambiguation
     """
-    file_lower = file_path.lower()
+    file_path.lower()
     file_name = Path(file_path).name.lower()
     tech_set = set(t.lower() for t in (tech_stack or []))
 
@@ -755,8 +755,8 @@ def _auto_review_pr(repo_root, pr_number, session_summary, build_result=None):
             projects = session_summary.get('projects_touched', [])
 
             comment_parts.append('### Session Metrics\n')
-            comment_parts.append(f"| Metric | Value |")
-            comment_parts.append(f"|--------|-------|")
+            comment_parts.append("| Metric | Value |")
+            comment_parts.append("|--------|-------|")
             if req_count:
                 comment_parts.append(f"| Requests | {req_count} |")
             if task_types:
@@ -1092,7 +1092,7 @@ def _print_workflow_step(step_num, step_name, status='IN_PROGRESS'):
 
     if step_num == -1:
         sys.stdout.write(f"\n{'?'*70}\n")
-        sys.stdout.write(f"[PR WORKFLOW] Starting 7-step GitHub workflow\n")
+        sys.stdout.write("[PR WORKFLOW] Starting 7-step GitHub workflow\n")
         sys.stdout.write(f"{'?'*70}\n")
     else:
         sys.stdout.write(f"[{step_num}] {symbol} {step_name}\n")
@@ -1135,8 +1135,8 @@ def run_pr_workflow(session_id=None):
             _log(error_msg)
             sys.stdout.write(f"\n{'='*70}\n")
             sys.stdout.write(f"[PR-WORKFLOW ERROR] {error_msg}\n")
-            sys.stdout.write(f"  Cannot create PR without knowing which branch you're on\n")
-            sys.stdout.write(f"  ACTION: Verify git repository with 'git status'\n")
+            sys.stdout.write("  Cannot create PR without knowing which branch you're on\n")
+            sys.stdout.write("  ACTION: Verify git repository with 'git status'\n")
             sys.stdout.write(f"{'='*70}\n\n")
             sys.stdout.flush()
             return False
@@ -1146,8 +1146,8 @@ def run_pr_workflow(session_id=None):
             info_msg = f"INFO: On {branch_name} - skipping PR workflow (no feature branch work)"
             _log(info_msg)
             sys.stdout.write(f"\n[PR-WORKFLOW] {info_msg}\n")
-            sys.stdout.write(f"  To enable PR workflow, create tasks first (TaskCreate)\n")
-            sys.stdout.write(f"  This creates a feature branch and GitHub issue automatically\n\n")
+            sys.stdout.write("  To enable PR workflow, create tasks first (TaskCreate)\n")
+            sys.stdout.write("  This creates a feature branch and GitHub issue automatically\n\n")
             sys.stdout.flush()
             return False
 
@@ -1222,7 +1222,7 @@ def run_pr_workflow(session_id=None):
             _log("  [FAIL] Push failed - cannot create PR without remote branch")
             _print_workflow_step(2, "Push branch", 'ERROR')
             sys.stdout.write(f"\n[PR-WORKFLOW ERROR] Could not push {branch_name} to remote\n")
-            sys.stdout.write(f"  ACTION: Check network and git remote configuration\n\n")
+            sys.stdout.write("  ACTION: Check network and git remote configuration\n\n")
             sys.stdout.flush()
             return False
         _log(f"  [OK] Branch pushed to origin/{branch_name}")
@@ -1235,8 +1235,8 @@ def run_pr_workflow(session_id=None):
         if not pr_number:
             _log("  [FAIL] PR creation failed")
             _print_workflow_step(3, "Create PR", 'ERROR')
-            sys.stdout.write(f"\n[PR-WORKFLOW ERROR] Could not create PR\n")
-            sys.stdout.write(f"  Check gh CLI authentication with 'gh auth status'\n\n")
+            sys.stdout.write("\n[PR-WORKFLOW ERROR] Could not create PR\n")
+            sys.stdout.write("  Check gh CLI authentication with 'gh auth status'\n\n")
             sys.stdout.flush()
             return False
         _log(f"  [OK] PR #{pr_number} created")
@@ -1263,9 +1263,9 @@ def run_pr_workflow(session_id=None):
             if not safe_to_merge:
                 _log("  [FAIL] Smart review found CRITICAL issues - NOT merging")
                 _print_workflow_step(5, "Smart code review", 'ERROR')
-                sys.stdout.write(f"\n[SMART REVIEW] Critical issues detected\n")
+                sys.stdout.write("\n[SMART REVIEW] Critical issues detected\n")
                 sys.stdout.write(f"  PR #{pr_number} left open for manual review\n")
-                sys.stdout.write(f"  Check PR comments for details\n\n")
+                sys.stdout.write("  Check PR comments for details\n\n")
                 sys.stdout.flush()
                 return False
             _log("  [OK] Smart review PASSED - safe to merge")
@@ -1283,8 +1283,8 @@ def run_pr_workflow(session_id=None):
             _log(f"  ??  Merge failed or blocked (PR #{pr_number} left open)")
             _print_workflow_step(6, "Merge PR", 'WARN')
             sys.stdout.write(f"\n[PR-WORKFLOW] PR #{pr_number} could not be auto-merged\n")
-            sys.stdout.write(f"  Likely cause: Branch protection rules require manual review\n")
-            sys.stdout.write(f"  ACTION: Merge manually from GitHub\n\n")
+            sys.stdout.write("  Likely cause: Branch protection rules require manual review\n")
+            sys.stdout.write("  ACTION: Merge manually from GitHub\n\n")
             sys.stdout.flush()
             return False
 
@@ -1317,9 +1317,9 @@ def run_pr_workflow(session_id=None):
         _log("=== PR WORKFLOW COMPLETED SUCCESSFULLY ===")
         _log("?"*70)
         sys.stdout.write(f"\n{'?'*70}\n")
-        sys.stdout.write(f"[PR-WORKFLOW] [OK] COMPLETED SUCCESSFULLY\n")
+        sys.stdout.write("[PR-WORKFLOW] [OK] COMPLETED SUCCESSFULLY\n")
         sys.stdout.write(f"  PR #{pr_number} merged into main\n")
-        sys.stdout.write(f"  Version bumped\n")
+        sys.stdout.write("  Version bumped\n")
         sys.stdout.write(f"{'?'*70}\n\n")
         sys.stdout.flush()
         return True

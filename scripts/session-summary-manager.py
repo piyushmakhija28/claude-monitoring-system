@@ -48,7 +48,6 @@ Windows-Safe: No Unicode chars (ASCII only, cp1252 compatible)
 """
 
 import sys
-import os
 import json
 import argparse
 from pathlib import Path
@@ -1146,7 +1145,7 @@ def auto_trigger_cleanup_if_needed(session_id, summary_data):
             json.dump(baseline, f, indent=2)
             _unlock_file(f)
 
-        log_event(f"[BASELINE] Context reset to 10% for next session")
+        log_event("[BASELINE] Context reset to 10% for next session")
 
 
 def _execute_session_cleanup():
@@ -1305,7 +1304,7 @@ def _generate_markdown(data):
     avg_complexity = data.get("avg_complexity", 0)
     requests = data.get("requests", [])
     duration_human = data.get("duration_human", "unknown")
-    duration_seconds = data.get("duration_seconds", 0)
+    data.get("duration_seconds", 0)
     plan_mode_count = data.get("plan_mode_count", 0)
     peak_context = data.get("peak_context_pct", 0)
     standards_count = data.get("standards_count", 0)
@@ -1622,7 +1621,7 @@ def _generate_markdown(data):
             if supp:
                 lines.append(f"- **Supplementary:** {', '.join(supp)}")
             if plan_mode:
-                lines.append(f"- **Plan Mode:** Yes")
+                lines.append("- **Plan Mode:** Yes")
             if ctx_pct:
                 lines.append(f"- **Context:** {ctx_pct}%")
             lines.append("")
@@ -1760,11 +1759,11 @@ def _generate_insights(data):
     insights = []
     req_count = data.get("request_count", 0)
     max_c = data.get("max_complexity", 0)
-    avg_c = data.get("avg_complexity", 0)
+    data.get("avg_complexity", 0)
     tool_stats = data.get("tool_stats", {})
     tool_counts = tool_stats.get("tool_counts", {})
     files_modified = data.get("files_modified", [])
-    files_read = data.get("files_read", [])
+    data.get("files_read", [])
     error_count = data.get("error_count", 0)
     peak_ctx = data.get("peak_context_pct", 0)
     duration_seconds = data.get("duration_seconds", 0)
@@ -2009,7 +2008,7 @@ def main():
         if ok:
             print(f"[OK] Accumulated for {args.session}")
         else:
-            print(f"[ERROR] Failed to accumulate")
+            print("[ERROR] Failed to accumulate")
             sys.exit(1)
 
     elif args.command == 'finalize':
@@ -2017,7 +2016,7 @@ def main():
         if ok:
             print(f"[OK] Comprehensive summary finalized for {args.session}")
         else:
-            print(f"[ERROR] Failed to finalize summary")
+            print("[ERROR] Failed to finalize summary")
             sys.exit(1)
 
     elif args.command == 'read':

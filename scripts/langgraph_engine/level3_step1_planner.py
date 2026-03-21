@@ -20,11 +20,10 @@ from datetime import datetime
 
 from loguru import logger
 from .ollama_service import get_ollama_service
-from .toon_models import ToonAnalysis
-from .plan_decision_rules import build_fallback_decision, evaluate_from_toon
+from .plan_decision_rules import build_fallback_decision
 from .step_validator import StepValidator
 from .token_manager import TokenBudget
-from .timeout_wrapper import run_with_timeout, fallback_step1, STEP_TIMEOUTS
+from .timeout_wrapper import run_with_timeout, fallback_step1
 
 # Import LLM retry helper (lazy to avoid circular imports)
 def _get_llm_retry():

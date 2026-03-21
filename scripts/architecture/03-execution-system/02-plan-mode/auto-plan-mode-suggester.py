@@ -22,7 +22,8 @@ if sys.stderr.encoding != 'utf-8':
 
 import json
 import yaml
-from typing import Dict, List
+from pathlib import Path
+from typing import Dict
 from datetime import datetime
 
 
@@ -90,7 +91,7 @@ class AutoPlanModeSuggester:
         risks = self.calculate_risk_factors(structured_prompt, complexity_analysis)
         print(f"\n[WARNING]️  Risk Adjustment: +{risks['score']}")
         if risks['factors']:
-            print(f"   Risk Factors:")
+            print("   Risk Factors:")
             for factor in risks['factors']:
                 print(f"   - {factor}")
 
@@ -330,7 +331,7 @@ Phases: {len(complexity.get('phases', []))}
 """
 
         if complexity.get('risk_factors'):
-            output += f"\nRisk Factors:"
+            output += "\nRisk Factors:"
             for factor in complexity['risk_factors']:
                 output += f"\n  [WARNING]️  {factor}"
 
@@ -454,19 +455,14 @@ def main():
         # Use actual complexity from step0 analysis (default 5 if missing)
         actual_complexity = context_data.get("complexity", 5)
         actual_task_count = context_data.get("task_count", 1)
-        actual_task_type = context_data.get("task_type", "Unknown")
-        actual_user_message = context_data.get("user_message", "")
+        context_data.get("task_type", "Unknown")
+        context_data.get("user_message", "")
 
         complexity = {
             'score': actual_complexity,
             'level': 'SIMPLE' if actual_complexity < 5 else 'MODERATE' if actual_complexity < 10 else 'COMPLEX',
             'estimated_tasks': actual_task_count,
             'requires_phases': actual_complexity >= 10
-        }
-        structured_prompt = {
-            'metadata': {'original_request': actual_user_message or 'Task'},
-            'task_type': actual_task_type,
-            'analysis': {}
         }
     elif len(sys.argv) < 2:
         # No arguments - return default
@@ -508,21 +504,13 @@ def main():
             try:
                 # Try to load as file
                 with open(prompt_arg, 'r') as f:
-                    structured_prompt = yaml.safe_load(f)
+                    yaml.safe_load(f)
             except (FileNotFoundError, OSError, ValueError):
                 # It's a string description
-                structured_prompt = {
-                    'metadata': {'original_request': prompt_arg},
-                    'task_type': 'Unknown',
-                    'analysis': {}
-                }
+                pass
         else:
             # No prompt provided, use minimal
-            structured_prompt = {
-                'metadata': {'original_request': 'Task'},
-                'task_type': 'Unknown',
-                'analysis': {}
-            }
+            pass
 
     import urllib.request
     import urllib.error

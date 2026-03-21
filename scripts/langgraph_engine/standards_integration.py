@@ -18,8 +18,7 @@ Priority ordering used by conflict resolution (from standard_selector.py):
 Uses ErrorLogger from error_logger.py for audit trail.
 """
 
-from typing import Optional, List, Dict, Any
-from pathlib import Path
+from typing import List, Dict, Any
 
 from .error_logger import ErrorLogger
 from .flow_state import FlowState

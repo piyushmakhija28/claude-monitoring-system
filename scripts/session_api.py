@@ -8,7 +8,6 @@ Phase 2: Session metadata management + archival for old sessions.
 """
 
 import json
-import os
 from pathlib import Path
 from datetime import datetime, timedelta
 

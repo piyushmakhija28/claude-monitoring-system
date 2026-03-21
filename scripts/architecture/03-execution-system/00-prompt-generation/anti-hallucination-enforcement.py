@@ -25,7 +25,7 @@ if sys.platform == 'win32':
     try:
         sys.stdout.reconfigure(encoding='utf-8')
         sys.stderr.reconfigure(encoding='utf-8')
-    except:
+    except Exception:
         pass
 
 MEMORY_DIR = Path.home() / ".claude" / "memory"
@@ -44,7 +44,7 @@ def log_policy_hit(action, context=""):
         LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
         with open(LOG_FILE, 'a', encoding='utf-8') as f:
             f.write(f"[{timestamp}] anti-hallucination-enforcement-policy | {action} | {context}\n")
-    except:
+    except Exception:
         pass
 
 

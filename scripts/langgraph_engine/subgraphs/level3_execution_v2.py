@@ -47,7 +47,7 @@ def _get_timeout_wrapper():
         return {}, None
 
 try:
-    from langgraph.graph import StateGraph, START, END
+    from langgraph.graph import StateGraph, START, END  # noqa: F401
     _LANGGRAPH_AVAILABLE = True
 except ImportError:
     _LANGGRAPH_AVAILABLE = False
@@ -58,10 +58,10 @@ except ImportError:
     import logging
     logger = logging.getLogger(__name__)
 
-from ..flow_state import FlowState
-from ..step_logger import write_level_log
-from ..rag_integration import rag_store_after_node, rag_lookup_before_llm, get_rag_layer
-from .level3_execution import (
+from ..flow_state import FlowState  # noqa: E402
+from ..step_logger import write_level_log  # noqa: E402
+from ..rag_integration import rag_store_after_node, rag_lookup_before_llm  # noqa: E402
+from .level3_execution import (  # noqa: E402
     step0_task_analysis,
     step1_plan_mode_decision,
     step2_plan_execution,
@@ -422,7 +422,6 @@ def _run_step(
             kb_suggestions = state.get("failure_kb_suggestions") or []
             user_msg = state.get("user_message", "")
             if kb_suggestions and user_msg:
-                import re as _re_kb
                 for entry in kb_suggestions:
                     sig = entry.get("signature", "")
                     sig_words = [w for w in sig.lower().split() if len(w) > 3]

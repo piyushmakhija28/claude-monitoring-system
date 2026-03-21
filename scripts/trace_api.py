@@ -11,7 +11,6 @@ Key Design:
 """
 
 import json
-import sys
 from pathlib import Path
 
 try:

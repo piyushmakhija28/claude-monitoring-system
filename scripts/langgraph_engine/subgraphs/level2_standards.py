@@ -109,7 +109,7 @@ def run_standards_loader_script() -> dict:
         # Parse output
         try:
             return json.loads(result.stdout)
-        except:
+        except Exception:
             return {
                 "status": "SUCCESS",
                 "exit_code": result.returncode,
@@ -282,7 +282,7 @@ def node_mcp_plugin_discovery(state: FlowState) -> dict:
     updates = {}
 
     try:
-        from ..mcp_plugin_loader import MCPPluginLoader, MCPPluginError
+        from ..mcp_plugin_loader import MCPPluginLoader, MCPPluginError  # noqa: F401
 
         loader = MCPPluginLoader()
         plugins = loader.discover_plugins()

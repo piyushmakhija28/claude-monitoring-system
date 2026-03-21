@@ -28,20 +28,17 @@ Usage:
 import os
 import json
 import subprocess
-import sys
 import tempfile
 import time
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional
 from enum import Enum
 from pathlib import Path
 from loguru import logger
 
 try:
     from .inference_router import InferenceRouter
-    from .ollama_service import OllamaService
 except ImportError:
     from inference_router import InferenceRouter
-    from ollama_service import OllamaService
 
 
 class StepType(Enum):
@@ -448,7 +445,7 @@ class HybridInferenceManager:
                     f"--system={temp_system_file}",  # System prompt from file
                     f"@{temp_message_file}",  # User message from file
                 ]
-                logger.debug(f"Calling Claude CLI with system prompt and user message")
+                logger.debug("Calling Claude CLI with system prompt and user message")
 
             else:
                 # Legacy format: combine prompt + context
@@ -475,7 +472,7 @@ class HybridInferenceManager:
                     "--no-stream",  # Wait for full response
                     f"@{temp_prompt_file}",  # Read prompt from file
                 ]
-                logger.debug(f"Calling Claude CLI (legacy format)")
+                logger.debug("Calling Claude CLI (legacy format)")
 
             try:
                 result = subprocess.run(

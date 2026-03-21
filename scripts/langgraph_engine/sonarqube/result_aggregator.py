@@ -14,7 +14,6 @@ Version: 1.4.1
 """
 
 import logging
-import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 

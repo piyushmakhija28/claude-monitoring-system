@@ -27,7 +27,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from utils.path_resolver import get_config_dir
 
 from mcp.server.fastmcp import FastMCP
-from base.response import to_json
 from base.decorators import mcp_tool_handler
 from base.persistence import AtomicJsonStore, SessionIdResolver
 

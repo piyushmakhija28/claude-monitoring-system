@@ -38,8 +38,8 @@ if sys.stderr.encoding != 'utf-8':
         import io
         sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
+import os
 import urllib.request
-import json
 from pathlib import Path
 from typing import Any, Optional, Dict
 
@@ -96,7 +96,7 @@ class ImportManager:
                 }
         except urllib.error.HTTPError:
             return None
-    
+
     @staticmethod
     def get_agent(agent_name: str) -> Optional[Dict]:
         """Load an agent definition from claude-global-library on GitHub.
@@ -128,7 +128,7 @@ class ImportManager:
                 }
         except urllib.error.HTTPError:
             return None
-    
+
     @staticmethod
     def get_policy(policy_path: str) -> Optional[str]:
         """Load an architecture policy document from claude-insight on GitHub.
@@ -150,7 +150,7 @@ class ImportManager:
                 return response.read().decode('utf-8')
         except urllib.error.HTTPError:
             return None
-    
+
     @staticmethod
     def get_local_module(module_path: str) -> Any:
         """Load a local project module by dotted path.
@@ -176,7 +176,7 @@ class ImportManager:
         for part in parts[1:]:
             module = getattr(module, part)
         return module
-    
+
     @staticmethod
     def list_skills() -> Optional[list]:
         """Fetch and return the skills index from claude-global-library.
@@ -195,7 +195,7 @@ class ImportManager:
                 return content.split('\n')
         except urllib.error.HTTPError:
             return None
-    
+
     @staticmethod
     def list_agents() -> Optional[list]:
         """Fetch and return the agents list from claude-global-library README.

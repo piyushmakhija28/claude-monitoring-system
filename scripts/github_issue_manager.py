@@ -36,7 +36,6 @@ Author: Claude Memory System
 """
 
 import sys
-import os
 import json
 import subprocess
 from pathlib import Path
@@ -509,31 +508,31 @@ def create_github_issue(task_id, subject, description):
     try:
         _debug_log_gh(f"[GH-CREATE] START: task_id={task_id}, subject='{subject[:50]}'")
 
-        _debug_log_gh(f"[GH-CREATE] Checking if gh is available...")
+        _debug_log_gh("[GH-CREATE] Checking if gh is available...")
         if not is_gh_available():
-            _debug_log_gh(f"[GH-CREATE] [FAIL] gh not available, returning None")
+            _debug_log_gh("[GH-CREATE] [FAIL] gh not available, returning None")
             return None
-        _debug_log_gh(f"[GH-CREATE] [PASS] gh is available")
+        _debug_log_gh("[GH-CREATE] [PASS] gh is available")
 
         _debug_log_gh(f"[GH-CREATE] Checking ops count (MAX={MAX_OPS_PER_SESSION})...")
         ops_count = _get_ops_count()
         _debug_log_gh(f"[GH-CREATE] ops_count={ops_count}")
         if ops_count >= MAX_OPS_PER_SESSION:
-            _debug_log_gh(f"[GH-CREATE] [FAIL] ops_count >= MAX, returning None")
+            _debug_log_gh("[GH-CREATE] [FAIL] ops_count >= MAX, returning None")
             return None
 
-        _debug_log_gh(f"[GH-CREATE] Getting repo root...")
+        _debug_log_gh("[GH-CREATE] Getting repo root...")
         repo_root = _get_repo_root()
         _debug_log_gh(f"[GH-CREATE] repo_root={repo_root}")
         if not repo_root:
-            _debug_log_gh(f"[GH-CREATE] [FAIL] no repo_root, returning None")
+            _debug_log_gh("[GH-CREATE] [FAIL] no repo_root, returning None")
             return None
 
         # Build issue title and body
         # CHANGED v3.0: Use semantic title format (no [TASK-X] prefix)
         # Format: {type}: {subject}
         # Example: bugfix: Model selection defaulting to HAIKU
-        _debug_log_gh(f"[GH-CREATE] Detecting issue type...")
+        _debug_log_gh("[GH-CREATE] Detecting issue type...")
         issue_type_label = _detect_issue_type(subject, description)
         _debug_log_gh(f"[GH-CREATE] issue_type_label={issue_type_label}")
         title = issue_type_label + ': ' + subject
@@ -541,7 +540,7 @@ def create_github_issue(task_id, subject, description):
         title = title[:256]
         _debug_log_gh(f"[GH-CREATE] title='{title[:60]}'")
 
-        _debug_log_gh(f"[GH-CREATE] Getting session context...")
+        _debug_log_gh("[GH-CREATE] Getting session context...")
         session_id = _get_session_id()
         _debug_log_gh(f"[GH-CREATE] session_id={session_id}")
         flow_ctx = _get_flow_trace_context()
@@ -692,7 +691,7 @@ def create_github_issue(task_id, subject, description):
         _ensure_labels_exist(labels, repo_root)
 
         # Create issue via gh CLI with labels
-        _debug_log_gh(f"[GH-CREATE] Building gh CLI command...")
+        _debug_log_gh("[GH-CREATE] Building gh CLI command...")
         cmd = [
             'gh', 'issue', 'create',
             '--title', title,
@@ -723,7 +722,7 @@ def create_github_issue(task_id, subject, description):
 
         # If label creation still failed, retry without labels
         if result.returncode != 0 and 'label' in result.stderr.lower():
-            _debug_log_gh(f"[GH-CREATE] Label error detected, retrying without labels...")
+            _debug_log_gh("[GH-CREATE] Label error detected, retrying without labels...")
             result = subprocess.run(
                 cmd,
                 capture_output=True, text=True, timeout=GH_TIMEOUT,
@@ -732,7 +731,7 @@ def create_github_issue(task_id, subject, description):
             _debug_log_gh(f"[GH-CREATE] Retry returned: returncode={result.returncode}")
 
         if result.returncode == 0 and result.stdout.strip():
-            _debug_log_gh(f"[GH-CREATE] [PASS] gh command succeeded")
+            _debug_log_gh("[GH-CREATE] [PASS] gh command succeeded")
             # stdout contains the issue URL, e.g. https://github.com/user/repo/issues/42
             issue_url = result.stdout.strip()
             issue_number = None
@@ -762,7 +761,7 @@ def create_github_issue(task_id, subject, description):
             # never breaks. Branch is created in the same call as the issue.
             _debug_log_gh(f"[GH-CREATE] Branch creation block: issue_number={issue_number}")
             if issue_number:
-                _debug_log_gh(f"[GH-CREATE] [PASS] issue_number exists, checking for THIS issue's branch...")
+                _debug_log_gh("[GH-CREATE] [PASS] issue_number exists, checking for THIS issue's branch...")
                 # Each issue gets its own branch: {issue_type}/{issue_number}
                 issue_specific_branch = f"{issue_type}/{issue_number}"
                 _debug_log_gh(f"[GH-CREATE] expected_branch_name={issue_specific_branch}")
@@ -779,9 +778,9 @@ def create_github_issue(task_id, subject, description):
                     except Exception as e:
                         _debug_log_gh(f"[GH-CREATE] Could not write stdout: {str(e)[:100]}")
                 else:
-                    _debug_log_gh(f"[GH-CREATE] [FAIL] Branch creation returned None")
+                    _debug_log_gh("[GH-CREATE] [FAIL] Branch creation returned None")
             else:
-                _debug_log_gh(f"[GH-CREATE] [FAIL] issue_number is falsy, skipping branch creation")
+                _debug_log_gh("[GH-CREATE] [FAIL] issue_number is falsy, skipping branch creation")
 
             _debug_log_gh(f"[GH-CREATE] [PASS] RETURNING issue_number={issue_number}")
             return issue_number
@@ -1454,14 +1453,14 @@ def create_issue_branch(issue_number, subject, issue_type=None):
             return None
 
         # STEP 1: Determine current branch
-        debug_log.append(f"[BRANCH-CREATE] STEP 1: Reading current branch...")
+        debug_log.append("[BRANCH-CREATE] STEP 1: Reading current branch...")
         result = subprocess.run(
             ['git', 'rev-parse', '--abbrev-ref', 'HEAD'],
             capture_output=True, text=True, timeout=5,
             cwd=repo_root
         )
         if result.returncode != 0:
-            error_msg = f"[BRANCH-CREATE] STEP 1 FAILED: Could not read current branch"
+            error_msg = "[BRANCH-CREATE] STEP 1 FAILED: Could not read current branch"
             debug_log.append(f"  Error: {result.stderr}")
             _log_branch_debug(debug_log, error_msg)
             sys.stdout.write(f"\n[GH ERROR] {error_msg}\n\n")
@@ -1479,7 +1478,7 @@ def create_issue_branch(issue_number, subject, issue_type=None):
             return None
 
         # STEP 2: Detect issue type
-        debug_log.append(f"[BRANCH-CREATE] STEP 2: Detecting issue type from subject...")
+        debug_log.append("[BRANCH-CREATE] STEP 2: Detecting issue type from subject...")
         if not issue_type:
             issue_type = _detect_issue_type(subject)
         debug_log.append(f"[BRANCH-CREATE] STEP 2 OK: Issue type = {issue_type}")
@@ -1497,7 +1496,7 @@ def create_issue_branch(issue_number, subject, issue_type=None):
         )
 
         if result.returncode == 0:
-            debug_log.append(f"[BRANCH-CREATE] STEP 4 OK: Branch created and checked out")
+            debug_log.append("[BRANCH-CREATE] STEP 4 OK: Branch created and checked out")
 
             # STEP 5: Verify we're on the branch
             verify_result = subprocess.run(
@@ -1510,7 +1509,7 @@ def create_issue_branch(issue_number, subject, issue_type=None):
                 debug_log.append(f"[BRANCH-CREATE] STEP 5 VERIFY: Confirmed on {verified_branch}")
 
             # STEP 6: Store branch name in mapping (with session_id for future session validation)
-            debug_log.append(f"[BRANCH-CREATE] STEP 6: Saving to github-issues.json...")
+            debug_log.append("[BRANCH-CREATE] STEP 6: Saving to github-issues.json...")
             mapping = _load_issues_mapping()
             mapping['session_branch'] = branch_name
             mapping['session_id'] = _get_current_session_id()  # Save current session_id
@@ -1518,7 +1517,7 @@ def create_issue_branch(issue_number, subject, issue_type=None):
             mapping['branch_from_issue'] = issue_number
             mapping['branch_type'] = issue_type
             _save_issues_mapping(mapping)
-            debug_log.append(f"[BRANCH-CREATE] STEP 6 OK: Branch info saved")
+            debug_log.append("[BRANCH-CREATE] STEP 6 OK: Branch info saved")
 
             success_msg = f"[BRANCH-CREATE] [OK] SUCCESS: {branch_name}"
             debug_log.append(success_msg)
@@ -1531,7 +1530,7 @@ def create_issue_branch(issue_number, subject, issue_type=None):
             # STEP 4b: Branch might already exist - try checkout
             debug_log.append(f"[BRANCH-CREATE] STEP 4 FAILED: Create failed with code {result.returncode}")
             debug_log.append(f"  stderr: {result.stderr[:300]}")
-            debug_log.append(f"[BRANCH-CREATE] STEP 4b: Attempting checkout on existing branch...")
+            debug_log.append("[BRANCH-CREATE] STEP 4b: Attempting checkout on existing branch...")
 
             result = subprocess.run(
                 ['git', 'checkout', branch_name],
@@ -1539,7 +1538,7 @@ def create_issue_branch(issue_number, subject, issue_type=None):
                 cwd=repo_root
             )
             if result.returncode == 0:
-                debug_log.append(f"[BRANCH-CREATE] STEP 4b OK: Existing branch checked out")
+                debug_log.append("[BRANCH-CREATE] STEP 4b OK: Existing branch checked out")
                 mapping = _load_issues_mapping()
                 mapping['session_branch'] = branch_name
                 mapping['session_id'] = _get_current_session_id()  # Save current session_id
@@ -1557,7 +1556,7 @@ def create_issue_branch(issue_number, subject, issue_type=None):
                 debug_log.append(f"[BRANCH-CREATE] STEP 4b FAILED: Checkout failed with code {result.returncode}")
                 debug_log.append(f"  stderr: {result.stderr[:300]}")
                 debug_log.append(error_msg)
-                debug_log.append(f"[BRANCH-CREATE] ACTION REQUIRED: Fix git manually or try again")
+                debug_log.append("[BRANCH-CREATE] ACTION REQUIRED: Fix git manually or try again")
                 _log_branch_debug(debug_log, error_msg)
 
                 # BLOCKING: Print prominent error so user sees it
@@ -1565,8 +1564,8 @@ def create_issue_branch(issue_number, subject, issue_type=None):
                 sys.stdout.write(f"[GH ERROR] Branch creation FAILED: {branch_name}\n")
                 sys.stdout.write(f"  Cannot create new branch: {result.stderr[:150]}\n")
                 sys.stdout.write(f"  Cannot checkout existing: {result.stderr[:150]}\n")
-                sys.stdout.write(f"  ACTION: Check git status and fix manually\n")
-                sys.stdout.write(f"  DEBUG: See ~/.claude/memory/logs/branch-creation-debug.log\n")
+                sys.stdout.write("  ACTION: Check git status and fix manually\n")
+                sys.stdout.write("  DEBUG: See ~/.claude/memory/logs/branch-creation-debug.log\n")
                 sys.stdout.write(f"{'='*70}\n\n")
                 sys.stdout.flush()
                 return None
@@ -1639,7 +1638,8 @@ def get_session_branch():
         if stored_branch and stored_session_id != current_session_id:
             # Log this for debugging
             try:
-                _debug_log_gh(f"[SESSION] Ignoring stale branch from previous session: {stored_branch} (old_sid={stored_session_id[:20]}..., current_sid={current_session_id[:20]}...)")
+                import logging as _logging
+                _logging.debug("[SESSION] Ignoring stale branch from previous session: %s", stored_branch)
             except Exception:
                 pass
 
@@ -1647,7 +1647,8 @@ def get_session_branch():
     except Exception as e:
         # If anything fails, return None to prevent blocking
         try:
-            _debug_log_gh(f"[SESSION] get_session_branch() exception: {type(e).__name__}: {str(e)[:150]}")
+            import logging as _logging
+            _logging.debug("[SESSION] get_session_branch() exception: %s: %s", type(e).__name__, str(e)[:150])
         except Exception:
             pass
         return None

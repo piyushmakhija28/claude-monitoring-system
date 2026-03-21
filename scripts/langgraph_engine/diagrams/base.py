@@ -8,7 +8,6 @@ The Template Method pattern defines the standard workflow:
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional
 
 logger = logging.getLogger(__name__)
 

@@ -20,7 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from mcp.server.fastmcp import FastMCP
 
-from git import InvalidGitRepositoryError, GitCommandError
+from git import GitCommandError
 
 from base.decorators import mcp_tool_handler
 from base.clients import GitRepoClient

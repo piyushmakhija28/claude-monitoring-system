@@ -23,7 +23,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from mcp.server.fastmcp import FastMCP
 
-from base.response import to_json
 from base.decorators import mcp_tool_handler
 from base.clients import GitHubApiClient, GitRepoClient
 
@@ -79,7 +78,7 @@ def github_create_issue(
         repo_path: Local repo path for auto-detecting owner/repo
     """
     repo = GitHubApiClient.instance().get_repo(repo_path)
-    label_list = [l.strip() for l in labels.split(",") if l.strip()] if labels else []
+    label_list = [lbl.strip() for lbl in labels.split(",") if lbl.strip()] if labels else []
 
     kwargs = {"title": title, "body": body, "labels": label_list}
     if assignee:
@@ -181,7 +180,7 @@ def github_create_pr(
     pr = repo.create_pull(title=title, body=body, head=head, base=base)
 
     if labels:
-        label_list = [l.strip() for l in labels.split(",") if l.strip()]
+        label_list = [lbl.strip() for lbl in labels.split(",") if lbl.strip()]
         for label in label_list:
             try:
                 pr.add_to_labels(label)
@@ -244,7 +243,7 @@ def github_merge_pr(
             "method": method,
             "branch_deleted": delete_branch
         }
-    except Exception as e:
+    except Exception:
         # Fallback: gh CLI for critical merge operation
         fallback = _gh_cli_merge_fallback(number, method, delete_branch, merge_msg)
         if fallback:
@@ -270,8 +269,8 @@ def github_list_issues(
 
     kwargs = {"state": state}
     if labels:
-        label_list = [l.strip() for l in labels.split(",") if l.strip()]
-        kwargs["labels"] = [repo.get_label(l) for l in label_list]
+        label_list = [lbl.strip() for lbl in labels.split(",") if lbl.strip()]
+        kwargs["labels"] = [repo.get_label(lbl) for lbl in label_list]
 
     issues = []
     for issue in repo.get_issues(**kwargs)[:25]:
@@ -280,7 +279,7 @@ def github_list_issues(
                 "number": issue.number,
                 "title": issue.title,
                 "state": issue.state,
-                "labels": [l.name for l in issue.labels],
+                "labels": [lbl.name for lbl in issue.labels],
                 "created_at": issue.created_at.isoformat()
             })
 
@@ -452,7 +451,7 @@ def github_auto_commit_and_pr(
     pr = gh_repo.create_pull(title=title, body=body, head=branch, base=base)
 
     if labels:
-        for label in [l.strip() for l in labels.split(",") if l.strip()]:
+        for label in [lbl.strip() for lbl in labels.split(",") if lbl.strip()]:
             try:
                 pr.add_to_labels(label)
             except Exception:
@@ -545,7 +544,7 @@ def github_label_issue(
     """
     repo = GitHubApiClient.instance().get_repo(repo_path)
     issue = repo.get_issue(number)
-    label_list = [l.strip() for l in labels.split(",") if l.strip()]
+    label_list = [lbl.strip() for lbl in labels.split(",") if lbl.strip()]
 
     added = []
     for label in label_list:
@@ -558,7 +557,7 @@ def github_label_issue(
     return {
         "issue_number": number,
         "labels_added": added,
-        "total_labels": [l.name for l in issue.labels]
+        "total_labels": [lbl.name for lbl in issue.labels]
     }
 
 

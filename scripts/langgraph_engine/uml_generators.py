@@ -12,12 +12,10 @@ Rendering:
 - Kroki.io free API for PlantUML -> SVG rendering
 """
 
-import os
 import ast
 import logging
 from pathlib import Path
 from datetime import datetime
-from typing import Dict, List, Any, Optional, Set, Tuple
 
 logger = logging.getLogger(__name__)
 

@@ -11,7 +11,7 @@ Rules:
 - everything else                      -> plan not required
 """
 
-from typing import Dict, Any, Optional, Tuple
+from typing import Dict, Any, Tuple
 from loguru import logger
 
 # Requirement types that always require planning, regardless of complexity

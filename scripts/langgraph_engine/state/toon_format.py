@@ -17,7 +17,7 @@ Example TOON object:
 }
 """
 
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 
 
 class ToonObject:

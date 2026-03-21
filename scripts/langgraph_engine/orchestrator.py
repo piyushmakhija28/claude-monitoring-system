@@ -64,8 +64,8 @@ from .subgraphs.level2_standards import (
     detect_project_type,
 )
 
-from .standards_integration import apply_standards_at_step, STANDARDS_INTEGRATION_POINTS
-from .standard_selector import select_standards, detect_project_type as selector_detect_project_type
+from .standards_integration import apply_standards_at_step
+from .standard_selector import select_standards
 
 from .subgraphs.level3_execution_v2 import (
     step0_0_project_context_node,
@@ -192,7 +192,6 @@ def ask_level_minus1_fix(state: FlowState) -> dict:
     - "Auto-fix" (RECOMMENDED - attempts to fix automatically)
     - "Skip Level -1" (NOT RECOMMENDED - will break flow later)
     """
-    from langchain_core.messages import BaseMessage
 
     retry_count = state.get(StepKeys.LEVEL_MINUS1_RETRY_COUNT, 0)
 
@@ -262,7 +261,6 @@ def fix_level_minus1_issues(state: FlowState) -> dict:
 
     Then resets Level -1 state for retry.
     """
-    import subprocess
     import os
     import sys
 
@@ -319,7 +317,7 @@ def fix_level_minus1_issues(state: FlowState) -> dict:
         print(f"✓ Applied: {', '.join(fixes_applied)}")
     if fixes_failed:
         print(f"✗ Could not fix: {', '.join(fixes_failed)}")
-    print(f"\nRetrying Level -1 checks...")
+    print("\nRetrying Level -1 checks...")
     print('='*70 + "\n")
 
     return updates
@@ -433,7 +431,6 @@ def save_workflow_memory(state: FlowState) -> dict:
     """Save workflow memory to disk for session persistence."""
     try:
         import json
-        from pathlib import Path
 
         session_id = state.get(StepKeys.SESSION_ID, "unknown")
         memory = state.get(StepKeys.WORKFLOW_MEMORY, {})
@@ -458,7 +455,7 @@ def save_workflow_memory(state: FlowState) -> dict:
                 )
 
             return {"workflow_memory_file": str(memory_file)}
-    except Exception as e:
+    except Exception:
         # Don't fail if memory save fails - it's non-critical
         pass
 
@@ -603,7 +600,7 @@ def verify_prompt_integrity(state: FlowState) -> bool:
     current = state.get(StepKeys.USER_MESSAGE, "")
 
     if original != current:
-        print(f"[WARNING] PROMPT INTEGRITY VIOLATION!", file=sys.stderr)
+        print("[WARNING] PROMPT INTEGRITY VIOLATION!", file=sys.stderr)
         print(f"  Original: {original[:50]}...", file=sys.stderr)
         print(f"  Current:  {current[:50]}...", file=sys.stderr)
         return False
@@ -724,7 +721,6 @@ def output_node(state: FlowState) -> dict:
     # Use LEGACY flag (no PID) because pipeline runs in a separate process
     # from Claude Code. Stop-notifier's _resolve_flag checks PID first, then legacy.
     try:
-        import os
         flag_dir = _ORCHESTRATOR_CLAUDE_HOME
         start_flag = flag_dir / ".session-start-voice"
         if not start_flag.exists():
@@ -859,7 +855,6 @@ def _save_pipeline_execution_log(state: FlowState, final_status: str) -> None:
     - Total pipeline timing
     - Skills/agents selected
     """
-    import json
     from datetime import datetime
 
     session_dir = state.get(StepKeys.SESSION_DIR) or state.get(StepKeys.SESSION_PATH, "")

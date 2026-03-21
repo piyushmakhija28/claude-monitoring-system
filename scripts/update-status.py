@@ -112,7 +112,7 @@ def main():
     elif status == "failed":
         return show_failed(message)
     else:
-        print(f"Usage: update-status [success|warning|failed] [optional message]")
+        print("Usage: update-status [success|warning|failed] [optional message]")
         return 1
 
 

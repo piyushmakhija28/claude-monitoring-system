@@ -19,7 +19,6 @@ import os
 import requests
 from typing import Dict, Any, Optional, List
 from loguru import logger
-from pathlib import Path
 
 
 class OllamaService:
@@ -300,7 +299,7 @@ class OllamaService:
           complex_reasoning  -> opus (best quality for planning/analysis)
           synthesis          -> sonnet (balanced for generation)
         """
-        import subprocess, shutil
+        import shutil
         claude_path = shutil.which("claude")
         if not claude_path:
             return None
@@ -564,7 +563,7 @@ Return ONLY valid JSON (no markdown):
         for phase in toon_final.get("phases", []):
             phases_text += f"\nPhase {phase.get('phase_number')}: {phase.get('title')}\n"
             phases_text += f"  Description: {phase.get('description')}\n"
-            phases_text += f"  Tasks:\n"
+            phases_text += "  Tasks:\n"
             for task in phase.get("tasks", []):
                 phases_text += f"    - {task}\n"
             phases_text += f"  Files affected: {', '.join(phase.get('files_affected', []))}\n"

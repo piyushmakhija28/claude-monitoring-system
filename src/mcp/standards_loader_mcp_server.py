@@ -24,7 +24,6 @@ Tools (6):
 import json
 import sys
 from pathlib import Path
-from typing import Optional
 
 # Ensure src/mcp/ is in path for base package imports
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -396,7 +395,7 @@ def _load_language_standards(project_type):
         return standards
     patterns = [
         f"{project_type}-standards.md",
-        f"common-standards-policy.md",
+        "common-standards-policy.md",
     ]
     for pattern in patterns:
         for md_file in ARCH_STANDARDS_DIR.glob(pattern):

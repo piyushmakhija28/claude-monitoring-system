@@ -10,7 +10,6 @@ ASCII-only (cp1252-safe for Windows).
 """
 
 import json
-from typing import Any, Dict, List, Optional, Set
 
 
 # =========================================================================

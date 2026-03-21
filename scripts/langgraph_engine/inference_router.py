@@ -12,7 +12,7 @@ Configuration via environment variables:
 
 import os
 from pathlib import Path
-from typing import Dict, Any, List, Optional, Literal
+from typing import Dict, Any, List, Literal
 from loguru import logger
 
 try:

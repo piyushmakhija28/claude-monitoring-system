@@ -25,7 +25,7 @@ import time
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, List, Optional
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 
 
 @dataclass
@@ -83,8 +83,6 @@ class ComputerUseAgent:
         """
         try:
             import mss
-            from PIL import Image
-            import io
 
             with mss.mss() as sct:
                 # Capture primary monitor
@@ -147,18 +145,18 @@ class ComputerUseAgent:
 
         try:
             # Step 1: Open browser to dashboard
-            print(f"  [1/4] Opening browser to localhost:5000")
+            print("  [1/4] Opening browser to localhost:5000")
             subprocess.Popen(["start", "http://localhost:5000"], shell=True)
             time.sleep(3)
 
             # Step 2: Screenshot login page
-            print(f"  [2/4] Capturing login page")
+            print("  [2/4] Capturing login page")
             img_b64, img_path = self.take_screenshot("Login page visible")
             if img_path:
                 screenshots.append(img_path)
 
             # Step 3: Enter credentials
-            print(f"  [3/4] Entering admin/admin credentials")
+            print("  [3/4] Entering admin/admin credentials")
             self.click(400, 400)  # Click username field
             self.type_text("admin")
             self.click(400, 450)  # Click password field
@@ -167,7 +165,7 @@ class ComputerUseAgent:
             time.sleep(2)
 
             # Step 4: Screenshot authenticated dashboard
-            print(f"  [4/4] Capturing authenticated dashboard")
+            print("  [4/4] Capturing authenticated dashboard")
             img_b64, img_path = self.take_screenshot("Dashboard authenticated - session count visible")
             if img_path:
                 screenshots.append(img_path)
@@ -199,7 +197,7 @@ class ComputerUseAgent:
         start_time = datetime.now()
 
         try:
-            print(f"  [1/3] Navigating to 3-level flow history")
+            print("  [1/3] Navigating to 3-level flow history")
             # Navigate to /3level-flow-history
             self.press_key("f6")  # Address bar (browser dependent)
             time.sleep(0.5)
@@ -208,13 +206,13 @@ class ComputerUseAgent:
             time.sleep(2)
 
             # Step 1: Screenshot timeline
-            print(f"  [2/3] Capturing session timeline")
+            print("  [2/3] Capturing session timeline")
             img_b64, img_path = self.take_screenshot("3-Level Flow History - session timeline visible")
             if img_path:
                 screenshots.append(img_path)
 
             # Step 2: Scroll to see more data
-            print(f"  [3/3] Scrolling session list")
+            print("  [3/3] Scrolling session list")
             import pyautogui
             pyautogui.scroll(-3)  # Scroll down
             time.sleep(1)
@@ -250,7 +248,7 @@ class ComputerUseAgent:
         start_time = datetime.now()
 
         try:
-            print(f"  [1/3] Navigating to sessions page")
+            print("  [1/3] Navigating to sessions page")
             # Navigate to /sessions
             import pyautogui
             pyautogui.hotkey("ctrl", "l")  # Address bar
@@ -260,13 +258,13 @@ class ComputerUseAgent:
             time.sleep(2)
 
             # Step 1: Screenshot session list
-            print(f"  [2/3] Capturing session list")
+            print("  [2/3] Capturing session list")
             img_b64, img_path = self.take_screenshot("Sessions page - session list with metadata visible")
             if img_path:
                 screenshots.append(img_path)
 
             # Step 2: Check session details
-            print(f"  [3/3] Clicking session row for details")
+            print("  [3/3] Clicking session row for details")
             self.click(600, 300)  # Click first session row
             time.sleep(1)
 
@@ -301,7 +299,7 @@ class ComputerUseAgent:
         start_time = datetime.now()
 
         try:
-            print(f"  [1/3] Navigating to policies page")
+            print("  [1/3] Navigating to policies page")
             # Navigate to /policies
             import pyautogui
             pyautogui.hotkey("ctrl", "l")  # Address bar
@@ -311,13 +309,13 @@ class ComputerUseAgent:
             time.sleep(2)
 
             # Step 1: Screenshot policies list
-            print(f"  [2/3] Capturing policies list")
+            print("  [2/3] Capturing policies list")
             img_b64, img_path = self.take_screenshot("Policies page - all 32 policies listed")
             if img_path:
                 screenshots.append(img_path)
 
             # Step 2: Check execution counts
-            print(f"  [3/3] Scrolling to see policy execution counts")
+            print("  [3/3] Scrolling to see policy execution counts")
             import pyautogui
             pyautogui.scroll(-3)
             time.sleep(1)

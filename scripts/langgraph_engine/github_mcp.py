@@ -265,7 +265,7 @@ class GitHubMCP:
             if closing_comment:
                 comment_result = self.add_issue_comment(issue_number, closing_comment)
                 if not comment_result.get("success"):
-                    logger.warning(f"[MCP] Could not add closing comment")
+                    logger.warning("[MCP] Could not add closing comment")
 
             # Close issue
             issue = self.repo.get_issue(issue_number)
@@ -336,7 +336,7 @@ class GitHubMCP:
                     for label in labels:
                         pr.add_to_labels(label)
                 except GithubException:
-                    logger.warning(f"[MCP] Could not add all labels")
+                    logger.warning("[MCP] Could not add all labels")
 
             logger.info(f"[MCP] PR created: #{pr.number}")
 

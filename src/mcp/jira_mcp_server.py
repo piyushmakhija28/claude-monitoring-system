@@ -27,7 +27,7 @@ import os
 import sys
 import urllib.error
 import urllib.request
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 from pathlib import Path
 
 # Ensure src/mcp/ is in path for base package imports

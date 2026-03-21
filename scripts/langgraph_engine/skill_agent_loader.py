@@ -30,7 +30,7 @@ except ImportError:
 
 # Optional performance modules (gracefully degraded if unavailable)
 try:
-    from .parallel_executor import parallel_load_all_skills, parallel_load_all_agents
+    from .parallel_executor import parallel_load_all_agents
     from .cache_system import get_pipeline_cache, cached_skill_load
     _PERF_AVAILABLE = True
 except ImportError:

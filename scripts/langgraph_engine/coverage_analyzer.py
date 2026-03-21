@@ -12,10 +12,8 @@ Python 3.8+ compatible. ASCII-only (cp1252-safe). No external dependencies.
 """
 
 import ast
-import os
 import re
 from pathlib import Path
-from typing import Dict, List, Optional, Set, Any
 
 # ---------------------------------------------------------------------------
 # Lazy import helpers - avoid import-time side effects

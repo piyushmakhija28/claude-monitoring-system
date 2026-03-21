@@ -27,7 +27,7 @@ Task dict schema (subset used here):
 
 import json
 from pathlib import Path
-from typing import Dict, Any, List, Tuple, Optional, Set
+from typing import Dict, Any, List, Tuple, Set
 from loguru import logger
 
 try:

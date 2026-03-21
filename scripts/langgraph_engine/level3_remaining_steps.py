@@ -15,10 +15,9 @@ Note: Step 10 (Implementation) is handled by Claude directly with tools
 Note: Step 5 (Skill selection) is in ollama_service.py, wrapper here
 """
 
+import os
 import time
-import json
 import subprocess
-import re
 from pathlib import Path
 from typing import Dict, Any, Optional, List, Callable, TypeVar
 from datetime import datetime
@@ -34,10 +33,10 @@ try:
 except ImportError:
     _L3REMAINING_SKILLS_DIR = Path.home() / ".claude" / "skills"
     _L3REMAINING_AGENTS_DIR = Path.home() / ".claude" / "agents"
-from .toon_models import ExecutionBlueprint, ToonWithSkills
+from .toon_models import ExecutionBlueprint
 from .session_manager import SessionManager
 from .inference_router import get_inference_router
-from .plan_convergence import run_planning_loop, assess_plan_quality, DEFAULT_MAX_ITERATIONS
+from .plan_convergence import run_planning_loop, DEFAULT_MAX_ITERATIONS
 from .task_validator import validate_breakdown
 from .token_manager import TokenBudget
 
@@ -62,8 +61,7 @@ from .level3_llm_retry import (
 
 # Optional performance modules
 try:
-    from .parallel_executor import run_parallel_step2_exploration
-    from .cache_system import get_pipeline_cache, cached_llm_call
+    from .cache_system import get_pipeline_cache  # noqa: F401
     _PERF_AVAILABLE = True
 except ImportError:
     _PERF_AVAILABLE = False
@@ -139,7 +137,7 @@ class Level3RemainingSteps:
             selected_model = "complex_reasoning"
             reason = "High complexity, deeper reasoning needed"
 
-        logger.info(f"-> Selecting planning model based on TOON factors...")
+        logger.info("-> Selecting planning model based on TOON factors...")
         logger.info(f"   Complexity: {complexity_score}/10, Files: {files_affected}, Type: {project_type}")
         logger.info(f"✓ Selected model: {selected_model} ({reason})")
 
@@ -1094,7 +1092,7 @@ Be very specific and actionable - mention actual file paths and existing functio
 
             # Log results
             if result["success"]:
-                logger.info(f"✓ Documentation generation successful")
+                logger.info("✓ Documentation generation successful")
                 logger.info(f"  Files updated: {len(result['updated_files'])}")
                 for file in result['updated_files']:
                     logger.info(f"    - {file}")
@@ -1106,7 +1104,7 @@ Be very specific and actionable - mention actual file paths and existing functio
                     logger.info(f"  Frameworks: {', '.join(ctx.get('frameworks', []))}")
                     logger.info(f"  Version: {ctx.get('version')}")
             else:
-                logger.error(f"Documentation generation had errors")
+                logger.error("Documentation generation had errors")
                 if result.get('errors'):
                     for error in result['errors']:
                         logger.error(f"  - {error}")
@@ -1243,7 +1241,6 @@ All changes are tested and documented.
         """Attempt to send voice notification."""
         try:
             import platform
-            import sys
             system = platform.system()
 
             if system == "Darwin":  # macOS

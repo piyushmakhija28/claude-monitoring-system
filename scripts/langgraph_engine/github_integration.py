@@ -12,7 +12,6 @@ No need for GITHUB_TOKEN environment variable!
 """
 
 import subprocess
-import json
 from typing import Dict, Any, Optional, List
 from datetime import datetime
 from pathlib import Path

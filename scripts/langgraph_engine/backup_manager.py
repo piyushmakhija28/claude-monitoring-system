@@ -8,7 +8,6 @@ Provides safe backup/restore functionality with:
 - Transaction-like semantics
 """
 
-import shutil
 import difflib
 from pathlib import Path
 from typing import Optional, List, Dict
@@ -164,14 +163,14 @@ class BackupManager:
             # Read both versions
             try:
                 original_lines = backup_file.read_text(encoding="utf-8").splitlines(keepends=True)
-            except:
+            except Exception:
                 original_lines = backup_file.read_bytes().decode("utf-8", errors="replace").splitlines(
                     keepends=True
                 )
 
             try:
                 current_lines = file_path.read_text(encoding="utf-8").splitlines(keepends=True)
-            except:
+            except Exception:
                 current_lines = file_path.read_bytes().decode("utf-8", errors="replace").splitlines(
                     keepends=True
                 )
@@ -308,7 +307,7 @@ class BackupManager:
         if self.metadata_file.exists():
             try:
                 return json.loads(self.metadata_file.read_text())
-            except:
+            except Exception:
                 pass
 
         return {"session_id": self.session_id, "created": datetime.now().isoformat(), "backups": []}

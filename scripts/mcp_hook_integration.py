@@ -15,9 +15,8 @@ Usage in pre-tool-enforcer.py:
 """
 
 import json
-import sys
 from pathlib import Path
-from typing import Optional, Dict, Tuple
+from typing import Optional, Dict
 
 
 def _get_mcp_config_from_flow_trace() -> Dict[str, bool]:

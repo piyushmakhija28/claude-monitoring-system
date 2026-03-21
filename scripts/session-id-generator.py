@@ -37,7 +37,6 @@ Last Modified: 2026-02-16
 Author: Claude Memory System
 """
 
-import os
 import sys
 import json
 import random
@@ -62,7 +61,7 @@ while _scripts_root != _scripts_root.parent:
             sys.path.insert(0, str(_scripts_root))
         break
     _scripts_root = _scripts_root.parent
-from policy_tracking_helper import record_policy_execution, record_sub_operation, get_session_id
+from policy_tracking_helper import record_policy_execution  # noqa: E402
 
 class SessionIDGenerator:
     """Generates and manages Claude Code session IDs and lifecycle state.
@@ -233,7 +232,7 @@ class SessionIDGenerator:
             with open(self.current_session_file, 'r') as f:
                 data = json.load(f)
                 return data.get('current_session_id')
-        except:
+        except Exception:
             return None
 
     def get_session_data(self, session_id: str) -> dict:
@@ -253,7 +252,7 @@ class SessionIDGenerator:
         try:
             with open(session_file, 'r') as f:
                 return json.load(f)
-        except:
+        except Exception:
             return None
 
     def add_work_item(self, session_id: str, work_type: str,
@@ -406,7 +405,7 @@ class SessionIDGenerator:
                 with open(session_file, 'r') as f:
                     data = json.load(f)
                     sessions.append(data)
-            except:
+            except Exception:
                 continue
 
         return sessions

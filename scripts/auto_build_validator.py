@@ -400,7 +400,7 @@ def validate_build(repo_root=None, modified_files=None):
     # Build summary
     passed_count = sum(1 for r in results if r['passed'])
     total_count = len(results)
-    skipped = sum(1 for r in results if r.get('skipped'))
+    sum(1 for r in results if r.get('skipped'))
 
     if all_passed:
         labels = [r['label'] for r in results if not r.get('skipped')]

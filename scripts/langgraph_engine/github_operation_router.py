@@ -146,10 +146,10 @@ class GitHubOperationRouter:
         # Try MCP first
         if self.use_mcp and self.mcp:
             try:
-                logger.info(f"[Router] add_issue_comment: trying MCP (primary)")
+                logger.info("[Router] add_issue_comment: trying MCP (primary)")
                 result = self.mcp.add_issue_comment(issue_number, comment)
                 if result.get("success"):
-                    logger.info(f"[Router] add_issue_comment: MCP succeeded")
+                    logger.info("[Router] add_issue_comment: MCP succeeded")
                     return result
                 else:
                     logger.warning(f"[Router] add_issue_comment: MCP failed, {result.get('error')}")
@@ -162,7 +162,7 @@ class GitHubOperationRouter:
                 logger.info("[Router] add_issue_comment: falling back to gh CLI")
                 result = self.gh_cli.add_issue_comment(issue_number, comment)
                 if result.get("success"):
-                    logger.info(f"[Router] add_issue_comment: gh CLI succeeded")
+                    logger.info("[Router] add_issue_comment: gh CLI succeeded")
                 else:
                     logger.error(f"[Router] add_issue_comment: gh CLI failed, {result.get('error')}")
                 return result
@@ -186,10 +186,10 @@ class GitHubOperationRouter:
         # Try MCP first
         if self.use_mcp and self.mcp:
             try:
-                logger.info(f"[Router] close_issue: trying MCP (primary)")
+                logger.info("[Router] close_issue: trying MCP (primary)")
                 result = self.mcp.close_issue(issue_number, closing_comment)
                 if result.get("success"):
-                    logger.info(f"[Router] close_issue: MCP succeeded")
+                    logger.info("[Router] close_issue: MCP succeeded")
                     return result
                 else:
                     logger.warning(f"[Router] close_issue: MCP failed, {result.get('error')}")
@@ -202,7 +202,7 @@ class GitHubOperationRouter:
                 logger.info("[Router] close_issue: falling back to gh CLI")
                 result = self.gh_cli.close_issue(issue_number, closing_comment)
                 if result.get("success"):
-                    logger.info(f"[Router] close_issue: gh CLI succeeded")
+                    logger.info("[Router] close_issue: gh CLI succeeded")
                 else:
                     logger.error(f"[Router] close_issue: gh CLI failed, {result.get('error')}")
                 return result
@@ -319,10 +319,10 @@ class GitHubOperationRouter:
         # Try MCP first
         if self.use_mcp and self.mcp:
             try:
-                logger.info(f"[Router] add_pr_comment: trying MCP (primary)")
+                logger.info("[Router] add_pr_comment: trying MCP (primary)")
                 result = self.mcp.add_pr_comment(pr_number, comment)
                 if result.get("success"):
-                    logger.info(f"[Router] add_pr_comment: MCP succeeded")
+                    logger.info("[Router] add_pr_comment: MCP succeeded")
                     return result
                 else:
                     logger.warning(f"[Router] add_pr_comment: MCP failed, {result.get('error')}")
@@ -335,7 +335,7 @@ class GitHubOperationRouter:
                 logger.info("[Router] add_pr_comment: falling back to gh CLI")
                 result = self.gh_cli.add_pr_comment(pr_number, comment)
                 if result.get("success"):
-                    logger.info(f"[Router] add_pr_comment: gh CLI succeeded")
+                    logger.info("[Router] add_pr_comment: gh CLI succeeded")
                 else:
                     logger.error(f"[Router] add_pr_comment: gh CLI failed, {result.get('error')}")
                 return result

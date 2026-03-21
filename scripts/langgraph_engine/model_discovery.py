@@ -11,7 +11,6 @@ Configuration:
 - INTEL_AI_PATH: Root Intel AI directory (default: ~/intel-ai/)
 """
 
-import json
 import os
 from pathlib import Path
 from typing import Dict, List, Optional, Literal

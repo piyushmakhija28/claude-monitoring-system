@@ -36,7 +36,6 @@ if sys.stderr.encoding != 'utf-8':
         sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
 
-import os
 import sys
 import json
 import subprocess
@@ -54,7 +53,7 @@ while _scripts_root != _scripts_root.parent:
             sys.path.insert(0, str(_scripts_root))
         break
     _scripts_root = _scripts_root.parent
-from policy_tracking_helper import record_policy_execution, record_sub_operation, get_session_id
+from policy_tracking_helper import record_policy_execution, record_sub_operation, get_session_id  # noqa: E402
 
 # Flag auto-expiry configuration (Loophole #10)
 FLAG_EXPIRY_MINUTES = 60   # Auto-delete flags older than 60 minutes

@@ -13,7 +13,6 @@ Checks:
 
 import sys
 import time
-import platform
 from pathlib import Path
 
 try:
@@ -405,7 +404,6 @@ def ask_level_minus1_fix(state: FlowState) -> dict:
         kb_entries = _load_failure_kb(project_root)
         kb_loaded = len(kb_entries) > 0
         if kb_entries:
-            import re as _re_kb
             for check_msg in failed_checks:
                 if "PASS" in check_msg:
                     continue
@@ -794,7 +792,6 @@ def create_level_minus1_subgraph():
     Returns:
         Compiled StateGraph for Level -1
     """
-    from typing import Literal
 
     if not _LANGGRAPH_AVAILABLE:
         raise RuntimeError("LangGraph not installed")

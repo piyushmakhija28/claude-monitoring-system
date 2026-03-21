@@ -16,7 +16,6 @@ Version: 1.0.0
 """
 
 import sys
-import os
 import json
 import subprocess
 from pathlib import Path
@@ -213,7 +212,7 @@ def create_auto_commit(project_root, new_version):
             return False, "No changes to commit"
 
         # Create commit
-        commit_body = (
+        (
             f"- Updated VERSION file\n"
             f"- Updated README.md with new version\n"
             f"- Updated SYSTEM_REQUIREMENTS_SPECIFICATION.md\n"
