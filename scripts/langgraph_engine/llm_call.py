@@ -298,38 +298,51 @@ class OpenAIProvider(LLMProvider):
 
 
 # =============================================================================
-# IMPLEMENTATION: AnthropicProvider (Direct Claude API)
+# IMPLEMENTATION: AnthropicProvider (Direct Claude API via SDK)
 # =============================================================================
 
 class AnthropicProvider(LLMProvider):
     """Anthropic API provider (direct Claude API, requires ANTHROPIC_API_KEY).
 
-    Uses the Anthropic Messages API directly via urllib (no SDK dependency).
+    Uses the official Anthropic Python SDK for reliable API access with
+    automatic retries, proper error handling, and typed exceptions.
     This is DIFFERENT from ClaudeCLIProvider which uses the 'claude' CLI tool.
     """
 
     MODEL_MAP = {
-        "fast": "claude-haiku-4-5-20251001",
-        "balanced": "claude-sonnet-4-6-20250514",
-        "deep": "claude-opus-4-6-20250514",
-        "fast_classification": "claude-haiku-4-5-20251001",
-        "complex_reasoning": "claude-opus-4-6-20250514",
-        "synthesis": "claude-sonnet-4-6-20250514",
-        "planning": "claude-opus-4-6-20250514",
-        "code_review": "claude-sonnet-4-6-20250514",
+        "fast": "claude-haiku-4-5",
+        "balanced": "claude-sonnet-4-6",
+        "deep": "claude-opus-4-6",
+        "fast_classification": "claude-haiku-4-5",
+        "complex_reasoning": "claude-opus-4-6",
+        "synthesis": "claude-sonnet-4-6",
+        "planning": "claude-opus-4-6",
+        "code_review": "claude-sonnet-4-6",
     }
 
     def __init__(self):
         self._api_key = os.getenv("ANTHROPIC_API_KEY", "")
-        self._base_url = os.getenv(
-            "ANTHROPIC_BASE_URL",
-            "https://api.anthropic.com/v1/messages"
-        )
+        self._base_url = os.getenv("ANTHROPIC_BASE_URL", None)  # SDK handles default
         # Allow model override via env
         self._model_fast = os.getenv("ANTHROPIC_MODEL_FAST", self.MODEL_MAP["fast"])
         self._model_balanced = os.getenv("ANTHROPIC_MODEL_BALANCED", self.MODEL_MAP["balanced"])
         self._model_deep = os.getenv("ANTHROPIC_MODEL_DEEP", self.MODEL_MAP["deep"])
         self._available = bool(self._api_key)
+        self._client = None  # Lazy init — avoid import overhead at startup
+
+    def _get_client(self):
+        """Lazy-init the Anthropic SDK client (once per provider instance)."""
+        if self._client is None:
+            try:
+                import anthropic as _anthropic_sdk
+                kwargs = {"api_key": self._api_key, "max_retries": 2}
+                if self._base_url:
+                    kwargs["base_url"] = self._base_url
+                self._client = _anthropic_sdk.Anthropic(**kwargs)
+            except ImportError:
+                _log.warning("anthropic SDK not installed. Run: pip install anthropic")
+                self._available = False
+        return self._client
 
     @property
     def name(self) -> str:
@@ -342,7 +355,9 @@ class AnthropicProvider(LLMProvider):
         if not self._available:
             return None
 
-        import urllib.request
+        client = self._get_client()
+        if client is None:
+            return None
 
         # Select model by tier
         if model in ("deep", "complex_reasoning", "planning"):
@@ -352,31 +367,34 @@ class AnthropicProvider(LLMProvider):
         else:
             api_model = self._model_fast
 
-        try:
-            payload = {
-                "model": api_model,
-                "max_tokens": 2048,
-                "messages": [{"role": "user", "content": prompt}],
-                "temperature": temperature,
-            }
+        actual_prompt = prompt
+        if json_mode:
+            actual_prompt = prompt + "\n\nIMPORTANT: Return ONLY valid JSON. No explanation or markdown."
 
-            req = urllib.request.Request(
-                self._base_url,
-                data=json.dumps(payload).encode(),
-                headers={
-                    "Content-Type": "application/json",
-                    "x-api-key": self._api_key,
-                    "anthropic-version": "2023-06-01",
-                },
+        try:
+            import anthropic as _anthropic_sdk
+
+            response = client.messages.create(
+                model=api_model,
+                max_tokens=2048,
+                messages=[{"role": "user", "content": actual_prompt}],
+                temperature=temperature,
+                timeout=min(timeout, 60),
             )
-            with urllib.request.urlopen(req, timeout=min(timeout, 60)) as resp:
-                result = json.loads(resp.read().decode())
-                # Anthropic response: {"content": [{"type": "text", "text": "..."}]}
-                content_blocks = result.get("content", [])
-                if content_blocks:
-                    text = content_blocks[0].get("text", "").strip()
-                    if text:
-                        return text
+            text = next(
+                (block.text for block in response.content if block.type == "text"), ""
+            ).strip()
+            return text if text else None
+
+        except _anthropic_sdk.AuthenticationError:
+            _log.warning("AnthropicProvider: invalid API key — disabling provider")
+            self._available = False
+        except _anthropic_sdk.RateLimitError as exc:
+            _log.debug("AnthropicProvider rate limited: %s", exc)
+        except _anthropic_sdk.APIStatusError as exc:
+            _log.debug("AnthropicProvider API error %s: %s", exc.status_code, exc)
+        except _anthropic_sdk.APIConnectionError as exc:
+            _log.debug("AnthropicProvider connection error: %s", exc)
         except Exception as exc:
             _log.debug("AnthropicProvider call failed: %s", exc)
         return None
@@ -414,11 +432,16 @@ def _build_provider_chain() -> List[LLMProvider]:
 
     Configuration via env vars:
       LLM_PROVIDER=auto       -> try all available providers (default)
-      LLM_PROVIDER=ollama     -> use only Ollama (local, free)
-      LLM_PROVIDER=claude_cli -> use only Claude CLI (Anthropic subscription)
-      LLM_PROVIDER=anthropic  -> use only Anthropic API (direct, needs ANTHROPIC_API_KEY)
-      LLM_PROVIDER=openai     -> use only OpenAI (needs OPENAI_API_KEY)
-      LLM_FALLBACK=claude_cli,anthropic,openai -> fallback chain (comma-separated)
+      LLM_PROVIDER=ollama     -> Ollama only (no fallback needed, always local)
+      LLM_PROVIDER=anthropic  -> Anthropic API first, fallback to Ollama
+      LLM_PROVIDER=openai     -> OpenAI first, fallback to Ollama
+      LLM_PROVIDER=claude_cli -> Claude CLI first, fallback to Ollama
+      LLM_FALLBACK=anthropic  -> override the default Ollama fallback (comma-separated)
+
+    Default fallback strategy:
+      - Specific provider set -> fallback to Ollama (always available locally)
+      - auto mode             -> try all providers in order
+      - LLM_FALLBACK set      -> use user's explicit fallback (overrides default)
 
     Returns:
         List of instantiated, available providers in priority order.
@@ -426,16 +449,19 @@ def _build_provider_chain() -> List[LLMProvider]:
     primary = os.getenv("LLM_PROVIDER", "auto").strip().lower()
     fallback_str = os.getenv("LLM_FALLBACK", "").strip()
 
-    chain = []
-
     if primary == "auto":
         # Auto mode: try Ollama -> Claude CLI -> Anthropic API -> OpenAI
         order = ["ollama", "claude_cli", "anthropic", "openai"]
     else:
         order = [primary]
         if fallback_str:
+            # User explicitly defined fallbacks — respect their choice
             order.extend(f.strip() for f in fallback_str.split(",") if f.strip())
+        elif primary != "ollama":
+            # Default: always fall back to Ollama (local, always available)
+            order.append("ollama")
 
+    chain = []
     for provider_name in order:
         cls = _PROVIDER_REGISTRY.get(provider_name)
         if cls:

@@ -269,7 +269,7 @@ def llm_health_check(force_refresh: bool = False) -> str:
                         "Content-Type": "application/json",
                     },
                     data=json.dumps({
-                        "model": "claude-haiku-4-5-20251001",
+                        "model": "claude-haiku-4-5",
                         "max_tokens": 1,
                         "messages": [{"role": "user", "content": "hi"}],
                     }).encode(),

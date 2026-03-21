@@ -368,12 +368,34 @@ Every pipeline node stores its decision in Vector DB. Before LLM calls, the pipe
 
 ### Hybrid LLM Inference (4 providers)
 
+The engine supports 4 LLM providers. Each provider is **independently selectable** — you choose your primary, and Ollama always serves as the safety net fallback since it runs locally and never goes down.
+
 ```
-GPU-first: Ollama (local) -> Claude CLI -> Anthropic API -> OpenAI API
+Provider options:
+  openai     → OpenAI GPT API   (needs OPENAI_API_KEY)
+  anthropic  → Anthropic Claude API  (needs ANTHROPIC_API_KEY)
+  claude_cli → Claude Code CLI  (uses your Anthropic subscription)
+  ollama     → Local Ollama GPU (free, no API key, always available)
+  auto       → tries all in order: Ollama → Claude CLI → Anthropic → OpenAI
+
+Default fallback strategy:
+  LLM_PROVIDER=openai     → OpenAI first,     fallback → Ollama
+  LLM_PROVIDER=anthropic  → Anthropic first,  fallback → Ollama
+  LLM_PROVIDER=claude_cli → Claude CLI first, fallback → Ollama
+  LLM_PROVIDER=ollama     → Ollama only       (no fallback needed)
+  LLM_PROVIDER=auto       → all 4 in order    (full chain)
+```
+
+**Why Ollama as default fallback?** It runs locally — no API key, no rate limits, no network dependency. Even if your cloud API fails (wrong key, rate limit, outage), the pipeline continues uninterrupted.
+
+**Custom fallback** — override via `LLM_FALLBACK`:
+```bash
+LLM_PROVIDER=openai
+LLM_FALLBACK=anthropic,ollama   # OpenAI → Anthropic → Ollama
 ```
 
 - Complexity-based model selection (simple=fast model, complex=powerful model)
-- Automatic fallback chain when primary provider is unavailable
+- Anthropic provider uses the official `anthropic` Python SDK (automatic retries, typed errors)
 - Cached health checks (60s TTL) to avoid repeated probe calls
 
 ### Hook System (Pre/Post Tool Enforcement)
@@ -1038,13 +1060,41 @@ ENABLE_CI=false
 
 ### LLM Provider Settings
 
+Set your primary provider in `.env`. Ollama is always the default fallback unless you override it with `LLM_FALLBACK`.
+
 | Variable | Default | What It Does |
 |----------|---------|-------------|
-| `LLM_PROVIDER` | `auto` | **Which AI provider to use.** `auto` = tries all in order: Ollama (free, local) -> Claude CLI -> Anthropic API -> OpenAI API. Set to a specific provider name to force it. |
-| `OLLAMA_ENDPOINT` | `http://localhost:11434` | **Where Ollama GPU server is running.** Change this if you run Ollama on a different port or remote machine. |
-| `ANTHROPIC_API_KEY` | _(none)_ | **Your Claude API key.** Only needed if Ollama is not available and you want to use Claude directly. Get from console.anthropic.com. |
+| `LLM_PROVIDER` | `auto` | **Which AI provider to use.** Options: `auto` (try all), `anthropic`, `openai`, `claude_cli`, `ollama`. When set to a specific provider, Ollama is automatically used as fallback. |
+| `LLM_FALLBACK` | _(ollama)_ | **Override the default fallback chain.** Comma-separated: `LLM_FALLBACK=anthropic,ollama`. Leave unset to use Ollama as fallback (recommended). |
+| `OLLAMA_ENDPOINT` | `http://localhost:11434` | **Where Ollama GPU server is running.** Change this if Ollama runs on a different port or remote machine. |
+| `OLLAMA_MODEL_FAST` | `qwen2.5:7b` | **Ollama model for fast tasks** (classification, JSON, yes/no). |
+| `OLLAMA_MODEL_DEEP` | `qwen2.5:14b` | **Ollama model for deep tasks** (planning, complex reasoning). |
+| `ANTHROPIC_API_KEY` | _(none)_ | **Your Anthropic API key.** Required for `LLM_PROVIDER=anthropic`. Uses official `anthropic` Python SDK with auto-retry. Get from console.anthropic.com. |
+| `ANTHROPIC_MODEL_FAST` | `claude-haiku-4-5` | **Anthropic model for fast tasks.** |
+| `ANTHROPIC_MODEL_BALANCED` | `claude-sonnet-4-6` | **Anthropic model for balanced tasks.** |
+| `ANTHROPIC_MODEL_DEEP` | `claude-opus-4-6` | **Anthropic model for deep reasoning.** |
+| `OPENAI_API_KEY` | _(none)_ | **Your OpenAI API key.** Required for `LLM_PROVIDER=openai`. |
+| `OPENAI_MODEL_FAST` | `gpt-4o-mini` | **OpenAI model for fast tasks.** |
+| `OPENAI_MODEL_DEEP` | `gpt-4o` | **OpenAI model for deep tasks.** |
 | `GITHUB_TOKEN` | _(none)_ | **GitHub personal access token.** Required for Steps 8-12 (issue creation, branch, PR). Without this, the pipeline stops at Step 7. Falls back to `gh auth token` if not set. |
-| `OPENAI_API_KEY` | _(none)_ | **OpenAI API key.** Last fallback in the LLM chain. Only used if all other providers fail. |
+
+**Quick setup examples:**
+
+```bash
+# Use OpenAI, fall back to Ollama if it fails
+LLM_PROVIDER=openai
+OPENAI_API_KEY=sk-...
+
+# Use Anthropic Claude directly, fall back to Ollama
+LLM_PROVIDER=anthropic
+ANTHROPIC_API_KEY=sk-ant-...
+
+# Use local Ollama only (completely free, no API key)
+LLM_PROVIDER=ollama
+
+# Let engine decide (tries Ollama first, then cloud)
+LLM_PROVIDER=auto
+```
 
 ### Path System - Cross-Platform Directory Standard
 
