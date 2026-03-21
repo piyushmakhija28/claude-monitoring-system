@@ -1,0 +1,678 @@
+<mxfile host="app.diagrams.net" version="21.0.0">
+  <diagram name="Claude Workflow Engine - 3-Level Architecture" id="claude-workflow-arch">
+    <mxGraphModel dx="1422" dy="762" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="3400" pageHeight="3200" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!-- TITLE                                                           -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <mxCell id="2" value="Claude Workflow Engine — 3-Level LangGraph Architecture" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=20;fontStyle=1;fontColor=#1a1a2e;" vertex="1" parent="1">
+          <mxGeometry x="100" y="15" width="2400" height="45" as="geometry" />
+        </mxCell>
+
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!-- ENTRY POINT                                                     -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <mxCell id="3" value="&lt;b&gt;ENTRY POINT&lt;/b&gt;&lt;br&gt;User Message (Hook / CLI / Direct)&lt;br&gt;&lt;font color='#666666'&gt;Session ID: SESSION-YYYYMMDD-HHMMSS-XXXX&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1a1a2e;strokeColor=#1a1a2e;fontColor=#ffffff;fontSize=11;arcSize=10;" vertex="1" parent="1">
+          <mxGeometry x="480" y="75" width="280" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!-- LEVEL -1: AUTO-FIX ENFORCEMENT                                 -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <mxCell id="10" value="LEVEL -1  ·  Auto-Fix Enforcement" style="swimlane;startSize=35;fillColor=#FFF4E5;strokeColor=#E67E22;fontStyle=1;fontSize=13;fontColor=#7D3C00;swimlaneLine=1;rounded=1;arcSize=2;" vertex="1" parent="1">
+          <mxGeometry x="30" y="160" width="2160" height="290" as="geometry" />
+        </mxCell>
+
+        <mxCell id="11" value="&lt;b&gt;unicode_fix&lt;/b&gt;&lt;br&gt;Windows UTF-8&lt;br&gt;stdout/stderr" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FDEBD0;strokeColor=#E67E22;fontSize=10;" vertex="1" parent="10">
+          <mxGeometry x="20" y="55" width="155" height="65" as="geometry" />
+        </mxCell>
+
+        <mxCell id="12" value="&lt;b&gt;encoding_check&lt;/b&gt;&lt;br&gt;ASCII-only validate&lt;br&gt;(cp1252 safe)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FDEBD0;strokeColor=#E67E22;fontSize=10;" vertex="1" parent="10">
+          <mxGeometry x="210" y="55" width="155" height="65" as="geometry" />
+        </mxCell>
+
+        <mxCell id="13" value="&lt;b&gt;windows_path&lt;/b&gt;&lt;br&gt;Forward slash&lt;br&gt;no drive letters" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FDEBD0;strokeColor=#E67E22;fontSize=10;" vertex="1" parent="10">
+          <mxGeometry x="400" y="55" width="155" height="65" as="geometry" />
+        </mxCell>
+
+        <mxCell id="14" value="&lt;b&gt;merge&lt;/b&gt;&lt;br&gt;consolidate results" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FDEBD0;strokeColor=#E67E22;fontSize=10;" vertex="1" parent="10">
+          <mxGeometry x="590" y="65" width="130" height="45" as="geometry" />
+        </mxCell>
+
+        <mxCell id="15" value="status = OK?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFC300;strokeColor=#E67E22;fontSize=10;fontStyle=1;" vertex="1" parent="10">
+          <mxGeometry x="760" y="52" width="120" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="16" value="&lt;b&gt;ask_user&lt;/b&gt;&lt;br&gt;Show issues,&lt;br&gt;request decision" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FDEBD0;strokeColor=#E67E22;fontSize=10;" vertex="1" parent="10">
+          <mxGeometry x="940" y="55" width="155" height="65" as="geometry" />
+        </mxCell>
+
+        <mxCell id="17" value="auto-fix?&lt;br&gt;retry &lt; 3?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFC300;strokeColor=#E67E22;fontSize=10;fontStyle=1;" vertex="1" parent="10">
+          <mxGeometry x="1150" y="52" width="120" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="18" value="&lt;b&gt;fix_level_minus1&lt;/b&gt;&lt;br&gt;Apply auto-fixes&lt;br&gt;(retry loop ↺)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F0B27A;strokeColor=#E67E22;fontSize=10;" vertex="1" parent="10">
+          <mxGeometry x="1330" y="55" width="155" height="65" as="geometry" />
+        </mxCell>
+
+        <!-- Retry loop label -->
+        <mxCell id="19" value="↺ retry (max 3)" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontSize=9;fontColor=#E67E22;fontStyle=2;" vertex="1" parent="10">
+          <mxGeometry x="1330" y="165" width="155" height="25" as="geometry" />
+        </mxCell>
+
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!-- LEVEL 1: CONTEXT SYNC                                          -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <mxCell id="20" value="LEVEL 1  ·  Context Sync + Complexity Analysis" style="swimlane;startSize=35;fillColor=#EBF5FB;strokeColor=#2980B9;fontStyle=1;fontSize=13;fontColor=#1A5276;swimlaneLine=1;rounded=1;arcSize=2;" vertex="1" parent="1">
+          <mxGeometry x="30" y="480" width="2160" height="220" as="geometry" />
+        </mxCell>
+
+        <mxCell id="21" value="&lt;b&gt;session_loader&lt;/b&gt;&lt;br&gt;Create session dir&lt;br&gt;Save metadata" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D6EAF8;strokeColor=#2980B9;fontSize=10;" vertex="1" parent="20">
+          <mxGeometry x="20" y="55" width="155" height="65" as="geometry" />
+        </mxCell>
+
+        <!-- Parallel fork indicator -->
+        <mxCell id="20f" value="║ PARALLEL" style="text;html=1;strokeColor=#2980B9;fillColor=#D6EAF8;align=center;verticalAlign=middle;fontSize=9;fontColor=#2980B9;fontStyle=1;" vertex="1" parent="20">
+          <mxGeometry x="215" y="70" width="80" height="35" as="geometry" />
+        </mxCell>
+
+        <mxCell id="22" value="&lt;b&gt;complexity_calc&lt;/b&gt;&lt;br&gt;Score 0-10, CallGraph&lt;br&gt;impact analysis" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D6EAF8;strokeColor=#2980B9;fontSize=10;" vertex="1" parent="20">
+          <mxGeometry x="310" y="45" width="160" height="55" as="geometry" />
+        </mxCell>
+
+        <mxCell id="23" value="&lt;b&gt;context_loader&lt;/b&gt;&lt;br&gt;SRS, README, CLAUDE.md&lt;br&gt;ContextCache + OOM guard" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D6EAF8;strokeColor=#2980B9;fontSize=10;" vertex="1" parent="20">
+          <mxGeometry x="310" y="120" width="160" height="55" as="geometry" />
+        </mxCell>
+
+        <mxCell id="24" value="&lt;b&gt;toon_compression&lt;/b&gt;&lt;br&gt;TOON format&lt;br&gt;token reduction" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D6EAF8;strokeColor=#2980B9;fontSize=10;" vertex="1" parent="20">
+          <mxGeometry x="510" y="70" width="160" height="55" as="geometry" />
+        </mxCell>
+
+        <mxCell id="25" value="&lt;b&gt;level1_merge&lt;/b&gt;&lt;br&gt;Merge parallel&lt;br&gt;outputs" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D6EAF8;strokeColor=#2980B9;fontSize=10;" vertex="1" parent="20">
+          <mxGeometry x="710" y="70" width="130" height="55" as="geometry" />
+        </mxCell>
+
+        <mxCell id="26" value="&lt;b&gt;cleanup_l1&lt;/b&gt;&lt;br&gt;Release memory" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D6EAF8;strokeColor=#2980B9;fontSize=10;" vertex="1" parent="20">
+          <mxGeometry x="880" y="70" width="130" height="55" as="geometry" />
+        </mxCell>
+
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!-- LEVEL 2: STANDARDS                                             -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <mxCell id="30" value="LEVEL 2  ·  Standards + Tool Optimization + MCP Discovery" style="swimlane;startSize=35;fillColor=#EAFAF1;strokeColor=#27AE60;fontStyle=1;fontSize=13;fontColor=#145A32;swimlaneLine=1;rounded=1;arcSize=2;" vertex="1" parent="1">
+          <mxGeometry x="30" y="730" width="2160" height="255" as="geometry" />
+        </mxCell>
+
+        <mxCell id="31" value="&lt;b&gt;emergency_archive&lt;/b&gt;&lt;br&gt;Archive if context&lt;br&gt;&gt;95% capacity" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5F5E3;strokeColor=#27AE60;fontSize=10;" vertex="1" parent="30">
+          <mxGeometry x="20" y="55" width="150" height="65" as="geometry" />
+        </mxCell>
+
+        <mxCell id="32" value="&lt;b&gt;common_standards&lt;/b&gt;&lt;br&gt;Load policies/&lt;br&gt;Detect project type" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5F5E3;strokeColor=#27AE60;fontSize=10;" vertex="1" parent="30">
+          <mxGeometry x="205" y="55" width="150" height="65" as="geometry" />
+        </mxCell>
+
+        <mxCell id="33" value="Java&lt;br&gt;project?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ABEBC6;strokeColor=#27AE60;fontSize=10;fontStyle=1;" vertex="1" parent="30">
+          <mxGeometry x="400" y="52" width="105" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="34" value="&lt;b&gt;java_standards&lt;/b&gt;&lt;br&gt;SpringBoot, Maven&lt;br&gt;Gradle rules" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#A9DFBF;strokeColor=#27AE60;fontSize=10;dashed=1;" vertex="1" parent="30">
+          <mxGeometry x="390" y="160" width="150" height="55" as="geometry" />
+        </mxCell>
+
+        <!-- Parallel fork for tool_opt and mcp_disc -->
+        <mxCell id="30f" value="║ PARALLEL" style="text;html=1;strokeColor=#27AE60;fillColor=#D5F5E3;align=center;verticalAlign=middle;fontSize=9;fontColor=#27AE60;fontStyle=1;" vertex="1" parent="30">
+          <mxGeometry x="558" y="75" width="80" height="30" as="geometry" />
+        </mxCell>
+
+        <mxCell id="35" value="&lt;b&gt;tool_optimization&lt;/b&gt;&lt;br&gt;Token reduction&lt;br&gt;60-85% savings" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5F5E3;strokeColor=#27AE60;fontSize=10;" vertex="1" parent="30">
+          <mxGeometry x="650" y="48" width="155" height="50" as="geometry" />
+        </mxCell>
+
+        <mxCell id="36" value="&lt;b&gt;mcp_discovery&lt;/b&gt;&lt;br&gt;Discover MCP servers&lt;br&gt;Register tool hints" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5F5E3;strokeColor=#27AE60;fontSize=10;" vertex="1" parent="30">
+          <mxGeometry x="650" y="128" width="155" height="50" as="geometry" />
+        </mxCell>
+
+        <mxCell id="37" value="&lt;b&gt;level2_merge&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5F5E3;strokeColor=#27AE60;fontSize=10;" vertex="1" parent="30">
+          <mxGeometry x="855" y="70" width="120" height="45" as="geometry" />
+        </mxCell>
+
+        <mxCell id="38" value="&lt;b&gt;select_standards&lt;/b&gt;&lt;br&gt;Pick applicable&lt;br&gt;standards per task" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5F5E3;strokeColor=#27AE60;fontSize=10;" vertex="1" parent="30">
+          <mxGeometry x="1020" y="60" width="145" height="65" as="geometry" />
+        </mxCell>
+
+        <mxCell id="39" value="&lt;b&gt;optimize_context&lt;/b&gt;&lt;br&gt;Post-standards&lt;br&gt;token budget" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5F5E3;strokeColor=#27AE60;fontSize=10;" vertex="1" parent="30">
+          <mxGeometry x="1210" y="60" width="145" height="65" as="geometry" />
+        </mxCell>
+
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!-- LEVEL 3: EXECUTION PIPELINE (15 Steps)                        -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <mxCell id="40" value="LEVEL 3  ·  Execution Pipeline  ·  15 Steps (Step 0 → Step 14)" style="swimlane;startSize=35;fillColor=#F5EEF8;strokeColor=#8E44AD;fontStyle=1;fontSize=13;fontColor=#4A235A;swimlaneLine=1;rounded=1;arcSize=2;" vertex="1" parent="1">
+          <mxGeometry x="30" y="1015" width="2160" height="1870" as="geometry" />
+        </mxCell>
+
+        <!-- Step 0.0 -->
+        <mxCell id="41" value="&lt;b&gt;Step 0.0&lt;/b&gt; · project_context&lt;br&gt;Read README, CHANGELOG&lt;br&gt;Establish project baseline" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8DAEF;strokeColor=#8E44AD;fontSize=10;" vertex="1" parent="40">
+          <mxGeometry x="30" y="50" width="200" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Step 0.1 -->
+        <mxCell id="42" value="&lt;b&gt;Step 0.1&lt;/b&gt; · initial_callgraph&lt;br&gt;Snapshot CallGraph (578 classes)&lt;br&gt;Baseline for Step 11 diff" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8DAEF;strokeColor=#8E44AD;fontSize=10;" vertex="1" parent="40">
+          <mxGeometry x="30" y="130" width="200" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Step 0 -->
+        <mxCell id="43" value="&lt;b&gt;Step 0&lt;/b&gt; · task_analysis  ⚡RAG&lt;br&gt;LLM: task_type, complexity 0-10&lt;br&gt;suggested_model selection" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8DAEF;strokeColor=#8E44AD;fontSize=10;" vertex="1" parent="40">
+          <mxGeometry x="30" y="215" width="200" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Standards Hook badge -->
+        <mxCell id="h0" value="🔗 standards_hook_step0" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FDEDEC;strokeColor=#C0392B;fontSize=8;dashed=1;" vertex="1" parent="40">
+          <mxGeometry x="250" y="230" width="155" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- Step 1 -->
+        <mxCell id="44" value="&lt;b&gt;Step 1&lt;/b&gt; · plan_mode_decision  ⚡RAG&lt;br&gt;LLM: plan_required? (boolean)&lt;br&gt;Route decision point" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8DAEF;strokeColor=#8E44AD;fontSize=10;" vertex="1" parent="40">
+          <mxGeometry x="30" y="305" width="200" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Route after step 1 -->
+        <mxCell id="45" value="plan_required?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#D7BDE2;strokeColor=#8E44AD;fontSize=10;fontStyle=1;" vertex="1" parent="40">
+          <mxGeometry x="278" y="298" width="125" height="72" as="geometry" />
+        </mxCell>
+
+        <!-- Step 2 (conditional) -->
+        <mxCell id="46" value="&lt;b&gt;Step 2&lt;/b&gt; · plan_execution  ⚡RAG&lt;br&gt;LLM: multi-phase plan&lt;br&gt;phases, milestones, risk" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D2B4DE;strokeColor=#8E44AD;fontSize=10;dashed=1;" vertex="1" parent="40">
+          <mxGeometry x="460" y="300" width="200" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Standards Hook step 1 -->
+        <mxCell id="h1" value="🔗 standards_hook_step1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FDEDEC;strokeColor=#C0392B;fontSize=8;dashed=1;" vertex="1" parent="40">
+          <mxGeometry x="250" y="390" width="155" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- Step 3 -->
+        <mxCell id="47" value="&lt;b&gt;Step 3&lt;/b&gt; · task_breakdown&lt;br&gt;Granular task list&lt;br&gt;ENABLE_FIGMA → extract components" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8DAEF;strokeColor=#8E44AD;fontSize=10;" vertex="1" parent="40">
+          <mxGeometry x="30" y="430" width="200" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Step 4 -->
+        <mxCell id="48" value="&lt;b&gt;Step 4&lt;/b&gt; · toon_refinement&lt;br&gt;Refine TOON object&lt;br&gt;Consolidate all context" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8DAEF;strokeColor=#8E44AD;fontSize=10;" vertex="1" parent="40">
+          <mxGeometry x="30" y="520" width="200" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Step 5 -->
+        <mxCell id="49" value="&lt;b&gt;Step 5&lt;/b&gt; · skill_selection  ⚡RAG&lt;br&gt;RAG cross-session boost (Qdrant)&lt;br&gt;Best skill + agent from library" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8DAEF;strokeColor=#8E44AD;fontSize=10;" vertex="1" parent="40">
+          <mxGeometry x="30" y="610" width="200" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Step 6 -->
+        <mxCell id="50" value="&lt;b&gt;Step 6&lt;/b&gt; · skill_validation&lt;br&gt;Download skill if needed&lt;br&gt;Validate compatibility" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8DAEF;strokeColor=#8E44AD;fontSize=10;" vertex="1" parent="40">
+          <mxGeometry x="30" y="700" width="200" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Step 7 -->
+        <mxCell id="51" value="&lt;b&gt;Step 7&lt;/b&gt; · final_prompt  ⚡RAG&lt;br&gt;Generate 3 system prompt files&lt;br&gt;ENABLE_FIGMA → inject design tokens" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8DAEF;strokeColor=#8E44AD;fontSize=10;" vertex="1" parent="40">
+          <mxGeometry x="30" y="790" width="200" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Step 8 -->
+        <mxCell id="52" value="&lt;b&gt;Step 8&lt;/b&gt; · github_issue  ⚡RAG&lt;br&gt;Create GitHub Issue&lt;br&gt;ENABLE_JIRA → dual-link Jira" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8DAEF;strokeColor=#8E44AD;fontSize=10;" vertex="1" parent="40">
+          <mxGeometry x="30" y="880" width="200" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Step 9 -->
+        <mxCell id="53" value="&lt;b&gt;Step 9&lt;/b&gt; · branch_creation&lt;br&gt;feature/{slug} or feature/PROJ-123&lt;br&gt;Git ops via git_mcp_server" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8DAEF;strokeColor=#8E44AD;fontSize=10;" vertex="1" parent="40">
+          <mxGeometry x="30" y="970" width="200" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Hook Mode Boundary -->
+        <mxCell id="54" value="━━━━━━━━━━━━━━  HOOK MODE END  (CLAUDE_HOOK_MODE=1 stops here → Claude Code implements)  ━━━━━━━━━━━━━━" style="text;html=1;strokeColor=#E74C3C;fillColor=#FADBD8;align=center;verticalAlign=middle;fontSize=10;fontStyle=1;fontColor=#C0392B;rounded=1;" vertex="1" parent="40">
+          <mxGeometry x="30" y="1050" width="760" height="35" as="geometry" />
+        </mxCell>
+
+        <!-- Full mode label -->
+        <mxCell id="54b" value="↓  FULL MODE ONLY  (CLAUDE_HOOK_MODE=0)" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=9;fontColor=#8E44AD;fontStyle=2;" vertex="1" parent="40">
+          <mxGeometry x="30" y="1090" width="280" height="20" as="geometry" />
+        </mxCell>
+
+        <!-- Step 10 -->
+        <mxCell id="55" value="&lt;b&gt;Step 10&lt;/b&gt; · implementation&lt;br&gt;Hybrid LLM inference&lt;br&gt;ENABLE_SONARQUBE scan · ENABLE_FIGMA comment" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8DAEF;strokeColor=#8E44AD;fontSize=10;" vertex="1" parent="40">
+          <mxGeometry x="30" y="1115" width="200" height="65" as="geometry" />
+        </mxCell>
+
+        <!-- Standards Hook step 10 -->
+        <mxCell id="h10" value="🔗 standards_hook_step10" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FDEDEC;strokeColor=#C0392B;fontSize=8;dashed=1;" vertex="1" parent="40">
+          <mxGeometry x="250" y="1130" width="155" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- Step 11 -->
+        <mxCell id="56" value="&lt;b&gt;Step 11&lt;/b&gt; · pull_request  ⚡RAG&lt;br&gt;Create PR + code review&lt;br&gt;CallGraph diff (Step 0.1 vs now)&lt;br&gt;ENABLE_JENKINS → CI validate" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8DAEF;strokeColor=#8E44AD;fontSize=10;" vertex="1" parent="40">
+          <mxGeometry x="30" y="1210" width="200" height="75" as="geometry" />
+        </mxCell>
+
+        <!-- Route after step 11 -->
+        <mxCell id="57" value="review_passed?&lt;br&gt;or retry ≥ 3?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#D7BDE2;strokeColor=#8E44AD;fontSize=10;fontStyle=1;" vertex="1" parent="40">
+          <mxGeometry x="278" y="1215" width="130" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- Retry node -->
+        <mxCell id="58" value="&lt;b&gt;step11_retry&lt;/b&gt;&lt;br&gt;Increment retry_count&lt;br&gt;↺ back to Step 10" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F1948A;strokeColor=#8E44AD;fontSize=10;" vertex="1" parent="40">
+          <mxGeometry x="462" y="1218" width="165" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Step 12 -->
+        <mxCell id="59" value="&lt;b&gt;Step 12&lt;/b&gt; · issue_closure&lt;br&gt;Close GitHub issue&lt;br&gt;ENABLE_JIRA → transition Done" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8DAEF;strokeColor=#8E44AD;fontSize=10;" vertex="1" parent="40">
+          <mxGeometry x="30" y="1320" width="200" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Step 13 -->
+        <mxCell id="60" value="&lt;b&gt;Step 13&lt;/b&gt; · docs_update&lt;br&gt;Update docs + circular SDLC&lt;br&gt;Generate 13 UML diagram types" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8DAEF;strokeColor=#8E44AD;fontSize=10;" vertex="1" parent="40">
+          <mxGeometry x="30" y="1410" width="200" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Step 14 -->
+        <mxCell id="61" value="&lt;b&gt;Step 14&lt;/b&gt; · final_summary&lt;br&gt;Metrics finalized&lt;br&gt;Voice notification flag" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8DAEF;strokeColor=#8E44AD;fontSize=10;" vertex="1" parent="40">
+          <mxGeometry x="30" y="1500" width="200" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Level 3 merge -->
+        <mxCell id="62" value="&lt;b&gt;level3_merge&lt;/b&gt;&lt;br&gt;Final state consolidation" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D7BDE2;strokeColor=#8E44AD;fontSize=10;" vertex="1" parent="40">
+          <mxGeometry x="30" y="1590" width="200" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- Output node -->
+        <mxCell id="63" value="&lt;b&gt;output_node&lt;/b&gt;&lt;br&gt;Write flow-trace.json · Save workflow memory&lt;br&gt;Status: BLOCKED | FAILED | PARTIAL | OK" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#C39BD3;strokeColor=#8E44AD;fontSize=10;" vertex="1" parent="40">
+          <mxGeometry x="30" y="1665" width="200" height="65" as="geometry" />
+        </mxCell>
+
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!-- END TERMINAL                                                    -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <mxCell id="64" value="END" style="ellipse;whiteSpace=wrap;html=1;fillColor=#1a1a2e;strokeColor=#1a1a2e;fontColor=#ffffff;fontStyle=1;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="560" y="2915" width="100" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!-- EXTERNAL SYSTEMS PANEL                                         -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+
+        <!-- Panel header -->
+        <mxCell id="80" value="EXTERNAL SYSTEMS &amp; MCP SERVERS" style="text;html=1;strokeColor=#333333;fillColor=#2C3E50;align=center;verticalAlign=middle;fontSize=12;fontStyle=1;fontColor=#FFFFFF;rounded=1;" vertex="1" parent="1">
+          <mxGeometry x="2250" y="160" width="300" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- Git & GitHub Group -->
+        <mxCell id="81" value="&lt;b&gt;git_mcp_server&lt;/b&gt; (14 tools)&lt;br&gt;branch · commit · push · pull&lt;br&gt;stash · diff · fetch&lt;br&gt;&lt;font color='#666'&gt;Steps: 9, 11, 12&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5D8DC;strokeColor=#2C3E50;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="2250" y="215" width="180" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="82" value="&lt;b&gt;github_mcp_server&lt;/b&gt; (12 tools)&lt;br&gt;PR · issue · merge · label&lt;br&gt;build validate · full cycle&lt;br&gt;&lt;font color='#666'&gt;Steps: 8, 9, 11, 12&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5D8DC;strokeColor=#2C3E50;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="2250" y="305" width="180" height="80" as="geometry" />
+        </mxCell>
+
+        <!-- Session MCP -->
+        <mxCell id="83" value="&lt;b&gt;session_mcp_server&lt;/b&gt; (14 tools)&lt;br&gt;create · chain · tag · finalize&lt;br&gt;work items · search" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5D8DC;strokeColor=#2C3E50;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="2250" y="395" width="180" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- Vector DB / RAG -->
+        <mxCell id="84" value="&lt;b&gt;vector_db_mcp_server&lt;/b&gt; (11 tools)&lt;br&gt;Qdrant · 4 collections&lt;br&gt;node_decisions · sessions&lt;br&gt;flow_traces · tool_calls&lt;br&gt;&lt;font color='#666'&gt;RAG threshold: 0.75-0.90&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FAD7A0;strokeColor=#E67E22;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="2250" y="475" width="180" height="95" as="geometry" />
+        </mxCell>
+
+        <!-- LLM Providers -->
+        <mxCell id="85" value="&lt;b&gt;LLM Providers&lt;/b&gt; (Hybrid Routing)&lt;br&gt;━━━━━━━━━━━━━━━━━━━━━&lt;br&gt;Ollama (local GPU) — always up&lt;br&gt;Anthropic API (SDK + retries)&lt;br&gt;Claude CLI (subprocess)&lt;br&gt;OpenAI API&lt;br&gt;&lt;font color='#666'&gt;Fallback: primary → Ollama&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#AED6F1;strokeColor=#2980B9;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="2250" y="580" width="180" height="120" as="geometry" />
+        </mxCell>
+
+        <!-- Skill Manager -->
+        <mxCell id="86" value="&lt;b&gt;skill_manager_mcp&lt;/b&gt; (8 tools)&lt;br&gt;load · search · validate&lt;br&gt;rank · conflicts&lt;br&gt;&lt;font color='#666'&gt;Steps: 5, 6&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5D8DC;strokeColor=#2C3E50;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="2250" y="710" width="180" height="75" as="geometry" />
+        </mxCell>
+
+        <!-- Standards Loader -->
+        <mxCell id="87" value="&lt;b&gt;standards_loader_mcp&lt;/b&gt; (7 tools)&lt;br&gt;detect · framework · hot-reload&lt;br&gt;&lt;font color='#666'&gt;Level 2&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5D8DC;strokeColor=#2C3E50;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="2250" y="795" width="180" height="65" as="geometry" />
+        </mxCell>
+
+        <!-- Token Optimizer -->
+        <mxCell id="88" value="&lt;b&gt;token_optimization_mcp&lt;/b&gt; (10)&lt;br&gt;AST nav · smart read · dedup&lt;br&gt;60-85% token savings&lt;br&gt;&lt;font color='#666'&gt;Level 2 + Steps 0-7&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5D8DC;strokeColor=#2C3E50;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="2250" y="870" width="180" height="75" as="geometry" />
+        </mxCell>
+
+        <!-- UML Diagram MCP -->
+        <mxCell id="89" value="&lt;b&gt;uml_diagram_mcp&lt;/b&gt; (15 tools)&lt;br&gt;13 diagram types&lt;br&gt;Mermaid · PlantUML · Kroki.io&lt;br&gt;&lt;font color='#666'&gt;Step 13&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5D8DC;strokeColor=#2C3E50;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="2250" y="955" width="180" height="75" as="geometry" />
+        </mxCell>
+
+        <!-- OPTIONAL INTEGRATIONS header -->
+        <mxCell id="89b" value="OPTIONAL INTEGRATIONS (ENABLE_* flags)" style="text;html=1;strokeColor=#E74C3C;fillColor=#FADBD8;align=center;verticalAlign=middle;fontSize=10;fontStyle=1;fontColor=#C0392B;rounded=1;" vertex="1" parent="1">
+          <mxGeometry x="2250" y="1040" width="300" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- Jira (optional) -->
+        <mxCell id="90" value="&lt;b&gt;jira_mcp_server&lt;/b&gt; (10 tools)&lt;br&gt;ENABLE_JIRA=1&lt;br&gt;Create · Transition · Link PR&lt;br&gt;S8: Create · S9: Branch&lt;br&gt;S10: In Progress · S11: Review&lt;br&gt;S12: Done" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FDFEFE;strokeColor=#E74C3C;fontSize=10;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="2250" y="1080" width="180" height="110" as="geometry" />
+        </mxCell>
+
+        <!-- Figma (optional) -->
+        <mxCell id="91" value="&lt;b&gt;figma_mcp_server&lt;/b&gt; (10 tools)&lt;br&gt;ENABLE_FIGMA=1&lt;br&gt;S3: Extract components&lt;br&gt;S7: Inject design tokens&lt;br&gt;S10: Started comment&lt;br&gt;S11: Design review&lt;br&gt;S12: Complete comment" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FDFEFE;strokeColor=#E74C3C;fontSize=10;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="2250" y="1200" width="180" height="120" as="geometry" />
+        </mxCell>
+
+        <!-- Jenkins (optional) -->
+        <mxCell id="92" value="&lt;b&gt;jenkins_mcp_server&lt;/b&gt; (10 tools)&lt;br&gt;ENABLE_JENKINS=1&lt;br&gt;S11: Validate CI build&lt;br&gt;blocks merge if failed" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FDFEFE;strokeColor=#E74C3C;fontSize=10;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="2250" y="1330" width="180" height="80" as="geometry" />
+        </mxCell>
+
+        <!-- SonarQube (optional) -->
+        <mxCell id="93" value="&lt;b&gt;sonarqube_scanner&lt;/b&gt;&lt;br&gt;ENABLE_SONARQUBE=1&lt;br&gt;S10: Scan after impl&lt;br&gt;auto-fixer loop" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FDFEFE;strokeColor=#E74C3C;fontSize=10;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="2250" y="1420" width="180" height="75" as="geometry" />
+        </mxCell>
+
+        <!-- Draw.io MCP -->
+        <mxCell id="94" value="&lt;b&gt;drawio_mcp_server&lt;/b&gt; (5 tools)&lt;br&gt;12 diagram types&lt;br&gt;.drawio files · shareable URLs" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5D8DC;strokeColor=#2C3E50;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="2250" y="1505" width="180" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- Policy Enforcement -->
+        <mxCell id="95" value="&lt;b&gt;policy_enforcement_mcp&lt;/b&gt; (11)&lt;br&gt;pre_tool_gate_mcp (8)&lt;br&gt;post_tool_tracker_mcp (6)&lt;br&gt;Block Write/Edit until L1+L2 done" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5D8DC;strokeColor=#2C3E50;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="2250" y="1585" width="180" height="80" as="geometry" />
+        </mxCell>
+
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!-- LEGEND                                                          -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <mxCell id="leg0" value="LEGEND" style="swimlane;startSize=30;fillColor=#F2F3F4;strokeColor=#566573;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="2250" y="1680" width="490" height="290" as="geometry" />
+        </mxCell>
+
+        <mxCell id="leg1" value="Level -1 Node" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FDEBD0;strokeColor=#E67E22;fontSize=10;" vertex="1" parent="leg0">
+          <mxGeometry x="15" y="40" width="120" height="35" as="geometry" />
+        </mxCell>
+        <mxCell id="leg2" value="Level 1 Node" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D6EAF8;strokeColor=#2980B9;fontSize=10;" vertex="1" parent="leg0">
+          <mxGeometry x="15" y="85" width="120" height="35" as="geometry" />
+        </mxCell>
+        <mxCell id="leg3" value="Level 2 Node" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5F5E3;strokeColor=#27AE60;fontSize=10;" vertex="1" parent="leg0">
+          <mxGeometry x="15" y="130" width="120" height="35" as="geometry" />
+        </mxCell>
+        <mxCell id="leg4" value="Level 3 Node" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8DAEF;strokeColor=#8E44AD;fontSize=10;" vertex="1" parent="leg0">
+          <mxGeometry x="15" y="175" width="120" height="35" as="geometry" />
+        </mxCell>
+        <mxCell id="leg5" value="Routing Decision" style="rhombus;whiteSpace=wrap;html=1;fillColor=#D7BDE2;strokeColor=#8E44AD;fontSize=10;" vertex="1" parent="leg0">
+          <mxGeometry x="155" y="38" width="120" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="leg6" value="⚡RAG = LLM call cached&lt;br&gt;via Qdrant vector search&lt;br&gt;threshold 0.75-0.90" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FAD7A0;strokeColor=#E67E22;fontSize=10;" vertex="1" parent="leg0">
+          <mxGeometry x="155" y="100" width="145" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="leg7" value="Optional Integration&lt;br&gt;(ENABLE_* flag)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FDFEFE;strokeColor=#E74C3C;fontSize=10;dashed=1;" vertex="1" parent="leg0">
+          <mxGeometry x="155" y="175" width="145" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="leg8" value="🔗 Standards Hook&lt;br&gt;(9 injection points)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FDEDEC;strokeColor=#C0392B;fontSize=10;dashed=1;" vertex="1" parent="leg0">
+          <mxGeometry x="315" y="40" width="150" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="leg9" value="Retry Loop (↺)&lt;br&gt;max 3 attempts" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F1948A;strokeColor=#8E44AD;fontSize=10;" vertex="1" parent="leg0">
+          <mxGeometry x="315" y="100" width="150" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="leg10" value="Parallel Execution (║)&lt;br&gt;L1: complexity + context&lt;br&gt;L2: tool_opt + mcp_disc" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D6EAF8;strokeColor=#2980B9;fontSize=10;" vertex="1" parent="leg0">
+          <mxGeometry x="315" y="160" width="150" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!-- EDGES / ARROWS                                                  -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+
+        <!-- Entry → Level -1 -->
+        <mxCell id="e1" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="3" target="11" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Level -1 internal flow -->
+        <mxCell id="e2" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="11" target="12" parent="10">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e3" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="12" target="13" parent="10">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e4" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="13" target="14" parent="10">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e5" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="14" target="15" parent="10">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <!-- route: FAIL → ask_user -->
+        <mxCell id="e6" value="FAIL" style="edgeStyle=orthogonalEdgeStyle;fontColor=#E74C3C;fontStyle=1;" edge="1" source="15" target="16" parent="10">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e7" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="16" target="17" parent="10">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <!-- auto-fix → fix_node -->
+        <mxCell id="e8" value="auto-fix" style="edgeStyle=orthogonalEdgeStyle;fontColor=#27AE60;fontStyle=1;" edge="1" source="17" target="18" parent="10">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <!-- fix_node → retry loop back to unicode_fix -->
+        <mxCell id="e9" value="retry ↺" style="edgeStyle=orthogonalEdgeStyle;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;curved=1;fontColor=#E67E22;fontStyle=2;" edge="1" source="18" target="11" parent="10">
+          <mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="1430" y="220" /><mxPoint x="100" y="220" /></Array></mxGeometry>
+        </mxCell>
+
+        <!-- Level -1 OK → Level 1 -->
+        <mxCell id="e10" value="OK" style="edgeStyle=orthogonalEdgeStyle;exitX=0.5;exitY=1;fontColor=#27AE60;fontStyle=1;" edge="1" source="15" target="21" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <!-- Level -1 skip → Level 1 (from route_user_choice skip path) -->
+        <mxCell id="e11" value="skip" style="edgeStyle=orthogonalEdgeStyle;fontColor=#E67E22;fontStyle=1;dashed=1;" edge="1" source="17" target="21" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Level 1 internal flow -->
+        <mxCell id="e12" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="21" target="22" parent="20">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e13" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="21" target="23" parent="20">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e14" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="22" target="24" parent="20">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e15" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="23" target="24" parent="20">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e16" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="24" target="25" parent="20">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e17" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="25" target="26" parent="20">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Level 1 → Level 2 -->
+        <mxCell id="e18" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="26" target="31" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Level 2 internal flow -->
+        <mxCell id="e19" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="31" target="32" parent="30">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e20" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="32" target="33" parent="30">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <!-- Java yes → java_standards -->
+        <mxCell id="e21" value="YES" style="edgeStyle=orthogonalEdgeStyle;fontColor=#27AE60;fontStyle=1;" edge="1" source="33" target="34" parent="30">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <!-- java_standards → merge -->
+        <mxCell id="e22" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="34" target="37" parent="30">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <!-- Java no → tool_opt + mcp (via fork) -->
+        <mxCell id="e23" value="NO" style="edgeStyle=orthogonalEdgeStyle;fontColor=#E74C3C;fontStyle=1;" edge="1" source="33" target="35" parent="30">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e24" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="33" target="36" parent="30">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e25" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="35" target="37" parent="30">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e26" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="36" target="37" parent="30">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e27" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="37" target="38" parent="30">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e28" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="38" target="39" parent="30">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Level 2 → Level 3 -->
+        <mxCell id="e29" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="39" target="41" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Level 3 internal flow: Steps 0.0 → 0.1 → 0 → 1 -->
+        <mxCell id="e30" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="41" target="42" parent="40">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e31" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="42" target="43" parent="40">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e32" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="43" target="44" parent="40">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e33" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="44" target="45" parent="40">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <!-- plan_required YES → Step 2 -->
+        <mxCell id="e34" value="YES" style="edgeStyle=orthogonalEdgeStyle;fontColor=#27AE60;fontStyle=1;" edge="1" source="45" target="46" parent="40">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <!-- Step 2 → Step 3 -->
+        <mxCell id="e35" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="46" target="47" parent="40">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <!-- plan_required NO → Step 3 directly -->
+        <mxCell id="e36" value="NO" style="edgeStyle=orthogonalEdgeStyle;fontColor=#E74C3C;fontStyle=1;" edge="1" source="45" target="47" parent="40">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <!-- Steps 3 → 4 → 5 → 6 → 7 → 8 → 9 -->
+        <mxCell id="e37" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="47" target="48" parent="40">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e38" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="48" target="49" parent="40">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e39" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="49" target="50" parent="40">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e40" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="50" target="51" parent="40">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e41" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="51" target="52" parent="40">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e42" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="52" target="53" parent="40">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <!-- Step 9 → Step 10 (full mode) -->
+        <mxCell id="e43" value="Full Mode" style="edgeStyle=orthogonalEdgeStyle;fontColor=#8E44AD;fontStyle=1;" edge="1" source="53" target="55" parent="40">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <!-- Steps 10 → 11 -->
+        <mxCell id="e44" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="55" target="56" parent="40">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <!-- Step 11 → route -->
+        <mxCell id="e45" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="56" target="57" parent="40">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <!-- route: PASS → Step 12 -->
+        <mxCell id="e46" value="PASS / max retries" style="edgeStyle=orthogonalEdgeStyle;fontColor=#27AE60;fontStyle=1;" edge="1" source="57" target="59" parent="40">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <!-- route: FAIL → retry node -->
+        <mxCell id="e47" value="FAIL" style="edgeStyle=orthogonalEdgeStyle;fontColor=#E74C3C;fontStyle=1;" edge="1" source="57" target="58" parent="40">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <!-- retry → back to Step 10 -->
+        <mxCell id="e48" value="↺ retry" style="edgeStyle=orthogonalEdgeStyle;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;curved=1;fontColor=#E74C3C;fontStyle=2;" edge="1" source="58" target="55" parent="40">
+          <mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="620" y="1130" /></Array></mxGeometry>
+        </mxCell>
+        <!-- Steps 12 → 13 → 14 → merge → output -->
+        <mxCell id="e49" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="59" target="60" parent="40">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e50" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="60" target="61" parent="40">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e51" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="61" target="62" parent="40">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e52" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="62" target="63" parent="40">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Output node → END -->
+        <mxCell id="e53" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="63" target="64" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Hook Mode → END (after Step 9) -->
+        <mxCell id="e54" value="Hook Mode END" style="edgeStyle=orthogonalEdgeStyle;dashed=1;fontColor=#C0392B;fontStyle=2;" edge="1" source="53" target="64" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- External connections (dashed from steps to systems) -->
+        <!-- Step 8 → GitHub -->
+        <mxCell id="ex1" value="create issue" style="edgeStyle=orthogonalEdgeStyle;dashed=1;strokeColor=#2C3E50;fontSize=9;" edge="1" source="52" target="82" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <!-- Step 9 → Git -->
+        <mxCell id="ex2" value="create branch" style="edgeStyle=orthogonalEdgeStyle;dashed=1;strokeColor=#2C3E50;fontSize=9;" edge="1" source="53" target="81" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <!-- Step 11 → GitHub -->
+        <mxCell id="ex3" value="create PR" style="edgeStyle=orthogonalEdgeStyle;dashed=1;strokeColor=#2C3E50;fontSize=9;" edge="1" source="56" target="82" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <!-- Step 5 → Qdrant -->
+        <mxCell id="ex4" value="RAG lookup" style="edgeStyle=orthogonalEdgeStyle;dashed=1;strokeColor=#E67E22;fontSize=9;" edge="1" source="49" target="84" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <!-- Step 10 → LLM -->
+        <mxCell id="ex5" value="hybrid inference" style="edgeStyle=orthogonalEdgeStyle;dashed=1;strokeColor=#2980B9;fontSize=9;" edge="1" source="55" target="85" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <!-- Step 13 → UML -->
+        <mxCell id="ex6" value="generate 13 UML types" style="edgeStyle=orthogonalEdgeStyle;dashed=1;strokeColor=#2C3E50;fontSize=9;" edge="1" source="60" target="89" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <!-- Step 5 → Skill Manager -->
+        <mxCell id="ex7" value="skill lookup" style="edgeStyle=orthogonalEdgeStyle;dashed=1;strokeColor=#2C3E50;fontSize=9;" edge="1" source="49" target="86" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <!-- Step 8 → Jira (optional) -->
+        <mxCell id="ex8" value="ENABLE_JIRA" style="edgeStyle=orthogonalEdgeStyle;dashed=1;strokeColor=#E74C3C;fontSize=9;" edge="1" source="52" target="90" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <!-- Step 3 → Figma (optional) -->
+        <mxCell id="ex9" value="ENABLE_FIGMA" style="edgeStyle=orthogonalEdgeStyle;dashed=1;strokeColor=#E74C3C;fontSize=9;" edge="1" source="47" target="91" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <!-- Step 11 → Jenkins (optional) -->
+        <mxCell id="ex10" value="ENABLE_JENKINS" style="edgeStyle=orthogonalEdgeStyle;dashed=1;strokeColor=#E74C3C;fontSize=9;" edge="1" source="56" target="92" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <!-- Step 10 → SonarQube (optional) -->
+        <mxCell id="ex11" value="ENABLE_SONARQUBE" style="edgeStyle=orthogonalEdgeStyle;dashed=1;strokeColor=#E74C3C;fontSize=9;" edge="1" source="55" target="93" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
