@@ -429,90 +429,76 @@ policies/
 
 ## Current Status: What's Built vs What's Remaining
 
-### BUILT (v1.5.0 - Alpha)
+> **Version: 1.6.0** — All core features are complete and functional.
 
-| Component | Status | Details |
-|-----------|--------|---------|
-| **15-Step Pipeline** | COMPLETE | All steps produce real output (not stubs) |
-| **4-Level Architecture** | COMPLETE | Level -1 through Level 3 fully operational |
-| **19 MCP Servers** | COMPLETE | 323 tools, all tested and registered |
-| **Jira Integration** | COMPLETE | Dual issue tracking, full lifecycle (create/update/close) |
-| **Figma Integration** | COMPLETE | Component extraction, design tokens, fidelity review |
-| **Jenkins Integration** | COMPLETE | Build trigger, validation, console output on failure |
-| **RAG Integration** | COMPLETE | 4 Vector DB collections, step-specific thresholds |
-| **Hook System** | COMPLETE | Pre/post tool enforcement with blocking |
-| **Policy System** | COMPLETE | 63 policies covering all 15 steps |
-| **Multi-Project Detection** | COMPLETE | 20+ languages/frameworks auto-detected |
-| **Hybrid LLM Inference** | COMPLETE | 4-provider fallback chain |
-| **Token Optimization** | COMPLETE | AST navigation, dedup, 60-85% savings |
-| **Session Management** | COMPLETE | Chaining, TOON compression, archival |
-| **GitHub Integration** | COMPLETE | Issue, branch, PR, merge, review loop |
-| **Standards Enforcement** | COMPLETE | Common + framework-specific with 5 hooks |
-| **Cross-Session Learning** | COMPLETE | RAG pattern detection + skill selection boost |
-| **Test Suite** | COMPLETE | 69+ test files, integration tests for all 15 steps |
-| **Documentation** | COMPLETE | 46 docs, architecture diagrams, guides |
-| **Installation** | COMPLETE | setup.py, requirements.txt, .env.example |
-| **Modular Architecture** | COMPLETE | 9 packages: core, state, routing, helper_nodes, diagrams, parsers, sonarqube, integrations, pipeline_builder |
+### ✅ COMPLETE (v1.6.0)
 
-### REMAINING (Roadmap to v1.0.0 Production)
+| Component | Details |
+|-----------|---------|
+| **15-Step Pipeline** | All steps produce real output (not stubs). Steps 0–14 fully wired. |
+| **4-Level Architecture** | Level -1 → Level 1 → Level 2 → Level 3, fully operational |
+| **20 MCP Servers** | 328 tools: git, github, session, policy, llm, llm-router, ollama, anthropic, openai, token-optimizer, pre-tool-gate, post-tool-tracker, standards-loader, skill-manager, vector-db, uml-diagram, drawio, jira, jenkins, figma |
+| **LLM Provider Routing** | Official Anthropic SDK (auto-retry, typed errors). 4 providers: Ollama · Anthropic · Claude CLI · OpenAI. Specific provider → Ollama fallback by default. |
+| **GitHub Integration** | Issue, branch, PR, merge, review loop (Steps 8–12) |
+| **Jira Integration** | Dual issue tracking, full lifecycle: Create→InProgress→InReview→Done (Steps 8–12) |
+| **Figma Integration** | Component extraction (Step 3), design tokens (Step 7), fidelity review (Step 11) |
+| **Jenkins Integration** | Build trigger, CI validation, blocks merge on failure (Step 11) |
+| **SonarQube Integration** | API-first scan, lightweight fallback, auto-fixer loop, result aggregator (Step 10) |
+| **Quality Gate** | 4-gate PR merge enforcement: coverage · SonarQube · tests · review |
+| **Test Generator** | Auto-generates unit tests via CallGraph. Python (pytest), Java (JUnit5), TS (Jest), Go (table-driven) |
+| **RAG Integration** | Qdrant, 4 collections, step-specific thresholds (0.75–0.90). Caches LLM decisions. |
+| **CallGraph Intelligence** | 578 classes, 3,985 methods. Impact analysis at Steps 2, 10, 11. 4 language parsers. |
+| **Hook System** | UserPromptSubmit · PreToolUse · PostToolUse · Stop. Blocks Write/Edit until L1+L2 done. |
+| **Policy System** | 63 policies, 9 standards-hook injection points across Level 3 |
+| **Multi-Project Detection** | 20+ languages/frameworks auto-detected |
+| **Token Optimization** | AST navigation, smart read, dedup — 60–85% savings |
+| **Session Management** | Chaining, TOON compression, archival, cross-session memory |
+| **Standards Enforcement** | Common + conditional Java + framework-specific |
+| **Cross-Session Learning** | RAG pattern detection + skill selection boost (Qdrant semantic search) |
+| **Modular Architecture** | 9 packages: core · state · routing · helper_nodes · diagrams · parsers · sonarqube · integrations · pipeline_builder |
+| **UML Diagram Generation** | 13 diagram types via Strategy Pattern. CallGraph as single data source. Mermaid/PlantUML/Kroki.io |
+| **Draw.io Diagram Support** | 12 diagram types, editable .drawio files, shareable URLs (no API key needed) |
+| **Architecture Diagram** | Full 3-level pipeline diagram → `architecture.drawio` in project root |
+| **CLI Interface** | `cwe run/setup/status/health/version/doctor` — fully functional |
+| **Setup Wizard** | Interactive first-time configuration (`scripts/setup_wizard.py`) |
+| **Docker** | `Dockerfile` + `docker-compose.yml` — one-command deployment |
+| **GitHub Actions CI** | `.github/workflows/ci.yml` — configurable matrix (Python 3.8/3.10/3.12), lint, tests |
+| **Version Sync** | `scripts/sync-version.py` — syncs VERSION to all 20 MCP servers |
+| **Test Suite** | 57 test files covering MCP servers, pipeline steps, integrations |
+| **Coverage Setup** | `pytest-cov` + `coverage` in requirements.txt |
+| **Documentation** | 38 docs, SRS, CHANGELOG, guides, architecture draw.io |
 
-#### Phase 1: Hardening (Priority: HIGH)
+---
 
-| Task | Description | Effort | Impact |
-|------|-------------|--------|--------|
-| Code coverage measurement | Add `pytest --cov`, set 70% threshold | 2 hrs | Know actual test coverage % |
-| Input validation layer | Sanitize user prompts, length limits, injection prevention | 3 hrs | Security for production use |
-| Checkpoint recovery testing | Test resume-from-crash at every step in staging | 4 hrs | Reliability guarantee |
-| Error message standardization | Consistent error codes across all 15 steps | 3 hrs | Better debugging |
+### 🔲 REMAINING
 
-#### Phase 2: CI/CD & Automation (Priority: HIGH)
+#### Priority: HIGH
 
-| Task | Description | Effort | Impact |
-|------|-------------|--------|--------|
-| GitHub Actions pipeline | Run tests on push, coverage reports, security scan | 4 hrs | Automated quality gates |
-| Docker containerization | Dockerfile + docker-compose for easy deployment | 3 hrs | One-command setup |
-| Version auto-bump | Semantic versioning on merge to main | 2 hrs | Release automation |
-| Pre-commit hooks | Lint, format, type-check before commit | 2 hrs | Code quality enforcement |
+| Task | Why Not Done Yet | Effort |
+|------|-----------------|--------|
+| **Coverage threshold enforcement** | `pytest-cov` is installed but no enforced minimum threshold configured in `pytest.ini` or CI | 1 hr |
+| **Input validation layer** | User prompts not sanitized — length limits, injection prevention missing at pipeline entry | 3 hrs |
+| **Pre-commit hooks** | `.pre-commit-config.yaml` doesn't exist — no lint/format/type-check before commit | 1 hr |
 
-#### Phase 3: Validation (Priority: MEDIUM)
+#### Priority: MEDIUM
 
-| Task | Description | Effort | Impact |
-|------|-------------|--------|--------|
-| Multi-project testing | Test on 10+ real projects (Python, Java, JS, Go, Rust) | 1 week | Prove multi-project readiness |
-| Load testing | 100 concurrent pipeline executions | 2 days | Performance baseline |
-| Fallback chain testing | Test all 4 LLM providers with intentional failures | 1 day | Reliability proof |
-| Checkpoint disaster drill | Kill process at each step, verify resume | 1 day | Recovery confidence |
+| Task | Why Not Done Yet | Effort |
+|------|-----------------|--------|
+| **Multi-project real-world testing** | Tested on this repo only — needs 10+ different project types (Python, Java, JS, Go, Rust) | 1 week |
+| **Load testing** | No baseline for concurrent executions — what happens with 10+ parallel pipelines? | 2 days |
+| **Checkpoint disaster drill** | Recovery code exists but never stress-tested (kill at each step, verify resume) | 1 day |
+| **Version auto-bump on merge** | `sync-version.py` exists but not wired into CI to auto-bump on merge to main | 2 hrs |
 
-#### Phase 4: Release (Priority: MEDIUM)
+#### Priority: LOW (Future / Enterprise)
 
-| Task | Description | Effort | Impact |
-|------|-------------|--------|--------|
-| PyPI package publish | `pip install claude-workflow-engine` | 1 day | Easy distribution |
-| CLI interface | `cwe run "fix the bug"` command | 2 days | User-friendly entry point |
-| Configuration wizard | Interactive setup for first-time users | 1 day | Onboarding experience |
-| Release notes + changelog | v1.0.0 announcement | 1 day | Community awareness |
-
-#### Phase 5: Quality Intelligence (Priority: HIGH - Next)
-
-| Task | Description | Impact |
-|------|-------------|--------|
-| SonarQube integration | Auto-scan code after implementation, parse findings, auto-create issues | Self-healing code quality |
-| Auto-fix SonarQube issues | Claude picks up scan findings and fixes bugs/vulnerabilities/smells autonomously | Zero manual quality work |
-| Unit test auto-generation | Generate language-specific unit tests for every modified method using call graph | Coverage never drops |
-| Integration test generation | Generate cross-service/API tests for modified call paths | End-to-end validation |
-| Language-aware test patterns | Python: pytest+fixtures, Java: JUnit5+Mockito, TS: Jest, Go: table-driven | Idiomatic tests per language |
-| Coverage-driven test scope | Use call graph to find untested methods and generate tests for them | Smart test targeting |
-| Quality gate enforcement | Block PR merge until SonarQube gate passes + coverage threshold met | Production-grade quality |
-
-#### Phase 6: Enterprise Features (Priority: LOW - Future)
-
-| Task | Description | Impact |
-|------|-------------|--------|
-| Metrics dashboard | Real-time pipeline execution monitoring | Observability |
-| Team collaboration | Multi-user sessions with role-based access | Team use |
-| Custom policy editor | UI for creating/editing policies | Customization |
-| Webhook integrations | Slack, Teams, Discord notifications | Enterprise workflow |
-| Audit trail | Complete compliance logging | Enterprise compliance |
+| Task | Description |
+|------|-------------|
+| **PyPI publish** | `pip install claude-workflow-engine` — package not yet published |
+| **Metrics web dashboard** | `metrics_aggregator.py` exists but no web UI for real-time monitoring |
+| **Team collaboration** | Multi-user sessions with role-based access |
+| **Custom policy editor** | UI for creating/editing the 63 policies without editing markdown |
+| **Webhook notifications** | Slack/Teams/Discord on pipeline complete/fail |
+| **Audit trail** | Compliance-grade immutable logging |
 | Plugin system | Third-party skill/agent marketplace | Ecosystem growth |
 
 ---
