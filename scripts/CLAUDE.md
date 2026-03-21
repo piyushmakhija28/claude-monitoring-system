@@ -22,8 +22,8 @@ This directory contains the pipeline entry point, hook scripts, and the core `la
 | `post-tool-tracker.py` | PostToolUse hook — progress tracking, GitHub integration |
 | `stop-notifier.py` | Stop hook — voice notification on session end |
 | `sync-version.py` | Syncs version from VERSION file to all MCP servers |
-| `CHANGELOG.md` | Full project changelog |
-| `System_Requirement_Analysis.md` | SRS document |
+| `/CHANGELOG.md` | Full project changelog (root) |
+| `/SRS.md` | System Requirements Specification (root) |
 
 ### langgraph_engine/ Package Structure (v1.5.0)
 
