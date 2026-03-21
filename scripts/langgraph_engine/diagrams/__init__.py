@@ -1,5 +1,6 @@
 """
 Diagrams package - Modular UML diagram generators (Strategy + Factory patterns).
+Also includes DrawioConverter for generating editable .drawio files.
 
 Each concrete generator lives in its own module and self-registers with
 DiagramFactory at import time via a deferred _register() call.
@@ -106,3 +107,6 @@ def _import_generators():
 
 
 _import_generators()
+
+# DrawioConverter is importable directly:
+#   from langgraph_engine.diagrams.drawio_converter import DrawioConverter

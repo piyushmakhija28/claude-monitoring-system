@@ -118,7 +118,7 @@ Level 3: Execution (15 steps: Step 0 through Step 14)
 | Jira Workflow | scripts/langgraph_engine/level3_steps8to12_jira.py | Dual GitHub+Jira integration (Steps 8/9/11/12) |
 | Figma Workflow | scripts/langgraph_engine/level3_figma_workflow.py | Design-to-code (components, tokens, review) |
 
-### MCP Servers (19 servers, 323 tools)
+### MCP Servers (20 servers, 328 tools)
 
 All registered in `~/.claude/settings.json`. Version synced via `scripts/sync-version.py`.
 
@@ -136,6 +136,7 @@ All registered in `~/.claude/settings.json`. Version synced via `scripts/sync-ve
 | skill-manager | skill_manager_mcp_server.py | 8 | Skill lifecycle (load, search, validate, rank, conflicts) |
 | vector-db | vector_db_mcp_server.py | 11 | Vector RAG (Qdrant, 4 collections, semantic search, bulk index, node decisions) |
 | uml-diagram | uml_diagram_mcp_server.py | 15 | UML generation (13 diagram types, CallGraph + AST + LLM, Mermaid/PlantUML, Kroki.io) |
+| drawio-diagram | drawio_mcp_server.py | 5 | Draw.io editable diagrams (12 types, .drawio files, shareable URLs, no API needed) |
 | jira-api | jira_mcp_server.py | 10 | Jira (create/search/transition issues, link PRs, Cloud+Server, ADF+plain text) |
 | jenkins-api | jenkins_mcp_server.py | 10 | Jenkins CI/CD (trigger/abort builds, console output, queue, build polling) |
 | figma-api | figma_mcp_server.py | 10 | Figma (file info, components, design tokens, styles, design review) |

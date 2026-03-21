@@ -157,6 +157,18 @@ class Level3DocumentationManager:
                     ["docs/uml/%s.md" % n for n in uml_result]
                 )
                 logger.info("UML: generated %d diagrams", len(uml_result))
+
+                # Also generate draw.io versions for all diagrams
+                cg = uml_gen._get_call_graph()
+                drawio_data = {
+                    "classes": (
+                        uml_gen._classes_from_call_graph(cg)
+                        or uml_gen.analyzer.extract_all_classes()
+                    ),
+                    "call_chains": uml_gen._call_chains_from_call_graph(cg) or [],
+                }
+                drawio_files = self._generate_drawio_diagrams(drawio_data)
+                created.extend(drawio_files)
             except Exception as e:
                 logger.debug("UML generation skipped: %s", e)
 
@@ -258,6 +270,14 @@ class Level3DocumentationManager:
                     uml_gen.save_diagram(diagram_type, syntax)
                     updated_files.append("docs/uml/%s.md" % diagram_type)
                 logger.info("UML: refreshed 5 diagrams (3 structural + sequence + call graph)")
+
+                # Also refresh draw.io versions using same analysis data
+                drawio_data = {
+                    "classes": classes,
+                    "call_chains": cg_chains if isinstance(cg_chains, list) else [],
+                }
+                drawio_files = self._generate_drawio_diagrams(drawio_data)
+                updated_files.extend(drawio_files)
             except Exception as e:
                 logger.debug("UML refresh skipped: %s", e)
 
@@ -287,6 +307,52 @@ class Level3DocumentationManager:
     # ==================================================================
     # PRIVATE HELPERS
     # ==================================================================
+
+    def _generate_drawio_diagrams(self, analysis_data, diagram_types=None):
+        # type: (dict, list) -> list
+        """Generate draw.io (.drawio) files for all SDLC diagram types.
+
+        Called automatically from create_all_docs() and update_existing_docs()
+        after Mermaid diagrams are generated. Saves files to docs/drawio/.
+
+        Args:
+            analysis_data: Dict with keys: classes, call_chains, states, etc.
+            diagram_types: List of types to generate. None = all 12 supported types.
+
+        Returns:
+            List of relative file paths created (e.g. "docs/drawio/class-diagram.drawio").
+        """
+        try:
+            try:
+                from .diagrams.drawio_converter import DrawioConverter
+            except ImportError:
+                from langgraph_engine.diagrams.drawio_converter import DrawioConverter
+        except ImportError:
+            logger.debug("DrawioConverter not available, skipping draw.io generation")
+            return []
+
+        output_dir = self.project_root / "docs" / "drawio"
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        types = diagram_types or DrawioConverter.SUPPORTED_TYPES
+        converter = DrawioConverter()
+        generated = []
+
+        for dtype in types:
+            try:
+                xml = converter.convert(dtype, analysis_data)
+                out_path = output_dir / ("%s-diagram.drawio" % dtype)
+                out_path.write_text(xml, encoding="utf-8")
+                generated.append("docs/drawio/%s-diagram.drawio" % dtype)
+                logger.debug("draw.io: saved %s", out_path.name)
+            except Exception as e:
+                logger.debug("draw.io: %s failed: %s", dtype, e)
+
+        if generated:
+            logger.info(
+                "draw.io: generated %d diagrams in docs/drawio/", len(generated)
+            )
+        return generated
 
     def _find_srs(self) -> Optional[Path]:
         """Find SRS file checking alternate names and locations."""
