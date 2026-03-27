@@ -16,18 +16,20 @@ All 15 steps (Step 0-14) implemented with:
 - RecoveryHandler for signal handling (Ctrl+C)
 """
 
+import json
 import os
 import sys
 import time
-import json
-from pathlib import Path
 from datetime import datetime
-from typing import Dict, Any, Optional
+from pathlib import Path
+from typing import Any, Dict, Optional
 
 try:
     import sys as _sys
+
     _sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent / "src"))
-    from utils.path_resolver import get_telemetry_dir, get_session_logs_dir
+    from utils.path_resolver import get_session_logs_dir, get_telemetry_dir
+
     _LEVEL3V2_TELEMETRY_DIR = get_telemetry_dir()
     _LEVEL3V2_SESSION_LOGS_DIR = get_session_logs_dir()
 except ImportError:
@@ -37,17 +39,21 @@ except ImportError:
 # Pipeline-level timing: maps session_id -> pipeline start time (float)
 _pipeline_start_times: Dict[str, float] = {}
 
+
 # Lazy import: avoid import-time side effects from timeout_wrapper
 def _get_timeout_wrapper():
     """Lazy-load timeout_wrapper to avoid import-time side effects."""
     try:
         from ..timeout_wrapper import STEP_TIMEOUTS, StepTimeout
+
         return STEP_TIMEOUTS, StepTimeout
     except Exception as _e:
         return {}, None
 
+
 try:
-    from langgraph.graph import StateGraph, START, END  # noqa: F401
+    from langgraph.graph import END, START, StateGraph  # noqa: F401
+
     _LANGGRAPH_AVAILABLE = True
 except ImportError:
     _LANGGRAPH_AVAILABLE = False
@@ -56,12 +62,16 @@ try:
     from loguru import logger
 except ImportError:
     import logging
+
     logger = logging.getLogger(__name__)
 
 from ..flow_state import FlowState  # noqa: E402
+from ..rag_integration import rag_lookup_before_llm, rag_store_after_node  # noqa: E402
 from ..step_logger import write_level_log  # noqa: E402
-from ..rag_integration import rag_store_after_node, rag_lookup_before_llm  # noqa: E402
 from .level3_execution import (  # noqa: E402
+    level3_merge_node,
+    route_after_step1_plan_decision,
+    route_after_step11_review,
     step0_task_analysis,
     step1_plan_mode_decision,
     step2_plan_execution,
@@ -77,19 +87,18 @@ from .level3_execution import (  # noqa: E402
     step12_issue_closure,
     step13_project_documentation_update,
     step14_final_summary_generation,
-    route_after_step1_plan_decision,
-    route_after_step11_review,
-    level3_merge_node,
 )
 
 # ---------------------------------------------------------------------------
 # Lazy import helpers for the new infrastructure modules
 # ---------------------------------------------------------------------------
 
+
 def _get_checkpoint_manager(session_id: str):
     """Lazy-load CheckpointManager to avoid import-time side-effects."""
     try:
         from ..checkpoint_manager import CheckpointManager
+
         return CheckpointManager(session_id)
     except Exception as e:
         logger.warning(f"[v2] CheckpointManager unavailable: {e}")
@@ -100,6 +109,7 @@ def _get_metrics_collector(session_id: str):
     """Lazy-load MetricsCollector."""
     try:
         from ..metrics_collector import MetricsCollector
+
         return MetricsCollector(session_id)
     except Exception as e:
         logger.warning(f"[v2] MetricsCollector unavailable: {e}")
@@ -110,6 +120,7 @@ def _get_error_logger(session_id: str):
     """Lazy-load ErrorLogger."""
     try:
         from ..error_logger import ErrorLogger
+
         return ErrorLogger(session_id=session_id)
     except Exception as e:
         logger.warning(f"[v2] ErrorLogger unavailable: {e}")
@@ -120,6 +131,7 @@ def _get_backup_manager(session_id: str):
     """Lazy-load BackupManager."""
     try:
         from ..backup_manager import BackupManager
+
         return BackupManager(session_id=session_id)
     except Exception as e:
         logger.warning(f"[v2] BackupManager unavailable: {e}")
@@ -147,11 +159,7 @@ def _get_infra(state: FlowState) -> Dict[str, Any]:
     """
     import os
 
-    session_id = (
-        state.get("session_id")
-        or os.environ.get("CURRENT_SESSION_ID", "")
-        or ""
-    )
+    session_id = state.get("session_id") or os.environ.get("CURRENT_SESSION_ID", "") or ""
 
     # Extract session_id from session_path if still empty
     if not session_id:
@@ -168,9 +176,9 @@ def _get_infra(state: FlowState) -> Dict[str, Any]:
         # Real session_id arrived - create proper infra (don't keep using "unknown")
         _infra_cache[session_id] = {
             "checkpoint": _get_checkpoint_manager(session_id),
-            "metrics":    _get_metrics_collector(session_id),
+            "metrics": _get_metrics_collector(session_id),
             "error_logger": _get_error_logger(session_id),
-            "backup":     _get_backup_manager(session_id),
+            "backup": _get_backup_manager(session_id),
         }
         # Store session_id in env for other components
         os.environ["CURRENT_SESSION_ID"] = session_id
@@ -178,9 +186,9 @@ def _get_infra(state: FlowState) -> Dict[str, Any]:
     if session_id not in _infra_cache:
         _infra_cache[session_id] = {
             "checkpoint": _get_checkpoint_manager(session_id),
-            "metrics":    _get_metrics_collector(session_id),
+            "metrics": _get_metrics_collector(session_id),
             "error_logger": _get_error_logger(session_id),
-            "backup":     _get_backup_manager(session_id),
+            "backup": _get_backup_manager(session_id),
         }
         if session_id != "unknown":
             os.environ["CURRENT_SESSION_ID"] = session_id
@@ -191,6 +199,7 @@ def _get_infra(state: FlowState) -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 # Per-step session logging
 # ---------------------------------------------------------------------------
+
 
 def _write_step_log(
     state: FlowState,
@@ -244,10 +253,11 @@ def _write_step_log(
 
         if result:
             from ..step_logger import _summarize_result
+
             log_entry["result_summary"] = _summarize_result(result)
 
         log_file = log_dir / f"step-{step_number:02d}.json"
-        with open(log_file, 'w', encoding='utf-8') as f:
+        with open(log_file, "w", encoding="utf-8") as f:
             _json.dump(log_entry, f, indent=2)
 
     except Exception:
@@ -264,6 +274,7 @@ _RAG_ELIGIBLE_STEPS = {0, 1, 2, 5, 7, 8}
 # ---------------------------------------------------------------------------
 # Telemetry writer - appends one JSONL line per step to ~/.claude/logs/telemetry/
 # ---------------------------------------------------------------------------
+
 
 def _write_telemetry(
     state: FlowState,
@@ -288,14 +299,8 @@ def _write_telemetry(
             "status": status,
             "duration_ms": round(duration_ms, 1),
             "timestamp": datetime.now().isoformat(),
-            "llm_called": bool(
-                result.get("step%d_llm_invoked" % step_number, False)
-                if result else False
-            ),
-            "modified_files_count": len(
-                result.get("step%d_modified_files" % step_number, [])
-                if result else []
-            ),
+            "llm_called": bool(result.get("step%d_llm_invoked" % step_number, False) if result else False),
+            "modified_files_count": len(result.get("step%d_modified_files" % step_number, []) if result else []),
         }
         telemetry_dir = _LEVEL3V2_TELEMETRY_DIR
         telemetry_dir.mkdir(parents=True, exist_ok=True)
@@ -309,6 +314,7 @@ def _write_telemetry(
 # ---------------------------------------------------------------------------
 # Core step execution wrapper
 # ---------------------------------------------------------------------------
+
 
 def _run_step(
     step_number: int,
@@ -342,6 +348,7 @@ def _run_step(
         Result dict from step_fn, or fallback_result on timeout/failure.
     """
     import os as _os
+
     # Dry-run: skip Steps 8-14 (GitHub, implementation, PR, review, docs)
     if step_number >= 8 and _os.environ.get("CLAUDE_DRY_RUN") == "1":
         logger.info(f"[v2] Step {step_number} skipped (dry-run mode)")
@@ -356,10 +363,11 @@ def _run_step(
     # Update recovery handler's view of current step
     try:
         from ..recovery_handler import _register_globals
+
         if cp and error_logger:
             _register_globals(step_number, dict(state), cp, error_logger)
     except Exception:
-        pass   # Recovery handler update is best-effort
+        pass  # Recovery handler update is best-effort
 
     # Log step start to stderr for real-time visibility
     print(f"\n[STEP {step_number:02d}] {step_label} - START", file=sys.stderr)
@@ -390,10 +398,7 @@ def _run_step(
                     f"(confidence={confidence:.2f}, {duration*1000:.0f}ms)",
                     file=sys.stderr,
                 )
-                logger.info(
-                    f"[STEP {step_number:02d}] {step_label} - RAG HIT "
-                    f"(confidence={confidence:.2f})"
-                )
+                logger.info(f"[STEP {step_number:02d}] {step_label} - RAG HIT " f"(confidence={confidence:.2f})")
                 # Add RAG metadata to cached result
                 cached_decision[f"step{step_number}_rag_hit"] = True
                 cached_decision[f"step{step_number}_rag_confidence"] = confidence
@@ -427,7 +432,8 @@ def _run_step(
                     sig_words = [w for w in sig.lower().split() if len(w) > 3]
                     if any(w in user_msg.lower() for w in sig_words):
                         print(
-                            "[STEP %02d] KB WARNING: %s -> %s" % (
+                            "[STEP %02d] KB WARNING: %s -> %s"
+                            % (
                                 step_number,
                                 sig[:60],
                                 entry.get("prevention", "")[:80],
@@ -453,9 +459,7 @@ def _run_step(
             )
             # Check if timeout_wrapper returned its own error result
             if result.get("timed_out"):
-                logger.warning(
-                    f"[STEP {step_number:02d}] {step_label} - TIMED OUT after {timeout_s}s"
-                )
+                logger.warning(f"[STEP {step_number:02d}] {step_label} - TIMED OUT after {timeout_s}s")
                 duration = time.time() - step_start
                 if metrics:
                     try:
@@ -528,6 +532,7 @@ def _run_step(
         # Save workflow memory for resume support (non-blocking)
         try:
             import json as _json
+
             session_dir = state.get("session_dir", "")
             if session_dir:
                 mem_path = Path(session_dir) / "workflow-memory.json"
@@ -538,9 +543,7 @@ def _run_step(
                     "timestamp": datetime.now().isoformat(),
                     "session_id": state.get("session_id", ""),
                 }
-                mem_path.write_text(
-                    _json.dumps(mem_data, indent=2), encoding="utf-8"
-                )
+                mem_path.write_text(_json.dumps(mem_data, indent=2), encoding="utf-8")
         except Exception:
             pass  # Workflow memory is best-effort
 
@@ -574,9 +577,7 @@ def _run_step(
                     severity="ERROR",
                     error_type=type(exc).__name__,
                     recovery_action=(
-                        "Returning fallback result"
-                        if fallback_result is not None
-                        else "Step returning empty result"
+                        "Returning fallback result" if fallback_result is not None else "Step returning empty result"
                     ),
                 )
             except Exception:
@@ -645,6 +646,7 @@ def step0_0_project_context_node(state: FlowState) -> Dict[str, Any]:
     Fail-open: never blocks the pipeline.
     """
     import time as _t
+
     _start = _t.time()
     try:
         project_root = Path(state.get("project_root", "."))
@@ -653,8 +655,11 @@ def step0_0_project_context_node(state: FlowState) -> Dict[str, Any]:
         max_bytes = 5120  # 5KB cap per file
 
         candidate_files = [
-            "README.md", "CHANGELOG.md", "VERSION",
-            "pyproject.toml", "package.json",
+            "README.md",
+            "CHANGELOG.md",
+            "VERSION",
+            "pyproject.toml",
+            "package.json",
         ]
 
         for fname in candidate_files:
@@ -691,6 +696,7 @@ def step0_1_initial_callgraph_node(state: FlowState) -> Dict[str, Any]:
     Fail-open: never blocks the pipeline.
     """
     import time as _t
+
     _start = _t.time()
     try:
         from ..call_graph_analyzer import snapshot_call_graph
@@ -744,6 +750,7 @@ def level3_init_node(state: FlowState) -> Dict[str, Any]:
     # Install signal handlers once per session (best-effort, main thread only)
     try:
         from ..recovery_handler import RecoveryHandler
+
         handler = RecoveryHandler(session_id=session_id)
         handler.install_signal_handlers()
         handler.update_state(0, dict(state))
@@ -754,14 +761,12 @@ def level3_init_node(state: FlowState) -> Dict[str, Any]:
     workflow_memory = {}
     try:
         import json
+
         memory_file = Path(session_path) / "workflow-memory.json"
         if memory_file.is_file():
-            workflow_memory = json.loads(
-                memory_file.read_text(encoding="utf-8", errors="replace")
-            )
+            workflow_memory = json.loads(memory_file.read_text(encoding="utf-8", errors="replace"))
             logger.info(
-                "[v2] Loaded workflow memory from previous run "
-                "(last_step=%s)", workflow_memory.get("last_step", "?")
+                "[v2] Loaded workflow memory from previous run " "(last_step=%s)", workflow_memory.get("last_step", "?")
             )
     except Exception as e:
         logger.debug("[v2] Workflow memory load skipped: %s" % str(e))
@@ -771,9 +776,7 @@ def level3_init_node(state: FlowState) -> Dict[str, Any]:
         "user_requirement": state.get("user_message", ""),
     }
     if workflow_memory:
-        result["workflow_memory_file"] = str(
-            Path(session_path) / "workflow-memory.json"
-        )
+        result["workflow_memory_file"] = str(Path(session_path) / "workflow-memory.json")
 
     # Extract user preferences into pre-computed context for Steps 1, 5, 7
     try:
@@ -797,9 +800,10 @@ def level3_init_node(state: FlowState) -> Dict[str, Any]:
 
 
 def step0_task_analysis_node(state: FlowState) -> Dict[str, Any]:
-    """Step 0: Task Analysis with full error handling."""
-    return _run_step(
-        0, "Task Analysis",
+    """Step 0: Task Analysis with call graph complexity boost."""
+    result = _run_step(
+        0,
+        "Task Analysis",
         step0_task_analysis,
         state,
         fallback_result={
@@ -810,16 +814,37 @@ def step0_task_analysis_node(state: FlowState) -> Dict[str, Any]:
             "step0_task_count": 1,
         },
     )
+    # Apply call graph complexity boost injected by orchestration_pre_analysis_node
+    try:
+        graph_metrics = state.get("call_graph_metrics", {}) or {}
+        boost = graph_metrics.get("complexity_boost", 0)
+        if boost != 0 and graph_metrics.get("call_graph_available"):
+            current = result.get("step0_complexity", 5)
+            boosted = max(1, min(10, current + boost))
+            if boosted != current:
+                result["step0_complexity"] = boosted
+                result["step0_complexity_boosted"] = True
+                result["step0_complexity_boost_source"] = "call_graph"
+                logger.info(
+                    "[v2] Step 0 complexity adjusted by call graph: %d -> %d (boost=%+d)",
+                    current,
+                    boosted,
+                    boost,
+                )
+    except Exception:
+        pass  # Boost adjustment is best-effort
+    return result
 
 
 def step1_plan_mode_decision_node(state: FlowState) -> Dict[str, Any]:
     """Step 1: Plan Mode Decision with full error handling."""
     return _run_step(
-        1, "Plan Mode Decision",
+        1,
+        "Plan Mode Decision",
         step1_plan_mode_decision,
         state,
         fallback_result={
-            "step1_plan_required": True,   # Safe default: always plan on error
+            "step1_plan_required": True,  # Safe default: always plan on error
             "step1_reasoning": "Default - step1 failed, defaulting to plan mode",
             "step1_complexity_score": state.get("step0_complexity", 5),
         },
@@ -836,12 +861,11 @@ def step2_plan_execution_node(state: FlowState) -> Dict[str, Any]:
     impact_data = {}
     try:
         from ..call_graph_analyzer import analyze_impact_before_change
+
         project_root = state.get("project_root", ".")
         target_files = state.get("step0_target_files", [])
         task_desc = state.get("user_message", "")
-        impact_data = analyze_impact_before_change(
-            project_root, target_files, task_desc
-        )
+        impact_data = analyze_impact_before_change(project_root, target_files, task_desc)
         if impact_data.get("call_graph_available"):
             logger.info(
                 "[v2] Step 2 CallGraph impact: risk=%s, affected=%d methods",
@@ -852,7 +876,8 @@ def step2_plan_execution_node(state: FlowState) -> Dict[str, Any]:
         logger.debug("[v2] Step 2 CallGraph analysis skipped: %s", e)
 
     result = _run_step(
-        2, "Plan Execution",
+        2,
+        "Plan Execution",
         step2_plan_execution,
         state,
         fallback_result={
@@ -867,9 +892,7 @@ def step2_plan_execution_node(state: FlowState) -> Dict[str, Any]:
     if impact_data.get("call_graph_available"):
         result["step2_impact_analysis"] = impact_data
         result["step2_graph_risk_level"] = impact_data.get("risk_level", "low")
-        result["step2_affected_methods"] = [
-            m.get("fqn", "") for m in impact_data.get("affected_methods", [])
-        ]
+        result["step2_affected_methods"] = [m.get("fqn", "") for m in impact_data.get("affected_methods", [])]
 
     # --- Plan Validation against CallGraph impact ---
     plan = result.get("step2_plan_execution", {})
@@ -899,16 +922,11 @@ def step2_plan_execution_node(state: FlowState) -> Dict[str, Any]:
             uncovered = affected_files - plan_files
             if uncovered:
                 validation_issues.append(
-                    "Plan does not cover %d affected files: %s" % (
-                        len(uncovered), ", ".join(sorted(uncovered)[:5])
-                    )
+                    "Plan does not cover %d affected files: %s" % (len(uncovered), ", ".join(sorted(uncovered)[:5]))
                 )
 
             # Check 2: Are danger zone methods addressed in the plan?
-            if danger_zones and not any(
-                "careful" in str(p).lower() or "test" in str(p).lower()
-                for p in phases
-            ):
+            if danger_zones and not any("careful" in str(p).lower() or "test" in str(p).lower() for p in phases):
                 validation_issues.append(
                     "%d danger zone methods found but plan has no testing/careful phase" % len(danger_zones)
                 )
@@ -922,7 +940,8 @@ def step2_plan_execution_node(state: FlowState) -> Dict[str, Any]:
             if validation_issues:
                 logger.info(
                     "[v2] Step 2 plan validation: %d issues found: %s",
-                    len(validation_issues), "; ".join(validation_issues)
+                    len(validation_issues),
+                    "; ".join(validation_issues),
                 )
             else:
                 logger.info("[v2] Step 2 plan validation: PASSED")
@@ -935,6 +954,7 @@ def step2_plan_execution_node(state: FlowState) -> Dict[str, Any]:
     # --- User Interaction: High-risk plan confirmation ---
     try:
         from ..user_interaction import generate_step2_questions
+
         questions = generate_step2_questions({**state, **result})
         if questions:
             result["step2_pending_questions"] = questions
@@ -947,7 +967,8 @@ def step2_plan_execution_node(state: FlowState) -> Dict[str, Any]:
 def step3_task_breakdown_node(state: FlowState) -> Dict[str, Any]:
     """Step 3: Task Breakdown Validation with full error handling."""
     result = _run_step(
-        3, "Task Breakdown Validation",
+        3,
+        "Task Breakdown Validation",
         step3_task_breakdown_validation,
         state,
         fallback_result={
@@ -961,6 +982,7 @@ def step3_task_breakdown_node(state: FlowState) -> Dict[str, Any]:
     # --- CallGraph: Map files to tasks/phases based on graph analysis ---
     try:
         from ..call_graph_analyzer import snapshot_call_graph
+
         project_root = state.get("project_root", ".")
 
         # Get or build the graph snapshot (reuse from Step 2 if available)
@@ -1012,6 +1034,7 @@ def step3_task_breakdown_node(state: FlowState) -> Dict[str, Any]:
     if os.environ.get("ENABLE_FIGMA", "0") == "1":
         try:
             from level3_figma_workflow import Level3FigmaWorkflow
+
             figma_wf = Level3FigmaWorkflow()
             file_key = figma_wf.detect_figma_url(state.get("user_message", ""))
             if file_key:
@@ -1036,7 +1059,8 @@ def step3_task_breakdown_node(state: FlowState) -> Dict[str, Any]:
 def step4_toon_refinement_node(state: FlowState) -> Dict[str, Any]:
     """Step 4: TOON Refinement with full error handling."""
     result = _run_step(
-        4, "TOON Refinement",
+        4,
+        "TOON Refinement",
         step4_toon_refinement,
         state,
         fallback_result={
@@ -1051,10 +1075,7 @@ def step4_toon_refinement_node(state: FlowState) -> Dict[str, Any]:
         from ..call_graph_analyzer import get_phase_scoped_context
 
         # Get graph snapshot (from Step 3 or Step 2)
-        graph_snapshot = (
-            state.get("step3_graph_snapshot")
-            or state.get("step2_impact_analysis", {})
-        )
+        graph_snapshot = state.get("step3_graph_snapshot") or state.get("step2_impact_analysis", {})
 
         # Get phase file mapping from Step 3
         phase_file_map = state.get("step3_phase_file_map", {})
@@ -1066,9 +1087,7 @@ def step4_toon_refinement_node(state: FlowState) -> Dict[str, Any]:
 
             for task_id, files in phase_file_map.items():
                 if files:
-                    ctx = get_phase_scoped_context(
-                        graph_snapshot, files, task_id
-                    )
+                    ctx = get_phase_scoped_context(graph_snapshot, files, task_id)
                     phase_contexts[task_id] = ctx
                     all_phase_files.update(files)
 
@@ -1081,7 +1100,8 @@ def step4_toon_refinement_node(state: FlowState) -> Dict[str, Any]:
 
                 logger.info(
                     "[v2] Step 4 injected %d phase contexts, %d files in scope",
-                    len(phase_contexts), len(all_phase_files),
+                    len(phase_contexts),
+                    len(all_phase_files),
                 )
     except Exception as e:
         logger.debug("[v2] Step 4 phase context skipped: %s", e)
@@ -1092,7 +1112,8 @@ def step4_toon_refinement_node(state: FlowState) -> Dict[str, Any]:
 def step5_skill_selection_node(state: FlowState) -> Dict[str, Any]:
     """Step 5: Skill & Agent Selection with full error handling."""
     result = _run_step(
-        5, "Skill & Agent Selection",
+        5,
+        "Skill & Agent Selection",
         step5_skill_agent_selection,
         state,
         fallback_result={
@@ -1108,6 +1129,7 @@ def step5_skill_selection_node(state: FlowState) -> Dict[str, Any]:
     # --- User Interaction: Low-confidence skill confirmation ---
     try:
         from ..user_interaction import generate_step5_questions
+
         questions = generate_step5_questions(result)
         if questions:
             result["step5_pending_questions"] = questions
@@ -1120,12 +1142,13 @@ def step5_skill_selection_node(state: FlowState) -> Dict[str, Any]:
 def step6_skill_validation_node(state: FlowState) -> Dict[str, Any]:
     """Step 6: Skill Validation & Download with full error handling."""
     return _run_step(
-        6, "Skill Validation & Download",
+        6,
+        "Skill Validation & Download",
         step6_skill_validation_download,
         state,
         fallback_result={
             "step6_skill_validation": {},
-            "step6_skill_ready": True,    # Non-blocking default
+            "step6_skill_ready": True,  # Non-blocking default
             "step6_agent_ready": True,
             "step6_validation_status": "ERROR",
         },
@@ -1156,7 +1179,8 @@ def step7_final_prompt_node(state: FlowState) -> Dict[str, Any]:
             }
 
     result = _run_step(
-        7, "Final Prompt Generation",
+        7,
+        "Final Prompt Generation",
         _with_file_error_handling,
         state,
         fallback_result={
@@ -1171,6 +1195,7 @@ def step7_final_prompt_node(state: FlowState) -> Dict[str, Any]:
         if not file_key:
             try:
                 from level3_figma_workflow import Level3FigmaWorkflow
+
                 figma_wf = Level3FigmaWorkflow()
                 file_key = figma_wf.detect_figma_url(state.get("user_message", ""))
             except Exception as e:
@@ -1178,6 +1203,7 @@ def step7_final_prompt_node(state: FlowState) -> Dict[str, Any]:
         if file_key:
             try:
                 from level3_figma_workflow import Level3FigmaWorkflow
+
                 figma_wf = Level3FigmaWorkflow()
                 token_result = figma_wf.step7_extract_design_tokens(file_key)
                 result["figma_enabled"] = True
@@ -1200,8 +1226,9 @@ def step8_github_issue_node(state: FlowState) -> Dict[str, Any]:
 
     def _with_network_retry(st):
         """Network calls in step 8 get exponential backoff retry."""
-        import requests
         from time import sleep
+
+        import requests
 
         last_exc = None
         for attempt in range(3):
@@ -1219,7 +1246,7 @@ def step8_github_issue_node(state: FlowState) -> Dict[str, Any]:
                         recovery_action=f"Retry {attempt + 1}/3 with backoff",
                     )
                 logger.warning(f"[Step 8] Network error attempt {attempt + 1}/3: {req_exc}")
-                sleep(2 ** attempt)
+                sleep(2**attempt)
             except Exception:
                 # Non-network errors: don't retry
                 raise
@@ -1228,7 +1255,8 @@ def step8_github_issue_node(state: FlowState) -> Dict[str, Any]:
         raise last_exc or RuntimeError("GitHub issue creation failed after 3 retries")
 
     result = _run_step(
-        8, "GitHub Issue Creation",
+        8,
+        "GitHub Issue Creation",
         _with_network_retry,
         state,
         fallback_result={
@@ -1243,6 +1271,7 @@ def step8_github_issue_node(state: FlowState) -> Dict[str, Any]:
     if os.environ.get("ENABLE_JIRA", "0") == "1":
         try:
             from level3_steps8to12_jira import Level3JiraWorkflow
+
             jira_wf = Level3JiraWorkflow()
             jira_result = jira_wf.step8_create_jira_issue(
                 title=result.get("step8_title", ""),
@@ -1303,13 +1332,15 @@ def step9_branch_creation_node(state: FlowState) -> Dict[str, Any]:
                             recovery_action="Retry %d/3 with backoff" % (attempt + 1),
                         )
                     from time import sleep
-                    sleep(2 ** attempt)
+
+                    sleep(2**attempt)
                 else:
                     raise  # Non-network errors: don't retry
         raise last_exc or RuntimeError("Branch creation failed after 3 retries")
 
     return _run_step(
-        9, "Branch Creation",
+        9,
+        "Branch Creation",
         _with_network_retry,
         state,
         fallback_result={
@@ -1390,6 +1421,7 @@ def step10_implementation_note(state: FlowState) -> Dict[str, Any]:
     if jira_key and state.get("jira_issue_created", False):
         try:
             from level3_steps8to12_jira import Level3JiraWorkflow
+
             jira_wf = Level3JiraWorkflow()
             jira_wf.step10_start_progress(jira_issue_key=jira_key)
         except Exception as e:
@@ -1400,6 +1432,7 @@ def step10_implementation_note(state: FlowState) -> Dict[str, Any]:
     if figma_key and state.get("figma_enabled", False):
         try:
             from level3_figma_workflow import Level3FigmaWorkflow
+
             figma_wf = Level3FigmaWorkflow()
             figma_wf.step10_implementation_started(
                 file_key=figma_key,
@@ -1414,9 +1447,8 @@ def step10_implementation_note(state: FlowState) -> Dict[str, Any]:
     suggested_tests = []
     _dep_result = None
     try:
-        from ..call_graph_analyzer import (
-            snapshot_call_graph, get_implementation_context,
-        )
+        from ..call_graph_analyzer import get_implementation_context, snapshot_call_graph
+
         project_root = state.get("project_root", ".")
         target_files = state.get("step2_files_affected", []) or state.get("step0_target_files", [])
 
@@ -1436,6 +1468,7 @@ def step10_implementation_note(state: FlowState) -> Dict[str, Any]:
         # Resolve project dependencies for better graph coverage
         try:
             from ..build_dependency_resolver import resolve_and_enhance
+
             if call_context.get("call_graph_available") and pre_change_graph:
                 _dep_result = resolve_and_enhance(project_root, None)
         except Exception as e:
@@ -1499,10 +1532,7 @@ def step10_implementation_note(state: FlowState) -> Dict[str, Any]:
         except Exception as llm_exc:
             # Check if this looks like an LLM connectivity issue
             err_msg = str(llm_exc).lower()
-            is_llm_error = any(
-                kw in err_msg
-                for kw in ("ollama", "connection", "model", "timeout", "inference")
-            )
+            is_llm_error = any(kw in err_msg for kw in ("ollama", "connection", "model", "timeout", "inference"))
             if is_llm_error:
                 infra = _get_infra(st)
                 if infra["error_logger"]:
@@ -1522,7 +1552,8 @@ def step10_implementation_note(state: FlowState) -> Dict[str, Any]:
             raise
 
     result = _run_step(
-        10, "Implementation Execution",
+        10,
+        "Implementation Execution",
         _with_llm_fallback,
         state,
         fallback_result={
@@ -1539,10 +1570,7 @@ def step10_implementation_note(state: FlowState) -> Dict[str, Any]:
     result["step10_execution_prompt"] = exec_prompt
     result["step10_has_retry_context"] = has_retry
     result["step10_status"] = result.get("step10_status", result.get("step10_implementation_status", "OK"))
-    result["step10_message"] = result.get(
-        "step10_message",
-        "Step 10 executed (retry=%d)" % retry_count
-    )
+    result["step10_message"] = result.get("step10_message", "Step 10 executed (retry=%d)" % retry_count)
 
     # Merge CallGraph data into result for Step 11
     if pre_change_graph:
@@ -1557,6 +1585,7 @@ def step10_implementation_note(state: FlowState) -> Dict[str, Any]:
     # --- Quality: SonarQube scan + auto-fix + test generation ---
     try:
         from ..sonarqube_scanner import scan_and_report
+
         project_root = state.get("project_root", ".")
         modified_files = result.get("step10_modified_files", [])
 
@@ -1569,9 +1598,8 @@ def step10_implementation_note(state: FlowState) -> Dict[str, Any]:
             if scan_result.get("findings"):
                 try:
                     from ..sonar_auto_fixer import run_fix_loop
-                    fix_result = run_fix_loop(
-                        project_root, scan_result["findings"], max_iterations=2
-                    )
+
+                    fix_result = run_fix_loop(project_root, scan_result["findings"], max_iterations=2)
                     result["step10_auto_fix_result"] = fix_result
                     logger.info(
                         "[v2] Step 10 auto-fix: %d fixed, %d remaining",
@@ -1584,6 +1612,7 @@ def step10_implementation_note(state: FlowState) -> Dict[str, Any]:
             # 3. Generate tests for modified files
             try:
                 from ..test_generator import generate_tests_for_modified_files
+
                 test_result = generate_tests_for_modified_files(
                     project_root, modified_files, call_graph=pre_change_graph if pre_change_graph else None
                 )
@@ -1600,9 +1629,9 @@ def step10_implementation_note(state: FlowState) -> Dict[str, Any]:
             # 3b. Generate integration tests from call paths
             try:
                 from ..integration_test_generator import generate_integration_tests
+
                 integ_result = generate_integration_tests(
-                    project_root, modified_files,
-                    call_graph=pre_change_graph if pre_change_graph else None
+                    project_root, modified_files, call_graph=pre_change_graph if pre_change_graph else None
                 )
                 result["step10_generated_integration_tests"] = integ_result
                 if integ_result.get("paths_tested", 0) > 0:
@@ -1616,9 +1645,8 @@ def step10_implementation_note(state: FlowState) -> Dict[str, Any]:
             # 4. Coverage analysis
             try:
                 from ..coverage_analyzer import suggest_test_scope
-                coverage_result = suggest_test_scope(
-                    project_root, modified_files
-                )
+
+                coverage_result = suggest_test_scope(project_root, modified_files)
                 result["step10_coverage_results"] = coverage_result
             except Exception as e:
                 logger.debug("[v2] Step 10 coverage analysis skipped: %s", e)
@@ -1657,17 +1685,19 @@ def step11_pull_request_node(state: FlowState) -> Dict[str, Any]:
                             recovery_action="Retry %d/3 with backoff" % (attempt + 1),
                         )
                     from time import sleep
-                    sleep(2 ** attempt)
+
+                    sleep(2**attempt)
                 else:
                     raise
         raise last_exc or RuntimeError("PR creation failed after 3 retries")
 
     result = _run_step(
-        11, "Pull Request & Code Review",
+        11,
+        "Pull Request & Code Review",
         _with_network_retry,
         state,
         fallback_result={
-            "step11_review_passed": True,   # Allow pipeline to continue on error
+            "step11_review_passed": True,  # Allow pipeline to continue on error
             "step11_review_issues": ["Step 11 failed - skipping review"],
             "step11_retry_count": state.get("step11_retry_count", 0),
             "step11_status": "ERROR",
@@ -1679,6 +1709,7 @@ def step11_pull_request_node(state: FlowState) -> Dict[str, Any]:
     if jira_key and state.get("jira_issue_created", False):
         try:
             from level3_steps8to12_jira import Level3JiraWorkflow
+
             jira_wf = Level3JiraWorkflow()
             link_result = jira_wf.step11_link_pr_and_transition(
                 jira_issue_key=jira_key,
@@ -1694,6 +1725,7 @@ def step11_pull_request_node(state: FlowState) -> Dict[str, Any]:
     if result.get("step11_merged") and jira_key:
         try:
             from level3_steps8to12_jira import Level3JiraWorkflow
+
             jira_wf = Level3JiraWorkflow()
             jira_wf.step11_post_merge_update(
                 jira_issue_key=jira_key,
@@ -1707,22 +1739,16 @@ def step11_pull_request_node(state: FlowState) -> Dict[str, Any]:
     # --- CallGraph: Post-change impact review ---
     try:
         from ..call_graph_analyzer import review_change_impact
+
         project_root = state.get("project_root", ".")
-        modified_files = (
-            result.get("step10_modified_files")
-            or state.get("step10_modified_files", [])
-        )
+        modified_files = result.get("step10_modified_files") or state.get("step10_modified_files", [])
         pre_snapshot = state.get("step10_pre_change_graph", {})
 
         if modified_files:
-            impact_review = review_change_impact(
-                project_root, modified_files, pre_snapshot
-            )
+            impact_review = review_change_impact(project_root, modified_files, pre_snapshot)
             if impact_review.get("call_graph_available"):
                 result["step11_impact_review"] = impact_review
-                result["step11_risk_assessment"] = impact_review.get(
-                    "risk_assessment", "safe"
-                )
+                result["step11_risk_assessment"] = impact_review.get("risk_assessment", "safe")
                 breaking = impact_review.get("breaking_changes", [])
                 if breaking:
                     result["step11_breaking_changes"] = breaking
@@ -1730,7 +1756,8 @@ def step11_pull_request_node(state: FlowState) -> Dict[str, Any]:
                     existing_issues = result.get("step11_review_issues", [])
                     for bc in breaking[:5]:
                         existing_issues.append(
-                            "BREAKING: %s (%s, %d callers)" % (
+                            "BREAKING: %s (%s, %d callers)"
+                            % (
                                 bc.get("method", ""),
                                 bc.get("reason", ""),
                                 bc.get("callers", 0),
@@ -1750,12 +1777,16 @@ def step11_pull_request_node(state: FlowState) -> Dict[str, Any]:
     # --- Quality Gate: Evaluate all gates before merge ---
     try:
         from ..quality_gate import evaluate_quality_gate, generate_gate_report
+
         project_root = state.get("project_root", ".")
 
-        gate_result = evaluate_quality_gate(project_root, {
-            **state,
-            **result,  # Include step10/11 results
-        })
+        gate_result = evaluate_quality_gate(
+            project_root,
+            {
+                **state,
+                **result,  # Include step10/11 results
+            },
+        )
         result["step11_quality_gate"] = gate_result
 
         if not gate_result.get("gate_passed", True):
@@ -1763,11 +1794,7 @@ def step11_pull_request_node(state: FlowState) -> Dict[str, Any]:
             existing_issues = result.get("step11_review_issues", [])
             for gate_name in gate_result.get("blocking_gates", []):
                 gate_info = gate_result.get("gates", {}).get(gate_name, {})
-                existing_issues.append(
-                    "QUALITY GATE FAILED: %s - %s" % (
-                        gate_name, gate_info.get("reason", "unknown")
-                    )
-                )
+                existing_issues.append("QUALITY GATE FAILED: %s - %s" % (gate_name, gate_info.get("reason", "unknown")))
             result["step11_review_issues"] = existing_issues
             result["step11_quality_gate_passed"] = False
 
@@ -1788,7 +1815,8 @@ def step11_pull_request_node(state: FlowState) -> Dict[str, Any]:
 
     # --- User Interaction: Generate questions for breaking changes ---
     try:
-        from ..user_interaction import generate_step11_questions, InteractionManager
+        from ..user_interaction import InteractionManager, generate_step11_questions
+
         questions = generate_step11_questions({**state, **result})
         if questions:
             result["pending_interactions"] = questions
@@ -1808,10 +1836,9 @@ def step11_pull_request_node(state: FlowState) -> Dict[str, Any]:
         if file_key:
             try:
                 from level3_figma_workflow import Level3FigmaWorkflow
+
                 figma_wf = Level3FigmaWorkflow()
-                impl_summary = result.get("step11_review_summary", "") or state.get(
-                    "step10_implementation_summary", ""
-                )
+                impl_summary = result.get("step11_review_summary", "") or state.get("step10_implementation_summary", "")
                 review_result = figma_wf.step11_design_review(
                     file_key=file_key,
                     implementation_summary=impl_summary,
@@ -1857,13 +1884,15 @@ def step12_issue_closure_node(state: FlowState) -> Dict[str, Any]:
                             recovery_action="Retry %d/3 with backoff" % (attempt + 1),
                         )
                     from time import sleep
-                    sleep(2 ** attempt)
+
+                    sleep(2**attempt)
                 else:
                     raise
         raise last_exc or RuntimeError("Issue closure failed after 3 retries")
 
     result = _run_step(
-        12, "Issue Closure",
+        12,
+        "Issue Closure",
         _with_network_retry,
         state,
         fallback_result={
@@ -1877,6 +1906,7 @@ def step12_issue_closure_node(state: FlowState) -> Dict[str, Any]:
     if jira_key and state.get("jira_issue_created", False):
         try:
             from level3_steps8to12_jira import Level3JiraWorkflow
+
             jira_wf = Level3JiraWorkflow()
             close_result = jira_wf.step12_close_jira_issue(
                 jira_issue_key=jira_key,
@@ -1893,6 +1923,7 @@ def step12_issue_closure_node(state: FlowState) -> Dict[str, Any]:
     if figma_key and state.get("figma_enabled", False):
         try:
             from level3_figma_workflow import Level3FigmaWorkflow
+
             figma_wf = Level3FigmaWorkflow()
             figma_wf.step12_implementation_complete(
                 file_key=figma_key,
@@ -1943,7 +1974,8 @@ def step13_docs_update_node(state: FlowState) -> Dict[str, Any]:
             }
 
     return _run_step(
-        13, "Documentation Update",
+        13,
+        "Documentation Update",
         _with_file_error_handling,
         state,
         fallback_result={
@@ -1963,11 +1995,7 @@ def step14_final_summary_node(state: FlowState) -> Dict[str, Any]:
         if infra["metrics"]:
             try:
                 # Record any files modified from state
-                modified_files = (
-                    st.get("step10_modified_files") or
-                    st.get("step13_updated_files") or
-                    []
-                )
+                modified_files = st.get("step10_modified_files") or st.get("step13_updated_files") or []
                 if modified_files:
                     infra["metrics"].record_files_modified(
                         step=14,
@@ -1980,7 +2008,8 @@ def step14_final_summary_node(state: FlowState) -> Dict[str, Any]:
         return result
 
     return _run_step(
-        14, "Final Summary",
+        14,
+        "Final Summary",
         _with_metrics_summary,
         state,
         fallback_result={
@@ -1988,6 +2017,143 @@ def step14_final_summary_node(state: FlowState) -> Dict[str, Any]:
             "step14_summary": {},
         },
     )
+
+
+# ============================================================================
+# ORCHESTRATION PRE-ANALYSIS NODE - Runs before Step 0.0
+# ============================================================================
+
+
+def orchestration_pre_analysis_node(state: FlowState) -> Dict[str, Any]:
+    """Pre-analysis gate: call graph context + RAG orchestration lookup.
+
+    Executes BEFORE Step 0.0 (project context). Two responsibilities:
+
+    1. Call graph scan: identify hot nodes (5+ callers) and leaf nodes
+       (0 callers). Results are stored as call_graph_metrics so Step 0
+       can adjust its complexity score without an extra LLM call.
+
+    2. RAG orchestration lookup: check if a similar past task's agent
+       roster and phase plan can be reused (threshold 0.85).  On hit,
+       skip_architecture and skip_consensus flags are set so route_pre_analysis
+       can bypass Steps 0-4 and jump directly to Step 5 (skill selection).
+
+    Always fail-open: any exception returns empty metrics without blocking
+    the pipeline.
+    """
+    import time as _t
+
+    _start = _t.time()
+
+    result: Dict[str, Any] = {
+        "pre_analysis_result": {},
+        "call_graph_metrics": {},
+        "rag_orchestration_hit": False,
+        "rag_orchestration_confidence": 0.0,
+        "rag_orchestration_cached_plan": {},
+        "skip_architecture": False,
+        "skip_consensus": False,
+    }
+
+    # --- 1. Call Graph Scan ---
+    try:
+        from ..call_graph_analyzer import get_orchestration_context
+
+        project_root = state.get("project_root", ".")
+        task_desc = state.get("user_message", "")
+        graph_ctx = get_orchestration_context(
+            task_description=task_desc,
+            project_root=project_root,
+        )
+        result["call_graph_metrics"] = graph_ctx
+        result["pre_analysis_result"] = graph_ctx
+        if graph_ctx.get("call_graph_available"):
+            hot_count = len(graph_ctx.get("hot_nodes", []))
+            leaf_count = len(graph_ctx.get("leaf_nodes", []))
+            boost = graph_ctx.get("complexity_boost", 0)
+            logger.info(
+                "[v2] Pre-analysis CallGraph: hot=%d leaf=%d boost=%+d",
+                hot_count,
+                leaf_count,
+                boost,
+            )
+            print(
+                "[PRE-ANALYSIS] CallGraph: hot=%d leaf=%d complexity_boost=%+d" % (hot_count, leaf_count, boost),
+                file=sys.stderr,
+            )
+    except Exception as cg_exc:
+        logger.debug("[v2] Pre-analysis call graph scan skipped: %s", cg_exc)
+
+    # --- 2. RAG Orchestration Lookup ---
+    try:
+        from ..rag_integration import rag_lookup_orchestration
+
+        task_desc = state.get("user_message", "")
+        # Simple project name from path tail
+        proj_root = state.get("project_root", "") or ""
+        proj_name = proj_root.replace("\\", "/").rstrip("/").split("/")[-1]
+        context = {
+            "project": proj_name,
+            "task_hash": str(hash(task_desc[:100]) & 0xFFFFFF),
+            "framework": state.get("detected_framework", ""),
+        }
+        rag_result = rag_lookup_orchestration(
+            task=task_desc,
+            context=context,
+            state=dict(state),
+        )
+        if rag_result.get("hit"):
+            confidence = rag_result.get("confidence", 0.0)
+            cached = rag_result.get("cached_plan", {})
+            result["rag_orchestration_hit"] = True
+            result["rag_orchestration_confidence"] = confidence
+            result["rag_orchestration_cached_plan"] = cached
+            result["skip_architecture"] = True
+            result["skip_consensus"] = True
+            # Inject cached step0 data so downstream steps receive correct context
+            for key in (
+                "step0_task_type",
+                "step0_complexity",
+                "step0_reasoning",
+                "step1_plan_required",
+                "step3_tasks_validated",
+                "step5_skill",
+                "step5_agent",
+            ):
+                if cached.get(key) is not None:
+                    result[key] = cached[key]
+            print(
+                "[PRE-ANALYSIS] RAG HIT (confidence=%.2f) - skipping architecture phases" % confidence,
+                file=sys.stderr,
+            )
+            logger.info(
+                "[v2] Pre-analysis RAG HIT confidence=%.2f source_session=%s",
+                confidence,
+                rag_result.get("session_id", ""),
+            )
+        else:
+            print("[PRE-ANALYSIS] RAG MISS - running full pipeline", file=sys.stderr)
+    except Exception as rag_exc:
+        logger.debug("[v2] Pre-analysis RAG lookup skipped: %s", rag_exc)
+
+    elapsed = (_t.time() - _start) * 1000
+    result["pre_analysis_execution_time_ms"] = round(elapsed, 1)
+    return result
+
+
+def route_pre_analysis(state: FlowState) -> str:
+    """Route after orchestration_pre_analysis_node.
+
+    RAG HIT (confidence >= 0.85, skip_architecture set):
+        -> "level3_step5"  (skill selection, bypassing steps 0-4)
+
+    RAG MISS or call graph unavailable:
+        -> "level3_step0_0"  (normal pre-flight flow)
+    """
+    if state.get("rag_orchestration_hit") and state.get("skip_architecture"):
+        logger.info("[v2] Pre-analysis route: RAG HIT -> level3_step5")
+        return "level3_step5"
+    return "level3_step0_0"
 
 
 # ============================================================================

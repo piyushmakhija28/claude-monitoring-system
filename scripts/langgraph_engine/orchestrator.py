@@ -16,61 +16,54 @@ via node naming (level_minus1_*, level1_*, etc.)
 """
 
 import sys
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 from typing import Literal, Optional
 
 try:
     import sys as _sys
+
     _sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
     from utils.path_resolver import get_claude_home
+
     _ORCHESTRATOR_CLAUDE_HOME = get_claude_home()
 except ImportError:
     _ORCHESTRATOR_CLAUDE_HOME = Path.home() / ".claude"
 
 try:
-    from langgraph.graph import StateGraph, START, END
+    from langgraph.graph import END, START, StateGraph
+
     _LANGGRAPH_AVAILABLE = True
 except ImportError:
     _LANGGRAPH_AVAILABLE = False
 
 from .checkpointer import CheckpointerManager
-
-from .flow_state import FlowState, WorkflowContextOptimizer, StepKeys
-
-# Import all nodes from subgraphs
-from .subgraphs.level_minus1 import (
-    node_unicode_fix,
-    node_encoding_validation,
-    node_windows_path_check,
-    level_minus1_merge_node,
-)
-
+from .flow_state import FlowState, StepKeys, WorkflowContextOptimizer
+from .standard_selector import select_standards
+from .standards_integration import apply_standards_at_step
 from .subgraphs.level1_sync import (
-    node_session_loader,
-    node_complexity_calculation,
-    node_context_loader,
-    node_toon_compression,
     cleanup_level1_memory,
     level1_merge_node,
+    node_complexity_calculation,
+    node_context_loader,
+    node_session_loader,
+    node_toon_compression,
 )
-
 from .subgraphs.level2_standards import (
+    detect_project_type,
+    level2_merge_node,
     node_common_standards,
     node_java_standards,
-    node_tool_optimization_standards,
     node_mcp_plugin_discovery,
-    level2_merge_node,
-    detect_project_type,
+    node_tool_optimization_standards,
 )
-
-from .standards_integration import apply_standards_at_step
-from .standard_selector import select_standards
-
+from .subgraphs.level3_execution_v2 import level3_init_node
+from .subgraphs.level3_execution_v2 import level3_merge_node as level3_v2_merge_node
 from .subgraphs.level3_execution_v2 import (
+    orchestration_pre_analysis_node,
+    route_pre_analysis,
     step0_0_project_context_node,
     step0_1_initial_callgraph_node,
-    level3_init_node,
     step0_task_analysis_node,
     step1_plan_mode_decision_node,
     step2_plan_execution_node,
@@ -86,9 +79,15 @@ from .subgraphs.level3_execution_v2 import (
     step12_issue_closure_node,
     step13_docs_update_node,
     step14_final_summary_node,
-    level3_merge_node as level3_v2_merge_node,
 )
 
+# Import all nodes from subgraphs
+from .subgraphs.level_minus1 import (
+    level_minus1_merge_node,
+    node_encoding_validation,
+    node_unicode_fix,
+    node_windows_path_check,
+)
 
 # ============================================================================
 # ROUTING FUNCTIONS
@@ -214,31 +213,34 @@ def ask_level_minus1_fix(state: FlowState) -> dict:
     # 2. Default to "auto-fix" (RECOMMENDED)
     # 3. User can manually set level_minus1_user_choice in state if they want to skip
 
-    print(f"\n{'='*70}", file=__import__('sys').stderr)
-    print(f"[LEVEL -1] BLOCKING CHECK FAILURE (Attempt #{retry_count + 1})", file=__import__('sys').stderr)
-    print('='*70, file=__import__('sys').stderr)
-    print("\nIssues detected:", file=__import__('sys').stderr)
+    print(f"\n{'='*70}", file=__import__("sys").stderr)
+    print(f"[LEVEL -1] BLOCKING CHECK FAILURE (Attempt #{retry_count + 1})", file=__import__("sys").stderr)
+    print("=" * 70, file=__import__("sys").stderr)
+    print("\nIssues detected:", file=__import__("sys").stderr)
     for detail in error_details:
-        print(f"  ❌ {detail}", file=__import__('sys').stderr)
+        print(f"  ❌ {detail}", file=__import__("sys").stderr)
 
-    print("\n╔════════════════════════════════════════════════════════════╗", file=__import__('sys').stderr)
-    print("║  What would you like to do?                                ║", file=__import__('sys').stderr)
-    print("╚════════════════════════════════════════════════════════════╝", file=__import__('sys').stderr)
+    print("\n╔════════════════════════════════════════════════════════════╗", file=__import__("sys").stderr)
+    print("║  What would you like to do?                                ║", file=__import__("sys").stderr)
+    print("╚════════════════════════════════════════════════════════════╝", file=__import__("sys").stderr)
 
-    print("\n🔧 OPTION 1: Auto-fix (RECOMMENDED ✓)", file=__import__('sys').stderr)
-    print("   └─ I'll automatically fix these issues", file=__import__('sys').stderr)
-    print("   └─ Then rerun Level -1 checks", file=__import__('sys').stderr)
-    print("   └─ Continue to Level 1 once fixed", file=__import__('sys').stderr)
+    print("\n🔧 OPTION 1: Auto-fix (RECOMMENDED ✓)", file=__import__("sys").stderr)
+    print("   └─ I'll automatically fix these issues", file=__import__("sys").stderr)
+    print("   └─ Then rerun Level -1 checks", file=__import__("sys").stderr)
+    print("   └─ Continue to Level 1 once fixed", file=__import__("sys").stderr)
 
-    print("\n⏭️  OPTION 2: Skip Level -1 (NOT RECOMMENDED ✗)", file=__import__('sys').stderr)
-    print("   └─ Continue anyway without fixing", file=__import__('sys').stderr)
-    print("   └─ ⚠️  THIS WILL BREAK THE FLOW LATER", file=__import__('sys').stderr)
-    print("   └─ ⚠️  Encoding errors during execution", file=__import__('sys').stderr)
-    print("   └─ ⚠️  Path resolution failures", file=__import__('sys').stderr)
+    print("\n⏭️  OPTION 2: Skip Level -1 (NOT RECOMMENDED ✗)", file=__import__("sys").stderr)
+    print("   └─ Continue anyway without fixing", file=__import__("sys").stderr)
+    print("   └─ ⚠️  THIS WILL BREAK THE FLOW LATER", file=__import__("sys").stderr)
+    print("   └─ ⚠️  Encoding errors during execution", file=__import__("sys").stderr)
+    print("   └─ ⚠️  Path resolution failures", file=__import__("sys").stderr)
 
-    print("\n→ AUTO-SELECTING: auto-fix (Option 1) by default", file=__import__('sys').stderr)
-    print("  → If you want to skip, manually interrupt and set level_minus1_user_choice='skip'", file=__import__('sys').stderr)
-    print('='*70 + "\n", file=__import__('sys').stderr)
+    print("\n→ AUTO-SELECTING: auto-fix (Option 1) by default", file=__import__("sys").stderr)
+    print(
+        "  → If you want to skip, manually interrupt and set level_minus1_user_choice='skip'",
+        file=__import__("sys").stderr,
+    )
+    print("=" * 70 + "\n", file=__import__("sys").stderr)
 
     # Update state with user choice (defaulting to auto-fix)
     updates = {
@@ -266,8 +268,11 @@ def fix_level_minus1_issues(state: FlowState) -> dict:
 
     DEBUG = os.getenv("CLAUDE_DEBUG") == "1"
     if DEBUG:
-        print("[L-1-FIX] Starting auto-fix attempts...", file=__import__('sys').stderr)
-        print(f"[L-1-FIX] state['project_root'] at entry: '{state.get(StepKeys.PROJECT_ROOT, 'MISSING')}'", file=sys.stderr)
+        print("[L-1-FIX] Starting auto-fix attempts...", file=__import__("sys").stderr)
+        print(
+            f"[L-1-FIX] state['project_root'] at entry: '{state.get(StepKeys.PROJECT_ROOT, 'MISSING')}'",
+            file=sys.stderr,
+        )
 
     fixes_applied = []
     fixes_failed = []
@@ -276,14 +281,14 @@ def fix_level_minus1_issues(state: FlowState) -> dict:
     if not state.get(StepKeys.UNICODE_CHECK):
         fixes_applied.append("Unicode/UTF-8 encoding")
         if DEBUG:
-            print("[L-1-FIX] Unicode fix already applied", file=__import__('sys').stderr)
+            print("[L-1-FIX] Unicode fix already applied", file=__import__("sys").stderr)
 
     # Fix 2: Non-ASCII files - in real scenario, would need to rewrite files
     # For now, just log
     if not state.get(StepKeys.ENCODING_CHECK):
         fixes_failed.append("Non-ASCII files (manual edit needed)")
         if DEBUG:
-            print("[L-1-FIX] Non-ASCII files require manual editing", file=__import__('sys').stderr)
+            print("[L-1-FIX] Non-ASCII files require manual editing", file=__import__("sys").stderr)
 
     # Fix 3: Windows paths - replace backslashes with forward slashes
     if not state.get(StepKeys.WINDOWS_PATH_CHECK):
@@ -291,7 +296,7 @@ def fix_level_minus1_issues(state: FlowState) -> dict:
             # In real scenario: scan .py files and replace \\ with /
             fixes_applied.append("Windows path backslashes")
             if DEBUG:
-                print("[L-1-FIX] Windows paths fixed", file=__import__('sys').stderr)
+                print("[L-1-FIX] Windows paths fixed", file=__import__("sys").stderr)
         except Exception as e:
             fixes_failed.append(f"Windows path fix failed: {e}")
 
@@ -312,13 +317,13 @@ def fix_level_minus1_issues(state: FlowState) -> dict:
 
     print(f"\n{'='*70}")
     print(f"[LEVEL -1] Auto-fix attempt #{retry_count}")
-    print('='*70)
+    print("=" * 70)
     if fixes_applied:
         print(f"✓ Applied: {', '.join(fixes_applied)}")
     if fixes_failed:
         print(f"✗ Could not fix: {', '.join(fixes_failed)}")
     print("\nRetrying Level -1 checks...")
-    print('='*70 + "\n")
+    print("=" * 70 + "\n")
 
     return updates
 
@@ -344,8 +349,10 @@ def emergency_archive(state: FlowState) -> dict:
         # Best-effort: trigger session pruning
         try:
             import sys as _sys_ea
+
             _sys_ea.path.insert(0, str(Path(__file__).resolve().parent.parent / "architecture"))
             from importlib import import_module
+
             _pruner_spec = import_module("session-pruner") if False else None
         except Exception:
             pass
@@ -417,10 +424,7 @@ def optimize_context_for_level3_step(state: FlowState, step_name: str) -> dict:
     All previous step outputs stay in workflow_memory.
     """
     # Store current step's inputs/outputs
-    current_data = {
-        k: v for k, v in state.items()
-        if k.startswith("step") and isinstance(v, dict)
-    }
+    current_data = {k: v for k, v in state.items() if k.startswith("step") and isinstance(v, dict)}
 
     state = WorkflowContextOptimizer.store_step_output(state, step_name, current_data)
 
@@ -515,23 +519,27 @@ def level2_select_standards_node(state: FlowState) -> dict:
         updates["detected_framework"] = full_selection["framework"]
 
         existing_pipeline = state.get(StepKeys.PIPELINE) or []
-        updates[StepKeys.PIPELINE] = list(existing_pipeline) + [{
-            "node": "level2_select_standards",
-            "project_type": full_selection["project_type"],
-            "framework": full_selection["framework"],
-            "standards_loaded": full_selection["total_loaded"],
-            "conflicts": len(full_selection["conflicts"]),
-            "priority_chain": "custom(4) > team(3) > framework(2) > language(1)",
-            "traceability_keys": list(full_selection.get("traceability", {}).keys()),
-        }]
+        updates[StepKeys.PIPELINE] = list(existing_pipeline) + [
+            {
+                "node": "level2_select_standards",
+                "project_type": full_selection["project_type"],
+                "framework": full_selection["framework"],
+                "standards_loaded": full_selection["total_loaded"],
+                "conflicts": len(full_selection["conflicts"]),
+                "priority_chain": "custom(4) > team(3) > framework(2) > language(1)",
+                "traceability_keys": list(full_selection.get("traceability", {}).keys()),
+            }
+        ]
 
     except Exception as exc:
         updates["standards_selection_error"] = str(exc)
         existing_pipeline = state.get(StepKeys.PIPELINE) or []
-        updates[StepKeys.PIPELINE] = list(existing_pipeline) + [{
-            "node": "level2_select_standards",
-            "error": str(exc),
-        }]
+        updates[StepKeys.PIPELINE] = list(existing_pipeline) + [
+            {
+                "node": "level2_select_standards",
+                "error": str(exc),
+            }
+        ]
 
     return updates
 
@@ -618,15 +626,14 @@ def synthesize_prompt_with_flow_data(state: FlowState) -> dict:
     4. Return synthesized prompt for actual work
     """
     try:
-        from pathlib import Path
-        import sys
         import importlib.util
+        import sys
+        from pathlib import Path
 
         # Import PromptGenerator from prompt-generation-policy.py
         scripts_path = Path(__file__).parent.parent / "architecture" / "03-execution-system" / "00-prompt-generation"
         spec = importlib.util.spec_from_file_location(
-            "prompt_generation_policy",
-            scripts_path / "prompt-generation-policy.py"
+            "prompt_generation_policy", scripts_path / "prompt-generation-policy.py"
         )
         pg_module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(pg_module)
@@ -675,21 +682,19 @@ def synthesize_prompt_with_flow_data(state: FlowState) -> dict:
                 "selected_agents": state.get(StepKeys.AGENTS, []),
                 "skill_definition": state.get(StepKeys.SKILL_DEFINITION, ""),
                 "agent_definition": state.get(StepKeys.AGENT_DEFINITION, ""),
-            }
+            },
         }
 
         # SYNTHESIS: Create comprehensive prompt
         # Priority: user_message > user_message_original > env var CURRENT_USER_MESSAGE
         import os
+
         user_msg = (
             state.get(StepKeys.USER_MESSAGE)
             or state.get(StepKeys.USER_MESSAGE_ORIGINAL)
             or os.environ.get("CURRENT_USER_MESSAGE", "")
         )
-        synthesis_result = generator.synthesize_with_flow_data(
-            user_msg,
-            flow_data
-        )
+        synthesis_result = generator.synthesize_with_flow_data(user_msg, flow_data)
 
         return {
             "synthesized_prompt": synthesis_result.get("synthesized_prompt", ""),
@@ -697,16 +702,17 @@ def synthesize_prompt_with_flow_data(state: FlowState) -> dict:
                 "original_message": synthesis_result.get("original_message"),
                 "context_level": synthesis_result.get("context_level"),
                 "data_used": synthesis_result.get("data_used"),
-            }
+            },
         }
 
     except Exception as e:
         import sys
+
         print(f"[WARNING] Prompt synthesis failed: {e}", file=sys.stderr)
         # Fallback: return original message
         return {
             "synthesized_prompt": state.get(StepKeys.USER_MESSAGE, ""),
-            "synthesis_metadata": {"status": "fallback"}
+            "synthesis_metadata": {"status": "fallback"},
         }
 
 
@@ -730,7 +736,7 @@ def output_node(state: FlowState) -> dict:
             msg = f"Starting {task_type} task, complexity {complexity} out of 10."
             if skill:
                 msg += f" Using {skill} skill."
-            start_flag.write_text(msg, encoding='utf-8')
+            start_flag.write_text(msg, encoding="utf-8")
     except Exception:
         pass
 
@@ -764,6 +770,7 @@ def output_node(state: FlowState) -> dict:
         if session_dir:
             try:
                 from datetime import datetime
+
                 quick_summary = (
                     f"Pipeline: {final_status} | "
                     f"Task: {state.get(StepKeys.TASK_TYPE, '?')} | "
@@ -774,13 +781,14 @@ def output_node(state: FlowState) -> dict:
                     f"Time: {datetime.now().strftime('%H:%M:%S')}"
                 )
                 summary_file = Path(session_dir) / "execution-summary.txt"
-                summary_file.write_text(quick_summary, encoding='utf-8')
+                summary_file.write_text(quick_summary, encoding="utf-8")
             except Exception:
                 pass
 
     # VECTOR DB RAG - Store session summary for cross-session learning
     try:
         from .rag_integration import get_rag_layer
+
         rag = get_rag_layer(
             session_id=state.get(StepKeys.SESSION_ID, ""),
             project_root=state.get(StepKeys.PROJECT_ROOT, ""),
@@ -823,6 +831,7 @@ def output_node(state: FlowState) -> dict:
         if str(_src_mcp_dir) not in sys.path:
             sys.path.insert(0, str(_src_mcp_dir))
         from session_hooks import accumulate_request
+
         accumulate_request(
             session_id=state.get(StepKeys.SESSION_ID, ""),
             prompt=state.get(StepKeys.USER_MESSAGE, "")[:300],
@@ -1009,12 +1018,12 @@ def create_flow_graph(hook_mode: bool = False):
     """
     if not _LANGGRAPH_AVAILABLE:
         raise RuntimeError(
-            "LangGraph not installed. Install with: "
-            "pip install langgraph>=0.2.0 langchain-core>=0.3.0"
+            "LangGraph not installed. Install with: " "pip install langgraph>=0.2.0 langchain-core>=0.3.0"
         )
 
     import sys
-    DEBUG = sys.stderr.isatty() or __import__('os').getenv("CLAUDE_DEBUG") == "1"
+
+    DEBUG = sys.stderr.isatty() or __import__("os").getenv("CLAUDE_DEBUG") == "1"
 
     # Create graph
     graph = StateGraph(FlowState)
@@ -1151,9 +1160,22 @@ def create_flow_graph(hook_mode: bool = False):
     graph.add_node("level3_init", level3_init_node)
     graph.add_edge("level2_optimize_context", "level3_init")
 
+    # Pre-analysis gate: call graph scan + RAG orchestration lookup
+    # On RAG hit (confidence >= 0.85): jumps to level3_step5, skipping steps 0-4
+    # On miss: falls through to level3_step0_0 (normal pre-flight flow)
+    graph.add_node("level3_pre_analysis", orchestration_pre_analysis_node)
+    graph.add_edge("level3_init", "level3_pre_analysis")
+    graph.add_conditional_edges(
+        "level3_pre_analysis",
+        route_pre_analysis,
+        {
+            "level3_step0_0": "level3_step0_0",
+            "level3_step5": "level3_step5",
+        },
+    )
+
     # Step 0.0: Pre-flight - Project Context (README, CHANGELOG, etc.)
     graph.add_node("level3_step0_0", step0_0_project_context_node)
-    graph.add_edge("level3_init", "level3_step0_0")
 
     # Step 0.1: Pre-flight - Initial CallGraph Snapshot (baseline for Step 11 diff)
     graph.add_node("level3_step0_1", step0_1_initial_callgraph_node)
@@ -1178,7 +1200,7 @@ def create_flow_graph(hook_mode: bool = False):
         {
             "level3_step2": "level3_step2",
             "level3_step3": "level3_step3",
-        }
+        },
     )
 
     # Standards integration hook: Step 2 - during plan execution
@@ -1288,9 +1310,9 @@ def create_flow_graph(hook_mode: bool = False):
         "level3_step11",
         route_after_step11_review,
         {
-            "level3_step12": "level3_step12",        # Review passed or max retries reached
-            "level3_step11_retry": "level3_step11_retry"  # Review failed, increment then retry
-        }
+            "level3_step12": "level3_step12",  # Review passed or max retries reached
+            "level3_step11_retry": "level3_step11_retry",  # Review failed, increment then retry
+        },
     )
 
     # Step 12: Issue Closure
@@ -1350,8 +1372,9 @@ def create_initial_state(session_id: str = "", project_root: str = "", user_mess
     # **CRITICAL FIX**: Set project_root FIRST (before any immutable field is created)
     # project_root is Annotated[_keep_first_value] so once set, it can't change
     # We must set it to the correct value BEFORE creating the state
-    import sys
     import os
+    import sys
+
     print(f"[CREATE_INITIAL_STATE] Input project_root: '{project_root}'", file=sys.stderr)
     if not project_root:
         # Use cwd from hook event or actual cwd - NOT hardcoded path
@@ -1378,7 +1401,10 @@ def create_initial_state(session_id: str = "", project_root: str = "", user_mess
     )
 
     # Verify project_root was set correctly
-    print(f"[CREATE_INITIAL_STATE] After FlowState creation: project_root='{initial_state.get('project_root', 'MISSING')}'", file=sys.stderr)
+    print(
+        f"[CREATE_INITIAL_STATE] After FlowState creation: project_root='{initial_state.get('project_root', 'MISSING')}'",
+        file=sys.stderr,
+    )
 
     return initial_state
 
@@ -1450,7 +1476,7 @@ def resume_flow(
     # step executor (adequate for most recovery scenarios).
     success = resume_from_checkpoint(
         session_id=session_id,
-        step_executor=None,   # No-op executor (returns loaded state only)
+        step_executor=None,  # No-op executor (returns loaded state only)
         checkpoint_id=checkpoint_id,
     )
     return success

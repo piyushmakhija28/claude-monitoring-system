@@ -39,12 +39,12 @@ RAG_CONFIDENCE_THRESHOLD = 0.82
 
 # Step-specific thresholds (some steps need higher confidence)
 STEP_THRESHOLDS = {
-    "step0": 0.85,   # Task analysis - needs high match
-    "step1": 0.80,   # Plan mode decision - binary, easier to match
-    "step2": 0.88,   # Plan execution - complex, needs very close match
-    "step5": 0.82,   # Skill selection - moderate
-    "step7": 0.90,   # Final prompt - needs near-exact for reuse
-    "step8": 0.78,   # Issue label - simple classification
+    "step0": 0.85,  # Task analysis - needs high match
+    "step1": 0.80,  # Plan mode decision - binary, easier to match
+    "step2": 0.88,  # Plan execution - complex, needs very close match
+    "step5": 0.82,  # Skill selection - moderate
+    "step7": 0.90,  # Final prompt - needs near-exact for reuse
+    "step8": 0.78,  # Issue label - simple classification
     "step11": 0.85,  # PR review - needs high confidence
     "step13": 0.80,  # Docs update - moderate
     "step14": 0.75,  # Summary - low stakes
@@ -58,12 +58,13 @@ def _get_vector_functions():
     """Lazy import vector DB functions to avoid import-time failures."""
     try:
         from vector_db_mcp_server import (
-            vector_search_similar,
-            vector_bulk_index,
-            _get_qdrant_client,
             _embed_text,
             _generate_point_id,
+            _get_qdrant_client,
+            vector_bulk_index,
+            vector_search_similar,
         )
+
         return {
             "search": vector_search_similar,
             "bulk_index": vector_bulk_index,
@@ -91,7 +92,8 @@ def _ensure_node_decisions_collection():
 
         existing = {c.name for c in client.get_collections().collections}
         if "node_decisions" not in existing:
-            from qdrant_client.models import VectorParams, Distance
+            from qdrant_client.models import Distance, VectorParams
+
             client.create_collection(
                 collection_name="node_decisions",
                 vectors_config=VectorParams(size=384, distance=Distance.COSINE),
@@ -136,10 +138,10 @@ class RAGLayer:
 
     def lookup(
         self,
-        step,           # type: str
-        query,          # type: str
-        context=None,   # type: Optional[Dict]
-        threshold=None, # type: Optional[float]
+        step,  # type: str
+        query,  # type: str
+        context=None,  # type: Optional[Dict]
+        threshold=None,  # type: Optional[float]
     ):
         # type: (...) -> Optional[Dict]
         """Search for similar past decisions before making an LLM call.
@@ -247,10 +249,10 @@ class RAGLayer:
 
     def store(
         self,
-        step,           # type: str
-        decision,       # type: Dict[str, Any]
-        user_prompt="", # type: str
-        context=None,   # type: Optional[Dict]
+        step,  # type: str
+        decision,  # type: Dict[str, Any]
+        user_prompt="",  # type: str
+        context=None,  # type: Optional[Dict]
     ):
         # type: (...) -> bool
         """Store a node's decision in the vector DB for future RAG lookups.
@@ -323,12 +325,12 @@ class RAGLayer:
 
     def store_session_summary(
         self,
-        summary,           # type: str
-        task_type="",      # type: str
-        skill="",          # type: str
-        agent="",          # type: str
-        final_status="",   # type: str
-        steps_completed=0, # type: int
+        summary,  # type: str
+        task_type="",  # type: str
+        skill="",  # type: str
+        agent="",  # type: str
+        final_status="",  # type: str
+        steps_completed=0,  # type: int
     ):
         # type: (...) -> bool
         """Store full session summary in sessions collection for cross-session learning.
@@ -340,12 +342,11 @@ class RAGLayer:
 
         try:
             from vector_db_mcp_server import vector_index_session
+
             result_json = vector_index_session(
                 session_id=self.session_id,
                 project=self.project,
-                summary="{} {} {} {} {}".format(
-                    task_type, skill, agent, final_status, summary
-                )[:2000],
+                summary="{} {} {} {} {}".format(task_type, skill, agent, final_status, summary)[:2000],
                 tool_count=steps_completed,
                 context_pct=0.0,
                 duration_min=0.0,
@@ -358,11 +359,11 @@ class RAGLayer:
 
     def store_flow_trace(
         self,
-        level,            # type: str
-        step,             # type: str
-        status,           # type: str
-        description,      # type: str
-        recommendations="", # type: str
+        level,  # type: str
+        step,  # type: str
+        status,  # type: str
+        description,  # type: str
+        recommendations="",  # type: str
     ):
         # type: (...) -> bool
         """Store a flow trace entry for step-level tracking."""
@@ -371,6 +372,7 @@ class RAGLayer:
 
         try:
             from vector_db_mcp_server import vector_index_flow_trace
+
             result_json = vector_index_flow_trace(
                 session_id=self.session_id,
                 level=level,
@@ -403,8 +405,8 @@ _rag_instance = None  # type: Optional[RAGLayer]
 
 
 def get_rag_layer(
-    session_id="",    # type: str
-    project="",       # type: str
+    session_id="",  # type: str
+    project="",  # type: str
     project_root="",  # type: str
 ):
     # type: (...) -> RAGLayer
@@ -416,7 +418,7 @@ def get_rag_layer(
 
 
 def rag_lookup_before_llm(
-    step,   # type: str
+    step,  # type: str
     query,  # type: str
     state,  # type: Dict
 ):
@@ -441,9 +443,9 @@ def rag_lookup_before_llm(
 
 
 def rag_store_after_node(
-    step,      # type: str
+    step,  # type: str
     decision,  # type: Dict
-    state,     # type: Dict
+    state,  # type: Dict
 ):
     # type: (...) -> bool
     """Convenience function: store node decision after execution.
@@ -463,3 +465,135 @@ def rag_store_after_node(
     }
 
     return rag.store(step=step, decision=decision, user_prompt=user_prompt, context=context)
+
+
+# ---------------------------------------------------------------------------
+# Orchestration-level RAG: pre-Step 0 gate for agent roster + phase plan reuse
+# ---------------------------------------------------------------------------
+
+# Higher threshold: skipping architecture + consensus phases requires near-exact match
+RAG_ORCHESTRATION_THRESHOLD = 0.85
+
+
+def rag_lookup_orchestration(
+    task,  # type: str
+    context,  # type: Dict
+    state,  # type: Dict
+):
+    # type: (...) -> Dict
+    """RAG lookup for orchestration-level decisions (pre-Step 0 gate).
+
+    Checks if a similar task's orchestration plan (agent roster, phase plan,
+    complexity, task type) can be reused.  On hit the caller can skip
+    architecture and consensus phases, saving 3-5 LLM calls.
+
+    Args:
+        task:    User task description string.
+        context: Extra context dict (project, task_hash, framework, etc.)
+        state:   Current FlowState dict (for session_id, project_root).
+
+    Returns:
+        Dict with:
+            hit         - bool
+            confidence  - float (0.0 on miss)
+            cached_plan - dict with reusable step0-5 data (empty on miss)
+            session_id  - source session identifier if hit
+        Never raises - returns {"hit": False, ...} on any error.
+    """
+    _empty = {"hit": False, "confidence": 0.0, "cached_plan": {}, "session_id": ""}
+    try:
+        session_id = state.get("session_id", "")
+        project_root = state.get("project_root", "")
+        rag = get_rag_layer(session_id=session_id, project_root=project_root)
+        if not rag.available:
+            return _empty
+
+        project = context.get("project", rag.project)
+        task_hash = context.get("task_hash", "")
+        search_text = "orchestration_plan {} {} {}".format(project, task[:300], task_hash)
+
+        lookup_context = {
+            "task_type": context.get("task_type", ""),
+            "complexity": context.get("complexity", 0),
+            "framework": context.get("framework", ""),
+        }
+
+        result = rag.lookup(
+            step="orchestration_plan",
+            query=search_text,
+            context=lookup_context,
+            threshold=RAG_ORCHESTRATION_THRESHOLD,
+        )
+
+        if result and result.get("rag_hit"):
+            return {
+                "hit": True,
+                "confidence": result.get("confidence", 0.0),
+                "cached_plan": result.get("decision", {}),
+                "session_id": result.get("source_session", ""),
+            }
+        return _empty
+
+    except Exception:
+        return _empty
+
+
+def rag_store_orchestration(
+    task,  # type: str
+    result,  # type: Dict
+    metrics,  # type: Dict
+    state,  # type: Dict
+):
+    # type: (...) -> bool
+    """Store an orchestration decision after pipeline execution.
+
+    Caches the agent roster, phase plan, complexity, task type, and
+    execution metrics so future sessions with similar tasks can reuse
+    the plan via rag_lookup_orchestration().
+
+    Args:
+        task:    User task description.
+        result:  Pipeline result dict (step0-5 fields to cache).
+        metrics: Execution metrics dict (llm_calls_made, rag_hits,
+                 graph_nodes_pruned).
+        state:   Current FlowState dict (for session_id, project_root).
+
+    Returns:
+        True if stored, False on any error.
+    """
+    try:
+        session_id = state.get("session_id", "")
+        project_root = state.get("project_root", "")
+        rag = get_rag_layer(session_id=session_id, project_root=project_root)
+        if not rag.available:
+            return False
+
+        # Cache the key step0-5 fields needed for a future RAG hit reuse
+        cached = {
+            "step0_task_type": result.get("step0_task_type", ""),
+            "step0_complexity": result.get("step0_complexity", 5),
+            "step0_reasoning": result.get("step0_reasoning", ""),
+            "step1_plan_required": result.get("step1_plan_required", False),
+            "step3_tasks_validated": result.get("step3_tasks_validated", []),
+            "step5_skill": result.get("step5_skill", ""),
+            "step5_agent": result.get("step5_agent", ""),
+            "llm_calls_made": metrics.get("llm_calls_made", 0),
+            "rag_hits": metrics.get("rag_hits", 0),
+            "graph_nodes_pruned": metrics.get("graph_nodes_pruned", 0),
+        }
+
+        context = {
+            "task_type": result.get("step0_task_type", ""),
+            "complexity": result.get("step0_complexity", 5),
+            "framework": state.get("detected_framework", ""),
+        }
+
+        return rag.store(
+            step="orchestration_plan",
+            decision=cached,
+            user_prompt=task[:500],
+            context=context,
+        )
+
+    except Exception:
+        return False

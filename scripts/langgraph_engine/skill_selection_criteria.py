@@ -27,13 +27,16 @@ Task dict schema (subset used here):
 
 import json
 from pathlib import Path
-from typing import Dict, Any, List, Tuple, Set
+from typing import Any, Dict, List, Set, Tuple
+
 from loguru import logger
 
 try:
     import sys as _sys
+
     _sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
     from utils.path_resolver import get_claude_home
+
     _SKILL_SELECTION_CLAUDE_HOME = get_claude_home()
 except ImportError:
     _SKILL_SELECTION_CLAUDE_HOME = Path.home() / ".claude"
@@ -64,6 +67,55 @@ def _load_cross_project_patterns():
     return _pattern_cache
 
 
+def _get_call_graph_node_bonus(task, skill):
+    """Bonus based on call graph hot-node analysis (up to +0.10).
+
+    If the task's call_graph_metrics (from orchestration_pre_analysis_node)
+    shows hot nodes (5+ callers) in modules whose names overlap with this
+    skill's name or domain, the skill receives a bonus.  Hot modules signal
+    high-activity code areas where choosing the best skill matters most.
+
+    Reads task.get("call_graph_metrics") set by pre-analysis.
+    Returns 0.0 if call graph is unavailable or no match found.
+    """
+    try:
+        graph_metrics = task.get("call_graph_metrics") or {}
+        if not graph_metrics.get("call_graph_available"):
+            return 0.0
+
+        skill_name = (skill.get("name") or "").lower()
+        skill_domain = (skill.get("domain") or "").lower()
+        hot_nodes = graph_metrics.get("hot_nodes", [])
+        affected_modules = graph_metrics.get("affected_modules", [])
+
+        if not hot_nodes and not affected_modules:
+            return 0.0
+
+        # Keywords from skill name (e.g. "java-spring-boot" -> {"java","spring","boot"})
+        skill_keywords: Set[str] = set()
+        for part in skill_name.replace("-", " ").replace("_", " ").split():
+            if len(part) > 2:
+                skill_keywords.add(part)
+        if skill_domain:
+            skill_keywords.add(skill_domain)
+
+        if not skill_keywords:
+            return 0.0
+
+        # Count how many hot node FQNs contain a skill keyword
+        hot_matches = sum(1 for node in hot_nodes if any(kw in node.get("fqn", "").lower() for kw in skill_keywords))
+
+        # Count how many affected module names contain a skill keyword
+        module_matches = sum(1 for mod in affected_modules if any(kw in mod.lower() for kw in skill_keywords))
+
+        # +0.02 per hot match (capped 0.10), +0.01 per module match (capped 0.05)
+        bonus = min(0.10, hot_matches * 0.02) + min(0.05, module_matches * 0.01)
+        return min(0.10, bonus)
+
+    except Exception:
+        return 0.0
+
+
 def _get_rag_skill_boost(task, skill):
     """Get RAG-based boost for a skill based on historical success patterns.
 
@@ -83,6 +135,7 @@ def _get_rag_skill_boost(task, skill):
     # Source 1: Vector DB RAG lookup (past skill selections)
     try:
         from .rag_integration import _get_vector_functions
+
         vf = _get_vector_functions()
         if vf.get("available"):
             query = f"step5 skill selection {skill_name} {task_type}"
@@ -139,6 +192,7 @@ def _get_rag_skill_boost(task, skill):
 # Single-skill validation
 # ---------------------------------------------------------------------------
 
+
 def validate_skill(task: Dict[str, Any], skill: Dict[str, Any]) -> Tuple[bool, str]:
     """
     Validate whether a skill satisfies all *required* capabilities of a task.
@@ -171,15 +225,14 @@ def validate_skill(task: Dict[str, Any], skill: Dict[str, Any]) -> Tuple[bool, s
             logger.debug(f"[SkillSelectionCriteria] validate_skill FAIL: {msg}")
             return False, msg
 
-    logger.debug(
-        f"[SkillSelectionCriteria] validate_skill PASS: '{skill_name}' covers {required_caps}"
-    )
+    logger.debug(f"[SkillSelectionCriteria] validate_skill PASS: '{skill_name}' covers {required_caps}")
     return True, "OK"
 
 
 # ---------------------------------------------------------------------------
 # Conflict detection
 # ---------------------------------------------------------------------------
+
 
 def are_compatible(skill1: Dict[str, Any], skill2: Dict[str, Any]) -> bool:
     """
@@ -221,8 +274,8 @@ def get_conflict_reason(skill1: Dict[str, Any], skill2: Dict[str, Any]) -> str:
 
     Assumes are_compatible() has already returned False for this pair.
     """
-    name1 = (skill1.get("name") or "skill1")
-    name2 = (skill2.get("name") or "skill2")
+    name1 = skill1.get("name") or "skill1"
+    name2 = skill2.get("name") or "skill2"
 
     if skill1.get("exclusive"):
         return f"'{name1}' is declared exclusive and cannot be combined"
@@ -267,7 +320,7 @@ def detect_conflicts(selected_skills: List[Dict[str, Any]]) -> List[Dict[str, An
     conflicts: List[Dict[str, Any]] = []
 
     for i, skill1 in enumerate(selected_skills):
-        for skill2 in selected_skills[i + 1:]:
+        for skill2 in selected_skills[i + 1 :]:
             if not are_compatible(skill1, skill2):
                 conflict = {
                     "skill1": skill1.get("name", f"skill_{i}"),
@@ -289,6 +342,7 @@ def detect_conflicts(selected_skills: List[Dict[str, Any]]) -> List[Dict[str, An
 # ---------------------------------------------------------------------------
 # Skill ranking
 # ---------------------------------------------------------------------------
+
 
 def score_skill(task: Dict[str, Any], skill: Dict[str, Any]) -> float:
     """
@@ -334,6 +388,11 @@ def score_skill(task: Dict[str, Any], skill: Dict[str, Any]) -> float:
         overlap = len(task_tags & skill_tags) / max(len(task_tags), 1)
         score += 0.10 * min(overlap, 1.0)
 
+    # Call graph hot-node bonus (up to +0.10)
+    # Skills whose domain matches hot nodes in the call graph score higher.
+    cg_bonus = _get_call_graph_node_bonus(task, skill)
+    score += cg_bonus
+
     # Cross-session RAG boost (up to +0.15 bonus)
     # If this skill was successfully used for similar tasks in the past,
     # boost its score based on historical success patterns.
@@ -365,6 +424,7 @@ def rank_skills(
 # ---------------------------------------------------------------------------
 # Selection orchestrator
 # ---------------------------------------------------------------------------
+
 
 def build_selection(
     task: Dict[str, Any],
@@ -417,9 +477,7 @@ def build_selection(
         if not detect_conflicts(trial):
             selected.append(skill)
         else:
-            logger.info(
-                f"[SkillSelectionCriteria] Skipping '{skill.get('name')}' to avoid conflict"
-            )
+            logger.info(f"[SkillSelectionCriteria] Skipping '{skill.get('name')}' to avoid conflict")
 
     # Step 4: sanity check final selection for any remaining conflicts
     final_conflicts = detect_conflicts(selected)

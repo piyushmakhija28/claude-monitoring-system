@@ -16,46 +16,76 @@ Usage:
 """
 
 try:
-    from langgraph.graph import StateGraph, START, END
+    from langgraph.graph import END, START, StateGraph
+
     _LANGGRAPH_AVAILABLE = True
 except ImportError:
     _LANGGRAPH_AVAILABLE = False
 
-from .flow_state import FlowState
 from .checkpointer import CheckpointerManager
+from .flow_state import FlowState
 
-# Level -1 subgraph nodes
-from .subgraphs.level_minus1 import (
-    node_unicode_fix,
-    node_encoding_validation,
-    node_windows_path_check,
-    level_minus1_merge_node,
+# Helper nodes
+from .helper_nodes import (
+    ask_level_minus1_fix,
+    emergency_archive,
+    fix_level_minus1_issues,
+    level2_select_standards_node,
+    optimize_context_after_level2,
+    output_node,
+    step11_retry_increment_node,
+)
+
+# Standards integration hook functions
+from .helper_nodes.standards_helpers import (
+    apply_integration_step1,
+    apply_integration_step2,
+    apply_integration_step3,
+    apply_integration_step4,
+    apply_integration_step5,
+    apply_integration_step6,
+    apply_integration_step7,
+    apply_integration_step10,
+    apply_integration_step13,
+)
+
+# Routing functions
+from .routing import (
+    route_after_level_minus1,
+    route_after_level_minus1_fix,
+    route_after_level_minus1_user_choice,
+    route_after_step1_decision,
+    route_after_step11_review,
+    route_standards_loading,
 )
 
 # Level 1 subgraph nodes
 from .subgraphs.level1_sync import (
-    node_session_loader,
-    node_complexity_calculation,
-    node_context_loader,
-    node_toon_compression,
     cleanup_level1_memory,
     level1_merge_node,
+    node_complexity_calculation,
+    node_context_loader,
+    node_session_loader,
+    node_toon_compression,
 )
 
 # Level 2 subgraph nodes
 from .subgraphs.level2_standards import (
+    level2_merge_node,
     node_common_standards,
     node_java_standards,
-    node_tool_optimization_standards,
     node_mcp_plugin_discovery,
-    level2_merge_node,
+    node_tool_optimization_standards,
 )
 
 # Level 3 subgraph nodes (v2 active)
+from .subgraphs.level3_execution_v2 import level3_init_node
+from .subgraphs.level3_execution_v2 import level3_merge_node as level3_v2_merge_node
 from .subgraphs.level3_execution_v2 import (
+    orchestration_pre_analysis_node,
+    route_pre_analysis,
     step0_0_project_context_node,
     step0_1_initial_callgraph_node,
-    level3_init_node,
     step0_task_analysis_node,
     step1_plan_mode_decision_node,
     step2_plan_execution_node,
@@ -71,41 +101,14 @@ from .subgraphs.level3_execution_v2 import (
     step12_issue_closure_node,
     step13_docs_update_node,
     step14_final_summary_node,
-    level3_merge_node as level3_v2_merge_node,
 )
 
-# Routing functions
-from .routing import (
-    route_after_level_minus1,
-    route_after_level_minus1_user_choice,
-    route_after_level_minus1_fix,
-    route_standards_loading,
-    route_after_step1_decision,
-    route_after_step11_review,
-)
-
-# Helper nodes
-from .helper_nodes import (
-    ask_level_minus1_fix,
-    fix_level_minus1_issues,
-    emergency_archive,
-    optimize_context_after_level2,
-    output_node,
-    step11_retry_increment_node,
-    level2_select_standards_node,
-)
-
-# Standards integration hook functions
-from .helper_nodes.standards_helpers import (
-    apply_integration_step1,
-    apply_integration_step2,
-    apply_integration_step3,
-    apply_integration_step4,
-    apply_integration_step5,
-    apply_integration_step6,
-    apply_integration_step7,
-    apply_integration_step10,
-    apply_integration_step13,
+# Level -1 subgraph nodes
+from .subgraphs.level_minus1 import (
+    level_minus1_merge_node,
+    node_encoding_validation,
+    node_unicode_fix,
+    node_windows_path_check,
 )
 
 
@@ -126,8 +129,7 @@ class PipelineBuilder:
     def __init__(self) -> None:
         if not _LANGGRAPH_AVAILABLE:
             raise RuntimeError(
-                "LangGraph not installed. Install with: "
-                "pip install langgraph>=0.2.0 langchain-core>=0.3.0"
+                "LangGraph not installed. Install with: " "pip install langgraph>=0.2.0 langchain-core>=0.3.0"
             )
         self._graph: StateGraph = StateGraph(FlowState)
         self._hook_mode: bool = False
@@ -305,9 +307,22 @@ class PipelineBuilder:
         g.add_node("level3_init", level3_init_node)
         g.add_edge("level2_optimize_context", "level3_init")
 
+        # Pre-analysis gate: call graph scan + RAG orchestration lookup
+        # On RAG hit (confidence >= 0.85): jumps to level3_step5, skipping steps 0-4
+        # On miss: falls through to level3_step0_0 (normal pre-flight flow)
+        g.add_node("level3_pre_analysis", orchestration_pre_analysis_node)
+        g.add_edge("level3_init", "level3_pre_analysis")
+        g.add_conditional_edges(
+            "level3_pre_analysis",
+            route_pre_analysis,
+            {
+                "level3_step0_0": "level3_step0_0",
+                "level3_step5": "level3_step5",
+            },
+        )
+
         # Step 0.0: Pre-flight - Project Context (README, CHANGELOG, etc.)
         g.add_node("level3_step0_0", step0_0_project_context_node)
-        g.add_edge("level3_init", "level3_step0_0")
 
         # Step 0.1: Pre-flight - Initial CallGraph Snapshot (baseline for Step 11 diff)
         g.add_node("level3_step0_1", step0_1_initial_callgraph_node)
@@ -490,6 +505,7 @@ class PipelineBuilder:
 # CONVENIENCE FACTORY - backward compatible with orchestrator.create_flow_graph
 # ============================================================================
 
+
 def create_flow_graph(hook_mode: bool = False):
     """Create the compiled pipeline graph.
 
@@ -503,11 +519,4 @@ def create_flow_graph(hook_mode: bool = False):
     Returns:
         Compiled LangGraph runnable (CompiledStateGraph).
     """
-    return (
-        PipelineBuilder()
-        .add_level_minus1()
-        .add_level1()
-        .add_level2()
-        .add_level3(hook_mode=hook_mode)
-        .build()
-    )
+    return PipelineBuilder().add_level_minus1().add_level1().add_level2().add_level3(hook_mode=hook_mode).build()

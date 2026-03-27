@@ -28,6 +28,7 @@ logger = logging.getLogger(__name__)
 # Lazy import of call_graph_builder (same directory)
 # ---------------------------------------------------------------------------
 
+
 def _import_builder():
     """Lazy import of call_graph_builder.  Returns module or None."""
     try:
@@ -49,6 +50,7 @@ def _import_builder():
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
 
 def _rel_file(fqn):
     """Extract the relative file path from a FQN (left of '::')."""
@@ -184,9 +186,7 @@ def _avg_cyclomatic(graph):
 def _avg_cyclomatic_for_files(graph, file_set):
     """Return average cyclomatic complexity for methods in the given files."""
     values = [
-        m.get("cyclomatic", 1)
-        for m in graph.methods.values()
-        if m.get("file", "").replace("\\", "/") in file_set
+        m.get("cyclomatic", 1) for m in graph.methods.values() if m.get("file", "").replace("\\", "/") in file_set
     ]
     if not values:
         return 0.0
@@ -204,6 +204,7 @@ def _fallback(call_graph_available=False, extra=None):
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def analyze_impact_before_change(
     project_root,
@@ -237,34 +238,40 @@ def analyze_impact_before_change(
     try:
         mod = _import_builder()
         if mod is None:
-            return _fallback(extra={
-                "target_files": list(target_files) if target_files else [],
-                "affected_methods": [],
-                "affected_test_files": [],
-                "risk_level": "low",
-                "safe_change_zones": [],
-                "danger_zones": [],
-                "cross_file_deps": [],
-                "summary": "Call graph unavailable - could not import builder.",
-            })
+            return _fallback(
+                extra={
+                    "target_files": list(target_files) if target_files else [],
+                    "affected_methods": [],
+                    "affected_test_files": [],
+                    "risk_level": "low",
+                    "safe_change_zones": [],
+                    "danger_zones": [],
+                    "cross_file_deps": [],
+                    "summary": "Call graph unavailable - could not import builder.",
+                }
+            )
 
         logger.debug(
             "analyze_impact_before_change: project=%s files=%s task=%s",
-            project_root, target_files, task_description[:60] if task_description else "",
+            project_root,
+            target_files,
+            task_description[:60] if task_description else "",
         )
 
         graph = mod.build_call_graph(project_root)
         if graph is None:
-            return _fallback(extra={
-                "target_files": list(target_files) if target_files else [],
-                "affected_methods": [],
-                "affected_test_files": [],
-                "risk_level": "low",
-                "safe_change_zones": [],
-                "danger_zones": [],
-                "cross_file_deps": [],
-                "summary": "Could not build call graph for project.",
-            })
+            return _fallback(
+                extra={
+                    "target_files": list(target_files) if target_files else [],
+                    "affected_methods": [],
+                    "affected_test_files": [],
+                    "risk_level": "low",
+                    "safe_change_zones": [],
+                    "danger_zones": [],
+                    "cross_file_deps": [],
+                    "summary": "Could not build call graph for project.",
+                }
+            )
 
         # Normalize target files to relative posix paths
         file_set = _normalize_file_set(project_root, target_files)
@@ -288,11 +295,13 @@ def analyze_impact_before_change(
             callers = impact_map.get(fqn, set())
             n = len(callers)
             risk = _classify_risk(n)
-            affected_methods.append({
-                "fqn": fqn,
-                "callers_count": n,
-                "risk": risk,
-            })
+            affected_methods.append(
+                {
+                    "fqn": fqn,
+                    "callers_count": n,
+                    "risk": risk,
+                }
+            )
             if n == 0:
                 safe_change_zones.append(fqn)
             elif n >= 5:
@@ -326,14 +335,14 @@ def analyze_impact_before_change(
             summary = (
                 "%d method(s) in %d target file(s): risk=%s, "
                 "%d safe zones, %d danger zones, %d cross-file deps."
-                % (n_methods, len(file_set), overall_risk,
-                   n_safe, n_danger, len(cross_file_deps))
+                % (n_methods, len(file_set), overall_risk, n_safe, n_danger, len(cross_file_deps))
             )
         else:
-            summary = (
-                "Full project: %d method(s) analyzed: risk=%s, "
-                "%d safe zones, %d danger zones."
-                % (n_methods, overall_risk, n_safe, n_danger)
+            summary = "Full project: %d method(s) analyzed: risk=%s, " "%d safe zones, %d danger zones." % (
+                n_methods,
+                overall_risk,
+                n_safe,
+                n_danger,
             )
 
         return {
@@ -350,16 +359,18 @@ def analyze_impact_before_change(
 
     except Exception as exc:
         logger.error("analyze_impact_before_change failed: %s", exc, exc_info=True)
-        return _fallback(extra={
-            "target_files": list(target_files) if target_files else [],
-            "affected_methods": [],
-            "affected_test_files": [],
-            "risk_level": "low",
-            "safe_change_zones": [],
-            "danger_zones": [],
-            "cross_file_deps": [],
-            "summary": "Analysis failed: %s" % str(exc),
-        })
+        return _fallback(
+            extra={
+                "target_files": list(target_files) if target_files else [],
+                "affected_methods": [],
+                "affected_test_files": [],
+                "risk_level": "low",
+                "safe_change_zones": [],
+                "danger_zones": [],
+                "cross_file_deps": [],
+                "summary": "Analysis failed: %s" % str(exc),
+            }
+        )
 
 
 def get_implementation_context(
@@ -392,28 +403,33 @@ def get_implementation_context(
     try:
         mod = _import_builder()
         if mod is None:
-            return _fallback(extra={
-                "call_paths_through_targets": [],
-                "entry_points_affected": [],
-                "cross_file_dependencies": {},
-                "suggested_test_scope": [],
-                "stats": {"total_classes": 0, "total_methods": 0, "max_depth": 0},
-            })
+            return _fallback(
+                extra={
+                    "call_paths_through_targets": [],
+                    "entry_points_affected": [],
+                    "cross_file_dependencies": {},
+                    "suggested_test_scope": [],
+                    "stats": {"total_classes": 0, "total_methods": 0, "max_depth": 0},
+                }
+            )
 
         logger.debug(
             "get_implementation_context: project=%s files=%s",
-            project_root, target_files,
+            project_root,
+            target_files,
         )
 
         graph = mod.build_call_graph(project_root)
         if graph is None:
-            return _fallback(extra={
-                "call_paths_through_targets": [],
-                "entry_points_affected": [],
-                "cross_file_dependencies": {},
-                "suggested_test_scope": [],
-                "stats": {"total_classes": 0, "total_methods": 0, "max_depth": 0},
-            })
+            return _fallback(
+                extra={
+                    "call_paths_through_targets": [],
+                    "entry_points_affected": [],
+                    "cross_file_dependencies": {},
+                    "suggested_test_scope": [],
+                    "stats": {"total_classes": 0, "total_methods": 0, "max_depth": 0},
+                }
+            )
 
         file_set = _normalize_file_set(project_root, target_files)
 
@@ -429,10 +445,12 @@ def get_implementation_context(
         for p in all_paths:
             path_fqns = set(p.get("path", []))
             if path_fqns & target_methods:
-                paths_through.append({
-                    "path": p["path"],
-                    "depth": p.get("depth", len(p["path"])),
-                })
+                paths_through.append(
+                    {
+                        "path": p["path"],
+                        "depth": p.get("depth", len(p["path"])),
+                    }
+                )
         # Limit to 15
         paths_through = paths_through[:15]
 
@@ -474,9 +492,7 @@ def get_implementation_context(
                 cross_file_deps_raw[from_stem] = set()
             cross_file_deps_raw[from_stem].add(to_stem)
 
-        cross_file_dependencies = {
-            k: sorted(v) for k, v in sorted(cross_file_deps_raw.items())
-        }
+        cross_file_dependencies = {k: sorted(v) for k, v in sorted(cross_file_deps_raw.items())}
 
         # Suggested test scope: test files for affected modules
         all_affected_fqns = list(target_methods)
@@ -501,13 +517,15 @@ def get_implementation_context(
 
     except Exception as exc:
         logger.error("get_implementation_context failed: %s", exc, exc_info=True)
-        return _fallback(extra={
-            "call_paths_through_targets": [],
-            "entry_points_affected": [],
-            "cross_file_dependencies": {},
-            "suggested_test_scope": [],
-            "stats": {"total_classes": 0, "total_methods": 0, "max_depth": 0},
-        })
+        return _fallback(
+            extra={
+                "call_paths_through_targets": [],
+                "entry_points_affected": [],
+                "cross_file_dependencies": {},
+                "suggested_test_scope": [],
+                "stats": {"total_classes": 0, "total_methods": 0, "max_depth": 0},
+            }
+        )
 
 
 def review_change_impact(
@@ -544,35 +562,40 @@ def review_change_impact(
     try:
         mod = _import_builder()
         if mod is None:
-            return _fallback(extra={
-                "new_edges": [],
-                "removed_edges": [],
-                "orphaned_methods": [],
-                "breaking_changes": [],
-                "cyclomatic_change": {"before_avg": 0.0, "after_avg": 0.0, "delta": 0.0},
-                "max_call_depth": 0,
-                "risk_assessment": "safe",
-                "summary": "Call graph unavailable - could not import builder.",
-            })
+            return _fallback(
+                extra={
+                    "new_edges": [],
+                    "removed_edges": [],
+                    "orphaned_methods": [],
+                    "breaking_changes": [],
+                    "cyclomatic_change": {"before_avg": 0.0, "after_avg": 0.0, "delta": 0.0},
+                    "max_call_depth": 0,
+                    "risk_assessment": "safe",
+                    "summary": "Call graph unavailable - could not import builder.",
+                }
+            )
 
         logger.debug(
             "review_change_impact: project=%s modified=%s snapshot=%s",
-            project_root, modified_files,
+            project_root,
+            modified_files,
             "present" if pre_change_snapshot else "absent",
         )
 
         graph = mod.build_call_graph(project_root)
         if graph is None:
-            return _fallback(extra={
-                "new_edges": [],
-                "removed_edges": [],
-                "orphaned_methods": [],
-                "breaking_changes": [],
-                "cyclomatic_change": {"before_avg": 0.0, "after_avg": 0.0, "delta": 0.0},
-                "max_call_depth": 0,
-                "risk_assessment": "safe",
-                "summary": "Could not build call graph for project.",
-            })
+            return _fallback(
+                extra={
+                    "new_edges": [],
+                    "removed_edges": [],
+                    "orphaned_methods": [],
+                    "breaking_changes": [],
+                    "cyclomatic_change": {"before_avg": 0.0, "after_avg": 0.0, "delta": 0.0},
+                    "max_call_depth": 0,
+                    "risk_assessment": "safe",
+                    "summary": "Could not build call graph for project.",
+                }
+            )
 
         file_set = _normalize_file_set(project_root, modified_files)
 
@@ -619,14 +642,8 @@ def review_change_impact(
         added_keys = current_edge_keys - pre_edge_keys
         removed_keys = pre_edge_keys - current_edge_keys
 
-        new_edges = [
-            {"from": f, "to": t, "type": tp}
-            for f, t, tp in sorted(added_keys)
-        ]
-        removed_edges = [
-            {"from": f, "to": t, "type": tp}
-            for f, t, tp in sorted(removed_keys)
-        ]
+        new_edges = [{"from": f, "to": t, "type": tp} for f, t, tp in sorted(added_keys)]
+        removed_edges = [{"from": f, "to": t, "type": tp} for f, t, tp in sorted(removed_keys)]
 
         # ---- Orphaned methods: in modified files, no longer called ----------
         # A method is orphaned when it exists now but has no callers AND
@@ -666,11 +683,13 @@ def review_change_impact(
                 callers = current_callers.get(fqn, set())
                 n_callers = len(callers)
                 if n_callers > 0:
-                    breaking_changes.append({
-                        "method": fqn,
-                        "reason": "signature_changed",
-                        "callers": n_callers,
-                    })
+                    breaking_changes.append(
+                        {
+                            "method": fqn,
+                            "reason": "signature_changed",
+                            "callers": n_callers,
+                        }
+                    )
 
         breaking_changes.sort(key=lambda x: -x["callers"])
 
@@ -704,8 +723,12 @@ def review_change_impact(
             "Change review: +%d edges, -%d edges, %d orphaned, "
             "%d breaking changes, cyclomatic delta=%.1f -> risk=%s."
             % (
-                len(new_edges), n_removed, n_orphaned,
-                n_breaking, delta, risk_assessment,
+                len(new_edges),
+                n_removed,
+                n_orphaned,
+                n_breaking,
+                delta,
+                risk_assessment,
             )
         )
 
@@ -723,16 +746,18 @@ def review_change_impact(
 
     except Exception as exc:
         logger.error("review_change_impact failed: %s", exc, exc_info=True)
-        return _fallback(extra={
-            "new_edges": [],
-            "removed_edges": [],
-            "orphaned_methods": [],
-            "breaking_changes": [],
-            "cyclomatic_change": {"before_avg": 0.0, "after_avg": 0.0, "delta": 0.0},
-            "max_call_depth": 0,
-            "risk_assessment": "safe",
-            "summary": "Review failed: %s" % str(exc),
-        })
+        return _fallback(
+            extra={
+                "new_edges": [],
+                "removed_edges": [],
+                "orphaned_methods": [],
+                "breaking_changes": [],
+                "cyclomatic_change": {"before_avg": 0.0, "after_avg": 0.0, "delta": 0.0},
+                "max_call_depth": 0,
+                "risk_assessment": "safe",
+                "summary": "Review failed: %s" % str(exc),
+            }
+        )
 
 
 def snapshot_call_graph(project_root):
@@ -769,6 +794,7 @@ def snapshot_call_graph(project_root):
 # ---------------------------------------------------------------------------
 # Phase-scoped context extraction (no graph rebuild - works on snapshot)
 # ---------------------------------------------------------------------------
+
 
 def extract_phase_subgraph(snapshot, phase_files):
     """Extract a subgraph containing only nodes/edges relevant to phase_files.
@@ -836,9 +862,7 @@ def extract_phase_subgraph(snapshot, phase_files):
             expanded_fqns.add(to_fqn)
 
     # Step 3: Filter methods to expanded set
-    scope_methods = [
-        m for m in all_methods if m.get("id", "") in expanded_fqns
-    ]
+    scope_methods = [m for m in all_methods if m.get("id", "") in expanded_fqns]
 
     # Step 4: Filter classes that own any in-scope methods
     scope_class_fqns = set()
@@ -846,9 +870,7 @@ def extract_phase_subgraph(snapshot, phase_files):
         pc = m.get("parent_class")
         if pc:
             scope_class_fqns.add(pc)
-    scope_classes = [
-        c for c in all_classes if c.get("id", "") in scope_class_fqns
-    ]
+    scope_classes = [c for c in all_classes if c.get("id", "") in scope_class_fqns]
 
     # Step 5: Filter edges to only those between in-scope nodes
     scope_edges = []
@@ -969,11 +991,13 @@ def get_phase_scoped_context(snapshot, phase_files, phase_description=""):
                     caller_file = ""
                     if "::" in from_fqn:
                         caller_file = from_fqn.split("::")[0]
-                    cross_phase_callers.append({
-                        "fqn": from_fqn,
-                        "file": caller_file,
-                        "calls_into": to_fqn,
-                    })
+                    cross_phase_callers.append(
+                        {
+                            "fqn": from_fqn,
+                            "file": caller_file,
+                            "calls_into": to_fqn,
+                        }
+                    )
 
         # Classify danger zones and safe zones
         danger_zones = []
@@ -1019,18 +1043,12 @@ def get_phase_scoped_context(snapshot, phase_files, phase_description=""):
 
         # Build summary
         summary_parts = [
-            "Phase: %d methods in %d files" % (
-                len(phase_method_fqns), len(norm_phase)
-            ),
+            "Phase: %d methods in %d files" % (len(phase_method_fqns), len(norm_phase)),
         ]
         if danger_zones:
-            summary_parts.append(
-                "%d danger zone(s)" % len(danger_zones)
-            )
+            summary_parts.append("%d danger zone(s)" % len(danger_zones))
         if cross_phase_callers:
-            summary_parts.append(
-                "%d cross-phase caller(s)" % len(cross_phase_callers)
-            )
+            summary_parts.append("%d cross-phase caller(s)" % len(cross_phase_callers))
         summary_parts.append("risk=%s" % risk_level)
 
         return {
@@ -1050,3 +1068,177 @@ def get_phase_scoped_context(snapshot, phase_files, phase_description=""):
         logger.error("get_phase_scoped_context failed: %s", exc, exc_info=True)
         fallback["call_graph_available"] = False
         return fallback
+
+
+# ---------------------------------------------------------------------------
+# Orchestration context - pre-Step 0 call graph signals
+# ---------------------------------------------------------------------------
+
+
+def _topological_sort(dep_graph, all_nodes):
+    """Kahn's algorithm topological sort.
+
+    dep_graph: dict of {node: [nodes it depends on]}
+    all_nodes: list of all known node names
+    Returns nodes in dependency-first order.
+    Falls back to sorted(all_nodes) on cycle or any error.
+    """
+    try:
+        from collections import defaultdict, deque
+
+        nodes = set(all_nodes)
+        in_degree = defaultdict(int)
+        adj = defaultdict(list)
+
+        for node in nodes:
+            if node not in in_degree:
+                in_degree[node] = 0
+
+        for node, deps in dep_graph.items():
+            for dep in deps:
+                # dep must come before node in execution order
+                adj[dep].append(node)
+                in_degree[node] += 1
+
+        queue = deque(n for n in sorted(nodes) if in_degree[n] == 0)
+        result = []
+        while queue:
+            node = queue.popleft()
+            result.append(node)
+            for neighbor in sorted(adj[node]):
+                in_degree[neighbor] -= 1
+                if in_degree[neighbor] == 0:
+                    queue.append(neighbor)
+
+        # Append anything not reached (cycle members)
+        remaining = [n for n in sorted(nodes) if n not in result]
+        return result + remaining
+
+    except Exception:
+        return sorted(all_nodes)
+
+
+def get_orchestration_context(task_description="", project_root=""):
+    """Extract orchestration-relevant call graph signals (pre-Step 0 gate).
+
+    Scans the project call graph and returns structured signals that the
+    orchestration_pre_analysis_node uses to:
+      - Identify hot nodes (5+ callers) -> bump Step 0 complexity +2
+      - Identify leaf nodes (0 callers)  -> reduce complexity -1
+      - Derive dependency_order via topological sort for Phase ordering
+      - Flag phases safely skippable when only leaf-node modules are touched
+
+    Args:
+        task_description: Plain-language task (used for keyword matching
+                          against method/class FQNs to find affected modules).
+        project_root:     Project root directory (str or Path). Defaults to ".".
+
+    Returns:
+        dict with keys:
+            affected_modules    - list[str]: module stems matched by task keywords
+            hot_nodes           - list[dict]: {"fqn", "callers_count"} 5+ callers
+            leaf_nodes          - list[str]: FQNs with 0 callers
+            dependency_order    - list[str]: topological depth-order of modules
+            skip_phases         - list[str]: phase names safely skippable
+            complexity_boost    - int: +2 hot nodes present, -1 all-leaf only, 0 mixed
+            call_graph_available - bool
+        Never raises - returns call_graph_available=False on any error.
+    """
+    _empty = {
+        "affected_modules": [],
+        "hot_nodes": [],
+        "leaf_nodes": [],
+        "dependency_order": [],
+        "skip_phases": [],
+        "complexity_boost": 0,
+        "call_graph_available": False,
+    }
+    try:
+        root = str(project_root) if project_root else "."
+        mod = _import_builder()
+        if mod is None:
+            return _empty
+
+        graph = mod.build_call_graph(root)
+        if graph is None:
+            return _empty
+
+        impact_map = graph.compute_impact_map()
+
+        # Extract keywords from task description for module matching
+        task_words = set()
+        if task_description:
+            for w in task_description.lower().replace("-", " ").replace("_", " ").split():
+                if len(w) > 3:
+                    task_words.add(w)
+
+        hot_nodes = []
+        leaf_nodes = []
+        affected_modules = set()
+        dep_graph = {}  # module_stem -> list[module_stem it depends on]
+
+        for fqn, _method in graph.methods.items():
+            callers = impact_map.get(fqn, set())
+            n = len(callers)
+            file_path = _rel_file(fqn)
+            file_stem = Path(file_path).stem if file_path else ""
+
+            if n == 0:
+                leaf_nodes.append(fqn)
+            elif n >= 5:
+                hot_nodes.append({"fqn": fqn, "callers_count": n})
+
+            # Keyword match: does this FQN mention task keywords?
+            if task_words and file_stem:
+                fqn_lower = fqn.lower().replace("::", " ").replace(".", " ")
+                if any(w in fqn_lower for w in task_words):
+                    affected_modules.add(file_stem)
+
+        hot_nodes.sort(key=lambda x: -x["callers_count"])
+
+        # Build module-level dependency graph from call graph edges
+        all_module_stems = set()
+        for edge in graph.get_edges():
+            if edge.get("type") == "inheritance":
+                continue
+            from_stem = Path(_rel_file(edge["from"])).stem if _rel_file(edge["from"]) else ""
+            to_stem = Path(_rel_file(edge["to"])).stem if _rel_file(edge["to"]) else ""
+            if not from_stem or not to_stem or from_stem == to_stem:
+                continue
+            if from_stem not in dep_graph:
+                dep_graph[from_stem] = []
+            dep_graph[from_stem].append(to_stem)
+            all_module_stems.update([from_stem, to_stem])
+
+        # Topological sort over all discovered modules
+        dependency_order = _topological_sort(dep_graph, list(all_module_stems))
+
+        # Phase skip heuristic: if no hot nodes and task touches only leaf-heavy
+        # modules, architecture review adds limited value
+        skip_phases = []
+        if not hot_nodes:
+            skip_phases.append("architecture_review")
+
+        # Complexity boost signal
+        if hot_nodes:
+            complexity_boost = 2  # High-activity methods in scope -> increase complexity
+        elif leaf_nodes and not any(
+            len(impact_map.get(fqn, set())) >= 3 for fqn in list(graph.methods.keys())[:200]  # sample for performance
+        ):
+            complexity_boost = -1  # All low-risk methods -> decrease complexity
+        else:
+            complexity_boost = 0
+
+        return {
+            "affected_modules": sorted(affected_modules),
+            "hot_nodes": hot_nodes[:20],
+            "leaf_nodes": leaf_nodes[:50],
+            "dependency_order": dependency_order[:30],
+            "skip_phases": skip_phases,
+            "complexity_boost": complexity_boost,
+            "call_graph_available": True,
+        }
+
+    except Exception as exc:
+        logger.debug("get_orchestration_context failed: %s", exc)
+        return _empty
