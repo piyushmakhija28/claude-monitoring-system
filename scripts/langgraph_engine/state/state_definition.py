@@ -472,6 +472,9 @@ class FlowState(TypedDict, total=False):
     step10_call_context: Optional[Dict]  # Implementation context from CallGraph
     step10_pre_change_graph: Optional[Dict]  # Serialized CallGraph snapshot (before changes)
     step10_suggested_test_scope: Optional[List[str]]  # Test files to run
+    call_graph_stale: Optional[
+        bool
+    ]  # True after Step 10 writes files; cached snapshots from pre-implementation are stale
 
     # Step 11: Pull Request & Code Review (NEW - PHASE 2B)
     step11_pr_id: str  # GitHub PR ID

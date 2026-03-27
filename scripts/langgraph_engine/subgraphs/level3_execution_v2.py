@@ -1654,6 +1654,11 @@ def step10_implementation_note(state: FlowState) -> Dict[str, Any]:
     except Exception as e:
         logger.debug("[v2] Step 10 quality pipeline skipped: %s", e)
 
+    # Mark graph stale: Step 10 wrote files, any cached pre-implementation
+    # snapshots (step2_impact_analysis, pre_analysis_result) are no longer
+    # valid.  Step 11 and beyond should call refresh_call_graph_if_stale().
+    result["call_graph_stale"] = True
+
     return result
 
 
@@ -2092,10 +2097,22 @@ def orchestration_pre_analysis_node(state: FlowState) -> Dict[str, Any]:
         # Simple project name from path tail
         proj_root = state.get("project_root", "") or ""
         proj_name = proj_root.replace("\\", "/").rstrip("/").split("/")[-1]
+
+        # Lightweight structural fingerprint to prevent cross-project RAG false positives.
+        # Two tasks with identical text (e.g. "Add login to dashboard") in different
+        # projects would otherwise get a 0.95 RAG score and inject the wrong blueprint.
+        try:
+            from ..rag_integration import _compute_codebase_hash as _cbh
+
+            _codebase_hash = _cbh(proj_root)
+        except Exception:
+            _codebase_hash = ""
+
         context = {
             "project": proj_name,
             "task_hash": str(hash(task_desc[:100]) & 0xFFFFFF),
             "framework": state.get("detected_framework", ""),
+            "codebase_hash": _codebase_hash,
         }
         rag_result = rag_lookup_orchestration(
             task=task_desc,

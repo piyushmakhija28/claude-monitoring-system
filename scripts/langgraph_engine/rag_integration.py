@@ -23,6 +23,7 @@ Usage:
   rag.store(step="step0", decision={...}, user_prompt="...", context={...})
 """
 
+import hashlib
 import json
 import sys
 from datetime import datetime
@@ -32,6 +33,34 @@ from pathlib import Path
 _SRC_MCP_DIR = Path(__file__).resolve().parent.parent.parent / "src" / "mcp"
 if str(_SRC_MCP_DIR) not in sys.path:
     sys.path.insert(0, str(_SRC_MCP_DIR))
+
+
+def _compute_codebase_hash(project_root):
+    # type: (str) -> str
+    """Return a short structural fingerprint of the project codebase.
+
+    Hashes the sorted list of top-level Python module file names (not
+    their content) under project_root.  Cheap to compute (~1ms), stable
+    across sessions, and different enough between distinct projects to
+    prevent RAG cross-project false positives.
+
+    Returns "" on any error so callers can treat empty as "unknown".
+    """
+    try:
+        root = Path(project_root)
+        if not root.is_dir():
+            return ""
+        py_names = sorted(
+            p.name
+            for p in root.rglob("*.py")
+            if not any(part.startswith(".") for part in p.parts) and "__pycache__" not in str(p)
+        )
+        if not py_names:
+            return ""
+        digest = hashlib.sha1("|".join(py_names[:200]).encode("utf-8", errors="replace")).hexdigest()[:12]
+        return digest
+    except Exception:
+        return ""
 
 
 # Default confidence threshold - above this, RAG result replaces LLM call
@@ -223,6 +252,17 @@ class RAGLayer:
                             self._stats["misses"] += 1
                             return None
 
+                # Cross-project guard: penalise heavily when codebase fingerprints differ.
+                # Prevents "Add login to dashboard" in Project A matching Project B's cached
+                # plan even when the task text is identical (RAG score 0.95+).
+                query_hash = context.get("codebase_hash", "")
+                stored_hash = payload.get("codebase_hash", "")
+                if query_hash and stored_hash and query_hash != stored_hash:
+                    score *= 0.65
+                    if score < min_score:
+                        self._stats["misses"] += 1
+                        return None
+
             self._stats["hits"] += 1
             self._stats["llm_calls_saved"] += 1
 
@@ -295,6 +335,8 @@ class RAGLayer:
 
             from qdrant_client.models import PointStruct
 
+            codebase_hash = _compute_codebase_hash(self.project_root) if self.project_root else ""
+
             point = PointStruct(
                 id=self._vf["point_id"](),
                 vector=vector,
@@ -307,6 +349,7 @@ class RAGLayer:
                     "task_type": task_type,
                     "complexity": complexity,
                     "framework": framework,
+                    "codebase_hash": codebase_hash,
                     "indexed_at": datetime.now().isoformat(),
                 },
             )
@@ -510,12 +553,14 @@ def rag_lookup_orchestration(
 
         project = context.get("project", rag.project)
         task_hash = context.get("task_hash", "")
+        codebase_hash = context.get("codebase_hash", "") or _compute_codebase_hash(project_root)
         search_text = "orchestration_plan {} {} {}".format(project, task[:300], task_hash)
 
         lookup_context = {
             "task_type": context.get("task_type", ""),
             "complexity": context.get("complexity", 0),
             "framework": context.get("framework", ""),
+            "codebase_hash": codebase_hash,
         }
 
         result = rag.lookup(
@@ -586,6 +631,7 @@ def rag_store_orchestration(
             "task_type": result.get("step0_task_type", ""),
             "complexity": result.get("step0_complexity", 5),
             "framework": state.get("detected_framework", ""),
+            "codebase_hash": _compute_codebase_hash(project_root),
         }
 
         return rag.store(

@@ -1,7 +1,7 @@
 # Claude Workflow Engine - Project Context
 
 **Project:** Claude Workflow Engine
-**Version:** 1.6.0
+**Version:** 1.6.1
 **Type:** LangGraph Orchestration Pipeline with RAG + Call Graph Intelligence
 **Last Updated:** 2026-03-27
 
@@ -161,6 +161,15 @@ Default threshold: 0.82 (step-specific: 0.75-0.90)
 (agent roster, task type, complexity, skill selection) is reused from cache,
 bypassing Steps 0-4 entirely and saving ~5 LLM calls per session.
 
+**RAG Cross-Project Guard (v1.6.1 NEW):**
+Every payload stored in `node_decisions` includes a `codebase_hash` — a 12-char SHA1
+fingerprint of the sorted list of top-level Python module file names.  During lookup,
+if the query hash differs from the stored hash, the similarity score is penalised ×0.65,
+effectively blocking false positives where two identically-worded tasks from different
+projects (e.g. "Add login to dashboard" in Project A vs Project B) would otherwise match
+at 0.95+ and inject the wrong blueprint.  Empty hashes (unavailable codebase) are treated
+as unknown and incur no penalty.
+
 ### CallGraph-Driven Pipeline Intelligence
 
 The pipeline uses a full AST-based call graph (578 classes, 3,985 methods) to make
@@ -181,6 +190,15 @@ Step 11 (Review): review_change_impact() -> compare before/after graphs
 Key module: `scripts/langgraph_engine/call_graph_analyzer.py`
 Data source: `scripts/langgraph_engine/call_graph_builder.py`
 State fields: `step2_impact_analysis`, `step10_pre_change_graph`, `step11_impact_review`
+
+**Stale Graph Guard (v1.6.1 NEW):**
+After Step 10 writes files, state flag `call_graph_stale = True` is set.
+`refresh_call_graph_if_stale(state, project_root)` (in `call_graph_analyzer.py`) checks
+this flag and silently rebuilds the graph when stale rather than returning a pre-implementation
+cached snapshot.  This prevents multi-phase implementations from using a Phase-0 graph for
+Phase-C decisions after Phase-B has already modified files.  The function falls back through
+priority order: fresh scan (if stale) → step10_pre_change_graph → step2_impact_analysis →
+pre_analysis_result → fresh scan (nothing cached).
 
 UML diagrams (13 types) also consume CallGraph as single data source via adapters
 in `uml_generators.py`, replacing duplicate AST analysis.

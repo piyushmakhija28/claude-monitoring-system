@@ -1242,3 +1242,38 @@ def get_orchestration_context(task_description="", project_root=""):
     except Exception as exc:
         logger.debug("get_orchestration_context failed: %s", exc)
         return _empty
+
+
+# ---------------------------------------------------------------------------
+# Stale graph guard: use after Step 10 writes files
+# ---------------------------------------------------------------------------
+
+
+def refresh_call_graph_if_stale(state, project_root):
+    """Return a fresh call graph snapshot when Step 10 has written files.
+
+    The call_graph_stale flag is set True by step10_implementation_node
+    after it writes files.  Any function that would otherwise read from a
+    cached pre-implementation snapshot (e.g. step2_impact_analysis) should
+    call this helper instead of reading state directly.
+
+    Args:
+        state:        FlowState dict (or any dict with call_graph_stale key).
+        project_root: Project root directory (str or Path).
+
+    Returns:
+        dict - fresh snapshot from snapshot_call_graph() when stale,
+               best available cached snapshot otherwise (never raises).
+    """
+    if state.get("call_graph_stale"):
+        logger.debug("refresh_call_graph_if_stale: flag set, rebuilding graph")
+        return snapshot_call_graph(project_root)
+
+    # Return the most recent cached snapshot in priority order
+    for key in ("step10_pre_change_graph", "step2_impact_analysis", "pre_analysis_result"):
+        snap = state.get(key)
+        if snap and snap.get("call_graph_available"):
+            return snap
+
+    # Nothing cached yet - build fresh
+    return snapshot_call_graph(project_root)

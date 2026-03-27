@@ -2,7 +2,7 @@
 
 **The first AI tool that follows full SDLC** - from task analysis to merged PR, automatically.
 
-**Version:** 1.6.0 | **Status:** Alpha | **Last Updated:** 2026-03-27
+**Version:** 1.6.1 | **Status:** Alpha | **Last Updated:** 2026-03-27
 
 ---
 
@@ -193,6 +193,75 @@ Complexity is also auto-boosted without an LLM call:
 
 This reduces LLM calls per task by up to 5 inference steps on repeat workflows.
 
+---
+
+### How the Engine Reduces LLM Calls
+
+Every LLM call has latency and cost. The engine uses four distinct mechanisms to avoid unnecessary inference:
+
+| Mechanism | Where | LLM Calls Saved | How |
+|-----------|-------|----------------|-----|
+| **Orchestration RAG Hit** | Pre-Step 0 | ~5 calls | If task was orchestrated before (score ≥ 0.85), skip Steps 0-4 and reuse cached plan |
+| **Per-Node RAG Cache** | Steps 0-14 | 1 call per step | Each step checks RAG before calling LLM; on hit, returns cached decision directly |
+| **Call Graph Complexity Boost** | Step 0 | ~1 call | Complexity score computed without LLM using hot-node count; eliminates a dedicated analysis call |
+| **TOON Compression** | Level 1 | 1-2 calls | Context compressed before Step 0; LLM sees less tokens → faster, cheaper inference |
+
+**Total savings on a RAG hit session: up to 8 LLM calls avoided out of ~12 typical.**
+
+#### RAG Hit Decision Tree
+
+```
+New task arrives
+    |
+    v
+Pre-Analysis Gate (no LLM)
+    |-- Call graph scan: hot nodes, leaf nodes, complexity boost
+    |-- Codebase hash: fingerprint current project structure
+    |
+    v
+RAG Orchestration Lookup (no LLM)
+    |
+    +-- HIT (score >= 0.85) AND same codebase_hash ─────────────────┐
+    |   cached plan injected, skip Steps 0-4                        |
+    |   -> Jump directly to Step 5 (skill selection)                |
+    |   -> 5 LLM calls saved                                        |
+    |                                                               v
+    +-- MISS ──────────────> Full pipeline Step 0-14          Step 5 onward
+                             Each step still checks per-node RAG
+                             before its own LLM call
+```
+
+#### Cross-Project Guard (v1.6.1) — Preventing False Positives
+
+Without a project fingerprint, two identically-worded tasks in different codebases would match:
+
+```
+Project A: "Add login to dashboard"  -> stored with score 0.95
+Project B: "Add login to dashboard"  -> RAG lookup returns Project A's blueprint! WRONG
+
+Fix: codebase_hash = SHA1(sorted top-level .py file names)[:12]
+     Project A hash: "202e89f7b6c8"
+     Project B hash: "9a3f12b8c041"
+     Score penalty: 0.95 × 0.65 = 0.62 → below 0.85 threshold → RAG MISS
+     Result: Project B runs full pipeline, gets its own correct blueprint
+```
+
+#### Stale Graph Guard (v1.6.1) — Preventing Wrong Context After Implementation
+
+```
+Timeline of a pipeline run:
+
+Pre-Analysis  ──> builds graph (call_graph_metrics)
+Step 0-9      ──> use cached graph (no code changes yet) ✓
+Step 10       ──> WRITES FILES (codebase changes!)
+                  sets call_graph_stale = True in state
+Step 11+      ──> calls refresh_call_graph_if_stale(state, project_root)
+                  flag is True → rebuild graph fresh → accurate post-change context ✓
+
+Without fix:  Step 11 would use Step-0's graph (pre-implementation state)
+              review_change_impact() would see no changes → miss breaking changes → wrong PR review
+```
+
 **5. Better Skill Selection (Step 5)**
 
 The call graph reveals the **actual architecture** - not what the README says, but what the code actually does:
@@ -301,6 +370,7 @@ This simple architectural choice (NodeVisitor vs walk) is what makes the entire 
 | `get_implementation_context(method_fqn)` | Step 10 | Caller/callee awareness during implementation - gives full context of what calls the target and what it calls |
 | `review_change_impact(before_snapshot, after_snapshot)` | Step 11 | Before/after graph comparison for code review - detects new call edges, removed edges, and breaking changes |
 | `snapshot_call_graph()` | Step 10 | Captures serializable call graph state for diff comparison in Step 11 |
+| `refresh_call_graph_if_stale(state, project_root)` | Step 11+ | **v1.6.1** — Returns fresh graph when `call_graph_stale=True` (set after Step 10 writes files); prevents stale pre-implementation context from being injected into post-implementation steps |
 
 The data flow across steps:
 ```

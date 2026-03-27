@@ -31,15 +31,12 @@ from pathlib import Path
 # Ensure src/mcp/ is in path for base package imports
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from base.clients import EmbeddingManager, QdrantManager
+from base.decorators import mcp_tool_handler
+
 from mcp.server.fastmcp import FastMCP
 
-from base.decorators import mcp_tool_handler
-from base.clients import QdrantManager, EmbeddingManager
-
-mcp = FastMCP(
-    "vector-db",
-    instructions="Vector DB RAG for semantic search over workflow data (Qdrant local mode)"
-)
+mcp = FastMCP("vector-db", instructions="Vector DB RAG for semantic search over workflow data (Qdrant local mode)")
 
 # Collection definitions (kept local for clarity alongside the tools that use them)
 COLLECTIONS = {
@@ -65,6 +62,7 @@ COLLECTIONS = {
 def _generate_point_id() -> int:
     """Generate unique point ID based on timestamp."""
     import hashlib
+
     ts = str(time.time_ns())
     return int(hashlib.md5(ts.encode()).hexdigest()[:15], 16)
 
@@ -72,6 +70,7 @@ def _generate_point_id() -> int:
 # =============================================================================
 # TOOL 1: INDEX TOOL CALL
 # =============================================================================
+
 
 @mcp.tool()
 @mcp_tool_handler
@@ -130,6 +129,7 @@ def vector_index_tool_call(
 # TOOL 2: INDEX SESSION
 # =============================================================================
 
+
 @mcp.tool()
 @mcp_tool_handler
 def vector_index_session(
@@ -186,6 +186,7 @@ def vector_index_session(
 # =============================================================================
 # TOOL 3: INDEX FLOW TRACE
 # =============================================================================
+
 
 @mcp.tool()
 @mcp_tool_handler
@@ -245,6 +246,7 @@ def vector_index_flow_trace(
 # TOOL 4: SEARCH SIMILAR (generic across collections)
 # =============================================================================
 
+
 @mcp.tool()
 @mcp_tool_handler
 def vector_search_similar(
@@ -275,10 +277,9 @@ def vector_search_similar(
 
     query_filter = None
     if filter_field and filter_value:
-        from qdrant_client.models import Filter, FieldCondition, MatchValue
-        query_filter = Filter(
-            must=[FieldCondition(key=filter_field, match=MatchValue(value=filter_value))]
-        )
+        from qdrant_client.models import FieldCondition, Filter, MatchValue
+
+        query_filter = Filter(must=[FieldCondition(key=filter_field, match=MatchValue(value=filter_value))])
 
     results = client.search(
         collection_name=collection,
@@ -290,11 +291,13 @@ def vector_search_similar(
 
     matches = []
     for hit in results:
-        matches.append({
-            "id": hit.id,
-            "score": round(hit.score, 4),
-            "payload": hit.payload,
-        })
+        matches.append(
+            {
+                "id": hit.id,
+                "score": round(hit.score, 4),
+                "payload": hit.payload,
+            }
+        )
 
     return {
         "collection": collection,
@@ -307,6 +310,7 @@ def vector_search_similar(
 # =============================================================================
 # TOOL 5: SEARCH SESSIONS
 # =============================================================================
+
 
 @mcp.tool()
 def vector_search_sessions(
@@ -334,6 +338,7 @@ def vector_search_sessions(
 # =============================================================================
 # TOOL 6: SEARCH TRACES
 # =============================================================================
+
 
 @mcp.tool()
 def vector_search_traces(
@@ -372,6 +377,7 @@ def vector_search_traces(
 # TOOL 7: COLLECTION STATS
 # =============================================================================
 
+
 @mcp.tool()
 @mcp_tool_handler
 def vector_get_collection_stats(collection: str = "all") -> dict:
@@ -382,10 +388,7 @@ def vector_get_collection_stats(collection: str = "all") -> dict:
     """
     client = QdrantManager.instance().get_or_raise()
 
-    collections_to_check = (
-        list(COLLECTIONS.keys()) if collection == "all"
-        else [collection]
-    )
+    collections_to_check = list(COLLECTIONS.keys()) if collection == "all" else [collection]
 
     stats = {}
     total_points = 0
@@ -406,12 +409,10 @@ def vector_get_collection_stats(collection: str = "all") -> dict:
             stats[col_name] = {"error": str(e)}
 
     # DB size on disk
-    db_path = QdrantManager.DB_PATH
+    db_path = QdrantManager._get_db_path()
     db_size_kb = 0
     if db_path.exists():
-        db_size_kb = sum(
-            f.stat().st_size for f in db_path.rglob("*") if f.is_file()
-        ) / 1024
+        db_size_kb = sum(f.stat().st_size for f in db_path.rglob("*") if f.is_file()) / 1024
 
     return {
         "collections": stats,
@@ -424,6 +425,7 @@ def vector_get_collection_stats(collection: str = "all") -> dict:
 # =============================================================================
 # TOOL 8: DELETE COLLECTION
 # =============================================================================
+
 
 @mcp.tool()
 @mcp_tool_handler
@@ -441,7 +443,8 @@ def vector_delete_collection(collection: str) -> dict:
     client.delete_collection(collection)
 
     # Recreate empty collection
-    from qdrant_client.models import VectorParams, Distance
+    from qdrant_client.models import Distance, VectorParams
+
     config = COLLECTIONS[collection]
     dist = getattr(Distance, config["distance"].upper(), Distance.COSINE)
     client.create_collection(
@@ -459,6 +462,7 @@ def vector_delete_collection(collection: str) -> dict:
 # TOOL 9: HEALTH CHECK
 # =============================================================================
 
+
 @mcp.tool()
 @mcp_tool_handler
 def vector_health_check() -> dict:
@@ -467,7 +471,7 @@ def vector_health_check() -> dict:
         "qdrant_available": False,
         "embeddings_available": False,
         "collections": {},
-        "db_path": str(QdrantManager.DB_PATH),
+        "db_path": str(QdrantManager._get_db_path()),
     }
 
     # Check Qdrant
@@ -500,6 +504,7 @@ def vector_health_check() -> dict:
 # =============================================================================
 # TOOL 10: BULK INDEX
 # =============================================================================
+
 
 @mcp.tool()
 @mcp_tool_handler
@@ -534,18 +539,20 @@ def vector_bulk_index(
                 text = json.dumps(record)
             vector = EmbeddingManager.instance().embed(text)
             record["indexed_at"] = datetime.now().isoformat()
-            points.append(PointStruct(
-                id=_generate_point_id(),
-                vector=vector,
-                payload=record,
-            ))
+            points.append(
+                PointStruct(
+                    id=_generate_point_id(),
+                    vector=vector,
+                    payload=record,
+                )
+            )
         except Exception as e:
             errors.append({"index": i, "error": str(e)})
 
     if points:
         # Batch upsert in chunks of 100
         for chunk_start in range(0, len(points), 100):
-            chunk = points[chunk_start:chunk_start + 100]
+            chunk = points[chunk_start : chunk_start + 100]
             client.upsert(collection_name=collection, points=chunk)
 
     return {
@@ -559,6 +566,7 @@ def vector_bulk_index(
 # =============================================================================
 # TOOL 11: INDEX NODE DECISION
 # =============================================================================
+
 
 @mcp.tool()
 @mcp_tool_handler
