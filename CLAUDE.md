@@ -1,9 +1,9 @@
 # Claude Workflow Engine - Project Context
 
 **Project:** Claude Workflow Engine
-**Version:** 1.5.0
-**Type:** LangGraph Orchestration Pipeline with RAG
-**Last Updated:** 2026-03-21
+**Version:** 1.6.0
+**Type:** LangGraph Orchestration Pipeline with RAG + Call Graph Intelligence
+**Last Updated:** 2026-03-27
 
 ---
 
@@ -38,12 +38,15 @@ Level 1: Sync (session + parallel [complexity, context] + TOON compress)
 Level 2: Standards (common + conditional Java + tool opt + MCP discovery)
     |
 Level 3: Execution (15 steps: Step 0 through Step 14)
-    |-- Step 0:  Task Analysis + Prompt Generation
+    |-- Pre-0: Orchestration Pre-Analysis (CallGraph scan + RAG orchestration lookup)
+    |           RAG hit (>=0.85) -> skip Steps 0-4, jump to Step 5 (~5 LLM calls saved)
+    |           RAG miss -> normal flow; call graph complexity boost injected into Step 0
+    |-- Step 0:  Task Analysis + Prompt Generation (complexity boosted by call graph)
     |-- Step 1:  Plan Mode Decision
     |-- Step 2:  Plan Execution (CallGraph impact analysis + complexity-based model)
     |-- Step 3:  Task/Phase Breakdown + Figma component extraction (ENABLE_FIGMA)
     |-- Step 4:  TOON Refinement
-    |-- Step 5:  Skill & Agent Selection (RAG cross-session boost)
+    |-- Step 5:  Skill & Agent Selection (RAG cross-session boost + call graph hot-node bonus)
     |-- Step 6:  Skill Validation & Download
     |-- Step 7:  Final Prompt Generation (3 files) + Figma design tokens injection
     |-- Step 8:  GitHub Issue + Jira Issue creation (ENABLE_JIRA, dual-linked)
@@ -99,7 +102,8 @@ Level 3: Execution (15 steps: Step 0 through Step 14)
 | Parsers Package | scripts/langgraph_engine/parsers/ | Abstract Factory: ParserRegistry + 4 language parsers |
 | SonarQube Package | scripts/langgraph_engine/sonarqube/ | Facade: api_client, lightweight, aggregator, auto_fixer |
 | Integrations Package | scripts/langgraph_engine/integrations/ | Abstract Factory + Lifecycle: GitHub/Jira/Figma/Jenkins |
-| RAG Integration | scripts/langgraph_engine/rag_integration.py | Vector DB decision caching (16K) |
+| RAG Integration | scripts/langgraph_engine/rag_integration.py | Vector DB decision caching + orchestration-level plan cache |
+| Pre-Analysis Node | scripts/langgraph_engine/subgraphs/level3_execution_v2.py | orchestration_pre_analysis_node: CallGraph scan + RAG lookup before Step 0 |
 | Level -1 | scripts/langgraph_engine/subgraphs/level_minus1.py | Auto-fix enforcement |
 | Level 1 | scripts/langgraph_engine/subgraphs/level1_sync.py | Session/context sync + TOON |
 | Level 2 | scripts/langgraph_engine/subgraphs/level2_standards.py | Standards loading |
@@ -150,6 +154,12 @@ If confidence >= step-specific threshold, RAG result replaces LLM call (saving i
 Key module: `scripts/langgraph_engine/rag_integration.py`
 Collections: `node_decisions`, `sessions`, `flow_traces`, `tool_calls`
 Default threshold: 0.82 (step-specific: 0.75-0.90)
+
+**Orchestration-level RAG (v1.6.0 NEW):**
+`rag_lookup_orchestration()` / `rag_store_orchestration()` operate at the plan level
+(step="orchestration_plan", threshold=0.85). On hit, the full orchestration plan
+(agent roster, task type, complexity, skill selection) is reused from cache,
+bypassing Steps 0-4 entirely and saving ~5 LLM calls per session.
 
 ### CallGraph-Driven Pipeline Intelligence
 

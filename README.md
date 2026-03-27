@@ -2,7 +2,7 @@
 
 **The first AI tool that follows full SDLC** - from task analysis to merged PR, automatically.
 
-**Version:** 1.5.0 | **Status:** Alpha | **Last Updated:** 2026-03-21
+**Version:** 1.6.0 | **Status:** Alpha | **Last Updated:** 2026-03-27
 
 ---
 
@@ -30,7 +30,8 @@ Give it a task in natural language. It handles everything:
 You say: "Fix the login timeout bug"
 
 Engine does:
-  Step 0:  Analyzes task -> Bug Fix, complexity 4/10
+  Pre-0:   Call graph scan + RAG lookup -> cache hit? Skip Steps 0-4 directly to Step 5
+  Step 0:  Analyzes task -> Bug Fix, complexity 4/10 (boosted by call graph hot-node count)
   Step 1:  Decides plan mode -> Not needed (simple bug)
   Step 2:  Skipped (no plan needed)
   Step 3:  Breaks into tasks -> 2 tasks with file targets
@@ -69,7 +70,8 @@ Level 3:  EXECUTION         15 steps (Step 0-14): Full SDLC automation
 
 | Phase | Steps | What Happens |
 |-------|-------|-------------|
-| **Analysis & Planning** | 0-2 | Task analysis, complexity scoring, plan mode decision; CallGraph impact analysis + plan validation |
+| **Pre-Analysis Gate** | Pre-0 | Call graph scan + orchestration-level RAG lookup (threshold 0.85); on cache hit, skips Steps 0-4 entirely |
+| **Analysis & Planning** | 0-2 | Task analysis + call graph complexity boost, plan mode decision; CallGraph impact analysis + plan validation |
 | **Preparation** | 3-7 | Task Breakdown + **Figma component extraction**; TOON Refinement; skill/agent selection; Final Prompt + **Figma design tokens injection** |
 | **Issue & Branch** | 8-9 | GitHub Issue + **Jira Issue** (dual, cross-linked); Branch from **Jira key** (`feature/PROJ-123`) |
 | **Implementation** | 10 | Implementation + CallGraph snapshot; **Jira -> "In Progress"**; **Figma "started" comment** |
@@ -179,13 +181,26 @@ When the engine breaks a task into subtasks, the call graph tells it:
 - Which classes are tightly coupled (change one, must change the other)
 - What the full call chain looks like from user input to database write
 
-**4. Better Skill Selection (Step 5)**
+**4. Orchestration Pre-Analysis Gate (Pre-Step 0) — NEW in v1.6.0**
+
+Before any LLM call is made, the engine now runs a two-step gate:
+1. **Call graph scan** — `get_orchestration_context()` extracts hot nodes (5+ callers), leaf nodes, affected modules, and a topological dependency order
+2. **Orchestration RAG lookup** — checks if a similar task has been orchestrated before (threshold 0.85); on cache hit, the entire planning phase (Steps 0-4) is skipped and the cached agent roster + skill plan is reused directly at Step 5
+
+Complexity is also auto-boosted without an LLM call:
+- Hot nodes found → `complexity += 2` (max 10)
+- All-leaf nodes only → `complexity -= 1` (min 1)
+
+This reduces LLM calls per task by up to 5 inference steps on repeat workflows.
+
+**5. Better Skill Selection (Step 5)**
 
 The call graph reveals the **actual architecture** - not what the README says, but what the code actually does:
 - Heavy use of async/await? Select `asyncio` patterns
 - Deep inheritance trees? Needs OOP expertise
 - Method complexity > 20? Needs refactoring skill
 - Cross-class coupling > 10? Needs architectural skill
+- Hot nodes matching skill domain → up to +0.10 call graph bonus in scoring
 
 **5. Precise Code Review (Step 11)**
 
