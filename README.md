@@ -52,6 +52,261 @@ Engine does:
 
 ---
 
+## How It Actually Works — Complete Flow Example
+
+### Scenario: User types "Fix the login timeout bug"
+
+Let's trace the complete execution with real data (call graph + RAG + LLM decisions):
+
+#### Phase 1: Pre-Analysis Gate (No LLM yet)
+
+```
+INPUT: user_message = "Fix the login timeout bug"
+       project_root = "/path/to/auth-service"
+
+STEP 1: Call Graph Scan (get_orchestration_context)
+  ├─ Scan codebase AST: Find all classes, methods, call edges
+  ├─ Identify HOT NODES (5+ callers):
+  │  ├─ SessionManager.validate() -> 12 callers (bottleneck!)
+  │  ├─ AuthService.check_expiry() -> 8 callers
+  │  └─ TokenCache.get() -> 6 callers
+  ├─ Identify LEAF NODES (0 callers):
+  │  ├─ SessionValidator._is_expired()
+  │  ├─ TimeUtils.current_timestamp()
+  │  └─ LogUtils.log_timeout()
+  ├─ Compute complexity boost:
+  │  → Found hot nodes in auth/session modules
+  │  → Base complexity = 5, boost = +2
+  │  → Final complexity = 7/10 (COMPLEX task)
+  └─ Topological sort:
+     → SessionManager -> AuthService -> TokenCache (dependency order)
+
+STEP 2: Codebase Fingerprint (for cross-project guard)
+  → codebase_hash = SHA1(sorted .py files)[:12]
+  → codebase_hash = "a7f3c2b9e1d4"
+
+STEP 3: RAG Orchestration Lookup
+  ├─ Search: "orchestration_plan auth-service Fix the login timeout bug a7f3c2b9"
+  ├─ Check: codebase_hash = "a7f3c2b9e1d4" (does it match stored?)
+  ├─ Search results:
+  │  └─ Similar past task: "Fix authentication timeout" (score: 0.88)
+  │     ├─ Same codebase_hash ✓ (no penalty)
+  │     ├─ Same task_type: "bug_fix" ✓
+  │     └─ Cached plan available:
+  │        ├─ agent: "python-backend-engineer"
+  │        ├─ skills: ["python-core", "testing-core"]
+  │        ├─ complexity: 7/10
+  │        └─ step5_skill: "python-core" (already decided!)
+  │
+  └─ DECISION: RAG HIT (score 0.88 >= 0.85 threshold)
+     → Set skip_architecture = True
+     → Set skip_consensus = True
+     → Skip Steps 0-4, jump directly to Step 5
+     → LLM calls saved: 5 inference calls
+
+OUTPUT: {
+  "call_graph_metrics": {
+    "hot_nodes": [SessionManager.validate, AuthService.check_expiry, TokenCache.get],
+    "complexity_boost": 2,
+    "affected_modules": ["auth", "session", "cache"]
+  },
+  "rag_orchestration_hit": true,
+  "rag_orchestration_confidence": 0.88,
+  "rag_orchestration_cached_plan": {
+    "step0_task_type": "bug_fix",
+    "step0_complexity": 7,
+    "step5_skill": "python-core",
+    "step5_agent": "python-backend-engineer"
+  },
+  "skip_architecture": true,
+  "skip_consensus": true
+}
+```
+
+#### Phase 2: Analysis (Conditional on RAG)
+
+```
+RAG HIT → SKIP STEPS 0-4 (normally would cost 3 LLM calls)
+          Use cached plan directly
+
+IF RAG MISS (for completeness):
+  Step 0: Task Analysis LLM (would receive call graph context)
+    INPUT: {
+      task: "Fix the login timeout bug",
+      hot_nodes: ["SessionManager.validate (12 callers)", ...],
+      affected_modules: ["auth", "session"],
+      call_paths: [SessionManager -> AuthService -> TokenCache]
+    }
+    OUTPUT: {
+      task_type: "bug_fix",
+      complexity: 7,
+      reasoning: "Timeout bug in hot-node SessionManager.validate() - affects 12 callers, risky change"
+    }
+```
+
+#### Phase 3: Skill Selection (Step 5) — With RAG Boost
+
+```
+INSTEAD OF GUESSING from task text:
+  Step 5 LLM receives:
+  ├─ Task: "Fix login timeout bug"
+  ├─ Complexity: 7 (from call graph, not guessed)
+  ├─ Hot nodes in scope: SessionManager.validate, AuthService.check_expiry
+  ├─ RAG boost: Similar task selected ["python-core", "testing-core"] before
+  │           → Add +0.10 bonus to these skills
+  ├─ Framework detected: FastAPI (from imports)
+  │           → Bonus skills: ["fastapi-core"]
+  └─ Agent recommendation from RAG: "python-backend-engineer"
+
+Step 5 LLM OUTPUT:
+  ├─ Selected skills: ["python-core", "testing-core", "fastapi-core"]
+  ├─ Selected agent: "python-backend-engineer"
+  ├─ Reasoning: "Hot-node method in session management + FastAPI backend → backend engineer + core Python skills"
+  └─ Confidence: 0.94
+```
+
+#### Phase 4: Prompt Generation (Step 7) — With Call Graph Context Pre-Injected
+
+```
+BEFORE (v1.5.0) - Pure LLM, no structure:
+  Step 7 LLM: "Generate implementation prompt for: Fix login timeout bug"
+  → LLM guesses everything, high hallucination
+
+AFTER (v1.6.1) - Call graph data + prompt engineering:
+  Step 7 LLM receives:
+  ├─ Task: "Fix login timeout bug"
+  ├─ Pre-computed call graph data:
+  │  ├─ Target method: SessionManager.validate()
+  │  ├─ Callers (12 methods that depend on this):
+  │  │  ├─ AuthService.check_expiry() @ line 45
+  │  │  ├─ TokenCache.refresh() @ line 78
+  │  │  ├─ MiddlewareAuth.process() @ line 120
+  │  │  └─ ... 9 more
+  │  ├─ Callees (what this method calls):
+  │  │  ├─ TimeUtils.current_timestamp()
+  │  │  ├─ SessionStore.get()
+  │  │  └─ LogUtils.log_timeout()
+  │  ├─ Risk level: "RISKY" (12 callers = high impact zone)
+  │  └─ Cyclomatic complexity: 8 (moderately complex)
+  │
+  ├─ Pre-computed phase breakdown:
+  │  ├─ Phase A: Fix SessionManager.validate() timeout logic
+  │  ├─ Phase B: Update dependent callers (SafeUpdateMiddleware, etc.)
+  │  └─ Phase C: Add tests for timeout scenarios
+  │
+  └─ Prompt template (from cached plan):
+     """
+     TASK: Fix login timeout bug in SessionManager.validate()
+
+     RISK ANALYSIS:
+     - Method has 12 callers (high impact - risky change)
+     - Current complexity: 8 (moderately complex)
+     - Affected files: auth.py, session.py, cache.py
+
+     IMPLEMENTATION APPROACH:
+     Phase A: Timeout logic fix
+       - Method: SessionManager.validate() @ auth.py:45
+       - Current logic: checks expiry with hardcoded 30s timeout
+       - Issue: Doesn't account for clock skew or refresh race conditions
+       - Fix: Implement sliding window timeout + grace period
+
+     Phase B: Dependent method review
+       - AuthService.check_expiry() must handle new return value
+       - TokenCache.refresh() may need retry logic
+
+     Phase C: Testing
+       - Add tests for timeout edge cases
+       - Verify all 12 callers still work
+
+     GENERATED PROMPTS:
+     """
+
+  Step 7 LLM OUTPUT (minimal hallucination):
+    ├─ system_prompt.txt:
+    │  "You are a Python backend engineer. Fix the timeout bug in
+    │   SessionManager.validate() which is called by 12 methods.
+    │   Handle clock skew and race conditions. All callers must
+    │   remain compatible. Return refactored method + updated callers."
+    │
+    ├─ user_message.txt:
+    │  "Fix login timeout bug:
+    │   1. SessionManager.validate() uses hardcoded 30s timeout
+    │   2. Affected callers: AuthService.check_expiry, TokenCache.refresh, ...
+    │   3. Root cause: No clock skew handling
+    │   4. Solution: Sliding window + grace period
+    │   5. Files to modify: auth.py, session.py, cache.py
+    │   6. Tests needed: Timeout edge cases + 12-caller compatibility"
+    │
+    └─ context.txt:
+       "Call graph shows SessionManager.validate() has 12 callers.
+        Current complexity: 8/10. This is a risky change.
+        All callers must be reviewed for compatibility."
+```
+
+#### Phase 5: Implementation & Review (Steps 8-12)
+
+```
+Step 8: Create GitHub Issue
+  Title: "Fix login timeout bug in SessionManager.validate()"
+  Labels: ["bug", "python", "high-priority"]
+  Description: "[From Pre-Analysis] Affects 12 dependent methods, risky change"
+
+Step 9: Create Branch
+  Name: "bugfix/proj-123" (from Jira key)
+
+Step 10: Implementation
+  → AI generates code using system_prompt + user_message
+  → Call graph snapshot taken BEFORE changes
+  → Jira transitioned: "To Do" → "In Progress"
+
+Step 11: Code Review + PR
+  → Snapshots compared: before vs after call graph
+  → Detects breaking changes: Did any caller signature break?
+  → Risk assessment: "Safe" (all callers updated, tests added)
+  → Jira transitioned: "In Progress" → "In Review"
+  → PR created with auto-generated review checklist
+
+Step 12: Merge & Close
+  → PR merged ✓
+  → Jira transitioned: "In Review" → "Done"
+  → GitHub issue closed
+  → Automated comment: "Fixed in PR #42, merged at commit abc123"
+```
+
+#### Summary Statistics
+
+```
+EXECUTION SUMMARY:
+
+LLM Calls Used:    4 (out of 12 typical)
+  ├─ Pre-0:      0 (call graph scan + RAG, no LLM)
+  ├─ Step 0-4:   0 (RAG hit, cached plan)
+  ├─ Step 5:     1 (skill selection, minimal context)
+  ├─ Step 7:     1 (prompt refinement, call graph data pre-injected)
+  ├─ Step 10:    1 (implementation, structured context)
+  └─ Step 11:    1 (review, pre-change snapshot available)
+
+LLM Calls Saved:   8 calls (67% reduction)
+  ├─ Orchestration RAG:        ~5 calls (Steps 0-4)
+  ├─ Per-node RAG caching:     ~2 calls (per-step checks)
+  └─ Call graph determinism:   ~1 call (no re-analysis)
+
+Execution Time:    ~45 seconds (Hook Mode Steps 0-9)
+  ├─ Pre-0:  1.2s (call graph scan)
+  ├─ Steps 5-9: 43.8s (skill download + GitHub + branch)
+  └─ No Step 0-4 overhead (skipped via RAG hit)
+
+Cost Savings:
+  ├─ LLM inference: 67% reduction (4 calls vs 12)
+  ├─ Token budget: ~8K tokens saved
+  ├─ Total latency: 45s vs typical 70s (35% faster)
+  └─ Developer time: Issue → PR in <1 minute
+```
+
+This is the **complete end-to-end flow** — from user prompt to merged PR, with every optimization explained.
+
+---
+
 ## Architecture
 
 ### 4-Level Pipeline
