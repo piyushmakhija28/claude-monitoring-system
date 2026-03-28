@@ -18,12 +18,13 @@ Backward Compatible:
 - Incremental migration: policies can work as-is via PolicyNodeAdapter
 """
 
-import sys
-import os
 import json
+import os
+import signal
+import sys
 import threading
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 
 # ============================================================================
 # RECURSION GUARD - Prevent infinite loop when claude CLI calls trigger hooks
@@ -47,41 +48,87 @@ if str(_this_scripts_dir) not in sys.path:
 
 try:
     # Try importing LangGraph engine
-    from langgraph_engine.orchestrator import create_flow_graph, create_initial_state
-    from langgraph_engine.flow_trace_converter import (
-        write_flow_trace_json,
-        print_flow_checkpoint,
-    )
     from langgraph_engine.checkpointer import get_invoke_config
+    from langgraph_engine.flow_trace_converter import print_flow_checkpoint, write_flow_trace_json
+    from langgraph_engine.orchestrator import create_flow_graph, create_initial_state
+
     _LANGGRAPH_AVAILABLE = True
 except ImportError as e:
     _LANGGRAPH_AVAILABLE = False
     import_error = str(e)
     # Log detailed error for debugging
     import sys
+
     print(f"[IMPORT ERROR] {import_error}", file=sys.stderr)
     print("[DEBUG] Python path:", file=sys.stderr)
     for p in sys.path[:5]:
         print(f"  {p}", file=sys.stderr)
 
 # Windows-safe encoding
-if sys.platform == 'win32':
+if sys.platform == "win32":
     try:
-        if hasattr(sys.stdout, 'reconfigure'):
-            sys.stdout.reconfigure(encoding='utf-8', errors='replace')
-        if hasattr(sys.stderr, 'reconfigure'):
-            sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+        if hasattr(sys.stdout, "reconfigure"):
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        if hasattr(sys.stderr, "reconfigure"):
+            sys.stderr.reconfigure(encoding="utf-8", errors="replace")
     except Exception:
         pass
 
-VERSION = "1.4.1"
+VERSION = "1.6.1"
 SCRIPT_NAME = "3-level-flow.py"
 DEBUG = os.getenv("CLAUDE_DEBUG", "").lower() == "1"
+
+# Shutdown coordination event - set by signal handlers to trigger graceful exit
+_shutdown_event = threading.Event()
+
+
+def _setup_graceful_shutdown():
+    """Register OS signal handlers for graceful shutdown.
+
+    On SIGTERM / SIGINT the handler:
+    1. Sets _shutdown_event so polling loops can exit cleanly.
+    2. Writes a partial flow-trace.json with status="interrupted".
+    3. Calls sys.exit(0) so the process exits with a success code,
+       preventing Docker / Kubernetes from treating a SIGTERM as a failure.
+
+    On Windows only SIGINT is registered (SIGTERM is not supported by the
+    Windows signal module).
+    """
+
+    def _handle_signal(signum, frame):
+        print(
+            "\n[INFO] {} received signal {}. Shutting down gracefully...".format(SCRIPT_NAME, signum),
+            file=sys.stderr,
+        )
+        _shutdown_event.set()
+
+        # Write a minimal interrupted flow-trace so downstream hooks can detect it
+        try:
+            trace_path = Path.cwd() / "flow-trace.json"
+            interrupted_trace = {
+                "status": "interrupted",
+                "signal": signum,
+                "timestamp": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "version": VERSION,
+            }
+            trace_path.write_text(json.dumps(interrupted_trace, indent=2), encoding="utf-8")
+        except Exception:
+            pass
+
+        sys.exit(0)
+
+    if sys.platform == "win32":
+        # SIGTERM is not supported on Windows; register SIGINT only
+        signal.signal(signal.SIGINT, _handle_signal)
+    else:
+        signal.signal(signal.SIGTERM, _handle_signal)
+        signal.signal(signal.SIGINT, _handle_signal)
 
 
 def _generate_session_id() -> str:
     """Generate a unique session ID."""
     import uuid
+
     return f"SESSION-{datetime.now().strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:4].upper()}"
 
 
@@ -108,6 +155,7 @@ def _capture_user_message() -> str:
     We extract the actual user prompt and set cwd for project detection.
     """
     import sys
+
     user_message = ""
 
     # Try reading from stdin (hook pipes JSON event here)
@@ -169,7 +217,11 @@ def run_langgraph_engine(session_id: str = "", project_root: str = "", user_mess
         print(f"[DEBUG] Session: {session_id}")
         print(f"[DEBUG] Project: {project_root}")
         if user_message:
-            print(f"[DEBUG] Message: {user_message[:100]}..." if len(user_message) > 100 else f"[DEBUG] Message: {user_message}")
+            print(
+                f"[DEBUG] Message: {user_message[:100]}..."
+                if len(user_message) > 100
+                else f"[DEBUG] Message: {user_message}"
+            )
         else:
             print("[DEBUG] WARNING: No user message captured!")
 
@@ -184,7 +236,10 @@ def run_langgraph_engine(session_id: str = "", project_root: str = "", user_mess
         print(f"[DEBUG] Initial state keys: {list(initial_state.keys())}", file=sys.stderr)
         print(f"[DEBUG] Initial state user_message: {'user_message' in initial_state}", file=sys.stderr)
         if "user_message" in initial_state:
-            print(f"[DEBUG] user_message value: {initial_state['user_message'][:50] if initial_state['user_message'] else 'EMPTY'}", file=sys.stderr)
+            print(
+                f"[DEBUG] user_message value: {initial_state['user_message'][:50] if initial_state['user_message'] else 'EMPTY'}",
+                file=sys.stderr,
+            )
 
     # Create and invoke graph
     # hook_mode=True: Skip Steps 8-14 (GitHub workflow) for fast hook execution
@@ -200,7 +255,10 @@ def run_langgraph_engine(session_id: str = "", project_root: str = "", user_mess
     # session_id is now immutable and won't cause duplicate update errors
     invoke_config = get_invoke_config(session_id)
     if DEBUG:
-        print(f"[DEBUG] Before graph.invoke: initial_state['project_root']='{initial_state.get('project_root', 'MISSING')}'", file=sys.stderr)
+        print(
+            f"[DEBUG] Before graph.invoke: initial_state['project_root']='{initial_state.get('project_root', 'MISSING')}'",
+            file=sys.stderr,
+        )
     result = graph.invoke(initial_state, config=invoke_config)
 
     if DEBUG:
@@ -219,8 +277,7 @@ def _validate_environment() -> None:
     llm_provider = os.environ.get("LLM_PROVIDER", "").strip()
     if not llm_provider:
         print(
-            "[WARN] LLM_PROVIDER env var is not set. "
-            "LLM routing may fall back to defaults.",
+            "[WARN] LLM_PROVIDER env var is not set. " "LLM routing may fall back to defaults.",
             file=sys.stderr,
         )
 
@@ -228,8 +285,7 @@ def _validate_environment() -> None:
     memory_dir = Path.home() / ".claude" / "memory"
     if not memory_dir.exists():
         print(
-            f"[WARN] Memory directory not found: {memory_dir}. "
-            "Session memory features may not work.",
+            f"[WARN] Memory directory not found: {memory_dir}. " "Session memory features may not work.",
             file=sys.stderr,
         )
 
@@ -237,8 +293,7 @@ def _validate_environment() -> None:
     policies_dir = _this_scripts_dir.parent / "policies"
     if not policies_dir.exists():
         print(
-            f"[WARN] Policies directory not found: {policies_dir}. "
-            "Policy enforcement may be skipped.",
+            f"[WARN] Policies directory not found: {policies_dir}. " "Policy enforcement may be skipped.",
             file=sys.stderr,
         )
 
@@ -250,6 +305,21 @@ def main():
     try:
         # Validate environment before anything else (warnings only, never blocks)
         _validate_environment()
+
+        # Register OS-level signal handlers for graceful shutdown
+        _setup_graceful_shutdown()
+
+        # Start the lightweight HTTP health server if requested
+        if os.environ.get("ENABLE_HEALTH_SERVER", "0") == "1":
+            try:
+                from health_server import start_health_server
+
+                start_health_server(int(os.environ.get("HEALTH_PORT", "8080")))
+            except Exception as _hs_err:
+                print(
+                    "[WARN] Health server failed to start: {}".format(_hs_err),
+                    file=sys.stderr,
+                )
 
         # Check if LangGraph is available
         if not _LANGGRAPH_AVAILABLE:
@@ -314,9 +384,7 @@ def main():
 
         def _run_engine() -> None:
             try:
-                _result_holder.append(
-                    run_langgraph_engine(session_id, project_root, user_message)
-                )
+                _result_holder.append(run_langgraph_engine(session_id, project_root, user_message))
             except Exception as exc:
                 _error_holder.append(exc)
             finally:
@@ -328,8 +396,7 @@ def main():
         finished = _timeout_event.wait(timeout=ORCHESTRATION_TIMEOUT_SEC)
         if not finished:
             print(
-                f"[ERROR] {SCRIPT_NAME}: Orchestration timed out after "
-                f"{ORCHESTRATION_TIMEOUT_SEC} seconds.",
+                f"[ERROR] {SCRIPT_NAME}: Orchestration timed out after " f"{ORCHESTRATION_TIMEOUT_SEC} seconds.",
                 file=sys.stderr,
             )
             sys.exit(1)
@@ -368,6 +435,7 @@ def main():
         print(f"[ERROR] {SCRIPT_NAME}: {str(e)}", file=sys.stderr)
         if DEBUG:
             import traceback
+
             traceback.print_exc()
         sys.exit(1)
 

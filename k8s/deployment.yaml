@@ -1,0 +1,94 @@
+# =============================================================================
+# Claude Workflow Engine - Kubernetes Deployment
+# Runs 2 replicas of the engine with health/readiness probes, resource limits,
+# and non-root security context.
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: workflow-engine
+  namespace: workflow-engine
+  labels:
+    app: workflow-engine
+    version: "1.6.1"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: workflow-engine
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: workflow-engine
+        version: "1.6.1"
+    spec:
+      # Run as non-root user (uid 1000 matches the Dockerfile USER directive)
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+
+      containers:
+        - name: workflow-engine
+          image: workflow-engine:1.6.1
+          imagePullPolicy: IfNotPresent
+
+          ports:
+            - name: health
+              containerPort: 8080
+              protocol: TCP
+            - name: metrics
+              containerPort: 9090
+              protocol: TCP
+
+          # Inject non-sensitive config from ConfigMap
+          envFrom:
+            - configMapRef:
+                name: workflow-engine-config
+            - secretRef:
+                name: workflow-engine-secrets
+
+          # Liveness probe: restart the pod when the health endpoint stops responding
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+          # Readiness probe: remove pod from Service endpoints until Qdrant is reachable
+          readinessProbe:
+            httpGet:
+              path: /readiness
+              port: 8080
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "1"
+              memory: "2Gi"
+
+          # Drop all Linux capabilities; the pipeline does not need any
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: false
+
+      # Allow time for in-flight pipeline runs to complete before SIGKILL
+      terminationGracePeriodSeconds: 60

@@ -19,12 +19,12 @@ Log file locations (resolved via path_resolver):
 Windows-safe: ASCII only (cp1252 compatible).
 """
 
-import json
-import sys
 import argparse
+import json
 import logging
-from pathlib import Path
+import sys
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 # ---------------------------------------------------------------------------
@@ -40,16 +40,30 @@ if str(_project_root) not in sys.path:
 # ---------------------------------------------------------------------------
 try:
     from src.utils.path_resolver import get_logs_dir, get_session_logs_dir
+
     _HAS_PATH_RESOLVER = True
 except ImportError:
     _HAS_PATH_RESOLVER = False
 
 logger = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# Auto-start Prometheus metrics server if ENABLE_METRICS=1
+# ---------------------------------------------------------------------------
+try:
+    import os as _os
+
+    from scripts.langgraph_engine.metrics_exporter import start_metrics_server as _start_metrics
+
+    if _os.environ.get("ENABLE_METRICS", "0") == "1":
+        _start_metrics()
+except Exception:
+    pass
 
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
 
 def _get_logs_base() -> Path:
     """Return the logs base directory using path_resolver when available.
@@ -151,6 +165,7 @@ def _is_within_days(timestamp_str: Any, days: int) -> bool:
 # ---------------------------------------------------------------------------
 # Public aggregation functions
 # ---------------------------------------------------------------------------
+
 
 def aggregate_sessions(days: int = 7) -> Dict[str, Any]:
     """Aggregate session-level statistics from session.json files.
@@ -372,9 +387,7 @@ def aggregate_step_performance(days: int = 7) -> Dict[str, Any]:
 
         # Identify slowest and fastest
         if steps_result:
-            sorted_by_dur = sorted(
-                steps_result.items(), key=lambda x: x[1]["avg_duration_ms"]
-            )
+            sorted_by_dur = sorted(steps_result.items(), key=lambda x: x[1]["avg_duration_ms"])
             fastest_step = sorted_by_dur[0][0]
             slowest_step = sorted_by_dur[-1][0]
         else:
@@ -382,9 +395,7 @@ def aggregate_step_performance(days: int = 7) -> Dict[str, Any]:
             slowest_step = None
 
         # Total pipeline average: sum of per-step averages
-        total_avg = round(
-            sum(v["avg_duration_ms"] for v in steps_result.values()), 1
-        )
+        total_avg = round(sum(v["avg_duration_ms"] for v in steps_result.values()), 1)
 
         return {
             "steps": steps_result,
@@ -473,12 +484,7 @@ def aggregate_llm_usage(days: int = 7) -> Dict[str, Any]:
                     providers[provider] = providers.get(provider, 0) + 1
 
                 # Token tracking
-                tokens = (
-                    entry.get("tokens")
-                    or entry.get("tokens_used")
-                    or entry.get("total_tokens")
-                    or 0
-                )
+                tokens = entry.get("tokens") or entry.get("tokens_used") or entry.get("total_tokens") or 0
                 if isinstance(tokens, (int, float)):
                     total_tokens += int(tokens)
 
@@ -559,11 +565,7 @@ def aggregate_tool_usage(days: int = 7) -> Dict[str, Any]:
                     continue
 
                 # Count tool-related entries
-                tool_name = (
-                    entry.get("tool")
-                    or entry.get("tool_name")
-                    or entry.get("tool_type")
-                )
+                tool_name = entry.get("tool") or entry.get("tool_name") or entry.get("tool_type")
                 if not tool_name:
                     continue
 
@@ -619,6 +621,7 @@ def get_full_report(days: int = 7) -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 # Pretty-print helper
 # ---------------------------------------------------------------------------
+
 
 def _fmt_row(label: str, value: Any, width: int = 36) -> str:
     """Format a label/value pair as a fixed-width table row.
@@ -685,17 +688,17 @@ def print_report(report: Dict[str, Any]) -> None:
     steps = sp.get("steps", {})
     if steps:
         print()
-        print("  {:<12}  {:<18}  {:<14}  {}".format(
-            "Step", "Avg Duration (ms)", "Success Rate", "Call Count"
-        ))
+        print("  {:<12}  {:<18}  {:<14}  {}".format("Step", "Avg Duration (ms)", "Success Rate", "Call Count"))
         print("  " + "-" * 56)
         for step_name, sv in sorted(steps.items()):
-            print("  {:<12}  {:<18}  {:<14}  {}".format(
-                step_name,
-                sv.get("avg_duration_ms", 0),
-                "{:.1%}".format(sv.get("success_rate", 0)),
-                sv.get("call_count", 0),
-            ))
+            print(
+                "  {:<12}  {:<18}  {:<14}  {}".format(
+                    step_name,
+                    sv.get("avg_duration_ms", 0),
+                    "{:.1%}".format(sv.get("success_rate", 0)),
+                    sv.get("call_count", 0),
+                )
+            )
 
     # ---- LLM Usage ----
     lu = report.get("llm_usage", {})
@@ -734,6 +737,7 @@ def print_report(report: Dict[str, Any]) -> None:
 # ---------------------------------------------------------------------------
 # CLI helpers
 # ---------------------------------------------------------------------------
+
 
 def parse_days(value: str) -> int:
     """Parse a time range string into an integer number of days.

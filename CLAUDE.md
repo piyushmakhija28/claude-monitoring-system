@@ -1,9 +1,9 @@
 # Claude Workflow Engine - Project Context
 
 **Project:** Claude Workflow Engine
-**Version:** 1.6.1
+**Version:** 1.7.0
 **Type:** LangGraph Orchestration Pipeline with RAG + Call Graph Intelligence
-**Last Updated:** 2026-03-27
+**Last Updated:** 2026-03-28
 
 ---
 
@@ -20,8 +20,8 @@ Claude Workflow Engine is a 3-level LangGraph-based orchestration pipeline for a
 | **Status** | Active Development |
 | **Primary Location** | scripts/langgraph_engine/ |
 | **MCP Servers** | 19 (323 tools) |
-| **Total Python Files** | 360+ |
-| **Test Files** | 69 |
+| **Total Python Files** | 375+ |
+| **Test Files** | 74 |
 | **Call Graph** | 578 classes, 3,985 methods, 4 languages (Python/Java/TS/Kotlin) |
 
 ---
@@ -121,6 +121,19 @@ Level 3: Execution (15 steps: Step 0 through Step 14)
 | Test Generator | scripts/langgraph_engine/test_generator.py | Template-based unit tests (4 languages) |
 | Jira Workflow | scripts/langgraph_engine/level3_steps8to12_jira.py | Dual GitHub+Jira integration (Steps 8/9/11/12) |
 | Figma Workflow | scripts/langgraph_engine/level3_figma_workflow.py | Design-to-code (components, tokens, review) |
+| Health Server | scripts/health_server.py | Stdlib HTTP: GET /health + GET /readiness (daemon thread) |
+| DB Migrate | scripts/db_migrate.py | Idempotent Qdrant collection bootstrap + index creation |
+| Secrets Manager | scripts/langgraph_engine/secrets_manager.py | Startup secrets validation + AWS SM integration + rotation hints |
+| Audit Logger | scripts/langgraph_engine/audit_logger.py | Append-only JSON audit log, daily rotation, credential redaction |
+| Metrics Exporter | scripts/langgraph_engine/metrics_exporter.py | Prometheus: 9 metrics, start_metrics_server(port) |
+| Structured Logger | scripts/langgraph_engine/core/structured_logger.py | JSON log sink (LOG_FORMAT=json), ContextVar session/step injection |
+| Tracing | scripts/langgraph_engine/tracing.py | OpenTelemetry OTLP/console, create_span() context manager |
+| Error Tracking | scripts/langgraph_engine/error_tracking.py | Sentry capture_exception(), no-op without SENTRY_DSN |
+| Cache Invalidation | scripts/langgraph_engine/cache_invalidation.py | Qdrant cache purge by session/project/step/age; CLI |
+| Rate Limiter | src/mcp/rate_limiter.py | TokenBucket per client, 100/min tools, 10/min LLM |
+| Input Validator | src/mcp/input_validator.py | Null-byte strip, length limit, prompt injection detection |
+| Secrets Scanner | scripts/secrets_check.py | CI gate: 6 regex patterns, exit 1 on finding |
+| Pin Requirements | scripts/pin_requirements.py | Generates requirements.pinned.txt + requirements.bounds.txt |
 
 ### MCP Servers (20 servers, 328 tools)
 
@@ -225,6 +238,13 @@ All integrations are configurable via environment variables (default: disabled):
 | `ENABLE_SONARQUBE` | `0` | SonarQube scan after implementation (Step 10) |
 | `ENABLE_FIGMA` | `0` | Figma design-to-code extraction (Steps 3,7,11) |
 | `ENABLE_CI` | `false` | GitHub Actions CI pipeline |
+| `ENABLE_HEALTH_SERVER` | `0` | Start HTTP /health + /readiness on HEALTH_PORT (8080) |
+| `ENABLE_METRICS` | `0` | Start Prometheus /metrics server on METRICS_PORT (9090) |
+| `ENABLE_TRACING` | `0` | Enable OpenTelemetry tracing (OTLP to OTEL_EXPORTER_OTLP_ENDPOINT) |
+| `ENABLE_RATE_LIMITING` | `0` | Token bucket rate limiting on MCP tool endpoints |
+| `LOG_FORMAT` | `""` | Set to `json` for structured JSON logging (container log aggregation) |
+| `AUTO_CACHE_CLEANUP` | `0` | Auto-invalidate RAG entries older than 30 days at startup |
+| `FORCE_GRAPH_REBUILD` | `0` | Force call graph rebuild even if stale flag is False |
 
 ### Integration Lifecycle (Create -> Update -> Close)
 
@@ -275,14 +295,51 @@ pytest tests/
 # MCP server tests
 pytest tests/test_*mcp*.py
 
-# Integration tests
-pytest tests/integration/
+# Integration tests (require live Qdrant + providers)
+pytest tests/integration/ -m integration
 
-# CallGraph tests (builder + analyzer + UML integration)
+# E2E scenario tests
+pytest tests/e2e/
+
+# Load / concurrency tests
+RUN_LOAD_TESTS=1 pytest tests/load/
+
+# Security unit tests
+pytest tests/test_secrets_manager.py tests/test_audit_logger.py
+
+# CallGraph tests
 pytest tests/test_call_graph_builder.py tests/test_call_graph_analyzer.py
 
 # RAG tests
 pytest tests/test_rag_integration.py
+
+# With coverage report
+pytest tests/ --cov=scripts/langgraph_engine --cov-report=html:docs/coverage
+```
+
+### First-Time Setup
+
+```bash
+# Bootstrap Qdrant collections (idempotent)
+python scripts/db_migrate.py
+
+# Scan for hardcoded secrets (CI gate)
+python scripts/secrets_check.py
+
+# Pin all transitive dependencies
+python scripts/pin_requirements.py
+```
+
+### Production Run
+
+```bash
+# With health server + Prometheus metrics + JSON logs
+ENABLE_HEALTH_SERVER=1 ENABLE_METRICS=1 LOG_FORMAT=json \
+  python scripts/3-level-flow.py --message "your task"
+
+# Kubernetes
+kubectl apply -f k8s/secret.yaml -f k8s/configmap.yaml \
+  -f k8s/deployment.yaml -f k8s/service.yaml -f k8s/hpa.yaml
 ```
 
 ---
@@ -313,7 +370,7 @@ See environment variables in `.env.example`:
 <!-- execution-insight- -->
 ## Latest Execution Insight
 
-- **Task**: Modularization Refactor (complexity 8/10)
-- **Skill**: langgraph-core
-- **Agent**: python-backend-engineer
-- **Date**: 2026-03-18
+- **Task**: Production Readiness Sprint (complexity 9/10)
+- **Skill**: docker, kubernetes, python-core, testing-core
+- **Agent**: devops-engineer, python-backend-engineer, security-defense-architect, qa-testing-agent
+- **Date**: 2026-03-28

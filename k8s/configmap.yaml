@@ -1,0 +1,20 @@
+# =============================================================================
+# Claude Workflow Engine - Kubernetes ConfigMap
+# Non-sensitive runtime configuration for the workflow engine deployment.
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: workflow-engine-config
+  namespace: workflow-engine
+  labels:
+    app: workflow-engine
+    version: "1.6.1"
+data:
+  CLAUDE_DEBUG: "0"
+  CLAUDE_HOOK_MODE: "1"
+  ENABLE_HEALTH_SERVER: "1"
+  METRICS_PORT: "9090"
+  HEALTH_PORT: "8080"
+  QDRANT_HOST: "qdrant-service"
+  QDRANT_PORT: "6333"

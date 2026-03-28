@@ -2,7 +2,7 @@
 
 **The first AI tool that follows full SDLC** - from task analysis to merged PR, automatically.
 
-**Version:** 1.6.1 | **Status:** Alpha | **Last Updated:** 2026-03-27
+**Version:** 1.7.0 | **Status:** Alpha | **Last Updated:** 2026-03-28
 
 ---
 
@@ -769,7 +769,7 @@ policies/
 
 ## Current Status: What's Built vs What's Remaining
 
-> **Version: 1.6.0** — All core features are complete and functional.
+> **Version: 1.7.0** — All core features complete + full production readiness layer added (2026-03-28).
 
 ### ✅ COMPLETE (v1.6.0)
 
@@ -804,18 +804,42 @@ policies/
 | **Docker** | `Dockerfile` + `docker-compose.yml` — one-command deployment |
 | **GitHub Actions CI** | `.github/workflows/ci.yml` — configurable matrix (Python 3.8/3.10/3.12), lint, tests |
 | **Version Sync** | `scripts/sync-version.py` — syncs VERSION to all 20 MCP servers |
-| **Test Suite** | 57 test files covering MCP servers, pipeline steps, integrations |
+| **Test Suite** | 74 test files covering MCP servers, pipeline steps, integrations, security, e2e, load |
 | **Coverage Setup** | `pytest-cov` + `coverage` in requirements.txt |
-| **Documentation** | 38 docs, SRS, CHANGELOG, guides, architecture draw.io |
+| **Documentation** | 44+ docs, SRS, CHANGELOG, guides, deployment guide, troubleshooting guide, ADRs, runbooks |
 
 ---
 
-### ✅ RECENTLY COMPLETED
+### ✅ RECENTLY COMPLETED (v1.7.0 — Production Readiness Sprint, 2026-03-28)
 
 | Component | Details |
 |-----------|---------|
-| **Coverage Threshold Enforcement** | `.coveragerc` + `pytest.ini` created. CI enforces 50% minimum via `--cov-fail-under=50`. `continue-on-error` removed from coverage step. Threshold ratchets up as coverage improves. |
-| **Pre-commit Hooks** | `.pre-commit-config.yaml` created with 4 hook sets: file hygiene (`pre-commit-hooks` v4.6.0), linting (`ruff` — same rules as CI), formatting (`black` line-length=120), import sorting (`isort` black-profile). Run `pre-commit install` once after cloning. |
+| **Health & Readiness Endpoints** | `scripts/health_server.py` — stdlib HTTP server, `GET /health` + `GET /readiness` (Qdrant + key checks), daemon thread, zero langgraph_engine imports |
+| **Kubernetes Manifests** | `k8s/` — Deployment (2 replicas, liveness/readiness probes), ConfigMap, Secret, ClusterIP Service, HPA (2-6 replicas, 70% CPU) |
+| **Qdrant Bootstrap Script** | `scripts/db_migrate.py` — idempotent collection creation + payload indexes, `--recreate` flag |
+| **Graceful Shutdown** | `scripts/3-level-flow.py` — SIGTERM/SIGINT handlers; writes interrupted flow-trace.json on shutdown |
+| **Prometheus Metrics** | `scripts/langgraph_engine/metrics_exporter.py` — 9 metrics (pipeline/step/RAG/LLM/MCP); `ENABLE_METRICS=1` to activate |
+| **Structured JSON Logging** | `scripts/langgraph_engine/core/structured_logger.py` — loguru JSON sink, ContextVar session/step injection, `LOG_FORMAT=json` |
+| **OpenTelemetry Tracing** | `scripts/langgraph_engine/tracing.py` — OTLP/console exporter, `create_span()` context manager, `ENABLE_TRACING=1` |
+| **Sentry Error Tracking** | `scripts/langgraph_engine/error_tracking.py` — `capture_exception()` with step/session tags, no-op without SENTRY_DSN |
+| **RAG Cache Invalidation CLI** | `scripts/langgraph_engine/cache_invalidation.py` — purge by session/project/step/age via Qdrant filters |
+| **Secrets Validation** | `scripts/langgraph_engine/secrets_manager.py` — startup validation, rotation hints, optional AWS Secrets Manager |
+| **Rate Limiting** | `src/mcp/rate_limiter.py` — TokenBucket per client, 100/min tools, 10/min LLM, `ENABLE_RATE_LIMITING=1` |
+| **Input Validation** | `src/mcp/input_validator.py` — null-byte strip, length limits, 6-pattern prompt injection detection |
+| **Audit Logging** | `scripts/langgraph_engine/audit_logger.py` — append-only JSON, daily rotation, auto-redacts credentials in metadata |
+| **Secrets Scanner (CI Gate)** | `scripts/secrets_check.py` — scans scripts/ + src/, 6 regex patterns, exit 1 on finding; pre-commit hook ready |
+| **Requirements Pinning** | `scripts/pin_requirements.py` — generates `requirements.pinned.txt` + `requirements.bounds.txt` via pip show |
+| **Runbooks** | `docs/runbooks/` — STALE_GRAPH, RAG_MISS_RATE, LLM_PROVIDER_FAILURE |
+| **Architecture Decision Records** | `docs/adr/` — ADR-001 (Qdrant RAG), ADR-002 (Call Graph), ADR-003 (Multi-Provider Routing) |
+| **OpenAPI Spec** | `docs/api/OPENAPI_SPEC.yaml` — OpenAPI 3.0.3 for /health, /readiness, /metrics |
+| **Deployment Guide** | `docs/DEPLOYMENT_GUIDE.md` — prerequisites, docker-compose, K8s apply order, 20+ env vars reference |
+| **Troubleshooting Guide** | `docs/TROUBLESHOOTING_GUIDE.md` — 15 failure modes with exact error messages and fixes |
+| **Security Tests** | `tests/test_secrets_manager.py`, `tests/test_audit_logger.py` — 27 tests covering happy path, error, redaction, concurrency |
+| **Integration Tests** | `tests/integration/test_mcp_servers_integration.py` — MCP tool schemas, RAG cross-project penalty, rate limiter, input validator |
+| **E2E Scenario Tests** | `tests/e2e/test_pipeline_scenarios.py` — RAG hit path, stale graph guard, hook mode routing, secrets validation |
+| **Load / Concurrency Tests** | `tests/load/test_concurrent_pipelines.py` — token bucket thread safety, session ID uniqueness (100 concurrent), cross-project RAG penalty math |
+| **Coverage Threshold Enforcement** | `.coveragerc` + `pytest.ini` created. CI enforces 50% minimum via `--cov-fail-under=50`. Threshold ratchets up as coverage improves. |
+| **Pre-commit Hooks** | `.pre-commit-config.yaml` — file hygiene, ruff, black, isort, secrets-check gate |
 
 **Setup pre-commit locally (one-time):**
 ```bash
@@ -830,32 +854,26 @@ pre-commit run --all-files  # run once on existing codebase
 
 ### 🔲 REMAINING
 
-#### Priority: HIGH
-
-| Task | Why Not Done Yet | Effort |
-|------|-----------------|--------|
-| **Input validation layer** | User prompts not sanitized at pipeline entry — length limits, injection prevention, unicode edge cases | 3 hrs |
-
 #### Priority: MEDIUM
 
 | Task | Why Not Done Yet | Effort |
 |------|-----------------|--------|
 | **Multi-project real-world testing** | Tested on this repo only — needs 10+ different project types (Python, Java, JS, Go, Rust) | 1 week |
-| **Load testing** | No baseline for concurrent executions — what breaks with 10+ parallel pipelines? | 2 days |
 | **Checkpoint disaster drill** | Recovery code exists but never stress-tested (kill at each step, verify resume) | 1 day |
 | **Version auto-bump on merge** | `sync-version.py` exists but not wired into CI to auto-bump on merge to main | 2 hrs |
+| **Prometheus Grafana dashboard** | `metrics_exporter.py` exports metrics but no pre-built Grafana dashboard JSON yet | 1 day |
+| **CORS protection on health/metrics** | Security headers scaffold in place; full CORS configuration pending | 2 hrs |
 
 #### Priority: LOW (Future / Enterprise)
 
 | Task | Description |
 |------|-------------|
 | **PyPI publish** | `pip install claude-workflow-engine` — package not yet published |
-| **Metrics web dashboard** | `metrics_aggregator.py` exists but no web UI for real-time monitoring |
+| **Metrics web dashboard** | Prometheus + Grafana dashboard for real-time pipeline visibility |
 | **Team collaboration** | Multi-user sessions with role-based access |
 | **Custom policy editor** | UI for creating/editing the 63 policies without editing markdown |
 | **Webhook notifications** | Slack/Teams/Discord on pipeline complete/fail |
-| **Audit trail** | Compliance-grade immutable logging |
-| Plugin system | Third-party skill/agent marketplace | Ecosystem growth |
+| **Plugin system** | Third-party skill/agent marketplace |
 
 ---
 

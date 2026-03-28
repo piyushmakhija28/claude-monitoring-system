@@ -1,6 +1,6 @@
 # =============================================================================
 # Claude Workflow Engine - Dockerfile
-# Version: 1.4.1
+# Version: 1.6.1
 # Description: LangGraph orchestration pipeline with RAG
 # Base: python:3.10-slim (multi-stage build)
 # =============================================================================
@@ -39,7 +39,7 @@ FROM python:3.10-slim AS runtime
 
 LABEL org.opencontainers.image.title="Claude Workflow Engine" \
       org.opencontainers.image.description="LangGraph 3-level orchestration pipeline with RAG" \
-      org.opencontainers.image.version="1.4.1" \
+      org.opencontainers.image.version="1.6.1" \
       org.opencontainers.image.source="https://github.com/techdeveloper-org/claude-workflow-engine"
 
 # Install minimal runtime OS libraries
@@ -64,17 +64,19 @@ COPY --chown=appuser:appgroup . .
 # Switch to non-root user
 USER appuser
 
-# Expose no ports - this is a CLI pipeline, not a web server.
-# If MCP servers later need HTTP exposure, add EXPOSE here.
+# Expose health and metrics ports
+EXPOSE 8080
+EXPOSE 9090
 
-# Health check: verify Python environment is functional
-# Runs a quick import of the core orchestration module
-HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
-    CMD python -c "import sys; sys.path.insert(0, '/app'); import scripts.langgraph_engine.flow_state" \
-    || exit 1
+# Health check: HTTP GET /health on the lightweight health server.
+# The server is started only when ENABLE_HEALTH_SERVER=1.
+# Falls back to a process-level check when the server is not running.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD curl -sf http://localhost:8080/health || exit 1
 
 # Entrypoint: always use the pipeline entry point
 ENTRYPOINT ["python", "scripts/3-level-flow.py"]
 
-# Default command: show help when no task is provided
+# Default command: use TASK env var when provided, otherwise show help.
+# Override at runtime: docker run -e TASK="add login feature" image:tag
 CMD ["--help"]

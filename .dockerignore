@@ -4,42 +4,60 @@
 # Smaller context = faster builds, no accidental secret leakage.
 # =============================================================================
 
-# Version control - never include git history in images
-.git
-.gitignore
-.gitattributes
+# Python bytecode and cache - rebuilt inside the container
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.mypy_cache/
+.ruff_cache/
 
 # Secrets and environment - NEVER bake credentials into images
 .env
 .env.*
+!.env.example
 *.pem
 *.key
 *.p12
 *.pfx
 
-# Python bytecode and cache - rebuilt inside the container
-__pycache__
-*.py[cod]
-*.pyo
-.mypy_cache
-.ruff_cache
+# Version control - never include git history in images
+.git/
+.gitignore
+.gitattributes
 
-# Test runner cache
-.pytest_cache
+# Test artifacts
+tests/
+.pytest_cache/
 .coverage
 coverage.xml
 htmlcov/
 
-# Virtual environments - dependencies are installed via requirements.txt
-venv/
-.venv/
-env/
-.env_dir/
-
 # Documentation - not needed at runtime
 docs/
 *.md
-!README.md
+!CLAUDE.md
+
+# Virtual environments - dependencies are installed via requirements.txt
+.venv/
+venv/
+env/
+.env_dir/
+
+# Build artifacts from local development
+*.egg-info/
+dist/
+build/
+
+# Local test outputs and logs
+*.log
+audit.log
+logs/
+*.sqlite
+*.db
+
+# Node.js (not used in this project but guard against accidental inclusion)
+node_modules/
 
 # IDE and OS artifacts
 .idea/
@@ -53,14 +71,3 @@ Thumbs.db
 .github/
 .gitlab-ci.yml
 Jenkinsfile
-
-# Local test outputs and logs
-*.log
-logs/
-*.sqlite
-*.db
-
-# Build artifacts from local development
-dist/
-build/
-*.egg-info/

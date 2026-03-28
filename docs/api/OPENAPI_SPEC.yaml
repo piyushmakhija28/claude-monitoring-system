@@ -1,0 +1,248 @@
+openapi: 3.0.3
+
+info:
+  title: Claude Workflow Engine API
+  version: 1.6.1
+  description: |
+    Health, readiness, and metrics endpoints for the Claude Workflow Engine
+    LangGraph orchestration pipeline.
+
+    These endpoints are served by the MCP servers and the pipeline process.
+    They are intended for load balancers, Kubernetes liveness/readiness probes,
+    and Prometheus scraping.
+  contact:
+    name: Claude Workflow Engine
+  license:
+    name: MIT
+
+servers:
+  - url: http://localhost:8000
+    description: Local development server
+  - url: http://localhost:9000
+    description: MCP server gateway (aggregated)
+
+paths:
+
+  /health:
+    get:
+      summary: Liveness probe
+      description: |
+        Returns 200 if the process is alive and its core subsystems (LangGraph
+        state machine, Qdrant client, embedding model) are initialised.
+
+        Used as a Kubernetes liveness probe. A non-200 response should trigger
+        a container restart.
+      operationId: getHealth
+      tags:
+        - Observability
+      responses:
+        "200":
+          description: Process is healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+              example:
+                status: healthy
+                version: "1.6.1"
+                uptime_seconds: 3721
+                checks:
+                  langgraph: ok
+                  qdrant: ok
+                  embedding_model: ok
+        "503":
+          description: One or more subsystems are unhealthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: unhealthy
+                detail: "qdrant: connection refused at path .qdrant_data"
+                timestamp: "2026-03-27T12:00:00Z"
+
+  /readiness:
+    get:
+      summary: Readiness probe
+      description: |
+        Returns 200 if the pipeline is ready to accept new task requests.
+
+        Readiness requires all liveness checks to pass AND:
+        - At least one LLM provider reachable (Anthropic, OpenAI, Ollama, or NPU)
+        - GitHub token validated (if ENABLE_JIRA=0 and GitHub integration is active)
+
+        Used as a Kubernetes readiness probe. A non-200 response removes the
+        pod from the load balancer without restarting it.
+      operationId: getReadiness
+      tags:
+        - Observability
+      responses:
+        "200":
+          description: Pipeline is ready to process tasks
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReadinessResponse"
+              example:
+                ready: true
+                providers:
+                  anthropic: reachable
+                  openai: reachable
+                  ollama: unreachable
+                  npu: unavailable
+                active_provider: anthropic
+                github: authenticated
+        "503":
+          description: Pipeline is not ready
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: not_ready
+                detail: "No LLM provider reachable. Check ANTHROPIC_API_KEY and OLLAMA_ENDPOINT."
+                timestamp: "2026-03-27T12:00:00Z"
+
+  /metrics:
+    get:
+      summary: Prometheus metrics
+      description: |
+        Exposes runtime metrics in Prometheus text format (text/plain; version=0.0.4).
+
+        Key metrics exposed:
+        - `pipeline_steps_total` - counter by step and status (success/failure)
+        - `rag_cache_hit_total` - RAG cache hits by step
+        - `rag_cache_miss_total` - RAG cache misses by step
+        - `llm_calls_total` - LLM API calls by provider and model
+        - `llm_latency_seconds` - histogram of LLM call latency
+        - `call_graph_rebuild_total` - call graph rebuild events
+        - `qdrant_collection_points` - gauge of vector DB collection size by collection
+      operationId: getMetrics
+      tags:
+        - Observability
+      responses:
+        "200":
+          description: Metrics in Prometheus text format
+          content:
+            text/plain:
+              schema:
+                type: string
+              example: |
+                # HELP pipeline_steps_total Total pipeline step executions
+                # TYPE pipeline_steps_total counter
+                pipeline_steps_total{step="step0",status="success"} 42
+                pipeline_steps_total{step="step0",status="failure"} 1
+                # HELP rag_cache_hit_total RAG cache hits by step
+                # TYPE rag_cache_hit_total counter
+                rag_cache_hit_total{step="step0"} 17
+                rag_cache_miss_total{step="step0"} 25
+                # HELP llm_latency_seconds LLM call latency histogram
+                # TYPE llm_latency_seconds histogram
+                llm_latency_seconds_bucket{provider="anthropic",le="1.0"} 5
+                llm_latency_seconds_bucket{provider="anthropic",le="5.0"} 38
+                llm_latency_seconds_bucket{provider="anthropic",le="+Inf"} 42
+                llm_latency_seconds_sum{provider="anthropic"} 87.3
+                llm_latency_seconds_count{provider="anthropic"} 42
+        "503":
+          description: Metrics collection unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+components:
+
+  schemas:
+
+    HealthResponse:
+      type: object
+      required:
+        - status
+        - version
+        - uptime_seconds
+        - checks
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded, unhealthy]
+          description: Overall health status
+          example: healthy
+        version:
+          type: string
+          description: Pipeline version string
+          example: "1.6.1"
+        uptime_seconds:
+          type: integer
+          description: Seconds since the process started
+          example: 3721
+        checks:
+          type: object
+          description: Per-subsystem check results
+          additionalProperties:
+            type: string
+            enum: [ok, degraded, error]
+          example:
+            langgraph: ok
+            qdrant: ok
+            embedding_model: ok
+
+    ReadinessResponse:
+      type: object
+      required:
+        - ready
+        - providers
+        - active_provider
+      properties:
+        ready:
+          type: boolean
+          description: True if the pipeline can accept task requests
+          example: true
+        providers:
+          type: object
+          description: Reachability status of each LLM provider
+          properties:
+            anthropic:
+              type: string
+              enum: [reachable, unreachable, unconfigured]
+            openai:
+              type: string
+              enum: [reachable, unreachable, unconfigured]
+            ollama:
+              type: string
+              enum: [reachable, unreachable, unconfigured]
+            npu:
+              type: string
+              enum: [reachable, unreachable, unavailable]
+        active_provider:
+          type: string
+          description: The provider that will be used for the next task
+          example: anthropic
+        github:
+          type: string
+          enum: [authenticated, unauthenticated, unconfigured]
+          description: GitHub token validation status
+          example: authenticated
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+        - timestamp
+      properties:
+        error:
+          type: string
+          description: Machine-readable error code
+          example: not_ready
+        detail:
+          type: string
+          description: Human-readable error description
+          example: "No LLM provider reachable."
+        timestamp:
+          type: string
+          format: date-time
+          description: ISO 8601 UTC timestamp of the error
+          example: "2026-03-27T12:00:00Z"
+
+  tags:
+    - name: Observability
+      description: Health, readiness, and metrics endpoints

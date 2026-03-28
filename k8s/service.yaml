@@ -1,0 +1,31 @@
+# =============================================================================
+# Claude Workflow Engine - Kubernetes Service
+# ClusterIP service exposing health (8080) and metrics (9090) ports for
+# internal cluster access by Prometheus scraping and readiness checks.
+# =============================================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: workflow-engine-service
+  namespace: workflow-engine
+  labels:
+    app: workflow-engine
+    version: "1.6.1"
+  annotations:
+    # Prometheus auto-discovery: scrape the metrics port
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9090"
+    prometheus.io/path: "/metrics"
+spec:
+  type: ClusterIP
+  selector:
+    app: workflow-engine
+  ports:
+    - name: health
+      port: 8080
+      targetPort: 8080
+      protocol: TCP
+    - name: metrics
+      port: 9090
+      targetPort: 9090
+      protocol: TCP
