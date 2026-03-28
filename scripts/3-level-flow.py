@@ -428,6 +428,11 @@ def main():
         if not user_message:
             user_message = _capture_user_message()
 
+        # Skip workflow for slash commands (/commit, /clear, /skill-name, etc.)
+        # and shell commands (! git status), these don't need pipeline processing
+        if user_message.startswith("/") or user_message.startswith("!"):
+            sys.exit(0)
+
         print("[DEBUG] Before run_langgraph_engine:", file=sys.stderr)
         print(f"[DEBUG]   session_id={session_id}", file=sys.stderr)
         print(f"[DEBUG]   project_root={project_root}", file=sys.stderr)
