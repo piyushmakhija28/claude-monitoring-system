@@ -27,9 +27,7 @@ from .flow_state import FlowState
 
 # Helper nodes
 from .helper_nodes import (
-    ask_level_minus1_fix,
     emergency_archive,
-    fix_level_minus1_issues,
     level2_select_standards_node,
     optimize_context_after_level2,
     output_node,
@@ -52,7 +50,6 @@ from .helper_nodes.standards_helpers import (
 # Routing functions
 from .routing import (
     route_after_level_minus1,
-    route_after_level_minus1_fix,
     route_after_level_minus1_user_choice,
     route_after_step1_decision,
     route_after_step11_review,
@@ -105,6 +102,8 @@ from .subgraphs.level3_execution_v2 import (
 
 # Level -1 subgraph nodes
 from .subgraphs.level_minus1 import (
+    ask_level_minus1_fix,
+    fix_level_minus1_issues,
     level_minus1_merge_node,
     node_encoding_validation,
     node_unicode_fix,
@@ -182,15 +181,8 @@ class PipelineBuilder:
             },
         )
 
-        # Conditional: fix -> retry(level_minus1_unicode) | ask_fix
-        g.add_conditional_edges(
-            "fix_level_minus1",
-            route_after_level_minus1_fix,
-            {
-                "level_minus1_unicode": "level_minus1_unicode",
-                "ask_level_minus1_fix": "ask_level_minus1_fix",
-            },
-        )
+        # After fix, always retry Level -1 checks from start
+        g.add_edge("fix_level_minus1", "level_minus1_unicode")
 
         self._levels_added.append("level_minus1")
         return self
@@ -213,9 +205,6 @@ class PipelineBuilder:
         g.add_node("level1_toon_compression", node_toon_compression)
         g.add_node("level1_merge", level1_merge_node)
         g.add_node("level1_cleanup", cleanup_level1_memory)
-
-        # Also add the edge from fix_level_minus1 to level1_session (retry path)
-        g.add_edge("fix_level_minus1", "level1_session")
 
         # Session first, then parallel complexity + context
         g.add_edge("level1_session", "level1_complexity")

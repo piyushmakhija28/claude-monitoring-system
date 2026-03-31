@@ -71,6 +71,19 @@ class FlowState(TypedDict, total=False):
     failure_kb_loaded: Optional[bool]  # True if KB was parsed successfully
     failure_kb_suggestions: Optional[List[Dict]]  # KB matches for current failures
 
+    # Recovery state (written by ask/fix nodes, read by routing)
+    level_minus1_retry_count: int  # attempt counter (incremented by ask node)
+    level_minus1_user_choice: str  # "auto-fix" | "skip" | "force_continue"
+    level_minus1_fixes_applied: List[str]  # applied fixes (from fix node)
+    level_minus1_fix_errors: List[str]  # errors during fix attempts
+    level_minus1_ready_to_retry: bool  # True after fix node completes
+    level_minus1_max_attempts_reached: bool  # True when 3 attempts exceeded
+    level_minus1_fatal_failure: bool  # True on unrecoverable failure
+    level_minus1_failed_checks: List[str]  # messages for failed checks
+
+    # Encoding scan results
+    encoding_nonascii_files: List[str]  # files with non-ASCII content
+
     # ===========================================================================
     # LEVEL 1: SYNC SYSTEM (4 PARALLEL TASKS)
     # ===========================================================================

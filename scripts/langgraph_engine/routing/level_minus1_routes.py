@@ -8,6 +8,9 @@ from typing import Literal
 
 from ..flow_state import FlowState, StepKeys
 
+# Must match MAX_LEVEL_MINUS1_ATTEMPTS in subgraphs/level_minus1.py
+_MAX_LEVEL_MINUS1_ATTEMPTS = 3
+
 
 def route_after_level_minus1(state: FlowState) -> Literal["ask_level_minus1_fix", "level1_session"]:
     """Route based on Level -1 status.
@@ -32,20 +35,10 @@ def route_after_level_minus1_user_choice(state: FlowState) -> Literal["fix_level
     choice = state.get(StepKeys.LEVEL_MINUS1_USER_CHOICE, "skip")
 
     if choice == "auto-fix":
-        # Check retry count to prevent infinite loops (max 3 attempts)
+        # Check retry count to prevent infinite loops (max 3 attempts: counts 0,1,2 allowed)
         retry_count = state.get(StepKeys.LEVEL_MINUS1_RETRY_COUNT, 0)
-        if retry_count < 3:
+        if retry_count < _MAX_LEVEL_MINUS1_ATTEMPTS:
             return "fix_level_minus1"
 
     # Default: continue to Level 1 (start with session loader)
     return "level1_session"
-
-
-def route_after_level_minus1_fix(state: FlowState) -> Literal["level_minus1_unicode", "ask_level_minus1_fix"]:
-    """Route after fix attempt - retry Level -1 or ask again.
-
-    After applying fixes, rerun Level -1 checks.
-    If still fails, ask user again (with attempt number).
-    """
-    # Always retry checks after fix
-    return "level_minus1_unicode"

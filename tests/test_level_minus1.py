@@ -12,7 +12,7 @@ import sys
 import types
 import unittest
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 # ---------------------------------------------------------------------------
 # Add scripts/ to sys.path so langgraph_engine is importable as package
@@ -26,6 +26,7 @@ if _SCRIPTS not in sys.path:
 # ---------------------------------------------------------------------------
 # Pre-import stubs: prevent heavy transitive imports from executing
 # ---------------------------------------------------------------------------
+
 
 def _stub(name):
     m = types.ModuleType(name)
@@ -42,11 +43,23 @@ _lg_graph.StateGraph = MagicMock()
 
 # loguru
 _loguru = _stub("loguru")
-_noop = lambda *a, **kw: None
-_loguru.logger = type("_L", (), {
-    "info": _noop, "debug": _noop, "warning": _noop,
-    "error": _noop, "critical": _noop,
-})()
+
+
+def _noop(*a, **kw):
+    return None
+
+
+_loguru.logger = type(
+    "_L",
+    (),
+    {
+        "info": _noop,
+        "debug": _noop,
+        "warning": _noop,
+        "error": _noop,
+        "critical": _noop,
+    },
+)()
 
 # Stub the entire langgraph_engine package so its __init__ never runs
 _le_pkg = types.ModuleType("langgraph_engine")
@@ -57,6 +70,15 @@ sys.modules["langgraph_engine"] = _le_pkg
 # Individual sub-modules needed by level_minus1 via relative imports
 _flow_state = _stub("langgraph_engine.flow_state")
 _flow_state.FlowState = dict
+
+
+class _StepKeys:
+    LEVEL_MINUS1_STATUS = "level_minus1_status"
+    LEVEL_MINUS1_USER_CHOICE = "level_minus1_user_choice"
+    LEVEL_MINUS1_RETRY_COUNT = "level_minus1_retry_count"
+
+
+_flow_state.StepKeys = _StepKeys
 
 _error_logger = _stub("langgraph_engine.error_logger")
 _error_logger.ErrorLogger = MagicMock()
@@ -72,16 +94,19 @@ _subgraphs = _stub("langgraph_engine.subgraphs")
 _subgraphs.__path__ = [str(Path(_SCRIPTS) / "langgraph_engine" / "subgraphs")]
 _subgraphs.__package__ = "langgraph_engine.subgraphs"
 
+# Routing package stub
+_routing_pkg = _stub("langgraph_engine.routing")
+_routing_pkg.__path__ = [str(Path(_SCRIPTS) / "langgraph_engine" / "routing")]
+_routing_pkg.__package__ = "langgraph_engine.routing"
+
 
 # ---------------------------------------------------------------------------
 # Now import the module under test using importlib to respect the package
 # ---------------------------------------------------------------------------
 
-import importlib.util as _ilu
+import importlib.util as _ilu  # noqa: E402
 
-_level_minus1_path = (
-    Path(_SCRIPTS) / "langgraph_engine" / "subgraphs" / "level_minus1.py"
-)
+_level_minus1_path = Path(_SCRIPTS) / "langgraph_engine" / "subgraphs" / "level_minus1.py"
 _spec = _ilu.spec_from_file_location(
     "langgraph_engine.subgraphs.level_minus1",
     str(_level_minus1_path),
@@ -92,18 +117,32 @@ _level_minus1_mod.__package__ = "langgraph_engine.subgraphs"
 sys.modules["langgraph_engine.subgraphs.level_minus1"] = _level_minus1_mod
 _spec.loader.exec_module(_level_minus1_mod)
 
-# Import symbols
+# Import symbols from subgraph module
 node_unicode_fix = _level_minus1_mod.node_unicode_fix
 node_encoding_validation = _level_minus1_mod.node_encoding_validation
 node_windows_path_check = _level_minus1_mod.node_windows_path_check
 level_minus1_merge_node = _level_minus1_mod.level_minus1_merge_node
-route_after_level_minus1_merge = _level_minus1_mod.route_after_level_minus1_merge
 fix_level_minus1_issues = _level_minus1_mod.fix_level_minus1_issues
+
+# Import routing function from the canonical routing module
+_routes_path = Path(_SCRIPTS) / "langgraph_engine" / "routing" / "level_minus1_routes.py"
+_routes_spec = _ilu.spec_from_file_location(
+    "langgraph_engine.routing.level_minus1_routes",
+    str(_routes_path),
+    submodule_search_locations=[],
+)
+_routes_mod = _ilu.module_from_spec(_routes_spec)
+_routes_mod.__package__ = "langgraph_engine.routing"
+sys.modules["langgraph_engine.routing.level_minus1_routes"] = _routes_mod
+_routes_spec.loader.exec_module(_routes_mod)
+
+route_after_level_minus1 = _routes_mod.route_after_level_minus1
 
 
 # ---------------------------------------------------------------------------
 # Helper
 # ---------------------------------------------------------------------------
+
 
 def _state(tmp_path=None, **extra):
     base = {
@@ -117,6 +156,7 @@ def _state(tmp_path=None, **extra):
 # ---------------------------------------------------------------------------
 # Tests: node_unicode_fix
 # ---------------------------------------------------------------------------
+
 
 class TestNodeUnicodeFix(unittest.TestCase):
 
@@ -135,12 +175,11 @@ class TestNodeUnicodeFix(unittest.TestCase):
     def test_node_unicode_fix_windows_sets_unicode_check(self):
         """On Windows, unicode_check key is set in result."""
         import io
+
         # Use real StringIO objects so print(file=sys.stderr) works
         mock_stdout = io.StringIO()
         mock_stderr = io.StringIO()
-        with patch("sys.platform", "win32"), \
-             patch("sys.stdout", mock_stdout), \
-             patch("sys.stderr", mock_stderr):
+        with patch("sys.platform", "win32"), patch("sys.stdout", mock_stdout), patch("sys.stderr", mock_stderr):
             result = node_unicode_fix(_state())
         self.assertIn("unicode_check", result)
 
@@ -148,6 +187,7 @@ class TestNodeUnicodeFix(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # Tests: node_encoding_validation
 # ---------------------------------------------------------------------------
+
 
 class TestNodeEncodingValidation(unittest.TestCase):
 
@@ -160,6 +200,7 @@ class TestNodeEncodingValidation(unittest.TestCase):
     def test_node_encoding_validation_ascii_only(self):
         """ASCII-only .py files pass encoding validation on Windows."""
         import tempfile
+
         with tempfile.TemporaryDirectory() as td:
             (Path(td) / "clean.py").write_bytes(b"# ASCII only\nx = 1\n")
             state = _state(project_root=td)
@@ -170,6 +211,7 @@ class TestNodeEncodingValidation(unittest.TestCase):
     def test_node_encoding_validation_non_ascii(self):
         """Non-ASCII bytes in a .py file cause encoding_check=False on Windows."""
         import tempfile
+
         with tempfile.TemporaryDirectory() as td:
             # 0xC3 0xA9 = UTF-8 for e-acute, not pure ASCII
             (Path(td) / "bad.py").write_bytes(b"# Bad \xc3\xa9ncoding\n")
@@ -184,6 +226,7 @@ class TestNodeEncodingValidation(unittest.TestCase):
 # Tests: node_windows_path_check
 # ---------------------------------------------------------------------------
 
+
 class TestNodeWindowsPathCheck(unittest.TestCase):
 
     def test_node_windows_path_check_clean_non_windows(self):
@@ -195,10 +238,9 @@ class TestNodeWindowsPathCheck(unittest.TestCase):
     def test_node_windows_path_check_clean(self):
         """Python files using forward slashes pass on Windows."""
         import tempfile
+
         with tempfile.TemporaryDirectory() as td:
-            (Path(td) / "clean.py").write_text(
-                "path = '/usr/local/bin'\n", encoding="utf-8"
-            )
+            (Path(td) / "clean.py").write_text("path = '/usr/local/bin'\n", encoding="utf-8")
             state = _state(project_root=td)
             with patch("sys.platform", "win32"):
                 result = node_windows_path_check(state)
@@ -207,10 +249,9 @@ class TestNodeWindowsPathCheck(unittest.TestCase):
     def test_node_windows_path_check_backslash(self):
         """Hardcoded Windows drive paths (C:\\) fail the check."""
         import tempfile
+
         with tempfile.TemporaryDirectory() as td:
-            (Path(td) / "bad.py").write_text(
-                'PATH = "C:\\\\Users\\\\admin\\\\file.txt"\n', encoding="utf-8"
-            )
+            (Path(td) / "bad.py").write_text('PATH = "C:\\\\Users\\\\admin\\\\file.txt"\n', encoding="utf-8")
             state = _state(project_root=td)
             with patch("sys.platform", "win32"):
                 result = node_windows_path_check(state)
@@ -220,6 +261,7 @@ class TestNodeWindowsPathCheck(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # Tests: level_minus1_merge_node
 # ---------------------------------------------------------------------------
+
 
 class TestLevelMinus1MergeNode(unittest.TestCase):
 
@@ -262,29 +304,29 @@ class TestLevelMinus1MergeNode(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# Tests: route_after_level_minus1_merge
+# Tests: route_after_level_minus1 (canonical routing from routing/ package)
 # ---------------------------------------------------------------------------
+
 
 class TestRouteAfterMerge(unittest.TestCase):
 
     def test_route_after_merge_ok(self):
-        """Returns END constant when status is OK."""
+        """Returns 'level1_session' when status is OK."""
         state = _state(level_minus1_status="OK")
-        result = route_after_level_minus1_merge(state)
-        # END is "END" per our stub
-        self.assertEqual(result, "END")
+        result = route_after_level_minus1(state)
+        self.assertEqual(result, "level1_session")
 
     def test_route_after_merge_fail(self):
-        """Returns 'ask_fix' when status is FAILED."""
+        """Returns 'ask_level_minus1_fix' when status is FAILED."""
         state = _state(level_minus1_status="FAILED")
-        result = route_after_level_minus1_merge(state)
-        self.assertEqual(result, "ask_fix")
+        result = route_after_level_minus1(state)
+        self.assertEqual(result, "ask_level_minus1_fix")
 
     def test_route_after_merge_missing_status_defaults_to_fail(self):
-        """Missing level_minus1_status defaults to 'ask_fix' routing."""
+        """Missing level_minus1_status defaults to 'ask_level_minus1_fix' routing."""
         state = _state()  # no level_minus1_status key
-        result = route_after_level_minus1_merge(state)
-        self.assertEqual(result, "ask_fix")
+        result = route_after_level_minus1(state)
+        self.assertEqual(result, "ask_level_minus1_fix")
 
 
 class TestFixLevelMinus1Issues:
@@ -328,7 +370,7 @@ class TestFixLevelMinus1Issues:
             "windows_path_check": False,
             "project_root": str(tmp_path),
         }
-        result = fix_level_minus1_issues(state)
+        fix_level_minus1_issues(state)
         # Verify file still has escape sequences intact
         content = py_file.read_text(encoding="utf-8")
         assert "\\n" in content or "hello" in content
