@@ -62,7 +62,8 @@ class GitHubIntegration(AbstractIntegration):
         """
         if self._workflow is None:
             try:
-                from ..level3_steps8to12_github import Level3GitHubWorkflow  # type: ignore[import]
+                from ..level3_execution.steps8to12_github import Level3GitHubWorkflow  # type: ignore[import]
+
                 session_dir = self._config.get("session_dir", ".")
                 repo_path = self._config.get("repo_path", ".")
                 self._workflow = Level3GitHubWorkflow(

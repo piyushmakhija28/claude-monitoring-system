@@ -18,17 +18,19 @@ Implements complete WORKFLOW.md-compliant execution pipeline with proper step or
 - Step 14: Final Summary
 """
 
-import sys
 import json
 import subprocess
+import sys
 from pathlib import Path
 
 from loguru import logger
 
 try:
     import sys as _sys
+
     _sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent / "src"))
-    from utils.path_resolver import get_skills_dir, get_agents_dir
+    from utils.path_resolver import get_agents_dir, get_skills_dir
+
     _LEVEL3_SKILLS_DIR = get_skills_dir()
     _LEVEL3_AGENTS_DIR = get_agents_dir()
 except ImportError:
@@ -36,13 +38,13 @@ except ImportError:
     _LEVEL3_AGENTS_DIR = Path.home() / ".claude" / "agents"
 
 try:
-    from langgraph.graph import StateGraph, START, END
+    from langgraph.graph import END, START, StateGraph
+
     _LANGGRAPH_AVAILABLE = True
 except ImportError:
     _LANGGRAPH_AVAILABLE = False
 
 from ..flow_state import FlowState
-
 
 # ============================================================================
 # SCRIPT EXECUTION HELPER
@@ -63,14 +65,22 @@ def call_execution_script(script_name: str, args: list = None, model_tier: str =
 
     try:
         scripts_dir = Path(__file__).parent.parent.parent
-        script_path = scripts_dir / "architecture" / "03-execution-system" / f"{script_name}.py"
+        # Try new level-based location first
+        script_path = Path(__file__).parent.parent / "level3_execution" / "architecture" / f"{script_name}.py"
+        if not script_path.exists():
+            # Fallback to legacy location
+            script_path = scripts_dir / "architecture" / "03-execution-system" / f"{script_name}.py"
 
         if DEBUG:
             print(f"[L3-DEBUG] Finding script: {script_name}", file=sys.stderr)
 
         # Try variations if exact path not found
         if not script_path.exists():
-            found = list((scripts_dir / "architecture" / "03-execution-system").glob(f"**/{script_name}*.py"))
+            arch_dir = Path(__file__).parent.parent / "level3_execution" / "architecture"
+            found = list(arch_dir.glob(f"**/{script_name}*.py")) if arch_dir.exists() else []
+            if not found:
+                legacy_dir = scripts_dir / "architecture" / "03-execution-system"
+                found = list(legacy_dir.glob(f"**/{script_name}*.py")) if legacy_dir.exists() else []
             if found:
                 script_path = found[0]
             else:
@@ -95,8 +105,8 @@ def call_execution_script(script_name: str, args: list = None, model_tier: str =
             cmd,
             capture_output=True,
             text=True,
-            encoding='utf-8',
-            errors='replace',
+            encoding="utf-8",
+            errors="replace",
             timeout=30,
             cwd=scripts_dir,
             env=env,
@@ -110,16 +120,9 @@ def call_execution_script(script_name: str, args: list = None, model_tier: str =
             try:
                 return json.loads(result.stdout)
             except Exception:
-                return {
-                    "status": "SUCCESS",
-                    "exit_code": result.returncode,
-                    "output": result.stdout[:300]
-                }
+                return {"status": "SUCCESS", "exit_code": result.returncode, "output": result.stdout[:300]}
 
-        return {
-            "status": "SUCCESS" if result.returncode == 0 else "FAILED",
-            "exit_code": result.returncode
-        }
+        return {"status": "SUCCESS" if result.returncode == 0 else "FAILED", "exit_code": result.returncode}
 
     except subprocess.TimeoutExpired:
         return {"status": "TIMEOUT"}
@@ -135,6 +138,7 @@ def call_execution_script(script_name: str, args: list = None, model_tier: str =
 # Step 0: Consolidated Task Analysis (runs BEFORE Step 1)
 # NOTE: Per WORKFLOW.md, there is no Step 0. Task analysis happens in Step 1.
 # This function performs task analysis to feed into Step 1 decision.
+
 
 def step0_task_analysis(state: FlowState) -> dict:
     """Task Analysis - Determines task type, complexity, and breakdown for Step 1.
@@ -172,25 +176,22 @@ def step0_task_analysis(state: FlowState) -> dict:
         "project": {
             "project_root": state.get("project_root", ""),
             "is_java_project": state.get("is_java_project", False),
-        }
+        },
     }
 
     # SDLC Read Phase: Detect project documentation state
-    doc_info = {"is_fresh_project": False, "srs_exists": False,
-                "readme_exists": False, "claude_md_exists": False}
+    doc_info = {"is_fresh_project": False, "srs_exists": False, "readme_exists": False, "claude_md_exists": False}
     try:
-        from ..level3_documentation_manager import Level3DocumentationManager
+        from ..level3_execution.documentation_manager import Level3DocumentationManager
+
         doc_manager = Level3DocumentationManager(
-            project_root=state.get("project_root", "."),
-            session_dir=state.get("session_dir", "")
+            project_root=state.get("project_root", "."), session_dir=state.get("session_dir", "")
         )
         doc_info = doc_manager.detect_project_docs()
 
         # Inject doc summaries into context for better task analysis
         if not doc_info.get("is_fresh_project", False):
-            doc_summaries = doc_manager.summarize_existing_docs(
-                state.get("context_data", {})
-            )
+            doc_summaries = doc_manager.summarize_existing_docs(state.get("context_data", {}))
             if doc_summaries:
                 context_data["documentation"] = doc_summaries
     except Exception:
@@ -236,7 +237,7 @@ def step0_task_analysis(state: FlowState) -> dict:
         "step0_tasks": {
             "count": breakdown_result.get("task_count", 1),
             "tasks": breakdown_result.get("tasks", []),
-            "script_output": breakdown_result
+            "script_output": breakdown_result,
         },
         "step0_task_count": breakdown_result.get("task_count", 1),
         "is_fresh_project": doc_info.get("is_fresh_project", False),
@@ -245,6 +246,7 @@ def step0_task_analysis(state: FlowState) -> dict:
 
 
 # ===== STEP 1: PLAN MODE DECISION =====
+
 
 def step1_plan_mode_decision(state: FlowState) -> dict:
     """Step 1: Plan Mode Decision - Determine if detailed planning is needed.
@@ -284,21 +286,19 @@ def step1_plan_mode_decision(state: FlowState) -> dict:
         "step0_reasoning": reasoning_from_step0,
     }
 
-    args = [
-        "--analyze",
-        f"--context={json.dumps(context_data)}"
-    ]
+    args = ["--analyze", f"--context={json.dumps(context_data)}"]
     result = call_execution_script("auto-plan-mode-suggester", args, model_tier="fast")
 
     return {
         "step1_plan_required": result.get("plan_required", False),
         "step1_reasoning": result.get("reasoning", "Task analysis complete"),
         "step1_complexity_score": result.get("complexity_score", complexity),
-        "step1_context_provided": True  # Mark that context was passed
+        "step1_context_provided": True,  # Mark that context was passed
     }
 
 
 # ===== STEP 2: PLAN EXECUTION (CONDITIONAL) =====
+
 
 def _keyword_plan_fallback(tasks, task_type, complexity):
     """Fallback: group tasks into phases using keyword matching.
@@ -320,53 +320,68 @@ def _keyword_plan_fallback(tasks, task_type, complexity):
         return plan
 
     # Phase 1: Setup/Analysis
-    setup_tasks = [t for t in tasks if isinstance(t, dict) and
-                   any(kw in str(t.get('description', '')).lower()
-                       for kw in ['setup', 'analyze', 'plan', 'review'])]
+    setup_tasks = [
+        t
+        for t in tasks
+        if isinstance(t, dict)
+        and any(kw in str(t.get("description", "")).lower() for kw in ["setup", "analyze", "plan", "review"])
+    ]
     if setup_tasks:
-        plan["phases"].append({
-            "name": "Setup & Analysis",
-            "task_count": len(setup_tasks),
-            "tasks": [t.get('id') if isinstance(t, dict) else str(t) for t in setup_tasks]
-        })
+        plan["phases"].append(
+            {
+                "name": "Setup & Analysis",
+                "task_count": len(setup_tasks),
+                "tasks": [t.get("id") if isinstance(t, dict) else str(t) for t in setup_tasks],
+            }
+        )
 
     # Phase 2: Implementation
-    impl_tasks = [t for t in tasks if isinstance(t, dict) and
-                  any(kw in str(t.get('description', '')).lower()
-                      for kw in ['implement', 'develop', 'build', 'code'])]
+    impl_tasks = [
+        t
+        for t in tasks
+        if isinstance(t, dict)
+        and any(kw in str(t.get("description", "")).lower() for kw in ["implement", "develop", "build", "code"])
+    ]
     if impl_tasks:
-        plan["phases"].append({
-            "name": "Implementation",
-            "task_count": len(impl_tasks),
-            "tasks": [t.get('id') if isinstance(t, dict) else str(t) for t in impl_tasks]
-        })
+        plan["phases"].append(
+            {
+                "name": "Implementation",
+                "task_count": len(impl_tasks),
+                "tasks": [t.get("id") if isinstance(t, dict) else str(t) for t in impl_tasks],
+            }
+        )
 
     # Phase 3: Testing & Review
-    test_tasks = [t for t in tasks if isinstance(t, dict) and
-                  any(kw in str(t.get('description', '')).lower()
-                      for kw in ['test', 'review', 'verify', 'validate'])]
+    test_tasks = [
+        t
+        for t in tasks
+        if isinstance(t, dict)
+        and any(kw in str(t.get("description", "")).lower() for kw in ["test", "review", "verify", "validate"])
+    ]
     if test_tasks:
-        plan["phases"].append({
-            "name": "Testing & Verification",
-            "task_count": len(test_tasks),
-            "tasks": [t.get('id') if isinstance(t, dict) else str(t) for t in test_tasks]
-        })
+        plan["phases"].append(
+            {
+                "name": "Testing & Verification",
+                "task_count": len(test_tasks),
+                "tasks": [t.get("id") if isinstance(t, dict) else str(t) for t in test_tasks],
+            }
+        )
 
     # If no clear phases, use all tasks in one execution phase
     if not plan["phases"]:
-        plan["phases"].append({
-            "name": "Execution",
-            "task_count": len(tasks),
-            "tasks": [t.get('id') if isinstance(t, dict) else str(t) for t in tasks[:10]]
-        })
+        plan["phases"].append(
+            {
+                "name": "Execution",
+                "task_count": len(tasks),
+                "tasks": [t.get("id") if isinstance(t, dict) else str(t) for t in tasks[:10]],
+            }
+        )
 
     # Set milestones at end of each phase
     for phase_num, phase in enumerate(plan["phases"], start=1):
-        plan["milestones"].append({
-            "number": phase_num,
-            "name": "Complete " + phase["name"],
-            "tasks_required": phase["task_count"]
-        })
+        plan["milestones"].append(
+            {"number": phase_num, "name": "Complete " + phase["name"], "tasks_required": phase["task_count"]}
+        )
 
     plan["estimated_steps"] = sum(p["task_count"] for p in plan["phases"])
     return plan
@@ -404,8 +419,8 @@ def step2_plan_execution(state: FlowState) -> dict:
         task_lines = []
         for i, t in enumerate(tasks[:15], start=1):
             if isinstance(t, dict):
-                desc = str(t.get('description', t.get('id', 'Task')))
-                effort = str(t.get('estimated_effort', 'medium'))
+                desc = str(t.get("description", t.get("id", "Task")))
+                effort = str(t.get("estimated_effort", "medium"))
                 task_lines.append("%d. %s [effort: %s]" % (i, desc[:120], effort))
             else:
                 task_lines.append("%d. %s" % (i, str(t)[:120]))
@@ -420,18 +435,18 @@ def step2_plan_execution(state: FlowState) -> dict:
             "User request: %s\n\n"
             "Task type: %s\n"
             "Complexity: %d/10\n\n"
-            "Tasks:\n%s\n\n"
+            "Tasks:/n%s\n\n"
             "Return ONLY valid JSON with this exact structure (no markdown, no explanation):\n"
             "{\n"
-            "  \"phases\": [\n"
-            "    {\"name\": \"Phase Name\", \"tasks\": [\"task id or description\", ...], "
-            "\"task_count\": 3}\n"
+            '  "phases": [\n'
+            '    {"name": "Phase Name", "tasks": ["task id or description", ...], '
+            '"task_count": 3}\n'
             "  ],\n"
-            "  \"milestones\": [\n"
-            "    {\"number\": 1, \"name\": \"Milestone name\", \"tasks_required\": 3}\n"
+            '  "milestones": [\n'
+            '    {"number": 1, "name": "Milestone name", "tasks_required": 3}\n'
             "  ],\n"
-            "  \"estimated_steps\": 10,\n"
-            "  \"summary\": \"One sentence describing the plan\"\n"
+            '  "estimated_steps": 10,\n'
+            '  "summary": "One sentence describing the plan"\n'
             "}"
         ) % (user_msg_snippet, task_type, complexity, task_summary)
 
@@ -457,10 +472,12 @@ def step2_plan_execution(state: FlowState) -> dict:
                 parsed = json.loads(cleaned)
 
                 # Validate that required keys are present
-                if (isinstance(parsed, dict) and
-                        "phases" in parsed and
-                        isinstance(parsed["phases"], list) and
-                        len(parsed["phases"]) > 0):
+                if (
+                    isinstance(parsed, dict)
+                    and "phases" in parsed
+                    and isinstance(parsed["phases"], list)
+                    and len(parsed["phases"]) > 0
+                ):
                     plan = {
                         "task_type": task_type,
                         "complexity": complexity,
@@ -489,16 +506,15 @@ def step2_plan_execution(state: FlowState) -> dict:
         # CallGraph impact analysis (best-effort, enriches plan with risk data)
         impact_analysis = None
         try:
-            from ..call_graph_analyzer import analyze_impact_before_change
+            from ..level3_execution.call_graph_analyzer import analyze_impact_before_change
+
             target_files = []
             for phase in plan.get("phases", []):
                 for t in phase.get("tasks", []):
                     if isinstance(t, dict) and t.get("files"):
                         target_files.extend(t["files"])
             if target_files:
-                impact_analysis = analyze_impact_before_change(
-                    state.get("project_root", "."), target_files
-                )
+                impact_analysis = analyze_impact_before_change(state.get("project_root", "."), target_files)
         except ImportError:
             pass  # CallGraph not available
         except Exception:
@@ -517,14 +533,11 @@ def step2_plan_execution(state: FlowState) -> dict:
         return result
 
     except Exception as e:
-        return {
-            "step2_plan_execution": {"error": str(e)},
-            "step2_plan_status": "ERROR",
-            "step2_error": str(e)
-        }
+        return {"step2_plan_execution": {"error": str(e)}, "step2_plan_status": "ERROR", "step2_error": str(e)}
 
 
 # ===== STEP 3: TASK BREAKDOWN VALIDATION =====
+
 
 def step3_task_breakdown_validation(state: FlowState) -> dict:
     """Step 3: Task Breakdown Validation - Validate and format task breakdown.
@@ -556,30 +569,29 @@ def step3_task_breakdown_validation(state: FlowState) -> dict:
                 validated_tasks.append(task_validated)
             else:
                 # Simple string task
-                validated_tasks.append({
-                    "id": f"task-{i+1}",
-                    "description": str(task),
-                    "files": [],
-                    "dependencies": [],
-                    "estimated_effort": "medium"
-                })
+                validated_tasks.append(
+                    {
+                        "id": f"task-{i+1}",
+                        "description": str(task),
+                        "files": [],
+                        "dependencies": [],
+                        "estimated_effort": "medium",
+                    }
+                )
 
         return {
             "step3_tasks_validated": validated_tasks,
             "step3_task_count": task_count,
             "step3_validation_status": "OK" if not validation_errors else "WARNINGS",
-            "step3_validation_errors": validation_errors
+            "step3_validation_errors": validation_errors,
         }
 
     except Exception as e:
-        return {
-            "step3_task_count": 0,
-            "step3_validation_status": "ERROR",
-            "step3_error": str(e)
-        }
+        return {"step3_task_count": 0, "step3_validation_status": "ERROR", "step3_error": str(e)}
 
 
 # ===== STEP 4: TOON REFINEMENT =====
+
 
 def step4_toon_refinement(state: FlowState) -> dict:
     """Step 4: TOON Refinement - Enhance TOON with FULL task context.
@@ -631,9 +643,7 @@ def step4_toon_refinement(state: FlowState) -> dict:
 
             refined_toon["estimated_files"] = len(task_files)
             refined_toon["has_dependencies"] = len(task_deps) > 0
-            refined_toon["task_descriptions"] = [
-                t.get("description", "") for t in validated_tasks
-            ]
+            refined_toon["task_descriptions"] = [t.get("description", "") for t in validated_tasks]
 
         # Add plan insights
         if plan_details:
@@ -662,11 +672,12 @@ def step4_toon_refinement(state: FlowState) -> dict:
         return {
             "step4_toon_refined": state.get("level1_context_toon", {}),
             "step4_refinement_status": "ERROR",
-            "step4_error": str(e)
+            "step4_error": str(e),
         }
 
 
 # ===== STEP 5: SKILL & AGENT SELECTION =====
+
 
 def step5_skill_agent_selection(state: FlowState) -> dict:
     """Step 5: Skill & Agent Selection - Select perfect skill/agent with FULL context + definitions.
@@ -690,8 +701,8 @@ def step5_skill_agent_selection(state: FlowState) -> dict:
 
     Timeout: enforced at 60s by the v2 _run_step wrapper.
     """
-    from ..skill_agent_loader import get_skill_agent_loader
     from ..deepseek_reasoning import get_deepseek_reasoning
+    from ..skill_agent_loader import get_skill_agent_loader
 
     # Gather ALL context for best skill selection
     user_message = state.get("user_message", "")
@@ -760,16 +771,14 @@ def step5_skill_agent_selection(state: FlowState) -> dict:
         "available_mcps": available_mcps,  # List of discovered MCPs
         "mcp_filesystem_enabled": mcp_filesystem_enabled,  # True if Filesystem MCP available
         # PHASE 2 NEW: Include DeepSeek reasoning if available
-        "deepseek_mcp_reasoning": (
-            deepseek_mcp_reasoning.to_dict() if deepseek_mcp_reasoning else None
-        ),
+        "deepseek_mcp_reasoning": (deepseek_mcp_reasoning.to_dict() if deepseek_mcp_reasoning else None),
         "deepseek_skill_eval": deepseek_skill_eval,
     }
 
     # Pass task_type, complexity, and a SLIM context via temp file
     # (full context with skill definitions is ~800KB, exceeds Windows 32KB cmd line limit)
-    import tempfile
     import os
+    import tempfile
 
     # Detect project type for skill matching
     detected_fw = state.get("detected_framework", "")
@@ -792,7 +801,7 @@ def step5_skill_agent_selection(state: FlowState) -> dict:
     context_file = None
     try:
         fd, context_file = tempfile.mkstemp(suffix=".json", prefix="step5_ctx_")
-        with os.fdopen(fd, 'w', encoding='utf-8') as f:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
             json.dump(slim_context, f)
     except Exception:
         context_file = None
@@ -834,6 +843,7 @@ def step5_skill_agent_selection(state: FlowState) -> dict:
     # --- Cross-session RAG boost: re-rank skills based on historical success ---
     try:
         from ..skill_selection_criteria import _get_rag_skill_boost
+
         task_info = {"task_type": task_type, "complexity": complexity}
         boosted = []
         for sk in selected_skills:
@@ -854,27 +864,32 @@ def step5_skill_agent_selection(state: FlowState) -> dict:
 
     try:
         from ..conflict_resolver import ConflictResolver
+
         session_dir = state.get("session_dir", ".")
         conflict_resolver = ConflictResolver(session_dir=session_dir)
 
         # Build list representation for conflict checks
         candidate_items = []
         if selected_skill_name:
-            candidate_items.append({
-                "name": selected_skill_name,
-                "capabilities": [],
-                "domain": "general",
-                "exclusive": False,
-                "conflicts_with": [],
-            })
+            candidate_items.append(
+                {
+                    "name": selected_skill_name,
+                    "capabilities": [],
+                    "domain": "general",
+                    "exclusive": False,
+                    "conflicts_with": [],
+                }
+            )
         if selected_agent_name:
-            candidate_items.append({
-                "name": selected_agent_name,
-                "capabilities": [],
-                "domain": "general",
-                "exclusive": False,
-                "conflicts_with": [],
-            })
+            candidate_items.append(
+                {
+                    "name": selected_agent_name,
+                    "capabilities": [],
+                    "domain": "general",
+                    "exclusive": False,
+                    "conflicts_with": [],
+                }
+            )
 
         # Resolve conflicts in the selected pair
         if candidate_items:
@@ -888,6 +903,7 @@ def step5_skill_agent_selection(state: FlowState) -> dict:
 
             if skill_conflicts_detected > 0:
                 import logging as _logging
+
                 _logging.getLogger(__name__).warning(
                     f"[Step5] Skill conflicts detected: {skill_conflicts_detected}. "
                     f"Removed: {skill_conflicts_removed}"
@@ -906,9 +922,8 @@ def step5_skill_agent_selection(state: FlowState) -> dict:
 
     except Exception as _conflict_err:
         import logging as _logging
-        _logging.getLogger(__name__).debug(
-            f"[Step5] ConflictResolver unavailable (non-fatal): {_conflict_err}"
-        )
+
+        _logging.getLogger(__name__).debug(f"[Step5] ConflictResolver unavailable (non-fatal): {_conflict_err}")
 
     # Load full definitions for ALL selected skills/agents
     all_skill_defs = []
@@ -957,7 +972,10 @@ def _try_download_skill(skill_name: str, skills_dir: Path) -> bool:
         if sync_script.exists():
             subprocess.run(
                 [sys.executable, str(sync_script), "--skill", skill_name],
-                capture_output=True, text=True, encoding='utf-8', errors='replace',
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
                 timeout=15,
             )
             # Check if file now exists
@@ -979,7 +997,10 @@ def _try_download_agent(agent_name: str, agents_dir: Path) -> bool:
         if sync_script.exists():
             subprocess.run(
                 [sys.executable, str(sync_script), "--agent", agent_name],
-                capture_output=True, text=True, encoding='utf-8', errors='replace',
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
                 timeout=15,
             )
             agent_path = agents_dir / agent_name / "agent.md"
@@ -1004,12 +1025,7 @@ def step6_skill_validation_download(state: FlowState) -> dict:
     skill_name = state.get("step5_skill", "")
     agent_name = state.get("step5_agent", "")
 
-    validation_results = {
-        "skill_exists": False,
-        "agent_exists": False,
-        "downloaded": [],
-        "validation_errors": []
-    }
+    validation_results = {"skill_exists": False, "agent_exists": False, "downloaded": [], "validation_errors": []}
 
     # Check if skill exists
     if skill_name:
@@ -1050,11 +1066,7 @@ def step6_skill_validation_download(state: FlowState) -> dict:
                 )
 
     # NEW: Validate any selected MCPs (MCP Integration Phase 1)
-    mcp_results = {
-        "mcps_validated": {},
-        "mcp_validation_errors": [],
-        "mcp_status": "OK"
-    }
+    mcp_results = {"mcps_validated": {}, "mcp_validation_errors": [], "mcp_status": "OK"}
 
     available_mcps = state.get("mcp_servers_available", [])
     if available_mcps:
@@ -1083,6 +1095,7 @@ def step6_skill_validation_download(state: FlowState) -> dict:
 
 # ===== HELPERS: PROJECT CONTEXT DETECTION =====
 
+
 def _extract_modified_files(llm_response: str, project_root: str = ".") -> list:
     """Extract file paths mentioned in LLM response as modified/created.
 
@@ -1110,35 +1123,35 @@ def _extract_modified_files(llm_response: str, project_root: str = ".") -> list:
     # Pattern 1: Explicit file mentions (File: X, Modified: X, Created: X, Updated: X)
     explicit_re = re.compile(
         r'(?:^|\n)\s*(?:File|Modified|Created|Updated|Edited|Changed|Wrote)\s*[:=]\s*[`"]?([^\s`"]+\.\w{1,5})[`"]?',
-        re.IGNORECASE
+        re.IGNORECASE,
     )
     for m in explicit_re.finditer(llm_response):
         found.add(m.group(1))
 
     # Pattern 2: Code block headers (```lang path/to/file.ext)
-    codeblock_re = re.compile(r'```\w*\s+([^\s`]+\.\w{1,5})')
+    codeblock_re = re.compile(r"```\w*\s+([^\s`]+\.\w{1,5})")
     for m in codeblock_re.finditer(llm_response):
         found.add(m.group(1))
 
     # Pattern 3: Path-like strings with common extensions
     path_re = re.compile(
         r'(?:^|\s|[`"\'])(\S*?/\S+\.(?:py|js|ts|jsx|tsx|java|go|rs|cpp|c|h|md|json|yaml|yml|toml|cfg|html|css|scss))\b',
-        re.IGNORECASE
+        re.IGNORECASE,
     )
     for m in path_re.finditer(llm_response):
-        candidate = m.group(1).strip('`"\'()[]{}')
-        if '/' in candidate and len(candidate) < 200:
+        candidate = m.group(1).strip("`\"'()[]{}")
+        if "/" in candidate and len(candidate) < 200:
             found.add(candidate)
 
     # Filter: remove obvious non-files (URLs, imports, etc.)
     filtered = []
     for f in found:
-        if f.startswith('http') or f.startswith('//') or f.startswith('#'):
+        if f.startswith("http") or f.startswith("//") or f.startswith("#"):
             continue
-        if '..' in f and '/' not in f:
+        if ".." in f and "/" not in f:
             continue
         # Normalize backslashes
-        f = f.replace('\\', '/')
+        f = f.replace("\\", "/")
         filtered.append(f)
 
     # Deduplicate and limit
@@ -1152,6 +1165,7 @@ def _detect_project_type_from_files(project_root: str) -> str:
     instead of returning a generic "Python/Node/Other".
     """
     from pathlib import Path
+
     root = Path(project_root) if project_root else Path(".")
     if not root.exists():
         return "Unknown"
@@ -1182,7 +1196,8 @@ def _detect_project_type_from_files(project_root: str) -> str:
                 if f == "package.json":
                     try:
                         import json as _json
-                        pkg = _json.loads((root / f).read_text(encoding='utf-8'))
+
+                        pkg = _json.loads((root / f).read_text(encoding="utf-8"))
                         deps = {**pkg.get("dependencies", {}), **pkg.get("devDependencies", {})}
                         if "react" in deps:
                             return "React"
@@ -1198,7 +1213,7 @@ def _detect_project_type_from_files(project_root: str) -> str:
                     try:
                         req_text = ""
                         if (root / "requirements.txt").exists():
-                            req_text = (root / "requirements.txt").read_text(encoding='utf-8').lower()
+                            req_text = (root / "requirements.txt").read_text(encoding="utf-8").lower()
                         if "flask" in req_text:
                             return "Python/Flask"
                         if "django" in req_text:
@@ -1220,6 +1235,7 @@ def _read_project_context_snippets(project_root: str, max_chars: int = 1500) -> 
     Returns (readme_snippet, srs_snippet) - each max_chars long.
     """
     from pathlib import Path
+
     root = Path(project_root) if project_root else Path(".")
     readme_snippet = ""
     srs_snippet = ""
@@ -1232,7 +1248,7 @@ def _read_project_context_snippets(project_root: str, max_chars: int = 1500) -> 
         readme_file = root / readme_name
         if readme_file.exists():
             try:
-                content = readme_file.read_text(encoding='utf-8', errors='ignore')
+                content = readme_file.read_text(encoding="utf-8", errors="ignore")
                 readme_snippet = content[:max_chars]
                 if len(content) > max_chars:
                     readme_snippet += "\n... (truncated)"
@@ -1245,7 +1261,7 @@ def _read_project_context_snippets(project_root: str, max_chars: int = 1500) -> 
         srs_file = root / srs_name
         if srs_file.exists():
             try:
-                content = srs_file.read_text(encoding='utf-8', errors='ignore')
+                content = srs_file.read_text(encoding="utf-8", errors="ignore")
                 srs_snippet = content[:max_chars]
                 if len(content) > max_chars:
                     srs_snippet += "\n... (truncated)"
@@ -1257,6 +1273,7 @@ def _read_project_context_snippets(project_root: str, max_chars: int = 1500) -> 
 
 
 # ===== STEP 7: FINAL PROMPT GENERATION =====
+
 
 def step7_final_prompt_generation(state: FlowState) -> dict:
     """Step 7: Final Prompt Generation - Compose COMPLETE execution prompt with SYSTEM PROMPT.
@@ -1309,7 +1326,7 @@ def step7_final_prompt_generation(state: FlowState) -> dict:
         system_prompt_lines.append("## ANALYSIS")
         task_type = state.get("step0_task_type", "General")
         complexity = state.get("step0_complexity", 5)
-        reasoning = state.get('step0_reasoning', 'N/A')[:200]
+        reasoning = state.get("step0_reasoning", "N/A")[:200]
         system_prompt_lines.append(f"- Type: {task_type}")
         system_prompt_lines.append(f"- Complexity: {complexity}/10")
         system_prompt_lines.append(f"- Reasoning: {reasoning}")
@@ -1325,9 +1342,9 @@ def step7_final_prompt_generation(state: FlowState) -> dict:
         if tasks_to_show:
             for i, task in enumerate(tasks_to_show[:10], 1):  # Show all 10 tasks
                 if isinstance(task, dict):
-                    desc = task.get('description', task.get('id', 'Task'))
-                    effort = task.get('estimated_effort', 'medium')
-                    files = task.get('files', [])
+                    desc = task.get("description", task.get("id", "Task"))
+                    effort = task.get("estimated_effort", "medium")
+                    files = task.get("files", [])
                     system_prompt_lines.append(f"\n  {i}. {desc}")
                     system_prompt_lines.append(f"     Effort: {effort}")
                     if files:
@@ -1479,13 +1496,13 @@ def step7_final_prompt_generation(state: FlowState) -> dict:
             user_message_file = Path(session_path) / "user_message.txt"
             combined_prompt_file = Path(session_path) / "prompt.txt"
 
-            with open(system_prompt_file, 'w', encoding='utf-8') as f:
+            with open(system_prompt_file, "w", encoding="utf-8") as f:
                 f.write(system_prompt)
 
-            with open(user_message_file, 'w', encoding='utf-8') as f:
+            with open(user_message_file, "w", encoding="utf-8") as f:
                 f.write(user_message)
 
-            with open(combined_prompt_file, 'w', encoding='utf-8') as f:
+            with open(combined_prompt_file, "w", encoding="utf-8") as f:
                 f.write(combined_prompt)
 
             return {
@@ -1509,19 +1526,14 @@ def step7_final_prompt_generation(state: FlowState) -> dict:
                 },
             }
         else:
-            return {
-                "step7_prompt_saved": False,
-                "step7_error": "No session_dir available"
-            }
+            return {"step7_prompt_saved": False, "step7_error": "No session_dir available"}
 
     except Exception as e:
-        return {
-            "step7_prompt_saved": False,
-            "step7_error": str(e)
-        }
+        return {"step7_prompt_saved": False, "step7_error": str(e)}
 
 
 # ===== HELPER: LLM-BASED ISSUE TITLE GENERATION =====
+
 
 def _generate_issue_title(user_message: str, task_type: str, complexity: int) -> str:
     """Generate a short, descriptive GitHub issue title from user message using Ollama.
@@ -1551,6 +1563,7 @@ def _generate_issue_title(user_message: str, task_type: str, complexity: int) ->
     # Use shared LLM call (Ollama -> Claude CLI fallback)
     try:
         from ..llm_call import llm_call
+
         llm_title = llm_call(prompt, model="fast", temperature=0.3, timeout=30)
         if llm_title:
             llm_title = llm_title.strip().strip('"').strip("'").split("\n")[0].strip()
@@ -1572,14 +1585,16 @@ def _slugify_title(title: str, max_len: int = 50) -> str:
     Example: 'Fix authentication bug in dashboard' -> 'fix-authentication-bug-in-dashboard'
     """
     import re
+
     slug = title.lower().strip()
-    slug = re.sub(r'[^a-z0-9\s-]', '', slug)
-    slug = re.sub(r'[\s_]+', '-', slug)
-    slug = re.sub(r'-+', '-', slug).strip('-')
-    return slug[:max_len].rstrip('-')
+    slug = re.sub(r"[^a-z0-9\s-]", "", slug)
+    slug = re.sub(r"[\s_]+", "-", slug)
+    slug = re.sub(r"-+", "-", slug).strip("-")
+    return slug[:max_len].rstrip("-")
 
 
 # ===== STEP 8: GITHUB ISSUE CREATION (NEW) =====
+
 
 def step8_github_issue_creation(state: FlowState) -> dict:
     """Step 8: GitHub Issue Creation - Create GitHub issue for tracking.
@@ -1686,17 +1701,11 @@ def step8_github_issue_creation(state: FlowState) -> dict:
 
         # Use Level3GitHubWorkflow for real GitHub issue creation
         try:
-            from ..level3_steps8to12_github import Level3GitHubWorkflow
+            from ..level3_execution.steps8to12_github import Level3GitHubWorkflow
 
-            workflow = Level3GitHubWorkflow(
-                session_dir=session_path or ".",
-                repo_path=project_root
-            )
+            workflow = Level3GitHubWorkflow(session_dir=session_path or ".", repo_path=project_root)
             result = workflow.step8_create_issue(
-                title=title,
-                description=body,
-                task_summary=user_msg,
-                implementation_plan=plan_text
+                title=title, description=body, task_summary=user_msg, implementation_plan=plan_text
             )
 
             if result.get("success"):
@@ -1706,7 +1715,7 @@ def step8_github_issue_creation(state: FlowState) -> dict:
                     "step8_issue_created": True,
                     "step8_title": title,
                     "step8_label": result.get("label", task_type),
-                    "step8_status": "OK"
+                    "step8_status": "OK",
                 }
             else:
                 logger.warning(f"GitHub issue creation failed: {result.get('error')}. Using fallback.")
@@ -1721,18 +1730,15 @@ def step8_github_issue_creation(state: FlowState) -> dict:
             "step8_issue_created": False,
             "step8_title": title,
             "step8_label": task_type,
-            "step8_status": "FALLBACK"
+            "step8_status": "FALLBACK",
         }
 
     except Exception as e:
-        return {
-            "step8_issue_created": False,
-            "step8_status": "ERROR",
-            "step8_error": str(e)
-        }
+        return {"step8_issue_created": False, "step8_status": "ERROR", "step8_error": str(e)}
 
 
 # ===== STEP 9: BRANCH CREATION (NEW) =====
+
 
 def step9_branch_creation(state: FlowState) -> dict:
     """Step 9: Branch Creation - Create feature branch for implementation.
@@ -1761,24 +1767,15 @@ def step9_branch_creation(state: FlowState) -> dict:
         # Skip branch creation if no real issue was created (issue_id=0 means fallback)
         if issue_id == "0" or not state.get("step8_issue_created", False):
             logger.info("Step 9: Skipping branch creation - no GitHub issue created (issue_id=0)")
-            return {
-                "step9_branch_name": "",
-                "step9_branch_created": False,
-                "step9_status": "SKIPPED"
-            }
+            return {"step9_branch_name": "", "step9_branch_created": False, "step9_status": "SKIPPED"}
 
         # Use Level3GitHubWorkflow for real branch creation
         try:
-            from ..level3_steps8to12_github import Level3GitHubWorkflow
+            from ..level3_execution.steps8to12_github import Level3GitHubWorkflow
 
-            workflow = Level3GitHubWorkflow(
-                session_dir=session_path,
-                repo_path=project_root
-            )
+            workflow = Level3GitHubWorkflow(session_dir=session_path, repo_path=project_root)
             result = workflow.step9_create_branch(
-                issue_number=int(issue_id) if issue_id.isdigit() else 0,
-                label=branch_label,
-                session_dir=session_path
+                issue_number=int(issue_id) if issue_id.isdigit() else 0, label=branch_label, session_dir=session_path
             )
 
             if result.get("success"):
@@ -1786,7 +1783,7 @@ def step9_branch_creation(state: FlowState) -> dict:
                     "step9_branch_name": result.get("branch_name", ""),
                     "step9_branch_created": True,
                     "step9_conflict_detected": result.get("conflict_detected", False),
-                    "step9_status": "OK"
+                    "step9_status": "OK",
                 }
             else:
                 logger.warning(f"Branch creation failed: {result.get('error')}. Using fallback.")
@@ -1796,21 +1793,14 @@ def step9_branch_creation(state: FlowState) -> dict:
 
         # Fallback: return branch name without actually creating it
         branch_name = f"{branch_label}/issue-{issue_id}"
-        return {
-            "step9_branch_name": branch_name,
-            "step9_branch_created": False,
-            "step9_status": "FALLBACK"
-        }
+        return {"step9_branch_name": branch_name, "step9_branch_created": False, "step9_status": "FALLBACK"}
 
     except Exception as e:
-        return {
-            "step9_branch_created": False,
-            "step9_status": "ERROR",
-            "step9_error": str(e)
-        }
+        return {"step9_branch_created": False, "step9_status": "ERROR", "step9_error": str(e)}
 
 
 # ===== STEP 10: IMPLEMENTATION EXECUTION (NEW) =====
+
 
 def step10_implementation_execution(state: FlowState) -> dict:
     """Step 10: Implementation Execution - Execute tasks using system prompt context.
@@ -1861,7 +1851,7 @@ def step10_implementation_execution(state: FlowState) -> dict:
 
             if system_prompt_file.exists():
                 try:
-                    system_prompt = system_prompt_file.read_text(encoding='utf-8')
+                    system_prompt = system_prompt_file.read_text(encoding="utf-8")
                     system_prompt_loaded = True
                     logger.info(f"Loaded system prompt from {system_prompt_file} ({len(system_prompt)} bytes)")
                 except Exception as e:
@@ -1869,7 +1859,7 @@ def step10_implementation_execution(state: FlowState) -> dict:
 
             if user_message_file.exists():
                 try:
-                    user_message = user_message_file.read_text(encoding='utf-8')
+                    user_message = user_message_file.read_text(encoding="utf-8")
                     user_message_loaded = True
                     logger.info(f"Loaded user message from {user_message_file} ({len(user_message)} bytes)")
                 except Exception as e:
@@ -1911,7 +1901,8 @@ def step10_implementation_execution(state: FlowState) -> dict:
         pre_change_graph = None
         call_context = None
         try:
-            from ..call_graph_analyzer import snapshot_call_graph, get_implementation_context
+            from ..level3_execution.call_graph_analyzer import get_implementation_context, snapshot_call_graph
+
             project_root = state.get("project_root", ".")
             pre_change_graph = snapshot_call_graph(project_root)
             target_files = state.get("step0_target_files", [])
@@ -1938,7 +1929,7 @@ def step10_implementation_execution(state: FlowState) -> dict:
                 result = manager.invoke(
                     step="step10_implementation_execution",
                     prompt=user_message,
-                    system_prompt=system_prompt  # Phase 2: Pass full context as system prompt
+                    system_prompt=system_prompt,  # Phase 2: Pass full context as system prompt
                 )
 
                 if result.get("status") == "ok":
@@ -1969,12 +1960,12 @@ def step10_implementation_execution(state: FlowState) -> dict:
             "step10_system_prompt_size": len(system_prompt) if system_prompt else 0,
             "step10_user_message_loaded": user_message_loaded,
             "step10_user_message_size": len(user_message) if user_message else 0,
-
             # LLM Invocation Status
             "step10_llm_invoked": llm_invoked,
             "step10_llm_response_length": len(llm_response) if llm_response else 0,
-            "step10_llm_response_preview": (llm_response[:200] + "...") if llm_response and len(llm_response) > 200 else llm_response,
-
+            "step10_llm_response_preview": (
+                (llm_response[:200] + "...") if llm_response and len(llm_response) > 200 else llm_response
+            ),
             # Implementation Results
             "step10_tasks_executed": task_count,
             "step10_modified_files": modified_files,
@@ -1985,10 +1976,8 @@ def step10_implementation_execution(state: FlowState) -> dict:
                 "llm_response_captured": llm_invoked,
                 "system_prompt_used": system_prompt_loaded,
             },
-
             # Full response (for debugging)
             "step10_llm_full_response": llm_response if llm_response else "[No LLM response]",
-
             # CallGraph data (for Step 11 diff)
             "step10_pre_change_graph": pre_change_graph,
             "step10_call_context": call_context,
@@ -2006,6 +1995,7 @@ def step10_implementation_execution(state: FlowState) -> dict:
 
 
 # ===== STEP 11: PULL REQUEST & CODE REVIEW (NEW) =====
+
 
 def step11_pull_request_review(state: FlowState) -> dict:
     """Step 11: Pull Request & Code Review - Create PR and run automated checks.
@@ -2038,7 +2028,7 @@ def step11_pull_request_review(state: FlowState) -> dict:
                 "step11_review_issues": [],
                 "step11_merged": False,
                 "step11_retry_count": 0,
-                "step11_status": "SKIPPED"
+                "step11_status": "SKIPPED",
             }
 
         session_path = state.get("session_dir") or os.environ.get("CLAUDE_SESSION_PATH", ".")
@@ -2064,19 +2054,16 @@ def step11_pull_request_review(state: FlowState) -> dict:
 
         # Use Level3GitHubWorkflow for real PR creation & review
         try:
-            from ..level3_steps8to12_github import Level3GitHubWorkflow
+            from ..level3_execution.steps8to12_github import Level3GitHubWorkflow
 
-            workflow = Level3GitHubWorkflow(
-                session_dir=session_path,
-                repo_path=project_root
-            )
+            workflow = Level3GitHubWorkflow(session_dir=session_path, repo_path=project_root)
             result = workflow.step11_create_pull_request(
                 issue_number=int(issue_id) if issue_id.isdigit() else 0,
                 branch_name=branch_name,
                 changes_summary=summary_text,
                 auto_merge=True,
                 selected_skills=selected_skills,
-                selected_agents=selected_agents
+                selected_agents=selected_agents,
             )
 
             if result.get("success"):
@@ -2087,7 +2074,7 @@ def step11_pull_request_review(state: FlowState) -> dict:
                     "step11_review_issues": result.get("review_issues", []),
                     "step11_merged": result.get("merged", False),
                     "step11_retry_count": retry_count,
-                    "step11_status": "OK"
+                    "step11_status": "OK",
                 }
             else:
                 logger.warning(f"PR creation failed: {result.get('error')}. Using fallback.")
@@ -2098,12 +2085,11 @@ def step11_pull_request_review(state: FlowState) -> dict:
         # CallGraph: post-change impact review (best-effort)
         impact_review = None
         try:
-            from ..call_graph_analyzer import review_change_impact
+            from ..level3_execution.call_graph_analyzer import review_change_impact
+
             pre_graph = state.get("step10_pre_change_graph")
             if pre_graph:
-                impact_review = review_change_impact(
-                    project_root, pre_graph, modified_files
-                )
+                impact_review = review_change_impact(project_root, pre_graph, modified_files)
         except ImportError:
             pass
         except Exception:
@@ -2117,21 +2103,18 @@ def step11_pull_request_review(state: FlowState) -> dict:
             "step11_review_issues": ["GitHub integration unavailable - review skipped"],
             "step11_merged": False,
             "step11_retry_count": retry_count,
-            "step11_status": "FALLBACK"
+            "step11_status": "FALLBACK",
         }
         if impact_review:
             result["step11_impact_review"] = impact_review
         return result
 
     except Exception as e:
-        return {
-            "step11_review_passed": False,
-            "step11_status": "ERROR",
-            "step11_error": str(e)
-        }
+        return {"step11_review_passed": False, "step11_status": "ERROR", "step11_error": str(e)}
 
 
 # ===== STEP 12: ISSUE CLOSURE (NEW) =====
+
 
 def step12_issue_closure(state: FlowState) -> dict:
     """Step 12: Issue Closure - Close GitHub issue after implementation.
@@ -2148,11 +2131,7 @@ def step12_issue_closure(state: FlowState) -> dict:
         # Skip if no issue was created
         if not state.get("step8_issue_created", False) or state.get("step8_issue_id", "0") == "0":
             logger.info("Step 12: Skipping issue closure - no issue was created")
-            return {
-                "step12_issue_closed": False,
-                "step12_closing_comment": "",
-                "step12_status": "SKIPPED"
-            }
+            return {"step12_issue_closed": False, "step12_closing_comment": "", "step12_status": "SKIPPED"}
         import os
 
         issue_id = state.get("step8_issue_id", "0")
@@ -2172,12 +2151,9 @@ def step12_issue_closure(state: FlowState) -> dict:
 
         # Use Level3GitHubWorkflow for real issue closure
         try:
-            from ..level3_steps8to12_github import Level3GitHubWorkflow
+            from ..level3_execution.steps8to12_github import Level3GitHubWorkflow
 
-            workflow = Level3GitHubWorkflow(
-                session_dir=session_path,
-                repo_path=project_root
-            )
+            workflow = Level3GitHubWorkflow(session_dir=session_path, repo_path=project_root)
             result = workflow.step12_close_issue(
                 issue_number=int(issue_id) if issue_id.isdigit() else 0,
                 pr_number=int(pr_id) if pr_id.isdigit() else 0,
@@ -2185,8 +2161,8 @@ def step12_issue_closure(state: FlowState) -> dict:
                 approach_taken=approach,
                 verification_steps=[
                     "Code review passed" if review_passed else "Code review pending",
-                    f"PR: {pr_url}" if pr_url else "PR not created"
-                ]
+                    f"PR: {pr_url}" if pr_url else "PR not created",
+                ],
             )
 
             if result.get("success"):
@@ -2205,7 +2181,7 @@ def step12_issue_closure(state: FlowState) -> dict:
                 return {
                     "step12_issue_closed": True,
                     "step12_closing_comment": f"Issue #{issue_id} closed via PR #{pr_id}",
-                    "step12_status": "OK"
+                    "step12_status": "OK",
                 }
             else:
                 logger.warning(f"Issue closure failed: {result.get('error')}. Using fallback.")
@@ -2221,21 +2197,14 @@ Status: {'Passed' if review_passed else 'Needs Work'}
 
 See PR for details."""
 
-        return {
-            "step12_issue_closed": False,
-            "step12_closing_comment": closing_comment,
-            "step12_status": "FALLBACK"
-        }
+        return {"step12_issue_closed": False, "step12_closing_comment": closing_comment, "step12_status": "FALLBACK"}
 
     except Exception as e:
-        return {
-            "step12_issue_closed": False,
-            "step12_status": "ERROR",
-            "step12_error": str(e)
-        }
+        return {"step12_issue_closed": False, "step12_status": "ERROR", "step12_error": str(e)}
 
 
 # ===== STEP 13: PROJECT DOCUMENTATION UPDATE =====
+
 
 def step13_project_documentation_update(state: FlowState) -> dict:
     """Step 13: Documentation - CREATE for new projects, UPDATE for existing.
@@ -2247,11 +2216,11 @@ def step13_project_documentation_update(state: FlowState) -> dict:
     from pathlib import Path
 
     try:
-        from ..level3_documentation_manager import Level3DocumentationManager
+        from ..level3_execution.documentation_manager import Level3DocumentationManager
 
         manager = Level3DocumentationManager(
             project_root=state.get("project_root", "."),
-            session_dir=state.get("session_dir", "") or state.get("session_path", "")
+            session_dir=state.get("session_dir", "") or state.get("session_path", ""),
         )
 
         is_fresh = state.get("is_fresh_project", False)
@@ -2265,6 +2234,7 @@ def step13_project_documentation_update(state: FlowState) -> dict:
         uml_diagrams_generated = []
         try:
             from ..uml_generators import UmlGenerators
+
             uml_gen = UmlGenerators(
                 project_root=state.get("project_root", "."),
                 output_dir=str(Path(state.get("project_root", ".")) / "docs" / "uml"),
@@ -2289,12 +2259,12 @@ def step13_project_documentation_update(state: FlowState) -> dict:
                 task_type = state.get("step0_task_type", "Unknown")
                 complexity = state.get("step0_complexity", 5)
                 content = "# Execution Documentation\n\n"
-                content += "**Generated**: %s\n\n" % __import__('datetime').datetime.now().isoformat()
+                content += "**Generated**: %s\n\n" % __import__("datetime").datetime.now().isoformat()
                 content += "- Task Type: %s\n" % task_type
                 content += "- Complexity: %d/10\n" % complexity
                 content += "- Documentation Status: %s\n" % result.get("step13_documentation_status", "OK")
                 content += "- Files Updated: %s\n" % ", ".join(result.get("step13_updated_files", []))
-                doc_file.write_text(content, encoding='utf-8')
+                doc_file.write_text(content, encoding="utf-8")
             except Exception:
                 pass  # Audit file is non-critical
 
@@ -2308,14 +2278,11 @@ def step13_project_documentation_update(state: FlowState) -> dict:
         }
 
     except Exception as e:
-        return {
-            "step13_updates_prepared": False,
-            "step13_documentation_status": "ERROR",
-            "step13_error": str(e)
-        }
+        return {"step13_updates_prepared": False, "step13_documentation_status": "ERROR", "step13_error": str(e)}
 
 
 # ===== STEP 14: FINAL SUMMARY GENERATION =====
+
 
 def step14_final_summary_generation(state: FlowState) -> dict:
     """Step 14: Final Summary Generation - Generate execution summary.
@@ -2364,7 +2331,7 @@ def step14_final_summary_generation(state: FlowState) -> dict:
         if session_dir:
             try:
                 summary_file = Path(session_dir) / "execution-summary.txt"
-                summary_file.write_text(summary_text, encoding='utf-8')
+                summary_file.write_text(summary_text, encoding="utf-8")
                 summary_saved = True
                 logger.info(f"Summary saved to {summary_file}")
             except Exception as save_err:
@@ -2386,6 +2353,7 @@ def step14_final_summary_generation(state: FlowState) -> dict:
 
         try:
             import subprocess
+
             voice_script = Path(__file__).parent.parent.parent / "voice-notifier.py"
             if voice_script.exists():
                 result = subprocess.run(
@@ -2393,7 +2361,7 @@ def step14_final_summary_generation(state: FlowState) -> dict:
                     timeout=60,  # generous: Coqui TTS needs time for model load + generation
                     capture_output=True,
                 )
-                voice_sent = (result.returncode == 0)
+                voice_sent = result.returncode == 0
                 if not voice_sent:
                     logger.debug(f"Voice exited with code {result.returncode}")
         except subprocess.TimeoutExpired:
@@ -2405,14 +2373,11 @@ def step14_final_summary_generation(state: FlowState) -> dict:
             "step14_summary": summary,
             "step14_summary_saved": summary_saved,
             "step14_voice_sent": voice_sent,
-            "step14_status": "OK"
+            "step14_status": "OK",
         }
 
     except Exception as e:
-        return {
-            "step14_status": "ERROR",
-            "step14_error": str(e)
-        }
+        return {"step14_status": "ERROR", "step14_error": str(e)}
 
 
 def _build_summary_text(summary: dict, state) -> str:
@@ -2433,8 +2398,8 @@ def _build_summary_text(summary: dict, state) -> str:
     lines.append(f"  Plan Used:  {'Yes' if summary.get('plan_used') else 'No'}")
     lines.append("")
 
-    skill = summary.get('skill_selected', '')
-    agent = summary.get('agent_selected', '')
+    skill = summary.get("skill_selected", "")
+    agent = summary.get("agent_selected", "")
     if skill or agent:
         lines.append("  Resources:")
         if skill:
@@ -2443,14 +2408,14 @@ def _build_summary_text(summary: dict, state) -> str:
             lines.append(f"    Agent: {agent}")
         lines.append("")
 
-    if summary.get('issue_created'):
+    if summary.get("issue_created"):
         lines.append(f"  Issue:  {summary.get('issue_url', 'created')}")
-    if summary.get('pr_url'):
+    if summary.get("pr_url"):
         lines.append(f"  PR:     {summary.get('pr_url')}")
         lines.append(f"  Merged: {'Yes' if summary.get('pr_merged') else 'No'}")
     lines.append("")
 
-    modified = summary.get('modified_files_list', [])
+    modified = summary.get("modified_files_list", [])
     if modified:
         lines.append(f"  Files Modified ({len(modified)}):")
         for f in modified[:10]:
@@ -2605,10 +2570,7 @@ def create_level3_subgraph():
     graph.add_conditional_edges(
         "step1_decision",
         route_after_step1_plan_decision,
-        {
-            "step2_execution": "step2_execution",
-            "step3_breakdown": "step3_breakdown"
-        }
+        {"step2_execution": "step2_execution", "step3_breakdown": "step3_breakdown"},
     )
 
     # Step 2 → Step 3 (Plan Execution leads to Task Breakdown)
@@ -2631,10 +2593,7 @@ def create_level3_subgraph():
     graph.add_conditional_edges(
         "step11_review",
         route_after_step11_review,
-        {
-            "step12_closure": "step12_closure",
-            "step10_implementation": "step10_implementation"
-        }
+        {"step12_closure": "step12_closure", "step10_implementation": "step10_implementation"},
     )
 
     # Sequential path: Step 12 → 13 → 14

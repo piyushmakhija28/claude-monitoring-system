@@ -32,22 +32,16 @@ from typing import Any, Dict, List, Optional
 logger = logging.getLogger(__name__)
 
 # Directories to skip during file discovery.
-_SKIP_DIRS = {
-    ".venv", "venv", "__pycache__", ".git", "node_modules", "dist", "build"
-}
+_SKIP_DIRS = {".venv", "venv", "__pycache__", ".git", "node_modules", "dist", "build"}
 
 # Compiled regex patterns (module-level to avoid recompiling per file).
 _RE_BARE_EXCEPT = re.compile(r"^\s*except\s*:")
 _RE_EVAL_EXEC = re.compile(r"\beval\s*\(|\bexec\s*\(")
-_RE_CREDENTIALS = re.compile(
-    r"(?i)(password|passwd|secret|api_key|apikey|token|auth)\s*=\s*[\"'][^\"']{4,}[\"']"
-)
+_RE_CREDENTIALS = re.compile(r"(?i)(password|passwd|secret|api_key|apikey|token|auth)\s*=\s*[\"'][^\"']{4,}[\"']")
 _RE_TODO = re.compile(r"#\s*(TODO|FIXME|HACK)\b", re.IGNORECASE)
 
 
-def _scan_file_lines(
-    rel_path: str, lines: List[str]
-) -> List[Dict[str, Any]]:
+def _scan_file_lines(rel_path: str, lines: List[str]) -> List[Dict[str, Any]]:
     """Run line-by-line regex checks on a single file.
 
     Args:
@@ -61,72 +55,73 @@ def _scan_file_lines(
 
     for lineno, raw_line in enumerate(lines, start=1):
         if _RE_BARE_EXCEPT.match(raw_line):
-            findings.append({
-                "file": rel_path,
-                "line": lineno,
-                "severity": "MAJOR",
-                "type": "BUG",
-                "rule": "python:bare-except",
-                "message": (
-                    "Bare 'except:' clause catches all exceptions "
-                    "including SystemExit"
-                ),
-                "status": "",
-                "effort": "",
-                "debt": "",
-                "tags": [],
-            })
+            findings.append(
+                {
+                    "file": rel_path,
+                    "line": lineno,
+                    "severity": "MAJOR",
+                    "type": "BUG",
+                    "rule": "python:bare-except",
+                    "message": ("Bare 'except:' clause catches all exceptions " "including SystemExit"),
+                    "status": "",
+                    "effort": "",
+                    "debt": "",
+                    "tags": [],
+                }
+            )
 
         if _RE_EVAL_EXEC.search(raw_line):
-            findings.append({
-                "file": rel_path,
-                "line": lineno,
-                "severity": "CRITICAL",
-                "type": "VULNERABILITY",
-                "rule": "python:eval-exec",
-                "message": "Use of eval()/exec() is a security risk",
-                "status": "",
-                "effort": "",
-                "debt": "",
-                "tags": ["security"],
-            })
+            findings.append(
+                {
+                    "file": rel_path,
+                    "line": lineno,
+                    "severity": "CRITICAL",
+                    "type": "VULNERABILITY",
+                    "rule": "python:eval-exec",
+                    "message": "Use of eval()/exec() is a security risk",
+                    "status": "",
+                    "effort": "",
+                    "debt": "",
+                    "tags": ["security"],
+                }
+            )
 
         if _RE_CREDENTIALS.search(raw_line):
-            findings.append({
-                "file": rel_path,
-                "line": lineno,
-                "severity": "BLOCKER",
-                "type": "VULNERABILITY",
-                "rule": "python:hardcoded-credentials",
-                "message": "Potential hardcoded credential or secret detected",
-                "status": "",
-                "effort": "",
-                "debt": "",
-                "tags": ["security", "credentials"],
-            })
+            findings.append(
+                {
+                    "file": rel_path,
+                    "line": lineno,
+                    "severity": "BLOCKER",
+                    "type": "VULNERABILITY",
+                    "rule": "python:hardcoded-credentials",
+                    "message": "Potential hardcoded credential or secret detected",
+                    "status": "",
+                    "effort": "",
+                    "debt": "",
+                    "tags": ["security", "credentials"],
+                }
+            )
 
         if _RE_TODO.search(raw_line):
-            findings.append({
-                "file": rel_path,
-                "line": lineno,
-                "severity": "INFO",
-                "type": "CODE_SMELL",
-                "rule": "python:todo-comment",
-                "message": "TODO/FIXME/HACK comment: {}".format(
-                    raw_line.strip()[:100]
-                ),
-                "status": "",
-                "effort": "",
-                "debt": "",
-                "tags": [],
-            })
+            findings.append(
+                {
+                    "file": rel_path,
+                    "line": lineno,
+                    "severity": "INFO",
+                    "type": "CODE_SMELL",
+                    "rule": "python:todo-comment",
+                    "message": "TODO/FIXME/HACK comment: {}".format(raw_line.strip()[:100]),
+                    "status": "",
+                    "effort": "",
+                    "debt": "",
+                    "tags": [],
+                }
+            )
 
     return findings
 
 
-def _scan_file_ast(
-    rel_path: str, source: str, lines: List[str]
-) -> List[Dict[str, Any]]:
+def _scan_file_ast(rel_path: str, source: str, lines: List[str]) -> List[Dict[str, Any]]:
     """Run AST-based checks on a single file.
 
     Checks:
@@ -148,9 +143,7 @@ def _scan_file_ast(
     try:
         tree = ast.parse(source, filename=rel_path)
     except SyntaxError:
-        logger.debug(
-            "Syntax error in %s; skipping AST checks", rel_path
-        )
+        logger.debug("Syntax error in %s; skipping AST checks", rel_path)
         return findings
 
     # -- Unused imports --
@@ -158,10 +151,7 @@ def _scan_file_ast(
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
-                bound_name = (
-                    alias.asname if alias.asname
-                    else alias.name.split(".")[0]
-                )
+                bound_name = alias.asname if alias.asname else alias.name.split(".")[0]
                 import_names[bound_name] = node.lineno
         elif isinstance(node, ast.ImportFrom):
             for alias in node.names:
@@ -170,27 +160,23 @@ def _scan_file_ast(
                     import_names[bound_name] = node.lineno
 
     for name, imp_lineno in import_names.items():
-        other_lines = [
-            line for idx, line in enumerate(lines, 1)
-            if idx != imp_lineno
-        ]
-        usage_count = sum(
-            1 for line in other_lines
-            if re.search(r"\b" + re.escape(name) + r"\b", line)
-        )
+        other_lines = [line for idx, line in enumerate(lines, 1) if idx != imp_lineno]
+        usage_count = sum(1 for line in other_lines if re.search(r"\b" + re.escape(name) + r"\b", line))
         if usage_count == 0:
-            findings.append({
-                "file": rel_path,
-                "line": imp_lineno,
-                "severity": "MINOR",
-                "type": "CODE_SMELL",
-                "rule": "python:unused-import",
-                "message": "Unused import: '{}'".format(name),
-                "status": "",
-                "effort": "",
-                "debt": "",
-                "tags": [],
-            })
+            findings.append(
+                {
+                    "file": rel_path,
+                    "line": imp_lineno,
+                    "severity": "MINOR",
+                    "type": "CODE_SMELL",
+                    "rule": "python:unused-import",
+                    "message": "Unused import: '{}'".format(name),
+                    "status": "",
+                    "effort": "",
+                    "debt": "",
+                    "tags": [],
+                }
+            )
 
     # -- Function length and cyclomatic complexity --
     for node in ast.walk(tree):
@@ -202,22 +188,20 @@ def _scan_file_ast(
         func_len = func_end - func_start + 1
 
         if func_len > 50:
-            findings.append({
-                "file": rel_path,
-                "line": func_start,
-                "severity": "MAJOR",
-                "type": "CODE_SMELL",
-                "rule": "python:function-too-long",
-                "message": (
-                    "Function '{}' is {} lines long (threshold: 50)".format(
-                        node.name, func_len
-                    )
-                ),
-                "status": "",
-                "effort": "",
-                "debt": "",
-                "tags": [],
-            })
+            findings.append(
+                {
+                    "file": rel_path,
+                    "line": func_start,
+                    "severity": "MAJOR",
+                    "type": "CODE_SMELL",
+                    "rule": "python:function-too-long",
+                    "message": ("Function '{}' is {} lines long (threshold: 50)".format(node.name, func_len)),
+                    "status": "",
+                    "effort": "",
+                    "debt": "",
+                    "tags": [],
+                }
+            )
 
         # Rough cyclomatic complexity: count branching nodes.
         complexity = 1
@@ -239,21 +223,23 @@ def _scan_file_ast(
                 complexity += len(child.values) - 1
 
         if complexity > 10:
-            findings.append({
-                "file": rel_path,
-                "line": func_start,
-                "severity": "MAJOR",
-                "type": "CODE_SMELL",
-                "rule": "python:cognitive-complexity",
-                "message": (
-                    "Function '{}' has estimated cyclomatic complexity of "
-                    "{} (threshold: 10)".format(node.name, complexity)
-                ),
-                "status": "",
-                "effort": "",
-                "debt": "",
-                "tags": [],
-            })
+            findings.append(
+                {
+                    "file": rel_path,
+                    "line": func_start,
+                    "severity": "MAJOR",
+                    "type": "CODE_SMELL",
+                    "rule": "python:cognitive-complexity",
+                    "message": (
+                        "Function '{}' has estimated cyclomatic complexity of "
+                        "{} (threshold: 10)".format(node.name, complexity)
+                    ),
+                    "status": "",
+                    "effort": "",
+                    "debt": "",
+                    "tags": [],
+                }
+            )
 
     return findings
 
@@ -273,18 +259,11 @@ def _resolve_target_files(
         Filtered list of Path objects (non-existent paths are excluded).
     """
     if modified_files is not None:
-        candidates = [
-            root_path / f
-            for f in modified_files
-            if f.endswith(".py") and (root_path / f).exists()
-        ]
+        candidates = [root_path / f for f in modified_files if f.endswith(".py") and (root_path / f).exists()]
     else:
         candidates = list(root_path.rglob("*.py"))
 
-    return [
-        p for p in candidates
-        if not any(part in _SKIP_DIRS for part in p.parts)
-    ]
+    return [p for p in candidates if not any(part in _SKIP_DIRS for part in p.parts)]
 
 
 def run_basic_scan(
@@ -354,15 +333,9 @@ def run_basic_scan(
     elapsed_ms = int((time.monotonic() - start) * 1000)
 
     bugs = sum(1 for f in all_findings if f["type"] == "BUG")
-    vulnerabilities = sum(
-        1 for f in all_findings if f["type"] == "VULNERABILITY"
-    )
-    code_smells = sum(
-        1 for f in all_findings if f["type"] == "CODE_SMELL"
-    )
-    quality_gate = (
-        "PASSED" if (bugs == 0 and vulnerabilities == 0) else "FAILED"
-    )
+    vulnerabilities = sum(1 for f in all_findings if f["type"] == "VULNERABILITY")
+    code_smells = sum(1 for f in all_findings if f["type"] == "CODE_SMELL")
+    quality_gate = "PASSED" if (bugs == 0 and vulnerabilities == 0) else "FAILED"
 
     logger.debug(
         "[run_basic_scan] Done in %dms: %d bugs, %d vulns, %d smells",

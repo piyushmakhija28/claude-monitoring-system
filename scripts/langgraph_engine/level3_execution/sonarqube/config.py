@@ -39,10 +39,7 @@ DEFAULT_QUALITY_GATE: Dict[str, Any] = {
 }
 
 # SonarQube metric keys fetched by get_project_measures.
-METRIC_KEYS = (
-    "bugs,vulnerabilities,code_smells,coverage,"
-    "duplicated_lines_density,ncloc,sqale_rating,alert_status"
-)
+METRIC_KEYS = "bugs,vulnerabilities,code_smells,coverage," "duplicated_lines_density,ncloc,sqale_rating,alert_status"
 
 # Maximum page size supported by the SonarQube issues search API.
 SONAR_MAX_PAGE_SIZE = 500
@@ -57,6 +54,7 @@ SONAR_CLI_TIMEOUT = 300
 # ---------------------------------------------------------------------------
 # Config factory
 # ---------------------------------------------------------------------------
+
 
 def get_sonar_config() -> Dict[str, Any]:
     """Return SonarQube configuration read from environment variables.

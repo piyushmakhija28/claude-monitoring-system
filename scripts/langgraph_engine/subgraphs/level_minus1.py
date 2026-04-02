@@ -302,13 +302,22 @@ def _load_failure_kb(project_root_str="."):
     try:
         import re
 
+        # Try new level-based location first, fall back to legacy path
         kb_path = (
-            Path(project_root_str)
+            Path(__file__).parent.parent
+            / "level3_execution"
             / "policies"
-            / "03-execution-system"
             / "failure-prevention"
             / "common-failures-prevention.md"
         )
+        if not kb_path.is_file():
+            kb_path = (
+                Path(project_root_str)
+                / "policies"
+                / "03-execution-system"
+                / "failure-prevention"
+                / "common-failures-prevention.md"
+            )
         if not kb_path.is_file():
             return []
 
@@ -439,7 +448,7 @@ def ask_level_minus1_fix(state: FlowState) -> dict:
     message += "\n".join(failed_checks)
 
     if kb_suggestions:
-        message += "\n\n  KB SUGGESTIONS:\n"
+        message += "\n\n  KB SUGGESTIONS:/n"
         seen = set()
         for kb in kb_suggestions:
             sig = kb.get("signature", "")
@@ -447,7 +456,7 @@ def ask_level_minus1_fix(state: FlowState) -> dict:
                 seen.add(sig)
                 message += "    -> %s: %s\n" % (sig, kb.get("prevention", ""))
 
-    message += "\n\nOPTIONS:\n"
+    message += "\n\nOPTIONS:/n"
     message += "  1. auto-fix   -> Attempt repair + retry\n"
     message += "  2. skip       -> Continue anyway (NOT RECOMMENDED)\n"
 
@@ -566,7 +575,7 @@ def fix_level_minus1_issues(state: FlowState) -> dict:
         try:
             import re as _re_fix
 
-            # Only replace backslashes that are part of a Windows drive path (X:\something).
+            # Only replace backslashes that are part of a Windows drive path (X:/something).
             # This avoids corrupting Python regex metacharacters (\d, \w, \S, \D, \B, \Z, \A, etc.)
             # that happen to appear in source files containing Windows-style path strings.
             _DRIVE_PATH_RE = _re_fix.compile(r"([A-Za-z]):\\([\w\\. \-]+)")
@@ -594,7 +603,7 @@ def fix_level_minus1_issues(state: FlowState) -> dict:
                         # Original content to compare
                         original_content = content
 
-                        # Replace only matched Windows drive paths (e.g. C:\foo\bar -> C:/foo/bar).
+                        # Replace only matched Windows drive paths (e.g. C:/foo/bar -> C:/foo/bar).
                         # Backslashes outside a drive-path match are left untouched.
                         content = _DRIVE_PATH_RE.sub(_fix_drive_path, content)
 

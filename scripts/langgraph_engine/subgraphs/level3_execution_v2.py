@@ -699,7 +699,7 @@ def step0_1_initial_callgraph_node(state: FlowState) -> Dict[str, Any]:
 
     _start = _t.time()
     try:
-        from ..call_graph_analyzer import snapshot_call_graph
+        from ..level3_execution.call_graph_analyzer import snapshot_call_graph
 
         project_root = state.get("project_root", ".")
         snapshot = snapshot_call_graph(project_root)
@@ -860,7 +860,7 @@ def step2_plan_execution_node(state: FlowState) -> Dict[str, Any]:
     # --- CallGraph Impact Analysis (pre-plan) ---
     impact_data = {}
     try:
-        from ..call_graph_analyzer import analyze_impact_before_change
+        from ..level3_execution.call_graph_analyzer import analyze_impact_before_change
 
         project_root = state.get("project_root", ".")
         target_files = state.get("step0_target_files", [])
@@ -981,7 +981,7 @@ def step3_task_breakdown_node(state: FlowState) -> Dict[str, Any]:
 
     # --- CallGraph: Map files to tasks/phases based on graph analysis ---
     try:
-        from ..call_graph_analyzer import snapshot_call_graph
+        from ..level3_execution.call_graph_analyzer import snapshot_call_graph
 
         project_root = state.get("project_root", ".")
 
@@ -1033,7 +1033,7 @@ def step3_task_breakdown_node(state: FlowState) -> Dict[str, Any]:
     # -- Figma Integration: extract components to inform task breakdown ----
     if os.environ.get("ENABLE_FIGMA", "0") == "1":
         try:
-            from level3_figma_workflow import Level3FigmaWorkflow
+            from ..level3_execution.figma_workflow import Level3FigmaWorkflow
 
             figma_wf = Level3FigmaWorkflow()
             file_key = figma_wf.detect_figma_url(state.get("user_message", ""))
@@ -1072,7 +1072,7 @@ def step4_toon_refinement_node(state: FlowState) -> Dict[str, Any]:
 
     # --- CallGraph: Inject phase-scoped context, clear old broad context ---
     try:
-        from ..call_graph_analyzer import get_phase_scoped_context
+        from ..level3_execution.call_graph_analyzer import get_phase_scoped_context
 
         # Get graph snapshot (from Step 3 or Step 2)
         graph_snapshot = state.get("step3_graph_snapshot") or state.get("step2_impact_analysis", {})
@@ -1194,7 +1194,7 @@ def step7_final_prompt_node(state: FlowState) -> Dict[str, Any]:
         file_key = state.get("figma_file_key", "")
         if not file_key:
             try:
-                from level3_figma_workflow import Level3FigmaWorkflow
+                from ..level3_execution.figma_workflow import Level3FigmaWorkflow
 
                 figma_wf = Level3FigmaWorkflow()
                 file_key = figma_wf.detect_figma_url(state.get("user_message", ""))
@@ -1202,7 +1202,7 @@ def step7_final_prompt_node(state: FlowState) -> Dict[str, Any]:
                 logger.warning("[v2] Figma URL detection (step7) failed (non-blocking): %s", str(e))
         if file_key:
             try:
-                from level3_figma_workflow import Level3FigmaWorkflow
+                from ..level3_execution.figma_workflow import Level3FigmaWorkflow
 
                 figma_wf = Level3FigmaWorkflow()
                 token_result = figma_wf.step7_extract_design_tokens(file_key)
@@ -1270,7 +1270,7 @@ def step8_github_issue_node(state: FlowState) -> Dict[str, Any]:
     # -- Jira Integration (after GitHub issue is created) ----------------
     if os.environ.get("ENABLE_JIRA", "0") == "1":
         try:
-            from level3_steps8to12_jira import Level3JiraWorkflow
+            from ..level3_execution.steps8to12_jira import Level3JiraWorkflow
 
             jira_wf = Level3JiraWorkflow()
             jira_result = jira_wf.step8_create_jira_issue(
@@ -1420,7 +1420,7 @@ def step10_implementation_note(state: FlowState) -> Dict[str, Any]:
     jira_key = state.get("jira_issue_key", "")
     if jira_key and state.get("jira_issue_created", False):
         try:
-            from level3_steps8to12_jira import Level3JiraWorkflow
+            from ..level3_execution.steps8to12_jira import Level3JiraWorkflow
 
             jira_wf = Level3JiraWorkflow()
             jira_wf.step10_start_progress(jira_issue_key=jira_key)
@@ -1431,7 +1431,7 @@ def step10_implementation_note(state: FlowState) -> Dict[str, Any]:
     figma_key = state.get("figma_file_key", "")
     if figma_key and state.get("figma_enabled", False):
         try:
-            from level3_figma_workflow import Level3FigmaWorkflow
+            from ..level3_execution.figma_workflow import Level3FigmaWorkflow
 
             figma_wf = Level3FigmaWorkflow()
             figma_wf.step10_implementation_started(
@@ -1447,7 +1447,7 @@ def step10_implementation_note(state: FlowState) -> Dict[str, Any]:
     suggested_tests = []
     _dep_result = None
     try:
-        from ..call_graph_analyzer import get_implementation_context, snapshot_call_graph
+        from ..level3_execution.call_graph_analyzer import get_implementation_context, snapshot_call_graph
 
         project_root = state.get("project_root", ".")
         target_files = state.get("step2_files_affected", []) or state.get("step0_target_files", [])
@@ -1489,15 +1489,15 @@ def step10_implementation_note(state: FlowState) -> Dict[str, Any]:
         exec_prompt = (
             "%s\n\n"
             "[RETRY #%d] Fix the following code review issues while keeping\n"
-            "previous fixes:\n\n"
-            "CURRENT ISSUES TO FIX:\n"
+            "previous fixes:/n/n"
+            "CURRENT ISSUES TO FIX:/n"
             "%s\n\n"
-            "IMPORTANT:\n"
+            "IMPORTANT:/n"
             "- Do NOT undo previous fixes (shown in history above)\n"
             "- Fix ONLY the current issues listed above\n"
             "- Keep all working code from previous attempts\n"
             "- Run tests to verify fixes if possible\n\n"
-            "Original implementation prompt:\n"
+            "Original implementation prompt:/n"
             "---\n"
             "%s\n"
             "---\n\n"
@@ -1584,7 +1584,7 @@ def step10_implementation_note(state: FlowState) -> Dict[str, Any]:
 
     # --- Quality: SonarQube scan + auto-fix + test generation ---
     try:
-        from ..sonarqube_scanner import scan_and_report
+        from ..level3_execution.sonarqube_scanner import scan_and_report
 
         project_root = state.get("project_root", ".")
         modified_files = result.get("step10_modified_files", [])
@@ -1597,7 +1597,7 @@ def step10_implementation_note(state: FlowState) -> Dict[str, Any]:
             # 2. Auto-fix if findings exist
             if scan_result.get("findings"):
                 try:
-                    from ..sonar_auto_fixer import run_fix_loop
+                    from ..level3_execution.sonar_auto_fixer import run_fix_loop
 
                     fix_result = run_fix_loop(project_root, scan_result["findings"], max_iterations=2)
                     result["step10_auto_fix_result"] = fix_result
@@ -1611,7 +1611,7 @@ def step10_implementation_note(state: FlowState) -> Dict[str, Any]:
 
             # 3. Generate tests for modified files
             try:
-                from ..test_generator import generate_tests_for_modified_files
+                from ..level3_execution.test_generator import generate_tests_for_modified_files
 
                 test_result = generate_tests_for_modified_files(
                     project_root, modified_files, call_graph=pre_change_graph if pre_change_graph else None
@@ -1628,7 +1628,7 @@ def step10_implementation_note(state: FlowState) -> Dict[str, Any]:
 
             # 3b. Generate integration tests from call paths
             try:
-                from ..integration_test_generator import generate_integration_tests
+                from ..level3_execution.integration_test_generator import generate_integration_tests
 
                 integ_result = generate_integration_tests(
                     project_root, modified_files, call_graph=pre_change_graph if pre_change_graph else None
@@ -1713,7 +1713,7 @@ def step11_pull_request_node(state: FlowState) -> Dict[str, Any]:
     jira_key = state.get("jira_issue_key", "")
     if jira_key and state.get("jira_issue_created", False):
         try:
-            from level3_steps8to12_jira import Level3JiraWorkflow
+            from ..level3_execution.steps8to12_jira import Level3JiraWorkflow
 
             jira_wf = Level3JiraWorkflow()
             link_result = jira_wf.step11_link_pr_and_transition(
@@ -1729,7 +1729,7 @@ def step11_pull_request_node(state: FlowState) -> Dict[str, Any]:
     # -- Jira: Post-merge update --
     if result.get("step11_merged") and jira_key:
         try:
-            from level3_steps8to12_jira import Level3JiraWorkflow
+            from ..level3_execution.steps8to12_jira import Level3JiraWorkflow
 
             jira_wf = Level3JiraWorkflow()
             jira_wf.step11_post_merge_update(
@@ -1743,7 +1743,7 @@ def step11_pull_request_node(state: FlowState) -> Dict[str, Any]:
 
     # --- CallGraph: Post-change impact review ---
     try:
-        from ..call_graph_analyzer import review_change_impact
+        from ..level3_execution.call_graph_analyzer import review_change_impact
 
         project_root = state.get("project_root", ".")
         modified_files = result.get("step10_modified_files") or state.get("step10_modified_files", [])
@@ -1781,7 +1781,7 @@ def step11_pull_request_node(state: FlowState) -> Dict[str, Any]:
 
     # --- Quality Gate: Evaluate all gates before merge ---
     try:
-        from ..quality_gate import evaluate_quality_gate, generate_gate_report
+        from ..level3_execution.quality_gate import evaluate_quality_gate, generate_gate_report
 
         project_root = state.get("project_root", ".")
 
@@ -1840,7 +1840,7 @@ def step11_pull_request_node(state: FlowState) -> Dict[str, Any]:
         file_key = state.get("figma_file_key", "")
         if file_key:
             try:
-                from level3_figma_workflow import Level3FigmaWorkflow
+                from ..level3_execution.figma_workflow import Level3FigmaWorkflow
 
                 figma_wf = Level3FigmaWorkflow()
                 impl_summary = result.get("step11_review_summary", "") or state.get("step10_implementation_summary", "")
@@ -1852,7 +1852,7 @@ def step11_pull_request_node(state: FlowState) -> Dict[str, Any]:
                     existing_issues = result.get("step11_review_issues", [])
                     checklist_text = review_result.get("checklist_text", "")
                     if checklist_text:
-                        existing_issues.append("DESIGN REVIEW:\n" + checklist_text)
+                        existing_issues.append("DESIGN REVIEW:/n" + checklist_text)
                     result["step11_review_issues"] = existing_issues
                     logger.info(
                         "[v2] Figma design review completed: %d items",
@@ -1910,7 +1910,7 @@ def step12_issue_closure_node(state: FlowState) -> Dict[str, Any]:
     jira_key = state.get("jira_issue_key", "")
     if jira_key and state.get("jira_issue_created", False):
         try:
-            from level3_steps8to12_jira import Level3JiraWorkflow
+            from ..level3_execution.steps8to12_jira import Level3JiraWorkflow
 
             jira_wf = Level3JiraWorkflow()
             close_result = jira_wf.step12_close_jira_issue(
@@ -1927,7 +1927,7 @@ def step12_issue_closure_node(state: FlowState) -> Dict[str, Any]:
     figma_key = state.get("figma_file_key", "")
     if figma_key and state.get("figma_enabled", False):
         try:
-            from level3_figma_workflow import Level3FigmaWorkflow
+            from ..level3_execution.figma_workflow import Level3FigmaWorkflow
 
             figma_wf = Level3FigmaWorkflow()
             figma_wf.step12_implementation_complete(
@@ -2120,7 +2120,7 @@ def orchestration_pre_analysis_node(state: FlowState) -> Dict[str, Any]:
 
     # --- 1. Call Graph Scan ---
     try:
-        from ..call_graph_analyzer import get_orchestration_context
+        from ..level3_execution.call_graph_analyzer import get_orchestration_context
 
         project_root = state.get("project_root", ".")
         task_desc = state.get("user_message", "")

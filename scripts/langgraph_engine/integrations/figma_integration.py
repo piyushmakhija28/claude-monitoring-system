@@ -65,7 +65,8 @@ class FigmaIntegration(AbstractIntegration):
         """
         if self._workflow is None:
             try:
-                from ..level3_figma_workflow import Level3FigmaWorkflow  # type: ignore[import]
+                from ..level3_execution.figma_workflow import Level3FigmaWorkflow  # type: ignore[import]
+
                 self._workflow = Level3FigmaWorkflow()
                 logger.debug("[FigmaIntegration] Level3FigmaWorkflow loaded")
             except ImportError as exc:

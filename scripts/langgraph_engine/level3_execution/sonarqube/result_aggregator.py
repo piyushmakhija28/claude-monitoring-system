@@ -26,9 +26,7 @@ logger = logging.getLogger(__name__)
 _CONTEXT_LINES = 10  # Lines of code context to include in fix prompts.
 
 
-def _read_lines_around(
-    file_path: str, line_no: int, context: int = _CONTEXT_LINES
-) -> str:
+def _read_lines_around(file_path: str, line_no: int, context: int = _CONTEXT_LINES) -> str:
     """Read source lines around a given line number.
 
     Args:
@@ -57,9 +55,7 @@ def _read_lines_around(
     snippet_lines: List[str] = []
     for idx in range(start, end):
         prefix = ">>>" if (idx + 1) == line_no else "   "
-        snippet_lines.append(
-            "{} {:4d}: {}".format(prefix, idx + 1, lines[idx])
-        )
+        snippet_lines.append("{} {:4d}: {}".format(prefix, idx + 1, lines[idx]))
 
     return "\n".join(snippet_lines)
 
@@ -68,24 +64,26 @@ def _read_lines_around(
 # Auto-fixable rule set (rules where an LLM can likely produce a safe fix)
 # ---------------------------------------------------------------------------
 
-_AUTO_FIXABLE_RULES = frozenset({
-    # Python (lightweight scanner rules)
-    "python:bare-except",
-    "python:unused-import",
-    "python:hardcoded-credentials",
-    "python:todo-comment",
-    "python:eval-exec",
-    # Python (SonarQube rule IDs)
-    "python:S1481",   # unused local variable
-    "python:S1854",   # useless assignment
-    "python:S1192",   # string literals duplicated
-    "python:S2095",   # resource not closed
-    "python:S1172",   # unused method parameter
-    "python:S125",    # commented-out code
-    # Multi-language
-    "common-java:InlineComments",
-    "Web:BoldAndItalicTagsCheck",
-})
+_AUTO_FIXABLE_RULES = frozenset(
+    {
+        # Python (lightweight scanner rules)
+        "python:bare-except",
+        "python:unused-import",
+        "python:hardcoded-credentials",
+        "python:todo-comment",
+        "python:eval-exec",
+        # Python (SonarQube rule IDs)
+        "python:S1481",  # unused local variable
+        "python:S1854",  # useless assignment
+        "python:S1192",  # string literals duplicated
+        "python:S2095",  # resource not closed
+        "python:S1172",  # unused method parameter
+        "python:S125",  # commented-out code
+        # Multi-language
+        "common-java:InlineComments",
+        "Web:BoldAndItalicTagsCheck",
+    }
+)
 
 # ---------------------------------------------------------------------------
 # Public: aggregate_scan_result
@@ -130,9 +128,7 @@ def aggregate_scan_result(
             "coverage_pct": coverage if coverage >= 0 else None,
             "quality_gate": gate_label,
         }
-        logger.debug(
-            "[aggregate_scan_result] Using API measures: %s", result["summary"]
-        )
+        logger.debug("[aggregate_scan_result] Using API measures: %s", result["summary"])
 
     if quality_gate:
         result["quality_gate_detail"] = quality_gate
@@ -196,9 +192,7 @@ def categorize_findings(findings: List[Dict[str, Any]]) -> Dict[str, Any]:
         # -- Auto-fixable vs needs-review --
         is_vulnerability = finding_type == "VULNERABILITY"
         is_complex_bug = (
-            finding_type == "BUG"
-            and severity in ("CRITICAL", "BLOCKER", "MAJOR")
-            and rule not in _AUTO_FIXABLE_RULES
+            finding_type == "BUG" and severity in ("CRITICAL", "BLOCKER", "MAJOR") and rule not in _AUTO_FIXABLE_RULES
         )
 
         if is_vulnerability or is_complex_bug:
@@ -209,8 +203,12 @@ def categorize_findings(findings: List[Dict[str, Any]]) -> Dict[str, Any]:
             # Simple bugs (null checks, unused vars) -> auto_fixable
             message = finding.get("message", "").lower()
             _SIMPLE_PATTERNS = (
-                "null", "unused", "import", "empty catch",
-                "todo", "deprecated",
+                "null",
+                "unused",
+                "import",
+                "empty catch",
+                "todo",
+                "deprecated",
             )
             if any(pat in message for pat in _SIMPLE_PATTERNS):
                 auto_fixable.append(finding)
@@ -289,8 +287,7 @@ def generate_fix_prompt(finding: Dict[str, Any]) -> str:
         )
     elif "todo" in message.lower() or "fixme" in message.lower():
         approach = (
-            "Implement the TODO/FIXME or convert it to a tracked GitHub issue "
-            "and remove the comment from the code."
+            "Implement the TODO/FIXME or convert it to a tracked GitHub issue " "and remove the comment from the code."
         )
     elif "complexity" in message.lower():
         approach = (
@@ -311,9 +308,7 @@ def generate_fix_prompt(finding: Dict[str, Any]) -> str:
         )
 
     parts = [
-        "Fix the following SonarQube {} {} finding.".format(
-            severity, finding_type
-        ),
+        "Fix the following SonarQube {} {} finding.".format(severity, finding_type),
         "",
         "File:     {}".format(file_path),
         "Line:     {}".format(line_no),

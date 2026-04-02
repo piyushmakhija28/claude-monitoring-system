@@ -64,21 +64,21 @@ except ImportError:
 
 
 try:
-    from ..context_cache import ContextCache
+    from ..level1_sync.context_cache import ContextCache
 
     _CONTEXT_CACHE_AVAILABLE = True
 except ImportError:
     _CONTEXT_CACHE_AVAILABLE = False
 
 try:
-    from ..context_deduplicator import deduplicate_context
+    from ..level1_sync.context_deduplicator import deduplicate_context
 
     _DEDUPLICATOR_AVAILABLE = True
 except ImportError:
     _DEDUPLICATOR_AVAILABLE = False
 
 try:
-    from ..toon_schema import validate_toon
+    from ..level1_sync.toon_schema import validate_toon
 
     _TOON_SCHEMA_AVAILABLE = True
 except ImportError:
@@ -93,7 +93,7 @@ except ImportError:
 
 
 def _load_architecture_script(script_name: str):
-    """Dynamically load a script from scripts/architecture/01-sync-system/.
+    """Dynamically load a script from level1_sync/architecture/.
 
     Returns the loaded module, or None if the file does not exist or
     fails to import.  All failures are silently swallowed so that the
@@ -108,7 +108,11 @@ def _load_architecture_script(script_name: str):
     try:
         import importlib.util
 
-        script_path = Path(__file__).parent.parent.parent / "architecture" / "01-sync-system" / script_name
+        # Try new level-based location first
+        script_path = Path(__file__).parent.parent / "level1_sync" / "architecture" / script_name
+        if not script_path.exists():
+            # Fallback to legacy location
+            script_path = Path(__file__).parent.parent.parent / "architecture" / "01-sync-system" / script_name
         if not script_path.exists():
             return None
         # Convert filename to a valid Python module name

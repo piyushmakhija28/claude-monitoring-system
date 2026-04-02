@@ -57,7 +57,8 @@ class JiraIntegration(AbstractIntegration):
         """
         if self._workflow is None:
             try:
-                from ..level3_steps8to12_jira import Level3JiraWorkflow  # type: ignore[import]
+                from ..level3_execution.steps8to12_jira import Level3JiraWorkflow  # type: ignore[import]
+
                 self._workflow = Level3JiraWorkflow()
                 logger.debug("[JiraIntegration] Level3JiraWorkflow loaded")
             except ImportError as exc:

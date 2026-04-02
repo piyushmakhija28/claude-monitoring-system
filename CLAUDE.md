@@ -64,23 +64,24 @@ Level 3: Execution (15 steps: Step 0 through Step 14)
 ```
 /
 +-- scripts/                          # Pipeline scripts and hooks
-|   +-- langgraph_engine/             # Core orchestration (155+ modules)
-|   |   +-- core/                     # [NEW v1.5] Cross-cutting abstractions (LazyLoader, ErrorHandler, NodeResult, etc.)
-|   |   +-- state/                    # [NEW v1.5] FlowState split into 6 focused modules
-|   |   +-- routing/                  # [NEW v1.5] All routing functions split by level
-|   |   +-- helper_nodes/             # [NEW v1.5] Helper node functions split by concern
-|   |   +-- diagrams/                 # [NEW v1.5] Strategy Pattern: 13 swappable UML generators
-|   |   +-- parsers/                  # [NEW v1.5] Abstract Factory: 4 language parsers (Py/Java/TS/Kotlin)
-|   |   +-- sonarqube/                # [NEW v1.5] Facade: api_client + lightweight + aggregator + auto_fixer
-|   |   +-- integrations/             # [NEW v1.5] Abstract Factory + Lifecycle: GitHub/Jira/Figma/Jenkins
-|   |   +-- pipeline_builder.py       # [NEW v1.5] Builder Pattern: PipelineBuilder chainable API
-|   |   +-- subgraphs/               # Level -1, 1, 2, 3 implementations
-|   +-- architecture/                 # Active pipeline scripts (6 scripts + 1 data file)
-+-- policies/                         # 63 policy definitions (62 .md + 1 .json)
-|   +-- 00-auto-fix-system/           # Level -1 policies (Unicode, encoding, paths, recovery)
-|   +-- 01-sync-system/               # Level 1 policies
-|   +-- 02-standards-system/          # Level 2 policies (+ tool optimization, MCP discovery)
-|   +-- 03-execution-system/          # Level 3 policies (15 steps + RAG, CallGraph, QualityGate, hooks)
+|   +-- langgraph_engine/             # Core orchestration engine
+|   |   +-- core/                     # Cross-cutting abstractions (LazyLoader, ErrorHandler, NodeResult, etc.)
+|   |   +-- state/                    # FlowState split into 6 focused modules
+|   |   +-- routing/                  # All routing functions split by level
+|   |   +-- helper_nodes/             # Helper node functions split by concern
+|   |   +-- diagrams/                 # Strategy Pattern: 13 swappable UML generators
+|   |   +-- parsers/                  # Abstract Factory: 4 language parsers (Py/Java/TS/Kotlin)
+|   |   +-- integrations/             # Abstract Factory + Lifecycle: GitHub/Jira/Figma/Jenkins
+|   |   +-- pipeline_builder.py       # Builder Pattern: PipelineBuilder chainable API
+|   |   +-- subgraphs/               # Level -1, 1, 2, 3 subgraph implementations
+|   |   +-- level_minus1/            # [v1.9] Level -1 Auto-Fix package (policies/)
+|   |   +-- level1_sync/             # [v1.9] Level 1 Sync package (3 modules + policies/ + architecture/)
+|   |   +-- level2_standards/        # [v1.9] Level 2 Standards package (2 modules + policies/ + architecture/)
+|   |   +-- level3_execution/        # [v1.9] Level 3 Execution package (15 modules + sonarqube/ + policies/ + architecture/)
+|   |   +-- [60+ shared modules]     # Cross-level: LLM, caching, metrics, git, state, etc.
+|   +-- architecture/                 # generate_system_diagram.py (shared utility)
++-- policies/                         # README pointing to level packages (policies moved into level_*/policies/)
+|   +-- testing/                      # Testing policies (unchanged)
 +-- src/mcp/                          # 2 in-engine MCP servers + shared bridge (session, vector-db, session_hooks, base/)
 +-- tests/                            # 75 test files
 +-- docs/                             # 47 documentation files

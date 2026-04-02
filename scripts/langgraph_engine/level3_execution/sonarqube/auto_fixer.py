@@ -50,12 +50,11 @@ class SonarAutoFixer:
         if self._module is None:
             try:
                 from .. import sonar_auto_fixer  # type: ignore[import]
+
                 self._module = sonar_auto_fixer
                 logger.debug("[SonarAutoFixer] sonar_auto_fixer loaded")
             except ImportError as exc:
-                logger.warning(
-                    "[SonarAutoFixer] sonar_auto_fixer unavailable: %s", exc
-                )
+                logger.warning("[SonarAutoFixer] sonar_auto_fixer unavailable: %s", exc)
         return self._module
 
     # ------------------------------------------------------------------
@@ -123,9 +122,7 @@ class SonarAutoFixer:
                 source_context=source_context,
             )
         except Exception as exc:
-            logger.error(
-                "[SonarAutoFixer] generate_fix_instruction() failed: %s", exc
-            )
+            logger.error("[SonarAutoFixer] generate_fix_instruction() failed: %s", exc)
             return {
                 "file": finding.get("file", ""),
                 "line": finding.get("line", 0),
@@ -162,9 +159,7 @@ class SonarAutoFixer:
         try:
             return module.apply_template_fix(file_path=file_path, fix=fix)
         except Exception as exc:
-            logger.error(
-                "[SonarAutoFixer] apply_template_fix() failed: %s", exc
-            )
+            logger.error("[SonarAutoFixer] apply_template_fix() failed: %s", exc)
             return {"applied": False, "file": file_path, "error": str(exc)}
 
     def run_fix_loop(
@@ -212,9 +207,7 @@ class SonarAutoFixer:
                 max_iterations=max_iterations,
             )
         except Exception as exc:
-            logger.error(
-                "[SonarAutoFixer] run_fix_loop() failed: %s", exc
-            )
+            logger.error("[SonarAutoFixer] run_fix_loop() failed: %s", exc)
             return {
                 "fixed": 0,
                 "skipped": len(findings),
@@ -239,7 +232,5 @@ class SonarAutoFixer:
         try:
             return module.get_fix_summary(fix_result)
         except Exception as exc:
-            logger.error(
-                "[SonarAutoFixer] get_fix_summary() failed: %s", exc
-            )
+            logger.error("[SonarAutoFixer] get_fix_summary() failed: %s", exc)
             return str(exc)

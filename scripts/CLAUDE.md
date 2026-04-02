@@ -35,14 +35,18 @@ langgraph_engine/
 +-- helper_nodes/   # Helper node functions split by concern
 +-- diagrams/       # Strategy Pattern: DiagramFactory + 13 UML generators
 +-- parsers/        # Abstract Factory: ParserRegistry + 4 language parsers
-+-- sonarqube/      # Facade: api_client + lightweight + aggregator + auto_fixer
 +-- integrations/   # Lifecycle: AbstractIntegration + GitHub/Jira/Figma/Jenkins
 +-- pipeline_builder.py  # Builder: PipelineBuilder chainable API
 +-- orchestrator.py      # Main StateGraph construction
 +-- flow_state.py        # Compat shim -> state/
 +-- uml_generators.py    # Compat shim -> diagrams/
 +-- call_graph_builder.py # Compat shim -> parsers/
-+-- subgraphs/           # Level -1, 1, 2, 3 implementations
++-- subgraphs/           # Level -1, 1, 2, 3 subgraph implementations
++-- level_minus1/        # Level -1 package (policies/)
++-- level1_sync/         # Level 1 package (3 modules + policies/ + architecture/)
++-- level2_standards/    # Level 2 package (2 modules + policies/ + architecture/)
++-- level3_execution/    # Level 3 package (15 modules + sonarqube/ + policies/ + architecture/)
++-- [60+ shared modules] # Cross-level utilities (LLM, caching, metrics, git, etc.)
 ```
 
 ### Running the Pipeline

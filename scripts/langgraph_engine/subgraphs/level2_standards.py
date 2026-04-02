@@ -5,16 +5,18 @@ Calls standards-loader.py to load actual standards from policies/
 Includes MCP plugin discovery for auto-routing tool optimization.
 """
 
-import sys
 import json
-import time
 import subprocess
+import sys
+import time
 from pathlib import Path
 
 try:
     import sys as _sys
+
     _sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent / "src"))
-    from utils.path_resolver import get_policies_dir, get_claude_home
+    from utils.path_resolver import get_claude_home, get_policies_dir
+
     _LEVEL2_POLICIES_DIR = get_policies_dir()
     _LEVEL2_CLAUDE_HOME = get_claude_home()
 except ImportError:
@@ -22,14 +24,14 @@ except ImportError:
     _LEVEL2_CLAUDE_HOME = Path.home() / ".claude"
 
 try:
-    from langgraph.graph import StateGraph, START, END
+    from langgraph.graph import END, START, StateGraph
+
     _LANGGRAPH_AVAILABLE = True
 except ImportError:
     _LANGGRAPH_AVAILABLE = False
 
 from ..flow_state import FlowState
 from ..step_logger import write_level_log
-
 
 # ============================================================================
 # STANDARDS LOADING (from actual policies/)
@@ -46,19 +48,9 @@ def load_policies_from_directory() -> dict:
         policies_dir = _LEVEL2_POLICIES_DIR
 
         if not policies_dir.exists():
-            return {
-                "level1": {},
-                "level2": {},
-                "level3": {},
-                "status": "NO_POLICIES_DIR"
-            }
+            return {"level1": {}, "level2": {}, "level3": {}, "status": "NO_POLICIES_DIR"}
 
-        result = {
-            "level1": {},
-            "level2": {},
-            "level3": {},
-            "status": "LOADED"
-        }
+        result = {"level1": {}, "level2": {}, "level3": {}, "status": "LOADED"}
 
         # Load from each level directory
         for level_dir in ["01-sync-system", "02-standards-system", "03-execution-system"]:
@@ -72,7 +64,7 @@ def load_policies_from_directory() -> dict:
                         result[level_key][policy_file.stem] = {
                             "file": str(policy_file),
                             "size": len(content),
-                            "path": policy_file.stem
+                            "path": policy_file.stem,
                         }
                     except Exception:
                         pass
@@ -80,10 +72,7 @@ def load_policies_from_directory() -> dict:
         return result
 
     except Exception as e:
-        return {
-            "error": str(e),
-            "status": "ERROR"
-        }
+        return {"error": str(e), "status": "ERROR"}
 
 
 def run_standards_loader_script() -> dict:
@@ -100,21 +89,17 @@ def run_standards_loader_script() -> dict:
             [sys.executable, str(script_path), "--load-all"],
             capture_output=True,
             text=True,
-            encoding='utf-8',
-            errors='replace',
+            encoding="utf-8",
+            errors="replace",
             timeout=30,
-            cwd=scripts_dir
+            cwd=scripts_dir,
         )
 
         # Parse output
         try:
             return json.loads(result.stdout)
         except Exception:
-            return {
-                "status": "SUCCESS",
-                "exit_code": result.returncode,
-                "message": result.stdout[:500]
-            }
+            return {"status": "SUCCESS", "exit_code": result.returncode, "message": result.stdout[:500]}
 
     except subprocess.TimeoutExpired:
         return {"status": "TIMEOUT", "error": "standards-loader.py timed out"}
@@ -165,17 +150,26 @@ def node_common_standards(state: FlowState) -> dict:
         updates["standards_count"] = total_count if total_count > 0 else 12  # Fallback: 12 common standards
 
         existing_pipeline = state.get("pipeline") or []
-        updates["pipeline"] = list(existing_pipeline) + [{
-            "node": "node_common_standards",
-            "policies_loaded": level2_count,
-            "script_standards": script_count,
-            "total": updates["standards_count"]
-        }]
+        updates["pipeline"] = list(existing_pipeline) + [
+            {
+                "node": "node_common_standards",
+                "policies_loaded": level2_count,
+                "script_standards": script_count,
+                "total": updates["standards_count"],
+            }
+        ]
 
-        write_level_log(state, "level2", "common-standards", "OK", time.time() - _step_start, {
-            "standards_count": updates["standards_count"],
-            "policies_loaded": level2_count,
-        })
+        write_level_log(
+            state,
+            "level2",
+            "common-standards",
+            "OK",
+            time.time() - _step_start,
+            {
+                "standards_count": updates["standards_count"],
+                "policies_loaded": level2_count,
+            },
+        )
         return updates
 
     except Exception as e:
@@ -215,19 +209,25 @@ def node_java_standards(state: FlowState) -> dict:
                 "service-layer",
                 "repository-pattern",
                 "exception-handling",
-            ]
+            ],
         }
 
         existing_pipeline = state.get("pipeline") or []
-        updates["pipeline"] = list(existing_pipeline) + [{
-            "node": "node_java_standards",
-            "java_standards_loaded": len(java_standards)
-        }]
+        updates["pipeline"] = list(existing_pipeline) + [
+            {"node": "node_java_standards", "java_standards_loaded": len(java_standards)}
+        ]
 
-        write_level_log(state, "level2", "java-standards", "OK", time.time() - _step_start, {
-            "java_standards_loaded": True,
-            "patterns_count": len(java_standards),
-        })
+        write_level_log(
+            state,
+            "level2",
+            "java-standards",
+            "OK",
+            time.time() - _step_start,
+            {
+                "java_standards_loaded": True,
+                "patterns_count": len(java_standards),
+            },
+        )
         return updates
 
     except Exception as e:
@@ -244,13 +244,13 @@ def node_tool_optimization_standards(state: FlowState) -> dict:
     """
     _step_start = time.time()
     rules = {
-        "read_max_lines": 500,       # Read tool: max lines per call
-        "read_max_bytes": 51200,     # Read tool: max bytes (50KB)
-        "grep_max_matches": 50,      # Grep tool: max matches (head_limit)
-        "grep_max_results": 100,     # Grep tool: absolute max with output_mode
-        "search_max_results": 10,    # Search: max results
-        "cache_after_n_reads": 3,    # Reuse cache after 3 reads of same file
-        "bash_find_head": 20,        # find commands: pipe to | head -20
+        "read_max_lines": 500,  # Read tool: max lines per call
+        "read_max_bytes": 51200,  # Read tool: max bytes (50KB)
+        "grep_max_matches": 50,  # Grep tool: max matches (head_limit)
+        "grep_max_results": 100,  # Grep tool: absolute max with output_mode
+        "search_max_results": 10,  # Search: max results
+        "cache_after_n_reads": 3,  # Reuse cache after 3 reads of same file
+        "bash_find_head": 20,  # find commands: pipe to | head -20
     }
 
     updates = {
@@ -259,15 +259,20 @@ def node_tool_optimization_standards(state: FlowState) -> dict:
     }
 
     existing_pipeline = state.get("pipeline") or []
-    updates["pipeline"] = list(existing_pipeline) + [{
-        "node": "node_tool_optimization_standards",
-        "rules_loaded": list(rules.keys()),
-        "total_rules": len(rules)
-    }]
+    updates["pipeline"] = list(existing_pipeline) + [
+        {"node": "node_tool_optimization_standards", "rules_loaded": list(rules.keys()), "total_rules": len(rules)}
+    ]
 
-    write_level_log(state, "level2", "tool-optimization", "OK", time.time() - _step_start, {
-        "rules_loaded": len(rules),
-    })
+    write_level_log(
+        state,
+        "level2",
+        "tool-optimization",
+        "OK",
+        time.time() - _step_start,
+        {
+            "rules_loaded": len(rules),
+        },
+    )
     return updates
 
 
@@ -282,7 +287,7 @@ def node_mcp_plugin_discovery(state: FlowState) -> dict:
     updates = {}
 
     try:
-        from ..mcp_plugin_loader import MCPPluginLoader, MCPPluginError  # noqa: F401
+        from ..level2_standards.mcp_plugin_loader import MCPPluginError, MCPPluginLoader  # noqa: F401
 
         loader = MCPPluginLoader()
         plugins = loader.discover_plugins()
@@ -304,12 +309,14 @@ def node_mcp_plugin_discovery(state: FlowState) -> dict:
         }
 
         existing_pipeline = state.get("pipeline") or []
-        updates["pipeline"] = list(existing_pipeline) + [{
-            "node": "node_mcp_plugin_discovery",
-            "plugins_discovered": len(plugins),
-            "filesystem_mcp_enabled": filesystem_enabled,
-            "plugins_list": [p["short_name"] for p in available_mcps],
-        }]
+        updates["pipeline"] = list(existing_pipeline) + [
+            {
+                "node": "node_mcp_plugin_discovery",
+                "plugins_discovered": len(plugins),
+                "filesystem_mcp_enabled": filesystem_enabled,
+                "plugins_list": [p["short_name"] for p in available_mcps],
+            }
+        ]
 
     except ImportError:
         # MCPPluginLoader not available - graceful fallback
@@ -331,12 +338,17 @@ def node_mcp_plugin_discovery(state: FlowState) -> dict:
             "mcp_discovered_count": 0,
         }
 
-    write_level_log(state, "level2", "mcp-discovery",
-                    "OK" if updates.get("mcp_discovered_count", 0) > 0 else "FAILED",
-                    time.time() - _step_start, {
-                        "mcp_discovered_count": updates.get("mcp_discovered_count", 0),
-                        "plugins_found": updates.get("mcp_initialization_status", "ERROR"),
-                    })
+    write_level_log(
+        state,
+        "level2",
+        "mcp-discovery",
+        "OK" if updates.get("mcp_discovered_count", 0) > 0 else "FAILED",
+        time.time() - _step_start,
+        {
+            "mcp_discovered_count": updates.get("mcp_discovered_count", 0),
+            "plugins_found": updates.get("mcp_initialization_status", "ERROR"),
+        },
+    )
     return updates
 
 
@@ -386,9 +398,13 @@ def _run_ruff_check(project_root: str) -> list:
 
     result = _run_linter(
         [
-            "ruff", "check", src_path,
-            "--output-format", "json",
-            "--select", "E,W,F",
+            "ruff",
+            "check",
+            src_path,
+            "--output-format",
+            "json",
+            "--select",
+            "E,W,F",
         ],
         timeout=15,
     )
@@ -403,13 +419,15 @@ def _run_ruff_check(project_root: str) -> list:
 
     violations = []
     for item in violations_raw[:20]:
-        violations.append({
-            "file": item.get("filename", ""),
-            "line": item.get("location", {}).get("row", 0),
-            "code": item.get("code", ""),
-            "message": item.get("message", ""),
-            "severity": "warning" if (item.get("code", "") or "").startswith("W") else "error",
-        })
+        violations.append(
+            {
+                "file": item.get("filename", ""),
+                "line": item.get("location", {}).get("row", 0),
+                "code": item.get("code", ""),
+                "message": item.get("message", ""),
+                "severity": "warning" if (item.get("code", "") or "").startswith("W") else "error",
+            }
+        )
     return violations
 
 
@@ -421,10 +439,14 @@ def _run_flake8_check(project_root: str) -> list:
 
     result = _run_linter(
         [
-            "flake8", src_path,
-            "--format", "%(path)s:%(row)d:%(col)d: %(code)s %(text)s",
-            "--select", "E,W,F",
-            "--max-line-length", "120",
+            "flake8",
+            src_path,
+            "--format",
+            "%(path)s:%(row)d:%(col)d: %(code)s %(text)s",
+            "--select",
+            "E,W,F",
+            "--max-line-length",
+            "120",
         ],
         timeout=15,
     )
@@ -443,13 +465,15 @@ def _run_flake8_check(project_root: str) -> list:
             code_and_msg = rest.split(" ", 1)
             code = code_and_msg[0] if code_and_msg else ""
             message = code_and_msg[1] if len(code_and_msg) > 1 else rest
-            violations.append({
-                "file": parts[0],
-                "line": int(parts[1]),
-                "code": code,
-                "message": message,
-                "severity": "warning" if code.startswith("W") else "error",
-            })
+            violations.append(
+                {
+                    "file": parts[0],
+                    "line": int(parts[1]),
+                    "code": code,
+                    "message": message,
+                    "severity": "warning" if code.startswith("W") else "error",
+                }
+            )
         except (ValueError, IndexError):
             continue
     return violations
@@ -477,8 +501,14 @@ def node_standards_enforcement(state: FlowState) -> dict:
             updates["standards_violations"] = []
             updates["standards_violations_count"] = 0
             updates["standards_linter_used"] = "none"
-            write_level_log(state, "level2", "standards-enforcement", "SKIPPED",
-                            time.time() - _step_start, {"reason": "no linter found"})
+            write_level_log(
+                state,
+                "level2",
+                "standards-enforcement",
+                "SKIPPED",
+                time.time() - _step_start,
+                {"reason": "no linter found"},
+            )
             return updates
 
         if linter_name == "ruff":
@@ -492,17 +522,25 @@ def node_standards_enforcement(state: FlowState) -> dict:
         updates["standards_linter_used"] = linter_name
 
         existing_pipeline = state.get("pipeline") or []
-        updates["pipeline"] = list(existing_pipeline) + [{
-            "node": "node_standards_enforcement",
-            "linter": linter_name,
-            "violations_found": len(violations),
-        }]
+        updates["pipeline"] = list(existing_pipeline) + [
+            {
+                "node": "node_standards_enforcement",
+                "linter": linter_name,
+                "violations_found": len(violations),
+            }
+        ]
 
-        write_level_log(state, "level2", "standards-enforcement", "OK",
-                        time.time() - _step_start, {
-                            "linter": linter_name,
-                            "violations_count": len(violations),
-                        })
+        write_level_log(
+            state,
+            "level2",
+            "standards-enforcement",
+            "OK",
+            time.time() - _step_start,
+            {
+                "linter": linter_name,
+                "violations_count": len(violations),
+            },
+        )
 
     except Exception as e:
         # Always non-blocking
@@ -510,8 +548,7 @@ def node_standards_enforcement(state: FlowState) -> dict:
         updates["standards_violations"] = []
         updates["standards_violations_count"] = 0
         updates["standards_linter_used"] = "none"
-        write_level_log(state, "level2", "standards-enforcement", "FAILED",
-                        time.time() - _step_start, None, str(e))
+        write_level_log(state, "level2", "standards-enforcement", "FAILED", time.time() - _step_start, None, str(e))
 
     return updates
 
@@ -532,11 +569,17 @@ def level2_merge_node(state: FlowState) -> dict:
         existing_errors = state.get("errors") or []
         updates["errors"] = list(existing_errors) + ["Level 2: Standards loading failed"]
 
-    write_level_log(state, "level2", "merge", updates["level2_status"],
-                    time.time() - _step_start, {
-                        "level2_status": updates["level2_status"],
-                        "total_standards": state.get("standards_count", 0),
-                    })
+    write_level_log(
+        state,
+        "level2",
+        "merge",
+        updates["level2_status"],
+        time.time() - _step_start,
+        {
+            "level2_status": updates["level2_status"],
+            "total_standards": state.get("standards_count", 0),
+        },
+    )
     return updates
 
 

@@ -48,6 +48,7 @@ logger = logging.getLogger(__name__)
 # Internal low-level helpers
 # ---------------------------------------------------------------------------
 
+
 def _build_auth_header(token: str) -> str:
     """Build an HTTP Basic auth header value from a SonarQube token.
 
@@ -80,6 +81,7 @@ def _parse_report_task(report_task_path: Path) -> Dict[str, str]:
 # ---------------------------------------------------------------------------
 # Public low-level API (used by higher-level functions in this module)
 # ---------------------------------------------------------------------------
+
 
 def sonar_api_get(
     endpoint: str,
@@ -200,6 +202,7 @@ def _sonar_issue_to_finding(issue: Dict[str, Any]) -> Dict[str, Any]:
 # Public API - installation / server detection
 # ---------------------------------------------------------------------------
 
+
 def detect_sonar_installation() -> Dict[str, Any]:
     """Check whether sonar-scanner CLI is installed and whether the API is reachable.
 
@@ -283,9 +286,7 @@ def detect_sonar_installation() -> Dict[str, Any]:
         server_status = status_data.get("status", "UNKNOWN")
         result["api_available"] = server_status == "UP"
         result["server_status"] = server_status
-        logger.debug(
-            "SonarQube API at %s responded: status=%s", host_url, server_status
-        )
+        logger.debug("SonarQube API at %s responded: status=%s", host_url, server_status)
     else:
         logger.debug("SonarQube API at %s not reachable", host_url)
 
@@ -295,6 +296,7 @@ def detect_sonar_installation() -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 # Public API - data retrieval
 # ---------------------------------------------------------------------------
+
 
 def get_project_issues(
     project_key: Optional[str] = None,
@@ -475,9 +477,7 @@ def get_quality_gate_status(
     if config.get("organization"):
         params["organization"] = config["organization"]
 
-    data = sonar_api_get(
-        "/api/qualitygates/project_status", params=params, config=config
-    )
+    data = sonar_api_get("/api/qualitygates/project_status", params=params, config=config)
     if data is None:
         return default
 
@@ -557,6 +557,7 @@ def create_sonar_project(
 # ---------------------------------------------------------------------------
 # Public API - scan execution (CLI + API orchestration)
 # ---------------------------------------------------------------------------
+
 
 def run_sonar_scan(
     project_root: str,
@@ -747,15 +748,9 @@ def run_sonar_scan(
             "bugs": measures.get("bugs", 0),
             "vulnerabilities": measures.get("vulnerabilities", 0),
             "code_smells": measures.get("code_smells", 0),
-            "coverage_pct": (
-                measures.get("coverage")
-                if measures.get("coverage", -1.0) >= 0
-                else None
-            ),
+            "coverage_pct": (measures.get("coverage") if measures.get("coverage", -1.0) >= 0 else None),
             "quality_gate": (
-                "PASSED"
-                if quality_gate_str == "OK"
-                else ("FAILED" if quality_gate_str == "ERROR" else "UNKNOWN")
+                "PASSED" if quality_gate_str == "OK" else ("FAILED" if quality_gate_str == "ERROR" else "UNKNOWN")
             ),
         }
     else:
@@ -768,11 +763,7 @@ def run_sonar_scan(
             "vulnerabilities": vulnerabilities,
             "code_smells": code_smells,
             "coverage_pct": None,
-            "quality_gate": (
-                "PASSED"
-                if gate_str == "OK"
-                else ("FAILED" if gate_str == "ERROR" else "UNKNOWN")
-            ),
+            "quality_gate": ("PASSED" if gate_str == "OK" else ("FAILED" if gate_str == "ERROR" else "UNKNOWN")),
         }
 
     return {
