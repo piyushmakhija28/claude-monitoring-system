@@ -19,7 +19,7 @@ Claude Workflow Engine is a 3-level LangGraph-based orchestration pipeline for a
 | **Frameworks** | LangGraph 0.2.0+, LangChain, FastMCP (mcp package), Qdrant |
 | **Status** | Active Development |
 | **Primary Location** | scripts/langgraph_engine/ |
-| **MCP Servers** | 20 total: 2 in-engine + 18 separate repos (328 tools) |
+| **MCP Servers** | 20 servers (328 tools) -- all in separate repos under [techdeveloper-org](https://github.com/orgs/techdeveloper-org/repositories); 2 also keep in-engine copies in `src/mcp/` |
 | **Total Python Files** | 310+ |
 | **Test Files** | 75 |
 | **Call Graph** | 578 classes, 3,985 methods, 4 languages (Python/Java/TS/Kotlin) |
@@ -82,7 +82,7 @@ Level 3: Execution (15 steps: Step 0 through Step 14)
 |   +-- architecture/                 # generate_system_diagram.py (shared utility)
 +-- policies/                         # README pointing to level packages (policies moved into level_*/policies/)
 |   +-- testing/                      # Testing policies (unchanged)
-+-- src/mcp/                          # 2 in-engine MCP servers + shared bridge (session, vector-db, session_hooks, base/)
++-- src/mcp/                          # In-engine copies of session-mgr + vector-db (repos are source of truth) + bridge (session_hooks, base/)
 +-- tests/                            # 75 test files
 +-- docs/                             # 47 documentation files
 +-- docs/uml/                         # Auto-generated UML diagrams (13 types)
@@ -137,46 +137,49 @@ Level 3: Execution (15 steps: Step 0 through Step 14)
 | Secrets Scanner | scripts/secrets_check.py | CI gate: 6 regex patterns, exit 1 on finding |
 | Pin Requirements | scripts/pin_requirements.py | Generates requirements.pinned.txt + requirements.bounds.txt |
 
-### MCP Servers (20 servers, 328 tools) -- v1.8.1 Extracted to Separate Repos
+### MCP Servers (20 servers, 328 tools) -- All Extracted to Separate Repos
 
-All registered in `~/.claude/settings.json`. Each server now lives in its own private GitHub repo
-under `techdeveloper-org`. Settings point to `mcp-{name}/server.py` in the local workspace.
+All 20 MCP servers have been extracted to individual private repos under
+[`techdeveloper-org`](https://github.com/orgs/techdeveloper-org/repositories)
+for independent versioning, testing, and reuse. Each is registered in `~/.claude/settings.json`
+and points to `mcp-{name}/server.py` in the local workspace.
 
-#### In-Engine Servers (still in `src/mcp/` -- tightly coupled to pipeline internals)
+> **Note:** `session-mgr` and `vector-db` also keep in-engine copies in `src/mcp/` because
+> they are imported in-process by `session_hooks.py` and `rag_integration.py` respectively.
+> The separate repos are the source of truth; in-engine copies are kept for tight coupling needs.
 
-| Server | File | Tools | Purpose | Why In-Engine |
-|--------|------|-------|---------|---------------|
-| session-mgr | src/mcp/session_mcp_server.py | 14 | Session lifecycle | Imported in-process by session_hooks.py |
-| vector-db | src/mcp/vector_db_mcp_server.py | 11 | Qdrant RAG | Imported via sys.path by rag_integration.py |
+#### All 20 MCP Server Repos
 
-#### Extracted Servers (separate repos under `techdeveloper-org`)
-
-| Server | Repo | Tools | Purpose |
-|--------|------|-------|---------|
-| git-ops | [mcp-git-ops](https://github.com/techdeveloper-org/mcp-git-ops) | 14 | Git (branch, commit, push, pull, stash, diff, fetch, post-merge cleanup) |
-| github-api | [mcp-github-api](https://github.com/techdeveloper-org/mcp-github-api) | 12 | GitHub (PR, issue, merge, label, build validate, full merge cycle) |
-| policy-enforcement | [mcp-policy-enforcement](https://github.com/techdeveloper-org/mcp-policy-enforcement) | 11 | Policy compliance, flow-trace, module health, system health |
-| llm-provider | [mcp-llm-provider](https://github.com/techdeveloper-org/mcp-llm-provider) | 8 | LLM (4 providers, hybrid GPU-first, async health, cached) |
-| llm-router | [mcp-llm-router](https://github.com/techdeveloper-org/mcp-llm-router) | 4 | Intelligent LLM routing, step classification, model selection |
-| ollama-provider | [mcp-ollama-provider](https://github.com/techdeveloper-org/mcp-ollama-provider) | 5 | Local Ollama GPU inference, model discovery, pull |
-| anthropic-provider | [mcp-anthropic-provider](https://github.com/techdeveloper-org/mcp-anthropic-provider) | 4 | Direct Anthropic Claude API, cost estimation |
-| openai-provider | [mcp-openai-provider](https://github.com/techdeveloper-org/mcp-openai-provider) | 4 | Direct OpenAI GPT API, cost estimation |
-| token-optimizer | [mcp-token-optimizer](https://github.com/techdeveloper-org/mcp-token-optimizer) | 10 | Token reduction (AST navigation, smart read, dedup, 60-85% savings) |
-| pre-tool-gate | [mcp-pre-tool-gate](https://github.com/techdeveloper-org/mcp-pre-tool-gate) | 8 | Pre-tool validation (8 policy checks, skill hints) |
-| post-tool-tracker | [mcp-post-tool-tracker](https://github.com/techdeveloper-org/mcp-post-tool-tracker) | 6 | Post-tool tracking (progress, commit readiness, stats) |
-| standards-loader | [mcp-standards-loader](https://github.com/techdeveloper-org/mcp-standards-loader) | 7 | Standards (project detect, framework detect, hot-reload) |
-| skill-manager | [mcp-skill-manager](https://github.com/techdeveloper-org/mcp-skill-manager) | 8 | Skill lifecycle (load, search, validate, rank, conflicts) |
-| uml-diagram | [mcp-uml-diagram](https://github.com/techdeveloper-org/mcp-uml-diagram) | 15 | UML generation (13 diagram types, CallGraph + AST + LLM, Mermaid/PlantUML, Kroki.io) |
-| drawio-diagram | [mcp-drawio-diagram](https://github.com/techdeveloper-org/mcp-drawio-diagram) | 5 | Draw.io editable diagrams (12 types, .drawio files, shareable URLs, no API needed) |
-| jira-api | [mcp-jira-api](https://github.com/techdeveloper-org/mcp-jira-api) | 10 | Jira (create/search/transition issues, link PRs, Cloud+Server, ADF+plain text) |
-| jenkins-ci | [mcp-jenkins-ci](https://github.com/techdeveloper-org/mcp-jenkins-ci) | 10 | Jenkins CI/CD (trigger/abort builds, console output, queue, build polling) |
-| figma-api | [mcp-figma](https://github.com/techdeveloper-org/mcp-figma) | 10 | Figma (file info, components, design tokens, styles, design review) |
+| # | Server | Repo | Tools | Purpose |
+|---|--------|------|-------|---------|
+| 1 | session-mgr | [mcp-session-mgr](https://github.com/techdeveloper-org/mcp-session-mgr) | 14 | Session lifecycle (also in-engine: `src/mcp/session_mcp_server.py`) |
+| 2 | vector-db | [mcp-vector-db](https://github.com/techdeveloper-org/mcp-vector-db) | 11 | Qdrant RAG (also in-engine: `src/mcp/vector_db_mcp_server.py`) |
+| 3 | git-ops | [mcp-git-ops](https://github.com/techdeveloper-org/mcp-git-ops) | 14 | Git (branch, commit, push, pull, stash, diff, fetch, post-merge cleanup) |
+| 4 | github-api | [mcp-github-api](https://github.com/techdeveloper-org/mcp-github-api) | 12 | GitHub (PR, issue, merge, label, build validate, full merge cycle) |
+| 5 | policy-enforcement | [mcp-policy-enforcement](https://github.com/techdeveloper-org/mcp-policy-enforcement) | 11 | Policy compliance, flow-trace, module health, system health |
+| 6 | llm-provider | [mcp-llm-provider](https://github.com/techdeveloper-org/mcp-llm-provider) | 8 | LLM (4 providers, hybrid GPU-first, async health, cached) |
+| 7 | llm-router | [mcp-llm-router](https://github.com/techdeveloper-org/mcp-llm-router) | 4 | Intelligent LLM routing, step classification, model selection |
+| 8 | ollama-provider | [mcp-ollama-provider](https://github.com/techdeveloper-org/mcp-ollama-provider) | 5 | Local Ollama GPU inference, model discovery, pull |
+| 9 | anthropic-provider | [mcp-anthropic-provider](https://github.com/techdeveloper-org/mcp-anthropic-provider) | 4 | Direct Anthropic Claude API, cost estimation |
+| 10 | openai-provider | [mcp-openai-provider](https://github.com/techdeveloper-org/mcp-openai-provider) | 4 | Direct OpenAI GPT API, cost estimation |
+| 11 | token-optimizer | [mcp-token-optimizer](https://github.com/techdeveloper-org/mcp-token-optimizer) | 10 | Token reduction (AST navigation, smart read, dedup, 60-85% savings) |
+| 12 | pre-tool-gate | [mcp-pre-tool-gate](https://github.com/techdeveloper-org/mcp-pre-tool-gate) | 8 | Pre-tool validation (8 policy checks, skill hints) |
+| 13 | post-tool-tracker | [mcp-post-tool-tracker](https://github.com/techdeveloper-org/mcp-post-tool-tracker) | 6 | Post-tool tracking (progress, commit readiness, stats) |
+| 14 | standards-loader | [mcp-standards-loader](https://github.com/techdeveloper-org/mcp-standards-loader) | 7 | Standards (project detect, framework detect, hot-reload) |
+| 15 | skill-manager | [mcp-skill-manager](https://github.com/techdeveloper-org/mcp-skill-manager) | 8 | Skill lifecycle (load, search, validate, rank, conflicts) |
+| 16 | uml-diagram | [mcp-uml-diagram](https://github.com/techdeveloper-org/mcp-uml-diagram) | 15 | UML generation (13 diagram types, CallGraph + AST + LLM, Mermaid/PlantUML, Kroki.io) |
+| 17 | drawio-diagram | [mcp-drawio-diagram](https://github.com/techdeveloper-org/mcp-drawio-diagram) | 5 | Draw.io editable diagrams (12 types, .drawio files, shareable URLs, no API needed) |
+| 18 | jira-api | [mcp-jira-api](https://github.com/techdeveloper-org/mcp-jira-api) | 10 | Jira (create/search/transition issues, link PRs, Cloud+Server, ADF+plain text) |
+| 19 | jenkins-ci | [mcp-jenkins-ci](https://github.com/techdeveloper-org/mcp-jenkins-ci) | 10 | Jenkins CI/CD (trigger/abort builds, console output, queue, build polling) |
+| 20 | figma-api | [mcp-figma](https://github.com/techdeveloper-org/mcp-figma) | 10 | Figma (file info, components, design tokens, styles, design review) |
 
 #### Shared Base Package
 
 | Repo | Purpose |
 |------|---------|
 | [mcp-base](https://github.com/techdeveloper-org/mcp-base) | Shared base package: MCPResponse builder, @mcp_tool_handler decorator, AtomicJsonStore, LazyClient. Each server repo includes a copy as `base/`. |
+
+> **Total:** 20 server repos + 1 shared base = [21 repos](https://github.com/orgs/techdeveloper-org/repositories) under `techdeveloper-org`
 
 ### RAG Integration
 
