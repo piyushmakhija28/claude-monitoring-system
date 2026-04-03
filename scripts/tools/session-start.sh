@@ -199,8 +199,8 @@ echo ""
 echo "${BLUE}[6/7] Detecting active Claude Code plan...${NC}"
 
 # Check if plan detector exists
-if [ -f "$HOME/.claude/memory/scripts/plan-detector.sh" ]; then
-    PLAN_SUMMARY=$(bash "$HOME/.claude/memory/scripts/plan-detector.sh" --summary 2>/dev/null)
+if [ -f "$HOME/.claude/memory/scripts/tools/plan-detector.sh" ]; then
+    PLAN_SUMMARY=$(bash "$HOME/.claude/memory/scripts/tools/plan-detector.sh" --summary 2>/dev/null)
     if [ $? -eq 0 ]; then
         echo "${GREEN}✅ Active Plan: $PLAN_SUMMARY${NC}"
     else

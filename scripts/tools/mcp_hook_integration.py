@@ -16,7 +16,7 @@ Usage in pre-tool-enforcer.py:
 
 import json
 from pathlib import Path
-from typing import Optional, Dict
+from typing import Dict, Optional
 
 
 def _get_mcp_config_from_flow_trace() -> Dict[str, bool]:
@@ -34,9 +34,7 @@ def _get_mcp_config_from_flow_trace() -> Dict[str, bool]:
         if not session_id:
             return {"mcp_filesystem_enabled": False, "mcp_auto_routing_enabled": False}
 
-        trace_file = (
-            Path.home() / ".claude" / "memory" / "logs" / "sessions" / session_id / "flow-trace.json"
-        )
+        trace_file = Path.home() / ".claude" / "memory" / "logs" / "sessions" / session_id / "flow-trace.json"
 
         if not trace_file.exists():
             return {"mcp_filesystem_enabled": False, "mcp_auto_routing_enabled": False}
@@ -84,9 +82,7 @@ def should_suggest_mcp() -> bool:
         True if filesystem MCP is enabled and auto-routing is allowed
     """
     config = _get_mcp_config_from_flow_trace()
-    return config.get("mcp_filesystem_enabled", False) and config.get(
-        "mcp_auto_routing_enabled", False
-    )
+    return config.get("mcp_filesystem_enabled", False) and config.get("mcp_auto_routing_enabled", False)
 
 
 def get_mcp_read_suggestion() -> str:

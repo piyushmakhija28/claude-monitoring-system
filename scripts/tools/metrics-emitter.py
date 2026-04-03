@@ -34,6 +34,7 @@ from pathlib import Path
 # Internal helpers
 # ---------------------------------------------------------------------------
 
+
 def _metrics_file() -> Path:
     """Return the path to metrics.jsonl, creating parent dirs if needed.
 
@@ -45,12 +46,12 @@ def _metrics_file() -> Path:
         directories are created if they do not exist.
     """
     try:
-        p = Path.home() / '.claude' / 'memory' / 'logs' / 'metrics.jsonl'
+        p = Path.home() / ".claude" / "memory" / "logs" / "metrics.jsonl"
         p.parent.mkdir(parents=True, exist_ok=True)
         return p
     except Exception:
         # Fallback to a temp location so callers never explode
-        return Path(os.environ.get('TEMP', '/tmp')) / 'metrics.jsonl'
+        return Path(os.environ.get("TEMP", "/tmp")) / "metrics.jsonl"
 
 
 def _now_iso() -> str:
@@ -65,7 +66,7 @@ def _now_iso() -> str:
     try:
         return datetime.now(timezone.utc).isoformat()
     except Exception:
-        return datetime.utcnow().isoformat() + 'Z'
+        return datetime.utcnow().isoformat() + "Z"
 
 
 def _append(record: dict) -> None:
@@ -74,10 +75,10 @@ def _append(record: dict) -> None:
     Uses line-buffered open so each append is atomic for single records.
     """
     try:
-        record.setdefault('ts', _now_iso())
-        record.setdefault('pid', os.getpid())
-        line = json.dumps(record, ensure_ascii=True) + '\n'
-        with open(_metrics_file(), 'a', encoding='utf-8', errors='replace') as fh:
+        record.setdefault("ts", _now_iso())
+        record.setdefault("pid", os.getpid())
+        line = json.dumps(record, ensure_ascii=True) + "\n"
+        with open(_metrics_file(), "a", encoding="utf-8", errors="replace") as fh:
             fh.write(line)
     except Exception:
         pass
@@ -87,9 +88,10 @@ def _append(record: dict) -> None:
 # Public emit functions
 # ---------------------------------------------------------------------------
 
-def emit_hook_execution(hook_name: str, duration_ms: int,
-                        session_id: str = '', exit_code: int = 0,
-                        extra: dict = None) -> None:
+
+def emit_hook_execution(
+    hook_name: str, duration_ms: int, session_id: str = "", exit_code: int = 0, extra: dict = None
+) -> None:
     """
     Emit a record that captures one full hook script execution.
 
@@ -103,25 +105,28 @@ def emit_hook_execution(hook_name: str, duration_ms: int,
     """
     try:
         record = {
-            'type': 'hook_execution',
-            'hook': hook_name,
-            'duration_ms': int(duration_ms),
-            'session_id': str(session_id),
-            'exit_code': int(exit_code),
+            "type": "hook_execution",
+            "hook": hook_name,
+            "duration_ms": int(duration_ms),
+            "session_id": str(session_id),
+            "exit_code": int(exit_code),
         }
         if extra and isinstance(extra, dict):
-            record.update({k: v for k, v in extra.items()
-                           if k not in record})
+            record.update({k: v for k, v in extra.items() if k not in record})
         _append(record)
     except Exception:
         pass
 
 
-def emit_enforcement_event(hook_name: str, event_type: str,
-                           tool_name: str = '', reason: str = '',
-                           blocked: bool = False,
-                           session_id: str = '',
-                           extra: dict = None) -> None:
+def emit_enforcement_event(
+    hook_name: str,
+    event_type: str,
+    tool_name: str = "",
+    reason: str = "",
+    blocked: bool = False,
+    session_id: str = "",
+    extra: dict = None,
+) -> None:
     """
     Emit a record when an enforcement action occurs (block or hint).
 
@@ -139,25 +144,24 @@ def emit_enforcement_event(hook_name: str, event_type: str,
     """
     try:
         record = {
-            'type': 'enforcement_event',
-            'hook': hook_name,
-            'event_type': str(event_type),
-            'tool_name': str(tool_name),
-            'reason': str(reason)[:200],
-            'blocked': bool(blocked),
-            'session_id': str(session_id),
+            "type": "enforcement_event",
+            "hook": hook_name,
+            "event_type": str(event_type),
+            "tool_name": str(tool_name),
+            "reason": str(reason)[:200],
+            "blocked": bool(blocked),
+            "session_id": str(session_id),
         }
         if extra and isinstance(extra, dict):
-            record.update({k: v for k, v in extra.items()
-                           if k not in record})
+            record.update({k: v for k, v in extra.items() if k not in record})
         _append(record)
     except Exception:
         pass
 
 
-def emit_policy_step(step_name: str, level: int, passed: bool,
-                     duration_ms: int = 0, session_id: str = '',
-                     details: dict = None) -> None:
+def emit_policy_step(
+    step_name: str, level: int, passed: bool, duration_ms: int = 0, session_id: str = "", details: dict = None
+) -> None:
     """
     Emit a record after a numbered policy step completes.
 
@@ -172,23 +176,23 @@ def emit_policy_step(step_name: str, level: int, passed: bool,
     """
     try:
         record = {
-            'type': 'policy_step',
-            'step': str(step_name),
-            'level': int(level),
-            'passed': bool(passed),
-            'duration_ms': int(duration_ms),
-            'session_id': str(session_id),
+            "type": "policy_step",
+            "step": str(step_name),
+            "level": int(level),
+            "passed": bool(passed),
+            "duration_ms": int(duration_ms),
+            "session_id": str(session_id),
         }
         if details and isinstance(details, dict):
-            record['details'] = {k: v for k, v in details.items()}
+            record["details"] = {k: v for k, v in details.items()}
         _append(record)
     except Exception:
         pass
 
 
-def emit_flag_lifecycle(flag_type: str, action: str,
-                        session_id: str = '', reason: str = '',
-                        extra: dict = None) -> None:
+def emit_flag_lifecycle(
+    flag_type: str, action: str, session_id: str = "", reason: str = "", extra: dict = None
+) -> None:
     """
     Emit a record when an enforcement flag is written or cleared.
 
@@ -202,23 +206,22 @@ def emit_flag_lifecycle(flag_type: str, action: str,
     """
     try:
         record = {
-            'type': 'flag_lifecycle',
-            'flag_type': str(flag_type),
-            'action': str(action),
-            'session_id': str(session_id),
-            'reason': str(reason)[:200],
+            "type": "flag_lifecycle",
+            "flag_type": str(flag_type),
+            "action": str(action),
+            "session_id": str(session_id),
+            "reason": str(reason)[:200],
         }
         if extra and isinstance(extra, dict):
-            record.update({k: v for k, v in extra.items()
-                           if k not in record})
+            record.update({k: v for k, v in extra.items() if k not in record})
         _append(record)
     except Exception:
         pass
 
 
-def emit_context_sample(context_pct: float, session_id: str = '',
-                        source: str = '', tool_name: str = '',
-                        extra: dict = None) -> None:
+def emit_context_sample(
+    context_pct: float, session_id: str = "", source: str = "", tool_name: str = "", extra: dict = None
+) -> None:
     """
     Emit a context-usage sample at a point in time.
 
@@ -232,15 +235,14 @@ def emit_context_sample(context_pct: float, session_id: str = '',
     """
     try:
         record = {
-            'type': 'context_sample',
-            'context_pct': round(float(context_pct), 2),
-            'session_id': str(session_id),
-            'source': str(source),
-            'tool_name': str(tool_name),
+            "type": "context_sample",
+            "context_pct": round(float(context_pct), 2),
+            "session_id": str(session_id),
+            "source": str(source),
+            "tool_name": str(tool_name),
         }
         if extra and isinstance(extra, dict):
-            record.update({k: v for k, v in extra.items()
-                           if k not in record})
+            record.update({k: v for k, v in extra.items() if k not in record})
         _append(record)
     except Exception:
         pass
@@ -250,27 +252,36 @@ def emit_context_sample(context_pct: float, session_id: str = '',
 # CLI self-test (python metrics-emitter.py)
 # ---------------------------------------------------------------------------
 
-if __name__ == '__main__':
-    print('[metrics-emitter] Running self-test...')
-    emit_hook_execution('test-hook.py', 123, session_id='SESSION-TEST-001', exit_code=0)
-    emit_enforcement_event('pre-tool-enforcer.py', 'task_breakdown_block',
-                           tool_name='Write', reason='task-breakdown-pending flag found',
-                           blocked=True, session_id='SESSION-TEST-001')
-    emit_policy_step('LEVEL_3_STEP_4', level=3, passed=True,
-                     duration_ms=5, session_id='SESSION-TEST-001',
-                     details={'model': 'SONNET', 'complexity': 8})
-    emit_flag_lifecycle('skill_selection', 'write',
-                        session_id='SESSION-TEST-001',
-                        reason='step_3_5_skill_selection_required')
-    emit_context_sample(72.5, session_id='SESSION-TEST-001',
-                        source='post-tool-tracker', tool_name='Edit')
+if __name__ == "__main__":
+    print("[metrics-emitter] Running self-test...")
+    emit_hook_execution("test-hook.py", 123, session_id="SESSION-TEST-001", exit_code=0)
+    emit_enforcement_event(
+        "pre-tool-enforcer.py",
+        "task_breakdown_block",
+        tool_name="Write",
+        reason="task-breakdown-pending flag found",
+        blocked=True,
+        session_id="SESSION-TEST-001",
+    )
+    emit_policy_step(
+        "LEVEL_3_STEP_4",
+        level=3,
+        passed=True,
+        duration_ms=5,
+        session_id="SESSION-TEST-001",
+        details={"model": "SONNET", "complexity": 8},
+    )
+    emit_flag_lifecycle(
+        "skill_selection", "write", session_id="SESSION-TEST-001", reason="step_3_5_skill_selection_required"
+    )
+    emit_context_sample(72.5, session_id="SESSION-TEST-001", source="post-tool-tracker", tool_name="Edit")
     mf = _metrics_file()
-    print(f'[metrics-emitter] Wrote 5 test records to: {mf}')
+    print(f"[metrics-emitter] Wrote 5 test records to: {mf}")
     try:
-        with open(mf, 'r', encoding='utf-8') as fh:
+        with open(mf, "r", encoding="utf-8") as fh:
             lines = [line.strip() for line in fh if line.strip()]
-        print(f'[metrics-emitter] Total records in file: {len(lines)}')
-        print(f'[metrics-emitter] Last record: {lines[-1]}')
+        print(f"[metrics-emitter] Total records in file: {len(lines)}")
+        print(f"[metrics-emitter] Last record: {lines[-1]}")
     except Exception as e:
-        print(f'[metrics-emitter] Could not verify output: {e}')
-    print('[metrics-emitter] Self-test complete.')
+        print(f"[metrics-emitter] Could not verify output: {e}")
+    print("[metrics-emitter] Self-test complete.")

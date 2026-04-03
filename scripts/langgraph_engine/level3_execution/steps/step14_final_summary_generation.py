@@ -132,7 +132,7 @@ def step14_final_summary_generation(state: FlowState) -> dict:
             voice_msg += f" {len(modified_files)} files modified."
 
         try:
-            voice_script = Path(__file__).parent.parent.parent.parent.parent / "voice-notifier.py"
+            voice_script = Path(__file__).parent.parent.parent.parent.parent / "tools" / "voice-notifier.py"
             if voice_script.exists():
                 result = subprocess.run(
                     [sys.executable, str(voice_script), voice_msg],

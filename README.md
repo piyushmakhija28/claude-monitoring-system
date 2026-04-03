@@ -827,10 +827,10 @@ policies/
 | **Draw.io Diagram Support** | 12 diagram types, editable .drawio files, shareable URLs (no API key needed) |
 | **Architecture Diagram** | Full 3-level pipeline diagram → `architecture.drawio` in project root |
 | **CLI Interface** | `cwe run/setup/status/health/version/doctor` — fully functional |
-| **Setup Wizard** | Interactive first-time configuration (`scripts/setup_wizard.py`) |
+| **Setup Wizard** | Interactive first-time configuration (`scripts/setup/setup_wizard.py`) |
 | **Docker** | `Dockerfile` + `docker-compose.yml` — one-command deployment |
 | **GitHub Actions CI** | `.github/workflows/ci.yml` — configurable matrix (Python 3.10/3.12), lint, tests. Auto-trigger disabled; runs on `workflow_dispatch` only. |
-| **Version Sync** | `scripts/sync-version.py` — syncs VERSION to in-engine MCP servers (v1.8.1: extracted servers have own versioning in their repos) |
+| **Version Sync** | `scripts/tools/sync-version.py` — syncs VERSION to in-engine MCP servers (v1.8.1: extracted servers have own versioning in their repos) |
 | **Test Suite** | 75 test files covering MCP servers, pipeline steps, integrations, security, e2e, load |
 | **Coverage Setup** | `pytest-cov` + `coverage` in requirements.txt |
 | **Documentation** | 47 docs, SRS, CHANGELOG, guides, deployment guide, troubleshooting guide, ADRs, runbooks |
@@ -1169,12 +1169,14 @@ claude-workflow-engine/
 |   |   +-- call_graph_builder.py     # Compat shim -> parsers/ package
 |   |   +-- call_graph_analyzer.py    # Pipeline-ready analysis (impact, context, review)
 |   |   +-- uml_generators.py         # Compat shim -> diagrams/ package
-|   |   +-- subgraphs/                # Level -1, 1, 2, 3 implementations
 |   +-- architecture/                 # Helper scripts (sync, standards, execution)
+|   +-- setup/                        # One-time environment setup scripts
+|   +-- bin/                          # Windows .bat operational launchers
+|   +-- tools/                        # Developer utilities (release, sync, metrics, voice)
 |   +-- 3-level-flow.py               # Entry point
-|   +-- pre-tool-enforcer.py          # PreToolUse hook
-|   +-- post-tool-tracker.py          # PostToolUse hook
-|   +-- stop-notifier.py              # Stop hook (voice notification)
+|   +-- pre-tool-enforcer.py          # PreToolUse hook (shim -> pre_tool_enforcer/)
+|   +-- post-tool-tracker.py          # PostToolUse hook (shim -> post_tool_tracker/)
+|   +-- stop-notifier.py              # Stop hook (shim -> stop_notifier/)
 |
 +-- src/mcp/                          # In-engine copies of session-mgr + vector-db (repos are source of truth) + bridge (session_hooks)
 +-- policies/                         # 63 policy definitions (62 .md + 1 .json)

@@ -79,6 +79,22 @@ Level 3: Execution (15 steps: Step 0 through Step 14)
 |   |   +-- level3_execution/        # [v1.11] Level 3 Execution package (20+ modules + nodes/ + subgraph.py + sonarqube/ + policies/ + architecture/)
 |   |   +-- [60+ shared modules]     # Cross-level: LLM, caching, metrics, git, state, etc.
 |   +-- architecture/                 # generate_system_diagram.py (shared utility)
+|   +-- setup/                        # One-time environment setup (install-auto-hooks.sh, setup-global-claude.sh/.ps1, setup_wizard.py, etc.)
+|   +-- bin/                          # Windows .bat operational launchers (start/stop claude-insight, sync-insight, sync-library)
+|   +-- tools/                        # Developer utilities: release.py, sync-version.py, metrics-emitter.py, voice-notifier.py, session-start.sh, etc.
+|   +-- pre_tool_enforcer/            # PreToolUse hook package (canonical)
+|   +-- post_tool_tracker/            # PostToolUse hook package (canonical)
+|   +-- stop_notifier/                # Stop hook package (canonical)
+|   +-- github_operations/            # GitHub helper operations
+|   +-- github_pr_workflow/           # PR workflow package (canonical)
+|   +-- helpers/                      # Shared helper utilities
+|   +-- 3-level-flow.py               # Main pipeline entry point
+|   +-- pre-tool-enforcer.py          # PreToolUse hook entry point (shim -> pre_tool_enforcer/)
+|   +-- post-tool-tracker.py          # PostToolUse hook entry point (shim -> post_tool_tracker/)
+|   +-- stop-notifier.py              # Stop hook entry point (shim -> stop_notifier/)
+|   +-- ide_paths.py                  # Path constants (imported by hook packages)
+|   +-- project_session.py            # Session utilities (imported by hook packages)
+|   +-- policy_tracking_helper.py     # Policy tracking (imported by hook packages)
 +-- policies/                         # README pointing to level packages (policies moved into level_*/policies/)
 |   +-- testing/                      # Testing policies (unchanged)
 +-- src/mcp/                          # In-engine copies of session-mgr + vector-db (repos are source of truth) + bridge (session_hooks, base/)
@@ -392,7 +408,7 @@ See environment variables in `.env.example`:
 <!-- execution-insight- -->
 ## Latest Execution Insight
 
-- **Task**: v1.12.0 -- Surgical shim cleanup: delete subgraphs/ shim layer, rename v2_nodes/ -> nodes/ and execution_v2.py -> subgraph.py, delete 8 root-level level3_*.py shims, redirect orchestrator.py + pipeline_builder.py to canonical imports. Zero functional change.
+- **Task**: v1.12.0 -- scripts/ root cleanup: organize 31 scattered files into setup/ (9 files), bin/ (5 files), tools/ (17 files). Update path references in cli.py, step14, session-start.sh, auto-enforce-all-policies.sh. Keep ide_paths.py, project_session.py, policy_tracking_helper.py in root (imported by hook packages).
 - **Skill**: python-core
 - **Agent**: python-backend-engineer
 - **Date**: 2026-04-03

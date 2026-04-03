@@ -19,8 +19,8 @@ Steps:
 Windows-safe: ASCII only (cp1252 compatible).
 """
 
-import sys
 import subprocess
+import sys
 from datetime import datetime
 from pathlib import Path
 

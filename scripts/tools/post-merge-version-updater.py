@@ -15,19 +15,19 @@ Hook: PostToolUse (after Bash tool that does 'git push' or 'gh pr merge')
 Version: 1.0.0
 """
 
-import sys
 import json
 import subprocess
-from pathlib import Path
+import sys
 from datetime import datetime
+from pathlib import Path
 
 # Windows: UTF-8 safe
-if sys.platform == 'win32':
+if sys.platform == "win32":
     try:
-        if hasattr(sys.stdout, 'reconfigure'):
-            sys.stdout.reconfigure(encoding='utf-8', errors='replace')
-        if hasattr(sys.stderr, 'reconfigure'):
-            sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+        if hasattr(sys.stdout, "reconfigure"):
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        if hasattr(sys.stderr, "reconfigure"):
+            sys.stderr.reconfigure(encoding="utf-8", errors="replace")
     except Exception:
         pass
 
@@ -35,17 +35,10 @@ if sys.platform == 'win32':
 def run_command(cmd, cwd=None, timeout=30):
     """Run shell command safely."""
     try:
-        result = subprocess.run(
-            cmd,
-            shell=True,
-            cwd=cwd,
-            capture_output=True,
-            timeout=timeout,
-            text=True
-        )
+        result = subprocess.run(cmd, shell=True, cwd=cwd, capture_output=True, timeout=timeout, text=True)
         return result.returncode == 0, result.stdout, result.stderr
     except Exception as e:
-        return False, '', str(e)
+        return False, "", str(e)
 
 
 def detect_pr_merge():
@@ -58,16 +51,16 @@ def detect_pr_merge():
     3. Last 2 branches show merge activity
     """
     # Check current branch
-    success, branch, _ = run_command('git branch --show-current')
-    if not success or 'main' not in branch:
+    success, branch, _ = run_command("git branch --show-current")
+    if not success or "main" not in branch:
         return False, "Not on main branch"
 
     # Check last commit message
-    success, msg, _ = run_command('git log -1 --pretty=%B')
+    success, msg, _ = run_command("git log -1 --pretty=%B")
     if not success:
         return False, "Could not read commit message"
 
-    is_merge = 'merge' in msg.lower() or 'Merge pull request' in msg
+    is_merge = "merge" in msg.lower() or "Merge pull request" in msg
 
     return is_merge, msg
 
@@ -82,14 +75,14 @@ def bump_version(project_root):
     - hotfix on main -> bump PATCH (X.Y.Z+1)
     - breaking change -> bump MAJOR (X+1.0.0)
     """
-    version_file = project_root / 'VERSION'
+    version_file = project_root / "VERSION"
 
     if not version_file.exists():
         return False, "VERSION file not found"
 
     try:
         current = version_file.read_text().strip()
-        parts = current.split('.')
+        parts = current.split(".")
 
         if len(parts) != 3:
             return False, f"Invalid version format: {current} (expected X.Y.Z)"
@@ -100,9 +93,9 @@ def bump_version(project_root):
         commit_msg = ""
         try:
             import subprocess
+
             result = subprocess.run(
-                ["git", "log", "-1", "--format=%s"],
-                capture_output=True, text=True, cwd=str(project_root)
+                ["git", "log", "-1", "--format=%s"], capture_output=True, text=True, cwd=str(project_root)
             )
             commit_msg = result.stdout.strip().lower()
         except Exception:
@@ -119,7 +112,7 @@ def bump_version(project_root):
             patch = 0
 
         new_version = f"{major}.{minor}.{patch}"
-        version_file.write_text(new_version + '\n', encoding='utf-8')
+        version_file.write_text(new_version + "\n", encoding="utf-8")
 
         return True, f"{current} -> {new_version}"
     except Exception as e:
@@ -134,35 +127,27 @@ def update_readme(project_root, new_version):
     - Title: # Claude Insight vX.Y.Z
     - Badge: Version-brightgreen?version=X.Y.Z
     """
-    readme_file = project_root / 'README.md'
+    readme_file = project_root / "README.md"
 
     if not readme_file.exists():
         return False, "README.md not found"
 
     try:
-        content = readme_file.read_text(encoding='utf-8')
+        content = readme_file.read_text(encoding="utf-8")
 
         # Update title
-        content = content.replace(
-            '# Claude Insight v',
-            f'# Claude Insight v{new_version} (was v'
-        )
+        content = content.replace("# Claude Insight v", f"# Claude Insight v{new_version} (was v")
         # Simpler: just replace version in title
         import re
-        content = re.sub(
-            r'# Claude Insight v[\d.]+',
-            f'# Claude Insight v{new_version}',
-            content
-        )
+
+        content = re.sub(r"# Claude Insight v[\d.]+", f"# Claude Insight v{new_version}", content)
 
         # Update badge
         content = re.sub(
-            r'\]\(Version\)-brightgreen\?version=[\d.]+',
-            f'](Version)-brightgreen?version={new_version}',
-            content
+            r"\]\(Version\)-brightgreen\?version=[\d.]+", f"](Version)-brightgreen?version={new_version}", content
         )
 
-        readme_file.write_text(content, encoding='utf-8')
+        readme_file.write_text(content, encoding="utf-8")
         return True, "README.md updated"
     except Exception as e:
         return False, str(e)
@@ -175,8 +160,12 @@ def call_version_release_policy(project_root, new_version):
     This script uses LLM to generate comprehensive README/SRS updates.
     """
     policy_script = (
-        project_root / 'scripts' / 'architecture' / '03-execution-system' /
-        '09-git-commit' / 'version-release-policy.py'
+        project_root
+        / "scripts"
+        / "architecture"
+        / "03-execution-system"
+        / "09-git-commit"
+        / "version-release-policy.py"
     )
 
     if not policy_script.exists():
@@ -185,9 +174,7 @@ def call_version_release_policy(project_root, new_version):
     try:
         # Run the policy script (it will handle README/SRS update internally)
         success, stdout, stderr = run_command(
-            f'{sys.executable} "{policy_script}" --bump',
-            cwd=str(project_root),
-            timeout=60
+            f'{sys.executable} "{policy_script}" --bump', cwd=str(project_root), timeout=60
         )
 
         if success:
@@ -204,10 +191,12 @@ def create_auto_commit(project_root, new_version):
     """
     try:
         # Stage all changes in VERSION, README, SRS
-        run_command('git add VERSION README.md CHANGELOG.md SYSTEM_REQUIREMENTS_SPECIFICATION.md', cwd=str(project_root))
+        run_command(
+            "git add VERSION README.md CHANGELOG.md SYSTEM_REQUIREMENTS_SPECIFICATION.md", cwd=str(project_root)
+        )
 
         # Check if there are staged changes
-        success, status, _ = run_command('git status --short', cwd=str(project_root))
+        success, status, _ = run_command("git status --short", cwd=str(project_root))
         if not success or not status:
             return False, "No changes to commit"
 
@@ -222,11 +211,7 @@ def create_auto_commit(project_root, new_version):
 
         # Use git commit with stdin to avoid shell quoting issues
         cmd = f'git commit -m "chore: Auto-bump version to {new_version}"'
-        success, _, _ = run_command(
-            cmd,
-            cwd=str(project_root),
-            timeout=30
-        )
+        success, _, _ = run_command(cmd, cwd=str(project_root), timeout=30)
 
         if success:
             return True, f"Auto-commit created for v{new_version}"
@@ -241,7 +226,7 @@ def main():
     project_root = Path.cwd()
 
     # Log execution
-    log_file = Path.home() / '.claude' / 'memory' / 'logs' / 'post-merge-updater.log'
+    log_file = Path.home() / ".claude" / "memory" / "logs" / "post-merge-updater.log"
     log_file.parent.mkdir(parents=True, exist_ok=True)
 
     timestamp = datetime.now().isoformat()
@@ -252,7 +237,7 @@ def main():
 
     if not is_merge:
         log_entry += f"  Reason: {msg}\n  Skipping auto-version update.\n"
-        with open(log_file, 'a', encoding='utf-8') as f:
+        with open(log_file, "a", encoding="utf-8") as f:
             f.write(log_entry)
         return 0  # Not a merge, skip
 
@@ -263,13 +248,13 @@ def main():
     log_entry += f"[VERSION] {success}: {result}\n"
 
     if not success:
-        with open(log_file, 'a', encoding='utf-8') as f:
+        with open(log_file, "a", encoding="utf-8") as f:
             f.write(log_entry)
-        print(json.dumps({'status': 'FAILED', 'reason': result}))
+        print(json.dumps({"status": "FAILED", "reason": result}))
         return 1
 
     # Extract new version
-    new_version = result.split(' -> ')[-1].strip()
+    new_version = result.split(" -> ")[-1].strip()
 
     # Step 3: Update README
     success, result = update_readme(project_root, new_version)
@@ -284,20 +269,20 @@ def main():
     log_entry += f"[COMMIT] {success}: {result}\n"
 
     # Log result
-    with open(log_file, 'a', encoding='utf-8') as f:
+    with open(log_file, "a", encoding="utf-8") as f:
         f.write(log_entry)
 
     # Output status
     output = {
-        'step': 'POST_MERGE_VERSION_UPDATE',
-        'timestamp': timestamp,
-        'new_version': new_version,
-        'status': 'OK' if success else 'FAILED'
+        "step": "POST_MERGE_VERSION_UPDATE",
+        "timestamp": timestamp,
+        "new_version": new_version,
+        "status": "OK" if success else "FAILED",
     }
 
     print(json.dumps(output))
     return 0 if success else 1
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main())

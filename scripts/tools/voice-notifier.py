@@ -26,42 +26,44 @@ TTS Engine Priority:
 Windows-Safe: ASCII only (no Unicode/emojis in print statements)
 """
 
-import sys
 import os
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
 # Windows-safe encoding
-if sys.platform == 'win32':
+if sys.platform == "win32":
     import io
+
     try:
-        if hasattr(sys.stdout, 'reconfigure'):
-            sys.stdout.reconfigure(encoding='utf-8', errors='replace')
-        elif hasattr(sys.stdout, 'buffer'):
-            sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
-        if hasattr(sys.stderr, 'reconfigure'):
-            sys.stderr.reconfigure(encoding='utf-8', errors='replace')
-        elif hasattr(sys.stderr, 'buffer'):
-            sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+        if hasattr(sys.stdout, "reconfigure"):
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        elif hasattr(sys.stdout, "buffer"):
+            sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+        if hasattr(sys.stderr, "reconfigure"):
+            sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+        elif hasattr(sys.stderr, "buffer"):
+            sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
     except Exception:
         pass
 
-MEMORY_BASE = Path.home() / '.claude' / 'memory'
-VOICE_LOG = MEMORY_BASE / 'logs' / 'voice-notifier.log'
+MEMORY_BASE = Path.home() / ".claude" / "memory"
+VOICE_LOG = MEMORY_BASE / "logs" / "voice-notifier.log"
 
 # Coqui TTS config
 COQUI_MODEL = "tts_models/en/ljspeech/vits"
-COQUI_CACHE_DIR = Path.home() / '.claude' / 'cache' / 'tts'
+COQUI_CACHE_DIR = Path.home() / ".claude" / "cache" / "tts"
 
 
 def log_voice(msg):
     """Append a timestamped entry to the voice notifier log file."""
     VOICE_LOG.parent.mkdir(parents=True, exist_ok=True)
     from datetime import datetime
-    ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     try:
-        with open(VOICE_LOG, 'a', encoding='utf-8') as f:
+        with open(VOICE_LOG, "a", encoding="utf-8") as f:
             f.write(f"{ts} | {msg}\n")
     except Exception:
         pass
@@ -71,10 +73,12 @@ def log_voice(msg):
 # AUDIO PLAYBACK HELPERS
 # =============================================================================
 
+
 def play_wav_windows(wav_path):
     """Play a WAV file on Windows using winsound (built-in, no deps)."""
     try:
         import winsound
+
         winsound.PlaySound(str(wav_path), winsound.SND_FILENAME)
         return True
     except Exception as e:
@@ -82,9 +86,9 @@ def play_wav_windows(wav_path):
         # Fallback: try powershell
         try:
             subprocess.run(
-                ['powershell', '-Command',
-                 f'(New-Object Media.SoundPlayer "{wav_path}").PlaySync()'],
-                timeout=30, capture_output=True
+                ["powershell", "-Command", f'(New-Object Media.SoundPlayer "{wav_path}").PlaySync()'],
+                timeout=30,
+                capture_output=True,
             )
             return True
         except Exception as e2:
@@ -95,9 +99,9 @@ def play_wav_windows(wav_path):
 def play_wav_unix(wav_path):
     """Play a WAV file on Unix using aplay, paplay, or ffplay."""
     players = [
-        ['aplay', str(wav_path)],
-        ['paplay', str(wav_path)],
-        ['ffplay', '-nodisp', '-autoexit', str(wav_path)],
+        ["aplay", str(wav_path)],
+        ["paplay", str(wav_path)],
+        ["ffplay", "-nodisp", "-autoexit", str(wav_path)],
     ]
     for cmd in players:
         try:
@@ -115,7 +119,7 @@ def play_wav_unix(wav_path):
 
 def play_wav(wav_path):
     """Play a WAV file using platform-appropriate player."""
-    if sys.platform == 'win32':
+    if sys.platform == "win32":
         return play_wav_windows(wav_path)
     else:
         return play_wav_unix(wav_path)
@@ -148,8 +152,9 @@ def speak_edge_tts(text):
         bool: True if spoken successfully.
     """
     try:
-        import edge_tts
         import asyncio
+
+        import edge_tts
     except ImportError:
         log_voice("[TTS-EDGE] edge-tts not installed (pip install edge-tts)")
         return False
@@ -157,7 +162,7 @@ def speak_edge_tts(text):
     wav_path = None
     try:
         # Generate MP3 audio
-        wav_fd, wav_path = tempfile.mkstemp(suffix='.mp3', prefix='claude_voice_')
+        wav_fd, wav_path = tempfile.mkstemp(suffix=".mp3", prefix="claude_voice_")
         os.close(wav_fd)
 
         async def _generate():
@@ -174,28 +179,29 @@ def speak_edge_tts(text):
 
         # Play audio - convert MP3 to WAV for reliable Windows playback
         played = False
-        if sys.platform == 'win32':
+        if sys.platform == "win32":
             # Method 1: Use PowerShell to convert MP3 to WAV and play via SoundPlayer
             try:
-                wav_converted = wav_path.replace('.mp3', '.wav')
+                wav_converted = wav_path.replace(".mp3", ".wav")
                 # PowerShell: load MP3 via MediaFoundation, save as WAV, play
                 ps_cmd = (
-                    f'$mp3 = \"{wav_path}\"; '
-                    f'$wav = \"{wav_converted}\"; '
-                    f'Add-Type -AssemblyName System.Speech; '
-                    f'# Use Windows Media Player COM for MP3 playback; '
-                    f'$wmp = New-Object -ComObject WMPlayer.OCX; '
-                    f'$wmp.URL = $mp3; '
-                    f'$wmp.controls.play(); '
-                    f'Start-Sleep -Seconds 1; '
-                    f'while ($wmp.playState -eq 3) {{ Start-Sleep -Milliseconds 300 }}; '
-                    f'$wmp.close()'
+                    f'$mp3 = "{wav_path}"; '
+                    f'$wav = "{wav_converted}"; '
+                    f"Add-Type -AssemblyName System.Speech; "
+                    f"# Use Windows Media Player COM for MP3 playback; "
+                    f"$wmp = New-Object -ComObject WMPlayer.OCX; "
+                    f"$wmp.URL = $mp3; "
+                    f"$wmp.controls.play(); "
+                    f"Start-Sleep -Seconds 1; "
+                    f"while ($wmp.playState -eq 3) {{ Start-Sleep -Milliseconds 300 }}; "
+                    f"$wmp.close()"
                 )
                 result = subprocess.run(
-                    ['powershell', '-NoProfile', '-WindowStyle', 'Hidden', '-Command', ps_cmd],
-                    timeout=60, capture_output=True
+                    ["powershell", "-NoProfile", "-WindowStyle", "Hidden", "-Command", ps_cmd],
+                    timeout=60,
+                    capture_output=True,
                 )
-                played = (result.returncode == 0)
+                played = result.returncode == 0
                 # Cleanup converted file
                 if os.path.exists(wav_converted):
                     os.unlink(wav_converted)
@@ -207,14 +213,17 @@ def speak_edge_tts(text):
                 try:
                     # Create a copy that won't be deleted immediately
                     import shutil
-                    persist_path = os.path.join(tempfile.gettempdir(), 'claude_voice_latest.mp3')
+
+                    persist_path = os.path.join(tempfile.gettempdir(), "claude_voice_latest.mp3")
                     shutil.copy2(wav_path, persist_path)
                     subprocess.Popen(
-                        ['cmd', '/c', 'start', '', persist_path],
+                        ["cmd", "/c", "start", "", persist_path],
                         creationflags=subprocess.CREATE_NO_WINDOW,
-                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
                     )
                     import time
+
                     time.sleep(5)  # Give media player time to start
                     played = True
                 except Exception:
@@ -244,6 +253,7 @@ def speak_edge_tts(text):
 # TTS ENGINE 1: COQUI TTS (Neural - Primary)
 # =============================================================================
 
+
 def speak_coqui(text):
     """Speak text using Coqui TTS neural voice synthesis.
 
@@ -272,7 +282,7 @@ def speak_coqui(text):
         tts = TTS(model_name=COQUI_MODEL, progress_bar=False)
 
         # Generate WAV to temp file
-        wav_fd, wav_path = tempfile.mkstemp(suffix='.wav', prefix='claude_voice_')
+        wav_fd, wav_path = tempfile.mkstemp(suffix=".wav", prefix="claude_voice_")
         os.close(wav_fd)
 
         tts.tts_to_file(text=text, file_path=wav_path)
@@ -304,6 +314,7 @@ def speak_coqui(text):
 # TTS ENGINE 2: PYTTSX3 (Windows Fallback - Robotic)
 # =============================================================================
 
+
 def speak_pyttsx3(text):
     """Speak text on Windows using the pyttsx3 TTS engine (fallback).
 
@@ -318,32 +329,33 @@ def speak_pyttsx3(text):
     """
     try:
         import pyttsx3
+
         engine = pyttsx3.init()
 
-        voices = engine.getProperty('voices')
+        voices = engine.getProperty("voices")
         indian_voice = None
         for voice in voices:
             try:
-                if 'en-in' in voice.languages[0].lower() or 'indian' in voice.name.lower():
+                if "en-in" in voice.languages[0].lower() or "indian" in voice.name.lower():
                     indian_voice = voice.id
                     break
             except (IndexError, AttributeError):
                 continue
 
         if indian_voice:
-            engine.setProperty('voice', indian_voice)
+            engine.setProperty("voice", indian_voice)
             log_voice(f"[TTS-PYTTSX3] Using Indian voice: {indian_voice}")
         else:
             for voice in voices:
                 try:
-                    if any(lang in voice.languages[0].lower() for lang in ['en-us', 'en-gb', 'en']):
-                        engine.setProperty('voice', voice.id)
+                    if any(lang in voice.languages[0].lower() for lang in ["en-us", "en-gb", "en"]):
+                        engine.setProperty("voice", voice.id)
                         log_voice(f"[TTS-PYTTSX3] Using fallback voice: {voice.id}")
                         break
                 except (IndexError, AttributeError):
                     continue
 
-        engine.setProperty('rate', 150)
+        engine.setProperty("rate", 150)
         engine.say(text)
         engine.runAndWait()
         log_voice(f"[TTS-PYTTSX3-SUCCESS] Spoke: {text[:60]}")
@@ -361,6 +373,7 @@ def speak_pyttsx3(text):
 # TTS ENGINE 3: ESPEAK (Unix Fallback - Robotic)
 # =============================================================================
 
+
 def speak_espeak(text):
     """Speak text on Unix using the espeak command-line TTS tool (fallback).
 
@@ -371,14 +384,14 @@ def speak_espeak(text):
         bool: True if spoken successfully.
     """
     try:
-        cmd = ['espeak', '-v', 'en-in', '-s', '150', text]
+        cmd = ["espeak", "-v", "en-in", "-s", "150", text]
         result = subprocess.run(cmd, capture_output=True, timeout=10)
 
         if result.returncode == 0:
             log_voice(f"[TTS-ESPEAK-SUCCESS] Spoke with en-in: {text[:60]}")
             return True
         else:
-            cmd = ['espeak', '-v', 'en', '-s', '150', text]
+            cmd = ["espeak", "-v", "en", "-s", "150", text]
             result = subprocess.run(cmd, capture_output=True, timeout=10)
             if result.returncode == 0:
                 log_voice(f"[TTS-ESPEAK-SUCCESS] Spoke with fallback: {text[:60]}")
@@ -399,6 +412,7 @@ def speak_espeak(text):
 # TTS ENGINE 4: POWERSHELL SAPI (Windows Built-in - No Dependencies)
 # =============================================================================
 
+
 def speak_powershell_sapi(text):
     """Speak text on Windows using PowerShell SAPI.SpVoice (built-in, no packages needed).
 
@@ -411,7 +425,7 @@ def speak_powershell_sapi(text):
     Returns:
         bool: True if spoken successfully.
     """
-    if sys.platform != 'win32':
+    if sys.platform != "win32":
         return False
 
     try:
@@ -420,7 +434,7 @@ def speak_powershell_sapi(text):
         # Use SAPI.SpVoice - built into every Windows
         ps_script = f"Add-Type -AssemblyName System.Speech; $s = New-Object System.Speech.Synthesis.SpeechSynthesizer; $s.Rate = 1; $s.Speak('{safe_text}')"
         result = subprocess.run(
-            ['powershell', '-NoProfile', '-Command', ps_script],
+            ["powershell", "-NoProfile", "-Command", ps_script],
             timeout=60,
             capture_output=True,
         )
@@ -428,7 +442,7 @@ def speak_powershell_sapi(text):
             log_voice(f"[TTS-SAPI-SUCCESS] Spoke: {text[:60]}")
             return True
         else:
-            stderr = result.stderr.decode('utf-8', errors='replace')[:100]
+            stderr = result.stderr.decode("utf-8", errors="replace")[:100]
             log_voice(f"[TTS-SAPI-FAILED] {stderr}")
             return False
     except subprocess.TimeoutExpired:
@@ -443,6 +457,7 @@ def speak_powershell_sapi(text):
 # MAIN - TTS ENGINE CHAIN
 # =============================================================================
 
+
 def main():
     """Entry point - tries TTS engines in priority order.
 
@@ -452,7 +467,7 @@ def main():
         log_voice("[ERROR] No text provided")
         sys.exit(1)
 
-    text = ' '.join(sys.argv[1:])
+    text = " ".join(sys.argv[1:])
 
     if not text or not text.strip():
         log_voice("[ERROR] Empty text provided")
@@ -471,7 +486,7 @@ def main():
         sys.exit(0)
 
     # ENGINE 2: pyttsx3 (Windows, needs pywin32)
-    if sys.platform == 'win32':
+    if sys.platform == "win32":
         if speak_pyttsx3(text):
             log_voice("[OK] Voice notification completed (pyttsx3)")
             sys.exit(0)
@@ -482,7 +497,7 @@ def main():
         sys.exit(0)
 
     # ENGINE 4: espeak (Unix fallback)
-    if sys.platform != 'win32':
+    if sys.platform != "win32":
         if speak_espeak(text):
             log_voice("[OK] Voice notification completed (espeak)")
             sys.exit(0)
@@ -491,5 +506,5 @@ def main():
     sys.exit(0)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

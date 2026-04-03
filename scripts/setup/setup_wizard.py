@@ -19,11 +19,10 @@ Version: 1.4.1
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
-import shutil
 from pathlib import Path
-
 
 # ASCII-only banner
 BANNER = """
@@ -89,11 +88,7 @@ def check_system():
 
     # pip
     try:
-        subprocess.run(
-            [sys.executable, "-m", "pip", "--version"],
-            capture_output=True,
-            timeout=5
-        )
+        subprocess.run([sys.executable, "-m", "pip", "--version"], capture_output=True, timeout=5)
         print("  [OK] pip available")
     except Exception:
         print("  [!!] pip not available")
@@ -101,12 +96,7 @@ def check_system():
 
     # git
     try:
-        result = subprocess.run(
-            ["git", "--version"],
-            capture_output=True,
-            text=True,
-            timeout=5
-        )
+        result = subprocess.run(["git", "--version"], capture_output=True, text=True, timeout=5)
         print("  [OK] {0}".format(result.stdout.strip()))
     except (FileNotFoundError, subprocess.TimeoutExpired):
         print("  [!!] git not installed")
@@ -114,12 +104,7 @@ def check_system():
 
     # GitHub CLI
     try:
-        result = subprocess.run(
-            ["gh", "--version"],
-            capture_output=True,
-            text=True,
-            timeout=5
-        )
+        result = subprocess.run(["gh", "--version"], capture_output=True, text=True, timeout=5)
         ver = result.stdout.strip().split("\n")[0]
         print("  [OK] {0}".format(ver))
     except (FileNotFoundError, subprocess.TimeoutExpired):
@@ -145,9 +130,7 @@ def install_dependencies():
     if prompt_yes_no("  Install/update dependencies from requirements.txt?"):
         print("  Installing... (this may take a minute)")
         result = subprocess.run(
-            [sys.executable, "-m", "pip", "install", "-r", str(req_file), "-q"],
-            capture_output=True,
-            text=True
+            [sys.executable, "-m", "pip", "install", "-r", str(req_file), "-q"], capture_output=True, text=True
         )
         if result.returncode == 0:
             print("  [OK] Dependencies installed")
@@ -181,46 +164,25 @@ def setup_env():
 
     # Core settings
     print("\n  -- Core Settings --")
-    config["CLAUDE_HOOK_MODE"] = prompt_user(
-        "  Pipeline mode (1=hook Steps 0-9, 0=full Steps 0-14)",
-        default="1"
-    )
-    config["CLAUDE_DEBUG"] = prompt_user(
-        "  Debug mode (0=off, 1=on)",
-        default="0"
-    )
+    config["CLAUDE_HOOK_MODE"] = prompt_user("  Pipeline mode (1=hook Steps 0-9, 0=full Steps 0-14)", default="1")
+    config["CLAUDE_DEBUG"] = prompt_user("  Debug mode (0=off, 1=on)", default="0")
 
     # LLM Provider
     print("\n  -- LLM Provider --")
-    config["LLM_PROVIDER"] = prompt_user(
-        "  LLM provider (auto/ollama/anthropic/openai)",
-        default="auto"
-    )
-    config["OLLAMA_ENDPOINT"] = prompt_user(
-        "  Ollama endpoint",
-        default="http://localhost:11434/api/generate"
-    )
+    config["LLM_PROVIDER"] = prompt_user("  LLM provider (auto/ollama/anthropic/openai)", default="auto")
+    config["OLLAMA_ENDPOINT"] = prompt_user("  Ollama endpoint", default="http://localhost:11434/api/generate")
 
-    anthropic_key = prompt_user(
-        "  Anthropic API key (leave empty to skip)",
-        default=""
-    )
+    anthropic_key = prompt_user("  Anthropic API key (leave empty to skip)", default="")
     if anthropic_key:
         config["ANTHROPIC_API_KEY"] = anthropic_key
 
-    openai_key = prompt_user(
-        "  OpenAI API key (leave empty to skip)",
-        default=""
-    )
+    openai_key = prompt_user("  OpenAI API key (leave empty to skip)", default="")
     if openai_key:
         config["OPENAI_API_KEY"] = openai_key
 
     # GitHub
     print("\n  -- GitHub --")
-    gh_token = prompt_user(
-        "  GitHub token (leave empty to use 'gh auth token')",
-        default=""
-    )
+    gh_token = prompt_user("  GitHub token (leave empty to use 'gh auth token')", default="")
     if gh_token:
         config["GITHUB_TOKEN"] = gh_token
 
@@ -231,50 +193,23 @@ def setup_env():
     if prompt_yes_no("  Enable Jira integration?", default=False):
         config["ENABLE_JIRA"] = "1"
         config["JIRA_URL"] = prompt_user("  Jira URL", required=True)
-        config["JIRA_USER"] = prompt_user(
-            "  Jira user (email for Cloud)",
-            required=True
-        )
-        config["JIRA_API_TOKEN"] = prompt_user(
-            "  Jira API token",
-            required=True
-        )
-        config["JIRA_API_VERSION"] = prompt_user(
-            "  Jira API version (3=Cloud, 2=Server)",
-            default="3"
-        )
-        config["JIRA_DEFAULT_PROJECT"] = prompt_user(
-            "  Default Jira project key",
-            default=""
-        )
+        config["JIRA_USER"] = prompt_user("  Jira user (email for Cloud)", required=True)
+        config["JIRA_API_TOKEN"] = prompt_user("  Jira API token", required=True)
+        config["JIRA_API_VERSION"] = prompt_user("  Jira API version (3=Cloud, 2=Server)", default="3")
+        config["JIRA_DEFAULT_PROJECT"] = prompt_user("  Default Jira project key", default="")
 
     # Jenkins
     if prompt_yes_no("  Enable Jenkins integration?", default=False):
         config["ENABLE_JENKINS"] = "1"
-        config["JENKINS_URL"] = prompt_user(
-            "  Jenkins URL",
-            required=True
-        )
-        config["JENKINS_USER"] = prompt_user(
-            "  Jenkins username",
-            required=True
-        )
-        config["JENKINS_API_TOKEN"] = prompt_user(
-            "  Jenkins API token",
-            required=True
-        )
+        config["JENKINS_URL"] = prompt_user("  Jenkins URL", required=True)
+        config["JENKINS_USER"] = prompt_user("  Jenkins username", required=True)
+        config["JENKINS_API_TOKEN"] = prompt_user("  Jenkins API token", required=True)
 
     # SonarQube
     if prompt_yes_no("  Enable SonarQube integration?", default=False):
         config["ENABLE_SONARQUBE"] = "1"
-        config["SONAR_HOST_URL"] = prompt_user(
-            "  SonarQube URL",
-            default="http://localhost:9000"
-        )
-        config["SONAR_TOKEN"] = prompt_user(
-            "  SonarQube token",
-            default=""
-        )
+        config["SONAR_HOST_URL"] = prompt_user("  SonarQube URL", default="http://localhost:9000")
+        config["SONAR_TOKEN"] = prompt_user("  SonarQube token", default="")
 
     # Copy .env.example as base, then overlay user values
     shutil.copy2(str(env_example), str(env_file))
@@ -284,9 +219,7 @@ def setup_env():
         # Match commented or uncommented version of the key
         pattern = r"^#?\s*" + re.escape(key) + r"=.*$"
         replacement = "{0}={1}".format(key, value)
-        new_content, count = re.subn(
-            pattern, replacement, content, flags=re.MULTILINE
-        )
+        new_content, count = re.subn(pattern, replacement, content, flags=re.MULTILINE)
         if count > 0:
             content = new_content
         else:
@@ -302,10 +235,7 @@ def register_mcp_servers():
     """Step 4: Register MCP servers in ~/.claude/settings.json."""
     print("\n--- Step 4: MCP Server Registration ---\n")
 
-    if not prompt_yes_no(
-        "  Register MCP servers in ~/.claude/settings.json?",
-        default=True
-    ):
+    if not prompt_yes_no("  Register MCP servers in ~/.claude/settings.json?", default=True):
         print("  Skipped MCP registration")
         return True
 
@@ -350,21 +280,13 @@ def register_mcp_servers():
             skipped += 1
             continue
 
-        settings["mcpServers"][server_name] = {
-            "command": sys.executable,
-            "args": [str(mcp_file)],
-            "env": {}
-        }
+        settings["mcpServers"][server_name] = {"command": sys.executable, "args": [str(mcp_file)], "env": {}}
         registered += 1
 
     try:
-        settings_path.write_text(
-            json.dumps(settings, indent=2),
-            encoding="utf-8"
-        )
+        settings_path.write_text(json.dumps(settings, indent=2), encoding="utf-8")
         print(
-            "  [OK] Registered {0} server(s), skipped {1} already-registered "
-            "server(s)".format(registered, skipped)
+            "  [OK] Registered {0} server(s), skipped {1} already-registered " "server(s)".format(registered, skipped)
         )
         print("  [OK] Settings saved to {0}".format(settings_path))
     except OSError as exc:
@@ -390,11 +312,10 @@ def verify_connectivity():
     checks = []
 
     # Ollama
-    endpoint = os.environ.get(
-        "OLLAMA_ENDPOINT", "http://localhost:11434/api/generate"
-    )
+    endpoint = os.environ.get("OLLAMA_ENDPOINT", "http://localhost:11434/api/generate")
     try:
         import urllib.request
+
         base = endpoint.replace("/api/generate", "")
         with urllib.request.urlopen(base, timeout=3):
             checks.append(("Ollama", True))
@@ -403,12 +324,7 @@ def verify_connectivity():
 
     # GitHub CLI auth
     try:
-        result = subprocess.run(
-            ["gh", "auth", "status"],
-            capture_output=True,
-            text=True,
-            timeout=5
-        )
+        result = subprocess.run(["gh", "auth", "status"], capture_output=True, text=True, timeout=5)
         checks.append(("GitHub CLI auth", result.returncode == 0))
     except Exception:
         checks.append(("GitHub CLI auth", False))
@@ -419,6 +335,7 @@ def verify_connectivity():
         if jira_url:
             try:
                 import urllib.request
+
                 with urllib.request.urlopen(jira_url, timeout=5):
                     checks.append(("Jira", True))
             except Exception:
@@ -430,6 +347,7 @@ def verify_connectivity():
         if jenkins_url:
             try:
                 import urllib.request
+
                 with urllib.request.urlopen(jenkins_url, timeout=5):
                     checks.append(("Jenkins", True))
             except Exception:
@@ -437,11 +355,10 @@ def verify_connectivity():
 
     # SonarQube
     if os.environ.get("ENABLE_SONARQUBE") == "1":
-        sonar_url = os.environ.get(
-            "SONAR_HOST_URL", "http://localhost:9000"
-        )
+        sonar_url = os.environ.get("SONAR_HOST_URL", "http://localhost:9000")
         try:
             import urllib.request
+
             with urllib.request.urlopen(sonar_url, timeout=5):
                 checks.append(("SonarQube", True))
         except Exception:
@@ -462,11 +379,11 @@ def print_next_steps():
     """Show what to do next."""
     print("\n--- Setup Complete! ---\n")
     print("  Next steps:")
-    print("    1. Run the pipeline:  cwe run \"fix the login bug\"")
+    print('    1. Run the pipeline:  cwe run "fix the login bug"')
     print("    2. Check health:      cwe health")
     print("    3. View status:       cwe status")
-    print("    4. Full mode:         cwe run --mode full \"add user profile\"")
-    print("    5. Debug mode:        cwe run --debug \"investigate crash\"")
+    print('    4. Full mode:         cwe run --mode full "add user profile"')
+    print('    5. Debug mode:        cwe run --debug "investigate crash"')
     print("\n  Documentation:")
     print("    - Getting started:    docs/00_START_HERE.md")
     print("    - Full README:        README.md")

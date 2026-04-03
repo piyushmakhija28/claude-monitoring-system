@@ -281,7 +281,7 @@ def cmd_doctor(args):
 
 def cmd_setup(args):
     """Run the interactive setup wizard."""
-    setup_script = Path(__file__).resolve().parent / "setup_wizard.py"
+    setup_script = Path(__file__).resolve().parent / "setup" / "setup_wizard.py"
     if setup_script.exists():
         subprocess.run([sys.executable, str(setup_script)])
     else:

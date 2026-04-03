@@ -76,7 +76,7 @@ fi
 log "${BLUE}[STEP -1] Running auto-fix enforcement...${NC}"
 
 export PYTHONIOENCODING=utf-8
-if bash "$MEMORY_DIR/current/auto-fix-enforcer.sh" > /tmp/level-minus-1-output.log 2>&1; then
+if bash "$MEMORY_DIR/current/tools/auto-fix-enforcer.sh" > /tmp/level-minus-1-output.log 2>&1; then
     log "${GREEN}   ✅ All systems operational${NC}"
 
     # SESSION LOGGING: Log Level -1 results
