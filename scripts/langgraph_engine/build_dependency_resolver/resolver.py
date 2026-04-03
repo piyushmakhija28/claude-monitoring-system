@@ -403,6 +403,8 @@ def parse_dependencies(project_root: Any) -> Dict[str, Any]:
         needs_user_input: List[Dict] = []
 
         for dep in raw_deps:
+            from .parsers import _classify_dep  # lazy import to avoid circular
+
             classification = _classify_dep(root, dep, build_system)
             if classification == "internal":
                 internal.append(dep)

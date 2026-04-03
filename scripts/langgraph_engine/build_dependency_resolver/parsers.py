@@ -16,14 +16,7 @@ from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
-from .resolver import (  # noqa: E402, F811
-    GO_WELL_KNOWN,
-    JAVA_WELL_KNOWN,
-    NODE_WELL_KNOWN,
-    PYTHON_WELL_KNOWN,
-    RUST_WELL_KNOWN,
-    _classify_dep,
-)
+from .resolver import GO_WELL_KNOWN, JAVA_WELL_KNOWN, NODE_WELL_KNOWN, PYTHON_WELL_KNOWN, RUST_WELL_KNOWN  # noqa: E402
 
 
 def _parse_raw_deps(
