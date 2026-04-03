@@ -15,7 +15,7 @@ import sys
 import types
 import unittest
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 # ---------------------------------------------------------------------------
 # Add scripts/ to sys.path
@@ -29,6 +29,7 @@ if _SCRIPTS not in sys.path:
 # ---------------------------------------------------------------------------
 # Pre-import stubs
 # ---------------------------------------------------------------------------
+
 
 def _stub(name):
     m = types.ModuleType(name)
@@ -45,11 +46,23 @@ _lg_graph.StateGraph = MagicMock()
 
 # loguru
 _loguru = _stub("loguru")
-_noop = lambda *a, **kw: None
-_loguru.logger = type("_L", (), {
-    "info": _noop, "debug": _noop, "warning": _noop,
-    "error": _noop, "critical": _noop,
-})()
+
+
+def _noop(*a, **kw):  # noqa: E731
+    return None
+
+
+_loguru.logger = type(
+    "_L",
+    (),
+    {
+        "info": _noop,
+        "debug": _noop,
+        "warning": _noop,
+        "error": _noop,
+        "critical": _noop,
+    },
+)()
 
 # langgraph_engine package stub (prevents __init__ cascade)
 _le_pkg = types.ModuleType("langgraph_engine")
@@ -101,49 +114,168 @@ _subgraphs.__package__ = "langgraph_engine.subgraphs"
 # level3_execution stub - all step functions return empty dicts
 _exec_mod = _stub("langgraph_engine.subgraphs.level3_execution")
 for _step_fn in [
-    "step0_task_analysis", "step1_plan_mode_decision", "step2_plan_execution",
-    "step3_task_breakdown_validation", "step4_toon_refinement",
-    "step5_skill_agent_selection", "step6_skill_validation_download",
-    "step7_final_prompt_generation", "step8_github_issue_creation",
-    "step9_branch_creation", "step10_implementation_execution",
-    "step11_pull_request_review", "step12_issue_closure",
-    "step13_project_documentation_update", "step14_final_summary_generation",
-    "route_after_step1_plan_decision", "route_after_step11_review",
+    "step0_task_analysis",
+    "step1_plan_mode_decision",
+    "step2_plan_execution",
+    "step3_task_breakdown_validation",
+    "step4_toon_refinement",
+    "step5_skill_agent_selection",
+    "step6_skill_validation_download",
+    "step7_final_prompt_generation",
+    "step8_github_issue_creation",
+    "step9_branch_creation",
+    "step10_implementation_execution",
+    "step11_pull_request_review",
+    "step12_issue_closure",
+    "step13_project_documentation_update",
+    "step14_final_summary_generation",
+    "route_after_step1_plan_decision",
+    "route_after_step11_review",
     "level3_merge_node",
 ]:
     setattr(_exec_mod, _step_fn, MagicMock(return_value={}))
 
 
+import importlib.util as _ilu  # noqa: E402
+
+# level3_execution canonical package stubs (v1.11+ migration)
+_l3_pkg = _stub("langgraph_engine.level3_execution")
+_l3_pkg.__path__ = [str(Path(_SCRIPTS) / "langgraph_engine" / "level3_execution")]
+_l3_pkg.__package__ = "langgraph_engine.level3_execution"
+
+# routing stub
+_l3_routing = _stub("langgraph_engine.level3_execution.routing")
+_l3_routing.level3_merge_node = MagicMock(return_value={})
+_l3_routing.route_after_step1_plan_decision = MagicMock(return_value="step3_breakdown")
+_l3_routing.route_after_step11_review = MagicMock(return_value="step12_closure")
+
+# v2_nodes package stub - stub wrapper submodules that use bare names,
+# but load pre_nodes (level3_init_node) via importlib for real behavior
+_l3_v2_nodes = _stub("langgraph_engine.level3_execution.v2_nodes")
+_l3_v2_nodes.__path__ = [str(Path(_SCRIPTS) / "langgraph_engine" / "level3_execution" / "v2_nodes")]
+_l3_v2_nodes.__package__ = "langgraph_engine.level3_execution.v2_nodes"
+
+# Stub submodules that use bare names (_run_step, step*_fn) at module level
+for _sub in ["orchestration", "step_wrappers_0to4", "step_wrappers_5to9", "step_wrappers_10_11", "step_wrappers_12_14"]:
+    _stub("langgraph_engine.level3_execution.v2_nodes." + _sub)
+
+# Load pre_nodes via importlib (it does NOT use bare names at module level)
+_pre_spec = _ilu.spec_from_file_location(
+    "langgraph_engine.level3_execution.v2_nodes.pre_nodes",
+    str(Path(_SCRIPTS) / "langgraph_engine" / "level3_execution" / "v2_nodes" / "pre_nodes.py"),
+    submodule_search_locations=[],
+)
+_pre_mod = _ilu.module_from_spec(_pre_spec)
+_pre_mod.__package__ = "langgraph_engine.level3_execution.v2_nodes"
+sys.modules["langgraph_engine.level3_execution.v2_nodes.pre_nodes"] = _pre_mod
+_pre_spec.loader.exec_module(_pre_mod)
+
+# Populate v2_nodes package with a mix of real + mock node functions
+_l3_v2_nodes.level3_init_node = _pre_mod.level3_init_node
+_l3_v2_nodes.step0_0_project_context_node = _pre_mod.step0_0_project_context_node
+_l3_v2_nodes.step0_1_initial_callgraph_node = _pre_mod.step0_1_initial_callgraph_node
+for _v2_fn in [
+    "_build_retry_history_context",
+    "orchestration_pre_analysis_node",
+    "route_pre_analysis",
+    "route_to_closure_or_retry",
+    "route_to_plan_or_breakdown",
+    "step0_task_analysis_node",
+    "step1_plan_mode_decision_node",
+    "step2_plan_execution_node",
+    "step3_task_breakdown_node",
+    "step4_toon_refinement_node",
+    "step5_skill_selection_node",
+    "step6_skill_validation_node",
+    "step7_final_prompt_node",
+    "step8_github_issue_node",
+    "step9_branch_creation_node",
+    "step10_implementation_note",
+    "step11_pull_request_node",
+    "step12_issue_closure_node",
+    "step13_docs_update_node",
+    "step14_final_summary_node",
+]:
+    setattr(_l3_v2_nodes, _v2_fn, MagicMock(return_value={}))
+
 # ---------------------------------------------------------------------------
 # Load level3_execution_v2 via importlib
 # ---------------------------------------------------------------------------
 
-import importlib.util as _ilu
-
-_mod_path = (
-    Path(_SCRIPTS) / "langgraph_engine" / "subgraphs" / "level3_execution_v2.py"
-)
+# Load the canonical execution_v2 module (where _run_step lives)
+_canonical_path = Path(_SCRIPTS) / "langgraph_engine" / "level3_execution" / "execution_v2.py"
 _spec = _ilu.spec_from_file_location(
-    "langgraph_engine.subgraphs.level3_execution_v2",
-    str(_mod_path),
+    "langgraph_engine.level3_execution.execution_v2",
+    str(_canonical_path),
     submodule_search_locations=[],
 )
 _v2_mod = _ilu.module_from_spec(_spec)
-_v2_mod.__package__ = "langgraph_engine.subgraphs"
-sys.modules["langgraph_engine.subgraphs.level3_execution_v2"] = _v2_mod
+_v2_mod.__package__ = "langgraph_engine.level3_execution"
+sys.modules["langgraph_engine.level3_execution.execution_v2"] = _v2_mod
 _spec.loader.exec_module(_v2_mod)
 
+# Also register backward-compat shim path
+sys.modules["langgraph_engine.subgraphs.level3_execution_v2"] = _v2_mod
+
 _run_step = _v2_mod._run_step
-_build_retry_history_context = _v2_mod._build_retry_history_context
-level3_init_node = _v2_mod.level3_init_node
-step0_task_analysis_node = _v2_mod.step0_task_analysis_node
-step8_github_issue_node = _v2_mod.step8_github_issue_node
 _infra_cache = _v2_mod._infra_cache
+
+# Load real v2_nodes wrapper modules and inject bare names (_run_step, step*_fn)
+# These modules use F821-suppressed bare names that must be injected post-load
+_wrapper_modules = {}
+for _wmod_name, _wmod_file in [
+    ("step_wrappers_0to4", "step_wrappers_0to4.py"),
+    ("step_wrappers_5to9", "step_wrappers_5to9.py"),
+    ("step_wrappers_10_11", "step_wrappers_10_11.py"),
+    ("step_wrappers_12_14", "step_wrappers_12_14.py"),
+]:
+    _wmod_path = Path(_SCRIPTS) / "langgraph_engine" / "level3_execution" / "v2_nodes" / _wmod_file
+    _wmod_fqn = "langgraph_engine.level3_execution.v2_nodes." + _wmod_name
+    _wspec = _ilu.spec_from_file_location(_wmod_fqn, str(_wmod_path), submodule_search_locations=[])
+    _wmod = _ilu.module_from_spec(_wspec)
+    _wmod.__package__ = "langgraph_engine.level3_execution.v2_nodes"
+    sys.modules[_wmod_fqn] = _wmod
+    _wspec.loader.exec_module(_wmod)
+    _wrapper_modules[_wmod_name] = _wmod
+
+# Inject bare names into wrapper modules (they use F821 suppression)
+_bare_names = {
+    "_run_step": _v2_mod._run_step,
+    "step0_task_analysis": _exec_mod.step0_task_analysis,
+    "step1_plan_mode_decision": _exec_mod.step1_plan_mode_decision,
+    "step2_plan_execution": _exec_mod.step2_plan_execution,
+    "step3_task_breakdown_validation": _exec_mod.step3_task_breakdown_validation,
+    "step4_toon_refinement": _exec_mod.step4_toon_refinement,
+    "step5_skill_agent_selection": _exec_mod.step5_skill_agent_selection,
+    "step6_skill_validation_download": _exec_mod.step6_skill_validation_download,
+    "step7_final_prompt_generation": _exec_mod.step7_final_prompt_generation,
+    "step8_github_issue_creation": _exec_mod.step8_github_issue_creation,
+    "step9_branch_creation": _exec_mod.step9_branch_creation,
+    "step10_implementation_execution": _exec_mod.step10_implementation_execution,
+    "step11_pull_request_review": _exec_mod.step11_pull_request_review,
+    "step12_issue_closure": _exec_mod.step12_issue_closure,
+    "step13_project_documentation_update": _exec_mod.step13_project_documentation_update,
+    "step14_final_summary_generation": _exec_mod.step14_final_summary_generation,
+    "route_after_step1_plan_decision": _exec_mod.route_after_step1_plan_decision,
+    "route_after_step11_review": _exec_mod.route_after_step11_review,
+    "level3_merge_node": _exec_mod.level3_merge_node,
+}
+for _wmod in _wrapper_modules.values():
+    for _bname, _bval in _bare_names.items():
+        if not hasattr(_wmod, _bname):
+            setattr(_wmod, _bname, _bval)
+
+# Extract real node functions from wrapper modules
+step0_task_analysis_node = _wrapper_modules["step_wrappers_0to4"].step0_task_analysis_node
+step8_github_issue_node = _wrapper_modules["step_wrappers_5to9"].step8_github_issue_node
+_build_retry_history_context = _wrapper_modules["step_wrappers_5to9"]._build_retry_history_context
+level3_init_node = _pre_mod.level3_init_node
 
 
 # ---------------------------------------------------------------------------
 # Helper
 # ---------------------------------------------------------------------------
+
 
 def _state(**extra):
     base = {
@@ -165,6 +297,7 @@ def _clear_infra_cache():
 # Tests: _run_step wrapper
 # ---------------------------------------------------------------------------
 
+
 class TestRunStep(unittest.TestCase):
 
     def setUp(self):
@@ -173,6 +306,7 @@ class TestRunStep(unittest.TestCase):
 
     def test_run_step_success(self):
         """Returns step result dict on successful execution."""
+
         def _ok_step(state):
             return {"step99_done": True}
 
@@ -181,6 +315,7 @@ class TestRunStep(unittest.TestCase):
 
     def test_run_step_with_fallback(self):
         """Returns fallback_result when step_fn raises an exception."""
+
         def _failing_step(state):
             raise RuntimeError("simulated failure")
 
@@ -197,11 +332,13 @@ class TestRunStep(unittest.TestCase):
         }
 
         with patch.object(
-            _v2_mod, "_get_timeout_wrapper",
+            _v2_mod,
+            "_get_timeout_wrapper",
             return_value=({99: 1}, mock_timeout_cls),
         ):
             result = _run_step(
-                99, "Test Step",
+                99,
+                "Test Step",
                 lambda st: {"step99_result": True},
                 _state(),
                 fallback_result={},
@@ -271,6 +408,7 @@ class TestRunStep(unittest.TestCase):
 # Tests: level3_init_node
 # ---------------------------------------------------------------------------
 
+
 class TestLevel3InitNode(unittest.TestCase):
 
     def setUp(self):
@@ -279,6 +417,7 @@ class TestLevel3InitNode(unittest.TestCase):
     def test_level3_init_node(self):
         """Maps session_path to session_dir."""
         import tempfile
+
         with tempfile.TemporaryDirectory() as td:
             state = _state(session_path=td, session_id="test-session-v2-001")
             result = level3_init_node(state)
@@ -303,6 +442,7 @@ class TestLevel3InitNode(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # Tests: step0_task_analysis_node
 # ---------------------------------------------------------------------------
+
 
 class TestStep0TaskAnalysisNode(unittest.TestCase):
 
@@ -335,6 +475,7 @@ class TestStep0TaskAnalysisNode(unittest.TestCase):
 # Tests: step8_github_issue_node - network retry
 # ---------------------------------------------------------------------------
 
+
 class TestStep8NetworkRetry(unittest.TestCase):
 
     def setUp(self):
@@ -348,13 +489,11 @@ class TestStep8NetworkRetry(unittest.TestCase):
     def test_step8_network_retry(self):
         """Step 8 returns fallback after retrying RequestException 3 times."""
         try:
-            import requests
+            import requests  # noqa: F401
         except ImportError:
             self.skipTest("requests not installed")
 
-        _exec_mod.step8_github_issue_creation.side_effect = (
-            requests.RequestException("connection refused")
-        )
+        _exec_mod.step8_github_issue_creation.side_effect = requests.RequestException("connection refused")
 
         with patch("time.sleep", MagicMock()):
             result = step8_github_issue_node(_state())
@@ -364,7 +503,7 @@ class TestStep8NetworkRetry(unittest.TestCase):
     def test_step8_no_retry_on_non_network_error(self):
         """Non-network exceptions in step 8 are not retried."""
         try:
-            import requests
+            import requests  # noqa: F401
         except ImportError:
             self.skipTest("requests not installed")
 
@@ -378,6 +517,7 @@ class TestStep8NetworkRetry(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # Tests: _build_retry_history_context
 # ---------------------------------------------------------------------------
+
 
 class TestBuildRetryHistoryContext(unittest.TestCase):
 

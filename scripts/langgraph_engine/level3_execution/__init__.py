@@ -28,5 +28,7 @@ Level-specific modules:
 - sonarqube_scanner: Legacy SonarQube entry point
 - sonar_auto_fixer: SonarQube auto-fix
 - integration_test_generator: Integration test generation
-- execution_v2: v2 subgraph builder bridge
+- routing: Routing functions and merge node
+- helpers: Shared helpers and script runner
+- execution_v2: v2 subgraph builder
 """
