@@ -865,7 +865,7 @@ policies/
 | **Version Sync** | `scripts/tools/sync-version.py` — syncs VERSION to in-engine MCP servers (v1.8.1: extracted servers have own versioning in their repos) |
 | **Test Suite** | 75 test files covering MCP servers, pipeline steps, integrations, security, e2e, load |
 | **Coverage Setup** | `pytest-cov` + `coverage` in requirements.txt |
-| **Documentation** | 47 docs, SRS, CHANGELOG, guides, deployment guide, troubleshooting guide, ADRs, runbooks |
+| **Documentation** | 71 docs, SRS, CHANGELOG, guides, deployment guide, troubleshooting guide, ADRs, runbooks |
 
 ---
 
@@ -1146,7 +1146,7 @@ python scripts/3-level-flow.py --message "your task description"
 # Hook mode (Pre-0, Step 0, Steps 8-9 only, default)
 CLAUDE_HOOK_MODE=1 python scripts/3-level-flow.py --message "fix login bug"
 
-# Full mode (Pre-0, Step 0, Steps 8-14)
+# Full mode (all 8 active steps including implementation, PR, closure)
 CLAUDE_HOOK_MODE=0 python scripts/3-level-flow.py --message "add user profile feature"
 
 # Template fast-path (skips Step 0, jumps to Step 8, ~2s hook time)
@@ -1192,7 +1192,7 @@ claude-workflow-engine/
 |   |   +-- helper_nodes/             # [v1.5] Helper node functions split by concern
 |   |   +-- diagrams/                 # [v1.5] Strategy: DiagramFactory + 13 UML generators
 |   |   +-- parsers/                  # [v1.5] Abstract Factory: 4 language parsers (Py/Java/TS/Kotlin)
-|   |   +-- sonarqube/                # [v1.5] Facade: api_client + lightweight + aggregator + auto_fixer
+|   |   +-- sonarqube/                # Compat shim -> level3_execution/sonarqube/ package
 |   |   +-- integrations/             # [v1.5] Lifecycle: GitHub/Jira/Figma/Jenkins adapters
 |   |   +-- pipeline_builder.py       # [v1.5] Builder: PipelineBuilder chainable API
 |   |   +-- orchestrator.py           # Main StateGraph pipeline
@@ -1213,11 +1213,11 @@ claude-workflow-engine/
 +-- src/mcp/                          # In-engine copies of session-mgr + vector-db (repos are source of truth) + bridge (session_hooks)
 +-- policies/                         # 63 policy definitions (62 .md + 1 .json)
 +-- tests/                            # 75 test files
-+-- docs/                             # 47 documentation files
++-- docs/                             # 71 documentation files
 +-- docs/uml/                         # Auto-generated UML diagrams (13 types)
 +-- rules/                            # 34 coding standard definitions
 |
-+-- VERSION                           # Single source of truth (1.5.0)
++-- VERSION                           # Single source of truth (1.8.2)
 +-- CLAUDE.md                         # Project context for Claude Code
 +-- setup.py                          # Package installation
 +-- requirements.txt                  # Python dependencies
@@ -1238,10 +1238,10 @@ claude-workflow-engine/
 | Policy Files | 63 (62 .md + 1 .json) |
 | Standards Files | 34 |
 | Test Files | 75 |
-| Total Python Files | 225+ |
+| Total Python Files | 310+ |
 | Call Graph | 578 classes, 3,985 methods, 4 languages (Python/Java/TS/Kotlin) |
 | UML Diagram Types | 13 (CallGraph-powered) |
-| Documentation Files | 47 |
+| Documentation Files | 71 |
 | RAG Collections | 4 (Qdrant vector DB) |
 | Supported Languages | 20+ |
 | Supported Frameworks | 15+ |
@@ -1371,7 +1371,7 @@ SonarQube is configurable via environment variables:
 | SONAR_HOST_URL | http://localhost:9000 | SonarQube server URL |
 | SONAR_TOKEN | (none) | Authentication token |
 | SONAR_PROJECT_KEY | (auto-detect) | Project identifier |
-| SONAR_ORGANIZATION | (none) | SonarCloud organization |
+| SONAR_ORGANIZATION | (none) | SolarCloud organization |
 
 ---
 

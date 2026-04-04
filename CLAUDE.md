@@ -117,7 +117,7 @@ Level 3: Execution (8 active steps: Pre-0, Step 0, Steps 8-14)
 |   |   +-- integrations/             # Abstract Factory + Lifecycle: GitHub/Jira/Figma/Jenkins
 |   |   +-- pipeline_builder.py       # Builder Pattern: PipelineBuilder chainable API
 |   |   +-- level_minus1/            # [v1.9] Level -1 Auto-Fix package (nodes, merge, recovery, policies/)
-|   |   +-- level1_sync/             # [v1.11] Level 1 Sync package (9 modules + policies/ + architecture/)
+|   |   +-- level1_sync/             # [v1.11] Level 1 Sync package (10 modules + policies/ + architecture/)
 |   |   +-- level2_standards/        # [v1.11] Level 2 Standards package (7 modules + policies/ + architecture/)
 |   |   +-- level3_execution/        # [v1.11] Level 3 Execution package (20+ modules + nodes/ + subgraph.py + sonarqube/ + policies/ + architecture/)
 |   |   +-- [60+ shared modules]     # Cross-level: LLM, caching, metrics, git, state, etc.
@@ -142,7 +142,7 @@ Level 3: Execution (8 active steps: Pre-0, Step 0, Steps 8-14)
 |   +-- testing/                      # Testing policies (unchanged)
 +-- src/mcp/                          # In-engine copies of session-mgr + vector-db (repos are source of truth) + bridge (session_hooks, base/)
 +-- tests/                            # 75 test files
-+-- docs/                             # 47 documentation files
++-- docs/                             # 71 documentation files
 +-- docs/uml/                         # Auto-generated UML diagrams (13 types)
 +-- rules/                            # 34 coding standard definitions (incl. doc governance + docstrings-only + microservices patterns)
 ```
@@ -155,12 +155,12 @@ Level 3: Execution (8 active steps: Pre-0, Step 0, Steps 8-14)
 | Flow State | scripts/langgraph_engine/flow_state.py | Backward-compat shim -> re-exports from state/ |
 | State Package | scripts/langgraph_engine/state/ | FlowState, StepKeys, reducers, ToonObject, optimizer |
 | Core Package | scripts/langgraph_engine/core/ | LazyLoader, get_logger, node_error_handler, NodeResult, create_step_node |
-| Routing Package | scripts/langgraph_engine/routing/ | All 7 routing functions split by level |
-| Helper Nodes | scripts/langgraph_engine/helper_nodes/ | 11 helper node functions split by concern |
+| Routing Package | scripts/langgraph_engine/routing/ | All routing functions split by level |
+| Helper Nodes | scripts/langgraph_engine/helper_nodes/ | Helper node functions split by concern |
 | Pipeline Builder | scripts/langgraph_engine/pipeline_builder.py | Builder Pattern: chainable add_level*().build() |
 | Diagrams Package | scripts/langgraph_engine/diagrams/ | Strategy Pattern: DiagramFactory + 13 generators |
 | Parsers Package | scripts/langgraph_engine/parsers/ | Abstract Factory: ParserRegistry + 4 language parsers |
-| SonarQube Package | scripts/langgraph_engine/sonarqube/ | Facade: api_client, lightweight, aggregator, auto_fixer |
+| SonarQube Package | scripts/langgraph_engine/level3_execution/sonarqube/ | Facade: api_client, lightweight, aggregator, auto_fixer |
 | Integrations Package | scripts/langgraph_engine/integrations/ | Abstract Factory + Lifecycle: GitHub/Jira/Figma/Jenkins |
 | RAG Integration | scripts/langgraph_engine/rag_integration.py | Vector DB decision caching + orchestration-level plan cache |
 | Level -1 | scripts/langgraph_engine/level_minus1/ | Auto-fix enforcement (canonical) |
