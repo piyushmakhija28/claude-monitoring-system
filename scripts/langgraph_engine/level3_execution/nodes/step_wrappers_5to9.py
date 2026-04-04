@@ -3,6 +3,11 @@
 
 Extracted from level3_execution/subgraph.py for modularity.
 Windows-safe: ASCII only.
+
+CHANGE LOG (v1.13.0):
+  Removed Steps 5, 6, 7 node wrappers -- collapsed into Step 0 template call.
+  Steps 8 and 9 are unchanged.
+  _build_retry_history_context is kept (consumed by step10_implementation_note).
 """
 import os
 from typing import Any, Dict
@@ -20,116 +25,12 @@ except ImportError:
     FlowState = dict  # type: ignore[misc,assignment]
 
 
-def step5_skill_selection_node(state: FlowState) -> Dict[str, Any]:
-    """Step 5: Skill & Agent Selection with full error handling."""
-    result = _run_step(
-        5,
-        "Skill & Agent Selection",
-        step5_skill_agent_selection,
-        state,
-        fallback_result={
-            "step5_skill": "",
-            "step5_agent": "",
-            "step5_reasoning": "Default - step5 failed",
-            "step5_confidence": 0.0,
-            "step5_alternatives": [],
-            "step5_llm_query_needed": False,
-        },
-    )
-
-    # --- User Interaction: Low-confidence skill confirmation ---
-    try:
-        from ..user_interaction import generate_step5_questions
-
-        questions = generate_step5_questions(result)
-        if questions:
-            result["step5_pending_questions"] = questions
-    except Exception as e:
-        logger.debug("[v2] Step 5 user interaction skipped: %s", e)
-
-    return result
-
-
-def step6_skill_validation_node(state: FlowState) -> Dict[str, Any]:
-    """Step 6: Skill Validation & Download with full error handling."""
-    return _run_step(
-        6,
-        "Skill Validation & Download",
-        step6_skill_validation_download,
-        state,
-        fallback_result={
-            "step6_skill_validation": {},
-            "step6_skill_ready": True,  # Non-blocking default
-            "step6_agent_ready": True,
-            "step6_validation_status": "ERROR",
-        },
-    )
-
-
-def step7_final_prompt_node(state: FlowState) -> Dict[str, Any]:
-    """Step 7: Final Prompt Generation with full error handling."""
-
-    def _with_file_error_handling(st):
-        """Wrap step7 to add explicit file operation error handling."""
-        try:
-            return step7_final_prompt_generation(st)
-        except IOError as io_err:
-            # File write failure - attempt backup restore if possible
-            infra = get_infra(st)
-            if infra["error_logger"]:
-                infra["error_logger"].log_error(
-                    step="Step 7",
-                    error_message=str(io_err),
-                    severity="ERROR",
-                    error_type="IOError",
-                    recovery_action="Returning minimal result without file persistence",
-                )
-            return {
-                "step7_prompt_saved": False,
-                "step7_error": f"IOError: {io_err}",
-            }
-
-    result = _run_step(
-        7,
-        "Final Prompt Generation",
-        _with_file_error_handling,
-        state,
-        fallback_result={
-            "step7_prompt_saved": False,
-            "step7_error": "Step 7 failed",
-        },
-    )
-
-    # -- Figma Integration: inject design tokens into prompt snippet -------
-    if os.environ.get("ENABLE_FIGMA", "0") == "1":
-        file_key = state.get("figma_file_key", "")
-        if not file_key:
-            try:
-                from ..figma_workflow import Level3FigmaWorkflow
-
-                figma_wf = Level3FigmaWorkflow()
-                file_key = figma_wf.detect_figma_url(state.get("user_message", ""))
-            except Exception as e:
-                logger.warning("[v2] Figma URL detection (step7) failed (non-blocking): %s", str(e))
-        if file_key:
-            try:
-                from ..figma_workflow import Level3FigmaWorkflow
-
-                figma_wf = Level3FigmaWorkflow()
-                token_result = figma_wf.step7_extract_design_tokens(file_key)
-                result["figma_enabled"] = True
-                result["figma_file_key"] = file_key
-                result["figma_design_tokens"] = token_result.get("design_tokens", {})
-                result["figma_prompt_snippet"] = token_result.get("prompt_snippet", "")
-                if not token_result.get("success"):
-                    result["figma_error"] = token_result.get("error", "Unknown")
-                logger.info("[v2] Figma design tokens injected into Step 7 prompt")
-            except Exception as e:
-                logger.warning("[v2] Figma integration (step7) failed (non-blocking): %s", str(e))
-                result["figma_enabled"] = True
-                result["figma_error"] = str(e)
-
-    return result
+# REMOVED: step5_skill_selection_node -- collapsed into Step 0 template (v1.13.0)
+# REMOVED: step6_skill_validation_node -- collapsed into Step 0 template (v1.13.0)
+# REMOVED: step7_final_prompt_node -- collapsed into Step 0 template (v1.13.0)
+#
+# Outputs these nodes used to produce are now written by step0_task_analysis_node
+# after the orchestration template LLM call. See impact_map.md Section 2.
 
 
 def step8_github_issue_node(state: FlowState) -> Dict[str, Any]:

@@ -3,8 +3,16 @@
 
 Extracted from level3_execution/subgraph.py for modularity.
 Windows-safe: ASCII only.
+
+CHANGE LOG (v1.13.0):
+  Removed Steps 1, 3, 4 node wrappers -- collapsed into Step 0 template call.
+  Step 0 now injects combined_complexity_score (1-25 from Level 1) and
+  CallGraph analysis into the template context before the single LLM call.
+  Step 0 output populates the fields that Steps 1,3,4,5,6,7 previously provided.
+  Step 2 (plan execution) is retained as-is.
 """
 import os
+from pathlib import Path
 from typing import Any, Dict
 
 try:
@@ -19,23 +27,137 @@ try:
 except ImportError:
     FlowState = dict  # type: ignore[misc,assignment]
 
+from ..helpers import call_streaming_script
+
 
 def step0_task_analysis_node(state: FlowState) -> Dict[str, Any]:
-    """Step 0: Task Analysis with call graph complexity boost."""
-    result = _run_step(
-        0,
-        "Task Analysis",
-        step0_task_analysis,
-        state,
-        fallback_result={
-            "step0_task_type": "General Task",
-            "step0_complexity": 5,
-            "step0_reasoning": "Default - step0 failed",
-            "step0_tasks": {"count": 1, "tasks": []},
-            "step0_task_count": 1,
-        },
+    """Step 0 v2: prompt-gen-expert -> orchestrator-agent chain.
+
+    Phase 1: calls prompt-gen-expert-caller (fast, captured stdout) to build
+    an orchestration prompt enriched with combined_complexity_score and
+    CallGraph risk data.
+
+    Phase 2: calls orchestrator-agent-caller (long-running, stderr streamed
+    live) with the orchestration prompt written to a temp file so the user
+    sees real-time agent progress.
+
+    Post-call: populates migration fields so Steps 8-14 receive correct data.
+    """
+    import json as _json
+    import tempfile
+
+    DEBUG = os.getenv("CLAUDE_DEBUG") == "1"
+
+    # --- PRE-INJECTION A: combined_complexity_score from Level 1 (1-25 scale) ---
+    # Do NOT re-compute; read directly from state. Scale is 1-25, not 1-10.
+    complexity_score = state.get("combined_complexity_score", 5)
+
+    # --- PRE-INJECTION B: CallGraph impact analysis ---
+    call_graph_risk_level = "LOW"
+    call_graph_danger_zones = []
+    call_graph_affected_methods = []
+    try:
+        from ..call_graph_analyzer import analyze_impact_before_change
+
+        project_root = state.get("project_root", ".")
+        target_files = state.get("step0_target_files", [])
+        task_desc = state.get("user_message", "")
+        cg_result = analyze_impact_before_change(project_root, target_files, task_desc)
+        if cg_result.get("call_graph_available"):
+            call_graph_risk_level = cg_result.get("risk_level", "LOW")
+            call_graph_danger_zones = cg_result.get("danger_zones", [])
+            call_graph_affected_methods = cg_result.get("affected_methods", [])
+            logger.info(
+                "[v2] Step 0 CallGraph pre-injection: risk=%s danger_zones=%d affected=%d",
+                call_graph_risk_level,
+                len(call_graph_danger_zones),
+                len(call_graph_affected_methods),
+            )
+    except Exception as _cg_exc:
+        logger.debug("[v2] Step 0 CallGraph pre-injection skipped (fail-open): %s", _cg_exc)
+
+    user_message = state.get("user_message", "") or os.environ.get("CURRENT_USER_MESSAGE", "")
+
+    # --- PHASE 1: prompt-gen-expert-caller ---
+    os.environ.setdefault("STEP0_PROMPT_GEN_TIMEOUT", "60")
+    prompt_gen_args = [
+        user_message,
+        "--complexity=%s" % complexity_score,
+        "--call-graph-risk=%s" % call_graph_risk_level,
+        "--danger-zones=%s" % _json.dumps(call_graph_danger_zones),
+        "--affected-methods=%s" % _json.dumps(call_graph_affected_methods),
+    ]
+
+    # call_execution_script does not have __func__; use it directly but override timeout via env
+    _orig_timeout_env = os.environ.get("STEP0_PROMPT_GEN_TIMEOUT")
+    try:
+        # Re-import to avoid circular; helpers module already imported at top
+        import importlib as _il
+
+        _helpers_mod = _il.import_module("scripts.langgraph_engine.level3_execution.helpers")
+        _call_execution_script = _helpers_mod.call_execution_script
+    except Exception:
+        from ..helpers import call_execution_script as _call_execution_script  # noqa: PLC0415
+
+    prompt_gen_raw = _call_execution_script(
+        "prompt-gen-expert-caller",
+        prompt_gen_args,
+        model_tier="fast",
     )
-    # Apply call graph complexity boost injected by orchestration_pre_analysis_node
+
+    orchestration_prompt = prompt_gen_raw.get("orchestration_prompt", "")
+    if not orchestration_prompt:
+        # Fallback: use user_message directly
+        orchestration_prompt = user_message
+        logger.warning("[v2] Step 0 prompt-gen-expert returned no orchestration_prompt; using raw task")
+    else:
+        logger.info("[v2] Step 0 prompt-gen-expert: orchestration_prompt length=%d", len(orchestration_prompt))
+
+    # --- PHASE 2: orchestrator-agent-caller (streaming stderr) ---
+    orch_result: Dict[str, Any] = {}
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False, encoding="utf-8") as _tf:
+            _tf.write(orchestration_prompt)
+            _prompt_file = _tf.name
+
+        if DEBUG:
+            logger.debug("[v2] Step 0 orchestration prompt written to %s", _prompt_file)
+
+        orch_args = [
+            "--orchestration-prompt-file=%s" % _prompt_file,
+            "--session-dir=%s" % state.get("session_dir", ""),
+            "--project-root=%s" % state.get("project_root", "."),
+        ]
+
+        orch_result = call_streaming_script("orchestrator-agent-caller", orch_args)
+
+        if not orch_result.get("success", True):
+            logger.warning(
+                "[v2] Step 0 orchestrator-agent-caller non-success: %s",
+                orch_result.get("error", "unknown"),
+            )
+    except Exception as _orch_exc:
+        logger.warning("[v2] Step 0 orchestrator-agent-caller failed (fail-open): %s", _orch_exc)
+        orch_result = {"success": False, "error": str(_orch_exc)}
+    finally:
+        try:
+            Path(_prompt_file).unlink(missing_ok=True)
+        except Exception:
+            pass
+
+    # --- Build result from orchestrator output + migration fields ---
+    result = _map_step0_v2_result_to_state(state, orchestration_prompt, orch_result)
+
+    # Store the injected context for observability
+    result["step0_call_graph_risk_level"] = call_graph_risk_level
+    result["step0_call_graph_danger_zones_count"] = len(call_graph_danger_zones)
+    result["step0_call_graph_affected_methods_count"] = len(call_graph_affected_methods)
+    result["step0_complexity_injected"] = complexity_score
+    result["orchestration_prompt"] = orchestration_prompt
+    result["orchestrator_result"] = orch_result
+
+    # Apply call graph complexity boost from orchestration_pre_analysis_node
+    # (legacy boost path -- pre_analysis uses 1-10 scale boost on top of step0_complexity)
     try:
         graph_metrics = state.get("call_graph_metrics", {}) or {}
         boost = graph_metrics.get("complexity_boost", 0)
@@ -54,27 +176,91 @@ def step0_task_analysis_node(state: FlowState) -> Dict[str, Any]:
                 )
     except Exception:
         pass  # Boost adjustment is best-effort
+
     return result
 
 
-def step1_plan_mode_decision_node(state: FlowState) -> Dict[str, Any]:
-    """Step 1: Plan Mode Decision with full error handling."""
-    return _run_step(
-        1,
-        "Plan Mode Decision",
-        step1_plan_mode_decision,
-        state,
-        fallback_result={
-            "step1_plan_required": True,  # Safe default: always plan on error
-            "step1_reasoning": "Default - step1 failed, defaulting to plan mode",
-            "step1_complexity_score": state.get("step0_complexity", 5),
-        },
-    )
+def _map_step0_v2_result_to_state(
+    state: FlowState,
+    orchestration_prompt: str,
+    orch_result: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Map orchestrator-agent-caller output to FlowState migration fields.
+
+    Populates all fields that Steps 1, 3, 4, 5, 6, 7 previously wrote so that
+    Steps 8-14 continue to receive the correct state keys regardless of which
+    orchestration path produced the data.
+
+    Args:
+        state: Current pipeline state (read-only reference for fallback values).
+        orchestration_prompt: The prompt text produced by prompt-gen-expert-caller.
+        orch_result: Parsed JSON dict returned by orchestrator-agent-caller.
+
+    Returns:
+        A flat dict of state updates ready to merge into FlowState.
+    """
+    result: Dict[str, Any] = {}
+
+    # Core Step 0 fields
+    result["step0_task_type"] = orch_result.get("task_type", "General Task")
+    result["step0_complexity"] = orch_result.get("complexity", 5)
+    result["step0_reasoning"] = orch_result.get("reasoning", "")
+    raw_tasks = orch_result.get("tasks", {})
+    result["step0_tasks"] = raw_tasks if isinstance(raw_tasks, dict) else {"count": 1, "tasks": []}
+    result["step0_task_count"] = orch_result.get("task_count", 1)
+    result["step0_error"] = orch_result.get("error") if not orch_result.get("success", True) else None
+
+    # From Step 1: plan_required decision
+    result.setdefault("step1_plan_required", orch_result.get("plan_required", False))
+
+    # From Step 3: validated task list
+    if isinstance(raw_tasks, dict):
+        task_list = raw_tasks.get("tasks", [])
+    else:
+        task_list = []
+    result.setdefault("step3_tasks_validated", task_list)
+
+    # From Step 4: model selection
+    result.setdefault("step4_model", orch_result.get("model_recommendation", "complex_reasoning"))
+
+    # From Step 5: skill and agent selection
+    result.setdefault("step5_skill", orch_result.get("selected_skill", ""))
+    result.setdefault("step5_agent", orch_result.get("selected_agent", ""))
+    result.setdefault("step5_skills", orch_result.get("skills", []))
+    result.setdefault("step5_agents", orch_result.get("agents", []))
+    result.setdefault("step5_skill_definition", orch_result.get("skill_definition", ""))
+    result.setdefault("step5_agent_definition", orch_result.get("agent_definition", ""))
+
+    # From Step 6: skill readiness (always True -- orchestrator already validated)
+    result.setdefault("step6_skill_ready", True)
+    result.setdefault("step6_agent_ready", True)
+    result.setdefault("step6_validation_status", "OK")
+
+    # From Step 7: execution prompt
+    execution_prompt = orch_result.get("execution_prompt", "") or orchestration_prompt
+    result.setdefault("step7_execution_prompt", execution_prompt)
+    result.setdefault("step7_prompt_saved", bool(execution_prompt))
+
+    # Write execution prompt to disk (what Step 7 used to do)
+    try:
+        session_dir = state.get("session_dir", "")
+        if session_dir and execution_prompt:
+            sp_file = Path(session_dir) / "system_prompt.txt"
+            sp_file.parent.mkdir(parents=True, exist_ok=True)
+            sp_file.write_text(execution_prompt, encoding="utf-8")
+            result["step7_system_prompt_file"] = str(sp_file)
+            result["step7_system_prompt_loaded"] = True
+            logger.info("[v2] Step 0 wrote execution prompt to %s", sp_file)
+    except Exception as _sp_exc:
+        logger.debug("[v2] Step 0 prompt file write skipped: %s", _sp_exc)
+
+    return result
 
 
 def step2_plan_execution_node(state: FlowState) -> Dict[str, Any]:
     """Step 2: Plan Execution (conditional on Step 1) with full error handling.
 
+    Retained: provides structural plan data consumed by Steps 10 and 11.
     Injects CallGraph impact analysis before planning so the planner
     considers ripple effects of proposed changes.
     """
@@ -152,9 +338,6 @@ def step2_plan_execution_node(state: FlowState) -> Dict[str, Any]:
                     "%d danger zone methods found but plan has no testing/careful phase" % len(danger_zones)
                 )
 
-            # Check 3: Are phases ordered logically? (dependencies before dependents)
-            # Simple check: if phase N modifies a file that phase N+1 depends on, order is correct
-
             result["step2_plan_validated"] = len(validation_issues) == 0
             result["step2_plan_validation_issues"] = validation_issues
 
@@ -185,146 +368,10 @@ def step2_plan_execution_node(state: FlowState) -> Dict[str, Any]:
     return result
 
 
-def step3_task_breakdown_node(state: FlowState) -> Dict[str, Any]:
-    """Step 3: Task Breakdown Validation with full error handling."""
-    result = _run_step(
-        3,
-        "Task Breakdown Validation",
-        step3_task_breakdown_validation,
-        state,
-        fallback_result={
-            "step3_tasks_validated": [],
-            "step3_task_count": 0,
-            "step3_validation_status": "ERROR",
-            "step3_validation_errors": ["Step 3 failed"],
-        },
-    )
-
-    # --- CallGraph: Map files to tasks/phases based on graph analysis ---
-    try:
-        from ..call_graph_analyzer import snapshot_call_graph
-
-        project_root = state.get("project_root", ".")
-
-        # Get or build the graph snapshot (reuse from Step 2 if available)
-        graph_snapshot = state.get("step2_impact_analysis", {})
-        if not graph_snapshot.get("call_graph_available"):
-            graph_snapshot = snapshot_call_graph(project_root)
-
-        # Map task descriptions to files using graph's method/class names
-        validated_tasks = result.get("step3_tasks_validated", [])
-        phase_file_map = {}
-
-        all_methods = graph_snapshot.get("nodes", {}).get("methods", []) if "nodes" in graph_snapshot else []
-        all_classes = graph_snapshot.get("nodes", {}).get("classes", []) if "nodes" in graph_snapshot else []
-
-        for task in validated_tasks:
-            desc = task.get("description", "").lower()
-            task_id = task.get("id", "unknown")
-            matched_files = set()
-
-            # If task already has files from Step 0, use those
-            if task.get("files"):
-                matched_files.update(task["files"])
-            else:
-                # Match by keyword in class/method names against task description
-                desc_words = set(w for w in desc.replace("-", " ").replace("_", " ").split() if len(w) > 3)
-                for m in all_methods:
-                    m_name = m.get("name", "").lower()
-                    m_file = m.get("file", "")
-                    if any(w in m_name for w in desc_words) and m_file:
-                        matched_files.add(m_file)
-                for c in all_classes:
-                    c_name = c.get("name", "").lower()
-                    c_file = c.get("file", "")
-                    if any(w in c_name for w in desc_words) and c_file:
-                        matched_files.add(c_file)
-
-            phase_file_map[task_id] = sorted(matched_files)
-
-        result["step3_phase_file_map"] = phase_file_map
-        # Store the graph snapshot for reuse in Step 4
-        if "nodes" in graph_snapshot:
-            result["step3_graph_snapshot"] = graph_snapshot
-
-        logger.info("[v2] Step 3 mapped %d tasks to files via CallGraph", len(phase_file_map))
-    except Exception as e:
-        logger.debug("[v2] Step 3 file mapping skipped: %s", e)
-
-    # -- Figma Integration: extract components to inform task breakdown ----
-    if os.environ.get("ENABLE_FIGMA", "0") == "1":
-        try:
-            from ..figma_workflow import Level3FigmaWorkflow
-
-            figma_wf = Level3FigmaWorkflow()
-            file_key = figma_wf.detect_figma_url(state.get("user_message", ""))
-            if file_key:
-                comp_result = figma_wf.step3_extract_components(file_key)
-                result["figma_enabled"] = True
-                result["figma_file_key"] = file_key
-                result["figma_components"] = comp_result.get("components", [])
-                if not comp_result.get("success"):
-                    result["figma_error"] = comp_result.get("error", "Unknown")
-                logger.info(
-                    "[v2] Figma components extracted: %d components",
-                    comp_result.get("total_components", 0),
-                )
-        except Exception as e:
-            logger.warning("[v2] Figma integration (step3) failed (non-blocking): %s", str(e))
-            result["figma_enabled"] = True
-            result["figma_error"] = str(e)
-
-    return result
-
-
-def step4_toon_refinement_node(state: FlowState) -> Dict[str, Any]:
-    """Step 4: TOON Refinement with full error handling."""
-    result = _run_step(
-        4,
-        "TOON Refinement",
-        step4_toon_refinement,
-        state,
-        fallback_result={
-            "step4_toon_refined": state.get("level1_context_toon", {}),
-            "step4_refinement_status": "ERROR",
-            "step4_complexity_adjusted": state.get("step0_complexity", 5),
-        },
-    )
-
-    # --- CallGraph: Inject phase-scoped context, clear old broad context ---
-    try:
-        from ..call_graph_analyzer import get_phase_scoped_context
-
-        # Get graph snapshot (from Step 3 or Step 2)
-        graph_snapshot = state.get("step3_graph_snapshot") or state.get("step2_impact_analysis", {})
-
-        # Get phase file mapping from Step 3
-        phase_file_map = state.get("step3_phase_file_map", {})
-
-        if graph_snapshot and phase_file_map:
-            # For each phase/task, get its scoped context
-            phase_contexts = {}
-            all_phase_files = set()
-
-            for task_id, files in phase_file_map.items():
-                if files:
-                    ctx = get_phase_scoped_context(graph_snapshot, files, task_id)
-                    phase_contexts[task_id] = ctx
-                    all_phase_files.update(files)
-
-            if phase_contexts:
-                result["step4_phase_contexts"] = phase_contexts
-                result["step4_phase_scope_files"] = sorted(all_phase_files)
-
-                # Clear old broad context - replace with focused phase data
-                result["step4_old_context_cleared"] = True
-
-                logger.info(
-                    "[v2] Step 4 injected %d phase contexts, %d files in scope",
-                    len(phase_contexts),
-                    len(all_phase_files),
-                )
-    except Exception as e:
-        logger.debug("[v2] Step 4 phase context skipped: %s", e)
-
-    return result
+# REMOVED: step1_plan_mode_decision_node -- collapsed into Step 0 template (v1.13.0)
+# REMOVED: step3_task_breakdown_node -- collapsed into Step 0 template (v1.13.0)
+# REMOVED: step4_toon_refinement_node -- collapsed into Step 0 template (v1.13.0)
+#
+# These functions are intentionally absent. Their FlowState outputs are now populated
+# by step0_task_analysis_node after the orchestration template LLM call.
+# See: impact_map.md Section 2 (FlowState Field Audit) and Section 3 (Step 0 Spec).

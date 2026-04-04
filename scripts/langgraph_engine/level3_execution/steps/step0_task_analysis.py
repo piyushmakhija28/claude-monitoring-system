@@ -1,3 +1,7 @@
+# DEPRECATED as of v1.14.0: superseded by step0_task_analysis_node() in
+# nodes/step_wrappers_0to4.py using prompt-gen-expert + orchestrator-agent chain.
+# Kept for reference only. Do not call directly.
+
 """
 Level 3 Execution - Step 0: Task Analysis
 """

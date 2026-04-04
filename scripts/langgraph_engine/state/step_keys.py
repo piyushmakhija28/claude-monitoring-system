@@ -114,6 +114,8 @@ class StepKeys:
     STEP0_DOCS_FOUND = "step0_docs_found"
     STEP0_TARGET_FILES = "step0_target_files"
     STEP0_ERROR = "step0_error"
+    ORCHESTRATION_PROMPT = "orchestration_prompt"
+    ORCHESTRATOR_RESULT = "orchestrator_result"
 
     # ------------------------------------------------------------------
     # STEP 1: PLAN MODE DECISION

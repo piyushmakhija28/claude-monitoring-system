@@ -9,6 +9,11 @@ MetricsCollector, ErrorLogger, level3_execution step functions,
 loguru, subprocess) are mocked before import.
 
 ASCII-safe, UTF-8 encoded - Windows cp1252 compatible.
+
+CHANGE LOG (v1.13.0):
+  Updated paths: v2_nodes/ -> nodes/, execution_v2.py -> subgraph.py.
+  These were renamed in v1.11 refactoring; test now references correct paths.
+  _run_step is in subgraph.py; _infra_cache is in core/infrastructure.py.
 """
 
 import sys
@@ -149,31 +154,32 @@ _l3_routing.level3_merge_node = MagicMock(return_value={})
 _l3_routing.route_after_step1_plan_decision = MagicMock(return_value="step3_breakdown")
 _l3_routing.route_after_step11_review = MagicMock(return_value="step12_closure")
 
-# v2_nodes package stub - stub wrapper submodules that use bare names,
+# nodes package stub - stub wrapper submodules that use bare names,
 # but load pre_nodes (level3_init_node) via importlib for real behavior
-_l3_v2_nodes = _stub("langgraph_engine.level3_execution.v2_nodes")
-_l3_v2_nodes.__path__ = [str(Path(_SCRIPTS) / "langgraph_engine" / "level3_execution" / "v2_nodes")]
-_l3_v2_nodes.__package__ = "langgraph_engine.level3_execution.v2_nodes"
+# NOTE (v1.13.0): directory renamed from v2_nodes/ to nodes/ in v1.11 refactoring
+_l3_nodes = _stub("langgraph_engine.level3_execution.nodes")
+_l3_nodes.__path__ = [str(Path(_SCRIPTS) / "langgraph_engine" / "level3_execution" / "nodes")]
+_l3_nodes.__package__ = "langgraph_engine.level3_execution.nodes"
 
 # Stub submodules that use bare names (_run_step, step*_fn) at module level
 for _sub in ["orchestration", "step_wrappers_0to4", "step_wrappers_5to9", "step_wrappers_10_11", "step_wrappers_12_14"]:
-    _stub("langgraph_engine.level3_execution.v2_nodes." + _sub)
+    _stub("langgraph_engine.level3_execution.nodes." + _sub)
 
 # Load pre_nodes via importlib (it does NOT use bare names at module level)
 _pre_spec = _ilu.spec_from_file_location(
-    "langgraph_engine.level3_execution.v2_nodes.pre_nodes",
-    str(Path(_SCRIPTS) / "langgraph_engine" / "level3_execution" / "v2_nodes" / "pre_nodes.py"),
+    "langgraph_engine.level3_execution.nodes.pre_nodes",
+    str(Path(_SCRIPTS) / "langgraph_engine" / "level3_execution" / "nodes" / "pre_nodes.py"),
     submodule_search_locations=[],
 )
 _pre_mod = _ilu.module_from_spec(_pre_spec)
-_pre_mod.__package__ = "langgraph_engine.level3_execution.v2_nodes"
-sys.modules["langgraph_engine.level3_execution.v2_nodes.pre_nodes"] = _pre_mod
+_pre_mod.__package__ = "langgraph_engine.level3_execution.nodes"
+sys.modules["langgraph_engine.level3_execution.nodes.pre_nodes"] = _pre_mod
 _pre_spec.loader.exec_module(_pre_mod)
 
-# Populate v2_nodes package with a mix of real + mock node functions
-_l3_v2_nodes.level3_init_node = _pre_mod.level3_init_node
-_l3_v2_nodes.step0_0_project_context_node = _pre_mod.step0_0_project_context_node
-_l3_v2_nodes.step0_1_initial_callgraph_node = _pre_mod.step0_1_initial_callgraph_node
+# Populate nodes package with a mix of real + mock node functions
+_l3_nodes.level3_init_node = _pre_mod.level3_init_node
+_l3_nodes.step0_0_project_context_node = _pre_mod.step0_0_project_context_node
+_l3_nodes.step0_1_initial_callgraph_node = _pre_mod.step0_1_initial_callgraph_node
 for _v2_fn in [
     "_build_retry_history_context",
     "orchestration_pre_analysis_node",
@@ -181,13 +187,7 @@ for _v2_fn in [
     "route_to_closure_or_retry",
     "route_to_plan_or_breakdown",
     "step0_task_analysis_node",
-    "step1_plan_mode_decision_node",
     "step2_plan_execution_node",
-    "step3_task_breakdown_node",
-    "step4_toon_refinement_node",
-    "step5_skill_selection_node",
-    "step6_skill_validation_node",
-    "step7_final_prompt_node",
     "step8_github_issue_node",
     "step9_branch_creation_node",
     "step10_implementation_note",
@@ -196,31 +196,71 @@ for _v2_fn in [
     "step13_docs_update_node",
     "step14_final_summary_node",
 ]:
-    setattr(_l3_v2_nodes, _v2_fn, MagicMock(return_value={}))
+    setattr(_l3_nodes, _v2_fn, MagicMock(return_value={}))
+
+# Also keep legacy v2_nodes alias for any imports that still use old path
+_l3_v2_nodes_alias = _stub("langgraph_engine.level3_execution.v2_nodes")
+_l3_v2_nodes_alias.__path__ = _l3_nodes.__path__
+_l3_v2_nodes_alias.__package__ = "langgraph_engine.level3_execution.nodes"
 
 # ---------------------------------------------------------------------------
-# Load level3_execution_v2 via importlib
+# Load subgraph module (where _run_step lives) via importlib
 # ---------------------------------------------------------------------------
 
-# Load the canonical execution_v2 module (where _run_step lives)
-_canonical_path = Path(_SCRIPTS) / "langgraph_engine" / "level3_execution" / "execution_v2.py"
+# Stub core.infrastructure before loading subgraph.py
+_core_pkg = _stub("langgraph_engine.core")
+_core_pkg.__path__ = [str(Path(_SCRIPTS) / "langgraph_engine" / "core")]
+_core_pkg.__package__ = "langgraph_engine.core"
+
+_core_infra = _stub("langgraph_engine.core.infrastructure")
+_core_infra._infra_cache = {}
+_core_infra._create_infra_objects = MagicMock(
+    return_value={
+        "checkpoint_manager": None,
+        "metrics_collector": None,
+        "error_logger": None,
+        "backup_manager": None,
+    }
+)
+_core_infra._pipeline_start_times = {}
+_core_infra.get_infra = MagicMock(
+    return_value={
+        "checkpoint": None,
+        "metrics": None,
+        "error_logger": None,
+        "backup": None,
+    }
+)
+
+# Stub utils.path_resolver
+_utils_pkg = _stub("utils")
+_utils_pkg.__path__ = []
+_utils_resolver = _stub("utils.path_resolver")
+_utils_resolver.get_session_logs_dir = MagicMock(return_value=Path.home() / ".claude" / "logs" / "sessions")
+_utils_resolver.get_telemetry_dir = MagicMock(return_value=Path.home() / ".claude" / "logs" / "telemetry")
+
+# Load the canonical subgraph module (where _run_step lives)
+# NOTE (v1.13.0): execution_v2.py was merged into subgraph.py in v1.11 refactoring
+_canonical_path = Path(_SCRIPTS) / "langgraph_engine" / "level3_execution" / "subgraph.py"
 _spec = _ilu.spec_from_file_location(
-    "langgraph_engine.level3_execution.execution_v2",
+    "langgraph_engine.level3_execution.subgraph",
     str(_canonical_path),
     submodule_search_locations=[],
 )
 _v2_mod = _ilu.module_from_spec(_spec)
 _v2_mod.__package__ = "langgraph_engine.level3_execution"
-sys.modules["langgraph_engine.level3_execution.execution_v2"] = _v2_mod
+sys.modules["langgraph_engine.level3_execution.subgraph"] = _v2_mod
 _spec.loader.exec_module(_v2_mod)
 
-# Also register backward-compat shim path
+# Also register backward-compat shim paths for old test references
 sys.modules["langgraph_engine.subgraphs.level3_execution_v2"] = _v2_mod
+sys.modules["langgraph_engine.level3_execution.execution_v2"] = _v2_mod
 
 _run_step = _v2_mod._run_step
-_infra_cache = _v2_mod._infra_cache
+# _infra_cache lives in core/infrastructure.py; subgraph.py re-exports it
+_infra_cache = _core_infra._infra_cache
 
-# Load real v2_nodes wrapper modules and inject bare names (_run_step, step*_fn)
+# Load real nodes wrapper modules and inject bare names (_run_step, step*_fn)
 # These modules use F821-suppressed bare names that must be injected post-load
 _wrapper_modules = {}
 for _wmod_name, _wmod_file in [
@@ -229,11 +269,12 @@ for _wmod_name, _wmod_file in [
     ("step_wrappers_10_11", "step_wrappers_10_11.py"),
     ("step_wrappers_12_14", "step_wrappers_12_14.py"),
 ]:
-    _wmod_path = Path(_SCRIPTS) / "langgraph_engine" / "level3_execution" / "v2_nodes" / _wmod_file
-    _wmod_fqn = "langgraph_engine.level3_execution.v2_nodes." + _wmod_name
+    # NOTE (v1.13.0): nodes/ directory (was v2_nodes/ in older versions)
+    _wmod_path = Path(_SCRIPTS) / "langgraph_engine" / "level3_execution" / "nodes" / _wmod_file
+    _wmod_fqn = "langgraph_engine.level3_execution.nodes." + _wmod_name
     _wspec = _ilu.spec_from_file_location(_wmod_fqn, str(_wmod_path), submodule_search_locations=[])
     _wmod = _ilu.module_from_spec(_wspec)
-    _wmod.__package__ = "langgraph_engine.level3_execution.v2_nodes"
+    _wmod.__package__ = "langgraph_engine.level3_execution.nodes"
     sys.modules[_wmod_fqn] = _wmod
     _wspec.loader.exec_module(_wmod)
     _wrapper_modules[_wmod_name] = _wmod
@@ -259,6 +300,10 @@ _bare_names = {
     "route_after_step1_plan_decision": _exec_mod.route_after_step1_plan_decision,
     "route_after_step11_review": _exec_mod.route_after_step11_review,
     "level3_merge_node": _exec_mod.level3_merge_node,
+    "get_infra": _core_infra.get_infra,
+    "_create_infra_objects": _core_infra._create_infra_objects,
+    "_infra_cache": _core_infra._infra_cache,
+    "_pipeline_start_times": _core_infra._pipeline_start_times,
 }
 for _wmod in _wrapper_modules.values():
     for _bname, _bval in _bare_names.items():

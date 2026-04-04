@@ -3,6 +3,12 @@
 
 Extracted from level3_execution/subgraph.py for modularity.
 Windows-safe: ASCII only.
+
+CHANGE LOG (v1.13.0):
+  route_pre_analysis: both template_fast_path and RAG hit now route to
+  "level3_step8" (previously routed to "level3_step6" and "level3_step5").
+  Steps 5-7 no longer exist in the graph; Step 8 is the new post-Step-0 target.
+  route_to_plan_or_breakdown removed (Step 1 no longer exists in graph).
 """
 import sys
 from pathlib import Path
@@ -33,7 +39,7 @@ def orchestration_pre_analysis_node(state: FlowState) -> Dict[str, Any]:
     2. RAG orchestration lookup: check if a similar past task's agent
        roster and phase plan can be reused (threshold 0.85).  On hit,
        skip_architecture and skip_consensus flags are set so route_pre_analysis
-       can bypass Steps 0-4 and jump directly to Step 5 (skill selection).
+       can bypass Step 0 and jump directly to Step 8 (GitHub issue creation).
 
     Always fail-open: any exception returns empty metrics without blocking
     the pipeline.
@@ -54,8 +60,8 @@ def orchestration_pre_analysis_node(state: FlowState) -> Dict[str, Any]:
     }
 
     # --- 0. Orchestration Template Fast-Path (highest priority) ---
-    # If user provided --orchestration-template, bypass ALL LLM analysis (Steps 0-5)
-    # and jump directly to Step 6 (skill validation + download).
+    # If user provided --orchestration-template, bypass ALL LLM analysis (Step 0)
+    # and jump directly to Step 8 (GitHub issue creation).
     template = state.get("orchestration_template") or {}
     if template:
         try:
@@ -75,6 +81,10 @@ def orchestration_pre_analysis_node(state: FlowState) -> Dict[str, Any]:
             result["step5_agent"] = template.get("agent") or (template.get("agents") or [""])[0]
             result["step5_skills"] = template.get("skills") or ([template["skill"]] if template.get("skill") else [])
             result["step5_agents"] = template.get("agents") or ([template["agent"]] if template.get("agent") else [])
+            # Skill/agent ready defaults (Steps 6 collapsed)
+            result["step6_skill_ready"] = True
+            result["step6_agent_ready"] = True
+            result["step6_validation_status"] = "OK"
             # If system_prompt provided, write it to session dir so Step 10 can use it directly
             system_prompt_text = template.get("system_prompt", "")
             if system_prompt_text:
@@ -86,6 +96,8 @@ def orchestration_pre_analysis_node(state: FlowState) -> Dict[str, Any]:
                         sp_file.write_text(system_prompt_text, encoding="utf-8")
                         result["step7_system_prompt_file"] = str(sp_file)
                         result["step7_system_prompt_loaded"] = True
+                        result["step7_execution_prompt"] = system_prompt_text
+                        result["step7_prompt_saved"] = True
                         logger.info("[v2] Template system_prompt written to %s", sp_file)
                 except Exception as sp_err:
                     logger.debug("[v2] Template system_prompt write skipped: %s", sp_err)
@@ -96,12 +108,12 @@ def orchestration_pre_analysis_node(state: FlowState) -> Dict[str, Any]:
             elapsed = (_t.time() - _start) * 1000
             result["pre_analysis_execution_time_ms"] = round(elapsed, 1)
             print(
-                "[PRE-ANALYSIS] TEMPLATE FAST-PATH: task_type=%s complexity=%d skill=%s agent=%s -> jumping to Step 6"
+                "[PRE-ANALYSIS] TEMPLATE FAST-PATH: task_type=%s complexity=%d skill=%s agent=%s -> jumping to Step 8"
                 % (result["step0_task_type"], result["step0_complexity"], result["step5_skill"], result["step5_agent"]),
                 file=sys.stderr,
             )
             logger.info(
-                "[v2] Template fast-path active: %s complexity=%d -> level3_step6",
+                "[v2] Template fast-path active: %s complexity=%d -> level3_step8",
                 result["step0_task_type"],
                 result["step0_complexity"],
             )
@@ -149,8 +161,6 @@ def orchestration_pre_analysis_node(state: FlowState) -> Dict[str, Any]:
         proj_name = proj_root.replace("\\", "/").rstrip("/").split("/")[-1]
 
         # Lightweight structural fingerprint to prevent cross-project RAG false positives.
-        # Two tasks with identical text (e.g. "Add login to dashboard") in different
-        # projects would otherwise get a 0.95 RAG score and inject the wrong blueprint.
         try:
             from ..rag_integration import _compute_codebase_hash as _cbh
 
@@ -186,15 +196,24 @@ def orchestration_pre_analysis_node(state: FlowState) -> Dict[str, Any]:
                 "step3_tasks_validated",
                 "step5_skill",
                 "step5_agent",
+                "step5_skills",
+                "step5_agents",
+                "step6_skill_ready",
+                "step7_execution_prompt",
+                "step7_prompt_saved",
             ):
                 if cached.get(key) is not None:
                     result[key] = cached[key]
+            # Ensure skill-readiness defaults are set on RAG hit
+            result.setdefault("step6_skill_ready", True)
+            result.setdefault("step6_agent_ready", True)
+            result.setdefault("step7_prompt_saved", bool(result.get("step7_execution_prompt")))
             print(
-                "[PRE-ANALYSIS] RAG HIT (confidence=%.2f) - skipping architecture phases" % confidence,
+                "[PRE-ANALYSIS] RAG HIT (confidence=%.2f) - jumping to Step 8" % confidence,
                 file=sys.stderr,
             )
             logger.info(
-                "[v2] Pre-analysis RAG HIT confidence=%.2f source_session=%s",
+                "[v2] Pre-analysis RAG HIT confidence=%.2f source_session=%s -> level3_step8",
                 confidence,
                 rag_result.get("session_id", ""),
             )
@@ -212,20 +231,20 @@ def route_pre_analysis(state: FlowState) -> str:
     """Route after orchestration_pre_analysis_node.
 
     TEMPLATE FAST-PATH (highest priority, template_fast_path=True):
-        -> "level3_step6"  (skill validation, bypassing steps 0-5 entirely)
+        -> "level3_step8"  (GitHub issue creation, bypassing Step 0 entirely)
 
     RAG HIT (confidence >= 0.85, skip_architecture set):
-        -> "level3_step5"  (skill selection, bypassing steps 0-4)
+        -> "level3_step8"  (GitHub issue creation, bypassing Step 0)
 
     RAG MISS or call graph unavailable:
-        -> "level3_step0_0"  (normal pre-flight flow)
+        -> "level3_step0_0"  (normal pre-flight flow through Step 0)
     """
     if state.get("template_fast_path"):
-        logger.info("[v2] Pre-analysis route: TEMPLATE FAST-PATH -> level3_step6")
-        return "level3_step6"
+        logger.info("[v2] Pre-analysis route: TEMPLATE FAST-PATH -> level3_step8")
+        return "level3_step8"
     if state.get("rag_orchestration_hit") and state.get("skip_architecture"):
-        logger.info("[v2] Pre-analysis route: RAG HIT -> level3_step5")
-        return "level3_step5"
+        logger.info("[v2] Pre-analysis route: RAG HIT -> level3_step8")
+        return "level3_step8"
     return "level3_step0_0"
 
 
@@ -234,11 +253,20 @@ def route_pre_analysis(state: FlowState) -> str:
 # ============================================================================
 
 
-def route_to_plan_or_breakdown(state: FlowState) -> str:
-    """Route after Step 1 plan decision."""
-    from ..routing import route_after_step1_plan_decision
+# REMOVED: route_to_plan_or_breakdown (v1.13.0)
+# This routing function was used by Step 1 (Plan Mode Decision) to choose between
+# Step 2 and Step 3. Since Step 1 is removed from the graph, this routing function
+# is no longer needed. Kept as a stub to avoid breaking any test imports.
 
-    return route_after_step1_plan_decision(state)
+
+def route_to_plan_or_breakdown(state: FlowState) -> str:
+    """DEPRECATED (v1.13.0): Step 1 no longer exists in the graph.
+
+    Returns "level3_step8" as a safe no-op default.
+    This stub preserves backward compatibility for any tests that import it.
+    """
+    logger.warning("[v2] route_to_plan_or_breakdown called but Step 1 no longer exists (v1.13.0)")
+    return "level3_step8"
 
 
 def route_to_closure_or_retry(state: FlowState) -> str:

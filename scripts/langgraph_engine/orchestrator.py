@@ -7,12 +7,25 @@ This StateGraph wires together all 3 levels with conditional routing:
 1. Level -1 (auto-fix) - blocking checkpoint
 2. Level 1 (sync, 4 parallel context tasks)
 3. Level 2 (standards, conditional Java routing)
-4. Level 3 (12-step execution)
+4. Level 3 (9-step execution)
 5. Output node - writes flow-trace.json
 
 Note: LangGraph 1.0.10 doesn't support add_graph() nesting, so we flatten
 all nodes into one graph. This works fine - the graph structure is still clear
 via node naming (level_minus1_*, level1_*, etc.)
+
+CHANGE LOG (v1.13.0):
+  Steps 1, 3, 4, 5, 6, 7 removed from Level 3 graph.
+  Their outputs are now populated by step0_task_analysis_node after a single
+  consolidated LLM call (orchestration template). Steps 8-14 are unchanged.
+  route_after_step1_decision local function removed (step1 no longer exists).
+  apply_integration_step1/2/3/4/5/6/7 removed (hooks only needed for live steps).
+  route_pre_analysis conditional edges updated: both fast-path and RAG-hit now
+  route to "level3_step8" (was "level3_step6" and "level3_step5" respectively).
+  Step 2 (plan execution) retained as optional branch post-step0.
+  Direct edge: level3_step0 -> level3_step2 -> level3_step8 (plan mode)
+             OR level3_step0 -> level3_step8 (no-plan mode, new default).
+  New step count: Pre-0, 0.0, 0.1, 0, [2], 8, 9, [10-14] = 9 active steps.
 """
 
 import sys
@@ -63,13 +76,7 @@ from .level3_execution.subgraph import (
     step0_0_project_context_node,
     step0_1_initial_callgraph_node,
     step0_task_analysis_node,
-    step1_plan_mode_decision_node,
     step2_plan_execution_node,
-    step3_task_breakdown_node,
-    step4_toon_refinement_node,
-    step5_skill_selection_node,
-    step6_skill_validation_node,
-    step7_final_prompt_node,
     step8_github_issue_node,
     step9_branch_creation_node,
     step10_implementation_note,
@@ -108,11 +115,11 @@ def route_standards_loading(state: FlowState) -> Literal["level2_java_standards"
     return "level2_merge"
 
 
-def route_after_step1_decision(state: FlowState) -> Literal["level3_step2", "level3_step3"]:
-    """Conditional routing: if plan required, execute Step 2; else skip to Step 3."""
-    if state.get(StepKeys.PLAN_REQUIRED, True):
+def route_after_step0_to_step2_or_step8(state: FlowState) -> Literal["level3_step2", "level3_step8"]:
+    """Conditional routing after Step 0: if plan required, execute Step 2; else skip to Step 8."""
+    if state.get(StepKeys.PLAN_REQUIRED, False):
         return "level3_step2"
-    return "level3_step3"
+    return "level3_step8"
 
 
 def route_after_step11_review(state: FlowState) -> Literal["level3_step12", "level3_step11_retry"]:
@@ -300,7 +307,7 @@ def level2_select_standards_node(state: FlowState) -> dict:
       detected_framework        - framework name for downstream routing
       standards_selection_error - error string (non-fatal, execution continues)
 
-    Integration hooks (standards_hook_step1/2/5/10/13) consume the standards_selection
+    Integration hooks (standards_hook_step10/13) consume the standards_selection
     data to inject step-specific context/constraints/checklists.
     """
     updates: dict = {}
@@ -357,46 +364,13 @@ def level2_select_standards_node(state: FlowState) -> dict:
     return updates
 
 
-def apply_integration_step1(state: FlowState) -> dict:
-    """Apply standards integration point at Step 1 (plan mode decision)."""
-    updated = apply_standards_at_step(1, dict(state))
-    return {k: updated[k] for k in updated if k not in state or updated[k] != state.get(k)}
-
-
-def apply_integration_step2(state: FlowState) -> dict:
-    """Apply standards integration point at Step 2 (plan execution)."""
-    updated = apply_standards_at_step(2, dict(state))
-    return {k: updated[k] for k in updated if k not in state or updated[k] != state.get(k)}
-
-
-def apply_integration_step3(state: FlowState) -> dict:
-    """Apply standards integration point at Step 3 (task breakdown)."""
-    updated = apply_standards_at_step(3, dict(state))
-    return {k: updated[k] for k in updated if k not in state or updated[k] != state.get(k)}
-
-
-def apply_integration_step4(state: FlowState) -> dict:
-    """Apply standards integration point at Step 4 (TOON refinement)."""
-    updated = apply_standards_at_step(4, dict(state))
-    return {k: updated[k] for k in updated if k not in state or updated[k] != state.get(k)}
-
-
-def apply_integration_step5(state: FlowState) -> dict:
-    """Apply standards integration point at Step 5 (skill selection)."""
-    updated = apply_standards_at_step(5, dict(state))
-    return {k: updated[k] for k in updated if k not in state or updated[k] != state.get(k)}
-
-
-def apply_integration_step6(state: FlowState) -> dict:
-    """Apply standards integration point at Step 6 (skill validation)."""
-    updated = apply_standards_at_step(6, dict(state))
-    return {k: updated[k] for k in updated if k not in state or updated[k] != state.get(k)}
-
-
-def apply_integration_step7(state: FlowState) -> dict:
-    """Apply standards integration point at Step 7 (final prompt generation)."""
-    updated = apply_standards_at_step(7, dict(state))
-    return {k: updated[k] for k in updated if k not in state or updated[k] != state.get(k)}
+# REMOVED (v1.13.0): apply_integration_step1 -- Step 1 no longer in graph
+# REMOVED (v1.13.0): apply_integration_step2 -- Step 2 standards hook removed (step2 is now optional, no hook)
+# REMOVED (v1.13.0): apply_integration_step3 -- Step 3 no longer in graph
+# REMOVED (v1.13.0): apply_integration_step4 -- Step 4 no longer in graph
+# REMOVED (v1.13.0): apply_integration_step5 -- Step 5 no longer in graph
+# REMOVED (v1.13.0): apply_integration_step6 -- Step 6 no longer in graph
+# REMOVED (v1.13.0): apply_integration_step7 -- Step 7 no longer in graph
 
 
 def apply_integration_step10(state: FlowState) -> dict:
@@ -725,21 +699,15 @@ def _save_pipeline_execution_log(state: FlowState, final_status: str) -> None:
         log_lines.append(f"- Status: {state.get(StepKeys.LEVEL2_STATUS, 'unknown')}")
         log_lines.append("")
 
-        # Level 3 Steps
+        # Level 3 Steps (v1.13.0: Steps 1,3,4,5,6,7 removed; Step 2 is optional)
         log_lines.append("## Level 3: Execution Steps")
         log_lines.append("")
         log_lines.append("| Step | Name | Status | Duration | Details |")
         log_lines.append("|------|------|--------|----------|---------|")
 
         step_info = [
-            (0, "Task Analysis", "step0_task_type", "step0_complexity"),
-            (1, "Plan Mode Decision", "step1_plan_required", "step1_reasoning"),
-            (2, "Plan Execution", "step2_plan_status", "step2_phases"),
-            (3, "Task Breakdown", "step3_validation_status", "step3_task_count"),
-            (4, "TOON Refinement", "step4_refinement_status", "step4_complexity_adjusted"),
-            (5, "Skill & Agent Selection", "step5_skill", "step5_agent"),
-            (6, "Skill Validation", "step6_validation_status", "step6_skill_ready"),
-            (7, "Final Prompt Generation", "step7_prompt_saved", "step7_prompt_size"),
+            (0, "Task Analysis + Template", "step0_task_type", "step0_complexity"),
+            (2, "Plan Execution (optional)", "step2_plan_status", "step2_phases"),
             (8, "GitHub Issue Creation", "step8_status", "step8_issue_url"),
             (9, "Branch Creation", "step9_status", "step9_branch_name"),
             (10, "Implementation", "step10_implementation_status", "step10_llm_invoked"),
@@ -818,16 +786,24 @@ def create_flow_graph(hook_mode: bool = False):
     achieve automatic parallelization.
 
     Args:
-        hook_mode: If True, skip Steps 8-14 (GitHub workflow) for fast
+        hook_mode: If True, skip Steps 10-14 (GitHub workflow) for fast
                    UserPromptSubmit hook execution. Only runs Levels -1/1/2
-                   and Steps 0-7 (analysis + prompt generation).
-                   Steps 8-14 can be triggered separately after Claude has context.
+                   and Steps 0/2/8/9 (analysis + prompt generation + issue + branch).
+                   Steps 10-14 can be triggered separately after Claude has context.
 
     Returns:
         Compiled StateGraph instance
 
     Raises:
         RuntimeError: If LangGraph not installed
+
+    CHANGE LOG (v1.13.0):
+        Steps 1, 3, 4, 5, 6, 7 removed from graph.
+        Step 0 now does consolidated LLM call (orchestration template) and
+        populates all migration fields previously written by steps 1-7.
+        Step 2 (plan execution) retained as optional conditional branch.
+        route_pre_analysis targets updated to "level3_step8" for both fast paths.
+        Standards hooks for removed steps are no longer registered.
     """
     if not _LANGGRAPH_AVAILABLE:
         raise RuntimeError(
@@ -957,7 +933,10 @@ def create_flow_graph(hook_mode: bool = False):
     graph.add_edge("level2_select_standards", "level2_optimize_context")
 
     # ========================================================================
-    # LEVEL 3: EXECUTION SYSTEM - 14-STEP PIPELINE (v2 WORKFLOW.MD COMPLIANT)
+    # LEVEL 3: EXECUTION SYSTEM - 9-STEP PIPELINE (v1.13.0 CONSOLIDATED)
+    #
+    # Active steps: Pre-0, 0.0, 0.1, 0, [2 optional], 8, 9, [10-14 full mode]
+    # Steps 1, 3, 4, 5, 6, 7 removed -- outputs merged into Step 0 template call.
     # ========================================================================
 
     # Bridge node: session_path -> session_dir
@@ -965,8 +944,8 @@ def create_flow_graph(hook_mode: bool = False):
     graph.add_edge("level2_optimize_context", "level3_init")
 
     # Pre-analysis gate: call graph scan + RAG orchestration lookup
-    # On template fast-path (--orchestration-template): jumps to level3_step6, skipping steps 0-5
-    # On RAG hit (confidence >= 0.85): jumps to level3_step5, skipping steps 0-4
+    # Template fast-path (--orchestration-template): jumps directly to level3_step8
+    # RAG hit (confidence >= 0.85): jumps directly to level3_step8
     # On miss: falls through to level3_step0_0 (normal pre-flight flow)
     graph.add_node("level3_pre_analysis", orchestration_pre_analysis_node)
     graph.add_edge("level3_init", "level3_pre_analysis")
@@ -975,8 +954,7 @@ def create_flow_graph(hook_mode: bool = False):
         route_pre_analysis,
         {
             "level3_step0_0": "level3_step0_0",
-            "level3_step5": "level3_step5",
-            "level3_step6": "level3_step6",
+            "level3_step8": "level3_step8",
         },
     )
 
@@ -987,74 +965,24 @@ def create_flow_graph(hook_mode: bool = False):
     graph.add_node("level3_step0_1", step0_1_initial_callgraph_node)
     graph.add_edge("level3_step0_0", "level3_step0_1")
 
-    # Step 0: Task Analysis (MUST run before Step 1 - provides task_type, complexity, tasks)
+    # Step 0: Task Analysis + Orchestration Template (consolidated LLM call).
+    # Populates all migration fields for steps 8-14 (previously written by 1/3/4/5/6/7).
     graph.add_node("level3_step0", step0_task_analysis_node)
     graph.add_edge("level3_step0_1", "level3_step0")
 
-    # Standards integration hook: Step 1 - before plan mode decision
-    graph.add_node("level3_standards_hook_step1", apply_integration_step1)
-    graph.add_edge("level3_step0", "level3_standards_hook_step1")
-
-    # Step 1: Plan Mode Decision (LOCAL LLM - Ollama)
-    graph.add_node("level3_step1", step1_plan_mode_decision_node)
-    graph.add_edge("level3_standards_hook_step1", "level3_step1")
-
-    # CONDITIONAL: plan_required → step2 | direct → step3
+    # CONDITIONAL: plan_required -> step2 (plan execution) | step8 (direct to GitHub issue)
     graph.add_conditional_edges(
-        "level3_step1",
-        route_after_step1_decision,
+        "level3_step0",
+        route_after_step0_to_step2_or_step8,
         {
             "level3_step2": "level3_step2",
-            "level3_step3": "level3_step3",
+            "level3_step8": "level3_step8",
         },
     )
 
-    # Standards integration hook: Step 2 - during plan execution
-    graph.add_node("level3_standards_hook_step2", apply_integration_step2)
-
-    # Step 2: Plan Execution (only when plan_required=True)
+    # Step 2: Plan Execution (optional - only when step0 sets plan_required=True)
     graph.add_node("level3_step2", step2_plan_execution_node)
-    graph.add_edge("level3_step2", "level3_standards_hook_step2")
-    graph.add_edge("level3_standards_hook_step2", "level3_step3")
-
-    # Step 3: Task Breakdown
-    graph.add_node("level3_step3", step3_task_breakdown_node)
-
-    # Standards integration hook: Step 3 - validate task breakdown against standards
-    graph.add_node("level3_standards_hook_step3", apply_integration_step3)
-    graph.add_edge("level3_step3", "level3_standards_hook_step3")
-
-    # Step 4: TOON Refinement
-    graph.add_node("level3_step4", step4_toon_refinement_node)
-    graph.add_edge("level3_standards_hook_step3", "level3_step4")
-
-    # Standards integration hook: Step 4 - validate TOON context against standards
-    graph.add_node("level3_standards_hook_step4", apply_integration_step4)
-    graph.add_edge("level3_step4", "level3_standards_hook_step4")
-
-    # Step 5: Skill & Agent Selection (LOCAL LLM + filesystem scan)
-    graph.add_node("level3_step5", step5_skill_selection_node)
-    graph.add_edge("level3_standards_hook_step4", "level3_step5")
-
-    # Standards integration hook: Step 5 - after skill selection (validates skill vs project)
-    graph.add_node("level3_standards_hook_step5", apply_integration_step5)
-    graph.add_edge("level3_step5", "level3_standards_hook_step5")
-
-    # Step 6: Skill Validation & Download (RESTORED)
-    graph.add_node("level3_step6", step6_skill_validation_node)
-    graph.add_edge("level3_standards_hook_step5", "level3_step6")
-
-    # Standards integration hook: Step 6 - validate downloaded skill compatibility
-    graph.add_node("level3_standards_hook_step6", apply_integration_step6)
-    graph.add_edge("level3_step6", "level3_standards_hook_step6")
-
-    # Step 7: Final Prompt Generation (LOCAL LLM)
-    graph.add_node("level3_step7", step7_final_prompt_node)
-    graph.add_edge("level3_standards_hook_step6", "level3_step7")
-
-    # Standards integration hook: Step 7 - validate prompt includes standards context
-    graph.add_node("level3_standards_hook_step7", apply_integration_step7)
-    graph.add_edge("level3_step7", "level3_standards_hook_step7")
+    graph.add_edge("level3_step2", "level3_step8")
 
     # ========================================================================
     # STEPS 8-9: Issue + Branch Creation (runs in BOTH hook and full mode)
@@ -1063,7 +991,6 @@ def create_flow_graph(hook_mode: bool = False):
 
     # Step 8: GitHub Issue Creation
     graph.add_node("level3_step8", step8_github_issue_node)
-    graph.add_edge("level3_standards_hook_step7", "level3_step8")
 
     # Step 9: Branch Creation (issue-42-bug format)
     graph.add_node("level3_step9", step9_branch_creation_node)
@@ -1107,7 +1034,7 @@ def create_flow_graph(hook_mode: bool = False):
     graph.add_node("level3_step11", step11_pull_request_node)
     graph.add_edge("level3_standards_hook_step10", "level3_step11")
 
-    # Step 11 → Conditional Routing (retry loop or continue to closure)
+    # Step 11 -> Conditional Routing (retry loop or continue to closure)
     # Retry goes through increment node first (state mutations only in nodes)
     graph.add_node("level3_step11_retry", step11_retry_increment_node)
     graph.add_edge("level3_step11_retry", "level3_step10")

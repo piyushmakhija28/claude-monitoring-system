@@ -111,6 +111,87 @@ def call_execution_script(script_name: str, args: list = None, model_tier: str =
         return {"status": "ERROR", "error": str(e)}
 
 
+def call_streaming_script(script_name: str, args: list = None, timeout: int = None) -> dict:
+    """Call a Level 3 execution script with stderr streamed live to the terminal.
+
+    Unlike call_execution_script(), stderr is NOT captured -- it is inherited from
+    the parent process so the user sees real-time progress output from long-running
+    scripts such as orchestrator-agent-caller.  stdout is still piped and parsed as
+    JSON on completion.
+
+    Args:
+        script_name: Name of the script (without .py) in architecture/03-execution-system/
+        args: Command-line arguments to pass
+        timeout: Seconds to wait before raising TimeoutExpired.
+                 Reads STEP0_ORCHESTRATOR_TIMEOUT env var as default (fallback: 300).
+
+    Returns:
+        Parsed JSON dict from stdout, or an error dict with keys
+        ``success`` (False) and ``error`` (str).  Raw stdout is included
+        under key ``raw`` when JSON parsing fails.
+    """
+    import os
+
+    DEBUG = os.getenv("CLAUDE_DEBUG") == "1"
+
+    if timeout is None:
+        timeout = int(os.getenv("STEP0_ORCHESTRATOR_TIMEOUT", "300"))
+
+    try:
+        scripts_dir = Path(__file__).parent.parent.parent
+        script_path = Path(__file__).parent / "architecture" / f"{script_name}.py"
+        if not script_path.exists():
+            script_path = scripts_dir / "architecture" / "03-execution-system" / f"{script_name}.py"
+
+        if not script_path.exists():
+            arch_dir = Path(__file__).parent / "architecture"
+            found = list(arch_dir.glob(f"**/{script_name}*.py")) if arch_dir.exists() else []
+            if not found:
+                legacy_dir = scripts_dir / "architecture" / "03-execution-system"
+                found = list(legacy_dir.glob(f"**/{script_name}*.py")) if legacy_dir.exists() else []
+            if found:
+                script_path = found[0]
+            else:
+                if DEBUG:
+                    print(f"[L3-DEBUG] Streaming script not found: {script_name}", file=sys.stderr)
+                return {"success": False, "error": f"Script not found: {script_name}"}
+
+        cmd = [sys.executable, str(script_path)]
+        if args:
+            cmd.extend(args)
+
+        env = os.environ.copy()
+        env["PYTHONUNBUFFERED"] = "1"
+
+        if DEBUG:
+            print(f"[L3-DEBUG] Streaming: {script_name} (timeout={timeout}s)", file=sys.stderr)
+
+        result = subprocess.run(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=None,  # Inherit: live output visible in terminal
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout,
+            cwd=scripts_dir,
+            env=env,
+        )
+
+        if result.stdout:
+            try:
+                return json.loads(result.stdout)
+            except Exception:
+                return {"success": False, "error": "Non-JSON stdout", "raw": result.stdout[:500]}
+
+        return {"success": result.returncode == 0, "exit_code": result.returncode}
+
+    except subprocess.TimeoutExpired:
+        return {"success": False, "error": f"Timeout after {timeout}s"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
 # ============================================================================
 # SHARED CONTEXT DETECTION HELPERS
 # ============================================================================

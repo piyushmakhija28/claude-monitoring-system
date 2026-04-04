@@ -2,7 +2,7 @@
 
 **The first AI tool that follows full SDLC** - from task analysis to merged PR, automatically.
 
-**Version:** 1.12.0 | **Status:** Alpha | **Last Updated:** 2026-04-03
+**Version:** 1.14.0 | **Status:** Alpha | **Last Updated:** 2026-04-04
 
 ---
 
@@ -30,15 +30,41 @@ Give it a task in natural language. It handles everything:
 You say: "Fix the login timeout bug"
 
 Engine does:
-  Pre-0:   Call graph scan + RAG lookup -> cache hit? Skip Steps 0-4 directly to Step 5
-  Step 0:  Analyzes task -> Bug Fix, complexity 4/10 (boosted by call graph hot-node count)
-  Step 1:  Decides plan mode -> Not needed (simple bug)
-  Step 2:  Skipped (no plan needed)
-  Step 3:  Breaks into tasks -> 2 tasks with file targets
-  Step 4:  Refines context -> TOON with full project state
-  Step 5:  Selects skill -> python-core + testing-core
-  Step 6:  Validates skills -> Downloaded and ready
-  Step 7:  Generates prompt -> system_prompt.txt + user_message.txt
+  Level -1: Auto-fix (Unicode, encoding, paths)
+  Level 1:  Session sync + complexity score (combined_complexity_score, 1-25 scale)
+  Level 2:  Standards loading (Python + framework-specific)
+
+  Pre-0:   Call graph scan + RAG lookup
+           -> RAG hit (>=0.85)? Skip Step 0 entirely, jump to Step 8
+           -> Miss? Continue to Step 0 with fresh call graph data
+
+  Step 0:  Task Analysis v2 -- PromptGen + Orchestrator (2 LLM calls, ~15s total)
+  |
+  |  [What was before v1.13.0 -- 6 separate LLM calls:]
+  |    Step 0: task analysis, Step 1: plan mode decision,
+  |    Step 3: phase breakdown, Step 4: TOON refinement,
+  |    Step 5: skill/agent selection, Step 6: validation,
+  |    Step 7: final prompt generation
+  |
+  |  [What happens now -- 2 calls:]
+  |
+  |  Call 1 -- prompt-gen-expert-caller (~10s, captured):
+  |    Reads orchestration_system_prompt.txt template
+  |    Injects: user requirements + combined_complexity_score (from Level 1)
+  |             + call graph data (risk_level, danger_zones, hot_nodes from Pre-0)
+  |    LLM fills: complete orchestration prompt with agents, phases, contracts
+  |    Output: fully structured plan stored in state["orchestration_prompt"]
+  |
+  |  Call 2 -- orchestrator-agent-caller (~30-90s, stderr streamed live):
+  |    Receives filled orchestration prompt
+  |    Executes full plan: solution-architect -> consensus -> agents -> QA
+  |    User sees real-time progress in Claude Code terminal:
+  |      [ORCHESTRATOR] Building plan...
+  |      [ORCHESTRATOR] Phase A: solution-architect invoked...
+  |      [ORCHESTRATOR] Phase B: implementation...
+  |      [ORCHESTRATOR] Done.
+  |    Output: result stored in state["orchestrator_result"]
+
   Step 8:  Creates GitHub issue #42 + Jira PROJ-123 (dual-linked)
   Step 9:  Creates branch -> bugfix/proj-123 (from Jira key)
   Step 10: Implements fix + Jira "In Progress" + Figma "started"
@@ -48,9 +74,17 @@ Engine does:
   Step 14: Final summary -> execution-summary.txt + voice notification
 ```
 
-**Total time: ~60 seconds for Steps 0-9 (hook mode), ~170 seconds full pipeline.**
+**Total time: ~15s for planning (was ~75s), ~120s full pipeline (was ~170s).**
 
-> **NEW in v1.8.0 — Template Fast-Path:** If you pre-fill an orchestration template using `prompt-generation-expert`, the pipeline skips Steps 0-5 entirely and jumps straight to Step 6. This drops hook-mode time from ~60s to ~15s and cuts LLM calls from 7-8 down to 1. See [Orchestration Template Fast-Path](#orchestration-template-fast-path-v180) below.
+### Evolution of the Planning Phase
+
+| Version | Steps | LLM Calls (planning) | Time (planning) | What Changed |
+|---------|-------|----------------------|-----------------|--------------|
+| v1.12.0 | 15 | ~6 | ~75s | Original: Steps 0-7 each made separate LLM calls |
+| v1.13.0 | 9 | ~2 (subprocess) | ~30s | Removed Steps 1,3,4,5,6,7. Step 0 used 2 subprocess calls |
+| **v1.14.0** | **9** | **2 (LLM chain)** | **~15s** | Step 0 redesigned: template fill -> orchestrator chain with live stderr output |
+
+> **Template Fast-Path (unchanged from v1.8.0):** Pre-built orchestration prompt skips Step 0 entirely, jumps to Step 8. Drops planning time to ~0s.
 
 ---
 
@@ -1833,6 +1867,9 @@ export CLAUDE_HOME=/path/to/your/.claude
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| **v1.14.0** | 2026-04-04 | Step 0 redesign: 2-call LLM chain (prompt-gen-expert + orchestrator-agent). Template stored in `level3_execution/templates/`. `call_streaming_script()` helper with inherited stderr for real-time terminal output. Planning time: ~75s -> ~15s. Planning LLM calls: ~6 -> 2. |
+| **v1.13.0** | 2026-04-03 | Level 3 simplification: removed Steps 1,3,4,5,6,7. Pipeline 15 steps -> 9 steps. Step 0 collapsed all planning into 1 template call. `docs/impact_map.md` architecture blueprint created. |
+| **v1.12.0** | 2026-04-03 | scripts/ root cleanup: organized 31 files into setup/ (9), bin/ (5), tools/ (17). Path references updated across cli.py, step14, shell scripts. |
 | **v1.2.0 - v1.2.1** | 2026-03-18 | CallGraph-driven pipeline intelligence (Steps 2/3/4/10/11), phase-scoped context, 15 MCP servers (split LLM into Ollama + Anthropic + OpenAI + Router), Quality Intelligence Layer (SonarQube API-first, auto-fix, test gen, coverage, quality gates), 5 new language standards (TypeScript, Go, Rust, Swift, Kotlin), user interaction system, dependency resolver, metrics aggregator, dry-run mode, telemetry, plan validation, Level 2 enforcement |
 | **7.6.0** | 2026-03-18 | Call graph builder (class-level FQN, impact analysis, 47 tests), path standardization (30+ hardcoded paths removed, env var overrides) |
 | 7.5.0 | 2026-03-18 | UML diagram generation (13 types), 12th MCP server (uml-diagram, 15 tools), AST + LLM hybrid, call_graph_analyzer.py (4 pipeline functions) |

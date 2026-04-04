@@ -1,9 +1,9 @@
 # Claude Workflow Engine - Project Context
 
 **Project:** Claude Workflow Engine
-**Version:** 1.12.0
+**Version:** 1.14.0
 **Type:** LangGraph Orchestration Pipeline with RAG + Call Graph Intelligence + Template Fast-Path
-**Last Updated:** 2026-04-03
+**Last Updated:** 2026-04-04
 
 ---
 
@@ -34,22 +34,58 @@ Claude Workflow Engine is a 3-level LangGraph-based orchestration pipeline for a
 Level -1: Auto-Fix (3 checks: Unicode, encoding, paths)
     |
 Level 1: Sync (session + parallel [complexity, context] + TOON compress)
+    |     Outputs: combined_complexity_score [1-25] (simple x 0.3 + graph x 0.7)
+    |     NOTE: combined_complexity_score is on a 1-25 scale -- do NOT treat as 1-10
     |
 Level 2: Standards (common + conditional Java + tool opt + MCP discovery)
     |
-Level 3: Execution (15 steps: Step 0 through Step 14)
-    |-- Pre-0: Orchestration Pre-Analysis (Template check + CallGraph scan + RAG lookup)
-    |           Template provided -> skip Steps 0-5, jump to Step 6 (~6 LLM calls saved, ~15s)
-    |           RAG hit (>=0.85) -> skip Steps 0-4, jump to Step 5 (~5 LLM calls saved)
-    |           RAG miss -> normal flow; call graph complexity boost injected into Step 0
-    |-- Step 0:  Task Analysis + Prompt Generation (complexity boosted by call graph)
-    |-- Step 1:  Plan Mode Decision
-    |-- Step 2:  Plan Execution (CallGraph impact analysis + complexity-based model)
-    |-- Step 3:  Task/Phase Breakdown + Figma component extraction (ENABLE_FIGMA)
-    |-- Step 4:  TOON Refinement
-    |-- Step 5:  Skill & Agent Selection (RAG cross-session boost + call graph hot-node bonus)
-    |-- Step 6:  Skill Validation & Download
-    |-- Step 7:  Final Prompt Generation (3 files) + Figma design tokens injection
+Level 3: Execution (9 active steps: Pre-0, Step 0, Steps 8-14)
+    |
+    |-- Pre-0: Orchestration Pre-Analysis (unchanged)
+    |           CallGraph scan -> hot_nodes, danger_zones, complexity_boost -> state
+    |           RAG lookup (threshold 0.85) -> hit? skip Step 0, jump to Step 8
+    |           Template fast-path detected? -> skip Step 0, jump to Step 8
+    |           Miss -> continue to Step 0 with call graph data already in state
+    |
+    |-- Step 0: Task Analysis v2 -- PromptGen + Orchestrator        [v1.14.0]
+    |   |
+    |   |  WHAT CHANGED (v1.12 -> v1.13 -> v1.14):
+    |   |  v1.12: Steps 0-7 = 6 separate LLM calls (~75s planning)
+    |   |         Step 0: task analysis
+    |   |         Step 1: plan mode decision        [REMOVED in v1.13]
+    |   |         Step 3: task/phase breakdown      [REMOVED in v1.13]
+    |   |         Step 4: TOON refinement           [REMOVED in v1.13]
+    |   |         Step 5: skill & agent selection   [REMOVED in v1.13]
+    |   |         Step 6: skill validation          [REMOVED in v1.13]
+    |   |         Step 7: final prompt generation   [REMOVED in v1.13]
+    |   |  v1.13: Step 0 = 2 subprocess calls (~30s planning)
+    |   |  v1.14: Step 0 = 2 LLM chain calls (~15s planning)  <-- CURRENT
+    |   |
+    |   |-- Call 1: prompt-gen-expert-caller  (~10s, stdout captured)
+    |   |     Reads: level3_execution/templates/orchestration_system_prompt.txt
+    |   |     Injects into template:
+    |   |       {user_requirements}          <- state["task_description"]
+    |   |       {runtime_context_json_block} <- call graph + complexity (from Pre-0 + Level 1)
+    |   |       {complexity_score_display}   <- state["combined_complexity_score"] (1-25)
+    |   |       {codebase_risk_level}        <- call_graph_metrics["risk_level"]
+    |   |       {codebase_danger_zones}      <- call_graph_metrics["danger_zones"][:3]
+    |   |       {codebase_affected_methods}  <- call_graph_metrics["affected_methods"]
+    |   |       {codebase_hot_nodes}         <- call_graph_metrics["hot_nodes"][:5]
+    |   |     LLM generates: complete orchestration prompt (agents, phases, contracts)
+    |   |     Stores: state["orchestration_prompt"]
+    |   |
+    |   |-- Call 2: orchestrator-agent-caller  (~30-90s, stderr streamed live)
+    |         Reads: state["orchestration_prompt"] via temp file
+    |         Executes: full plan (solution-architect -> consensus -> agents -> QA)
+    |         User sees in terminal (real-time, flush=True):
+    |           [ORCHESTRATOR] Reading orchestration prompt...
+    |           [ORCHESTRATOR] Executing plan...
+    |           [ORCHESTRATOR] Done.
+    |         Stores: state["orchestrator_result"]
+    |         Env vars: STEP0_PROMPT_GEN_TIMEOUT (default 60s)
+    |                   STEP0_ORCHESTRATOR_TIMEOUT (default 300s)
+    |
+    |-- Step 2:  Plan Execution (optional, if step1_plan_required=True -- rare)
     |-- Step 8:  GitHub Issue + Jira Issue creation (ENABLE_JIRA, dual-linked)
     |-- Step 9:  Branch Creation (Jira key: feature/PROJ-123)
     |-- Step 10: Implementation + Jira "In Progress" + Figma "started" comment
@@ -58,6 +94,14 @@ Level 3: Execution (15 steps: Step 0 through Step 14)
     |-- Step 13: Documentation Update + UML Diagram Generation
     |-- Step 14: Final Summary
 ```
+
+### Planning Phase Evolution
+
+| Version | Active Steps | Planning LLM Calls | Planning Time | Key Change |
+|---------|-------------|-------------------|---------------|------------|
+| v1.12.0 | 15 | ~6 | ~75s | Original — Steps 0-7 each called LLM separately |
+| v1.13.0 | 9 | ~2 (subprocess) | ~30s | Removed Steps 1,3,4,5,6,7 |
+| **v1.14.0** | **9** | **2 (LLM chain)** | **~15s** | Step 0 = template fill + orchestrator with live stderr |
 
 ### Directory Layout
 
@@ -402,16 +446,16 @@ See environment variables in `.env.example`:
 
 ---
 
-**Last Updated:** 2026-04-03
+**Last Updated:** 2026-04-04
 
 
 <!-- execution-insight- -->
 ## Latest Execution Insight
 
-- **Task**: v1.12.0 -- scripts/ root cleanup: organize 31 scattered files into setup/ (9 files), bin/ (5 files), tools/ (17 files). Update path references in cli.py, step14, session-start.sh, auto-enforce-all-policies.sh. Keep ide_paths.py, project_session.py, policy_tracking_helper.py in root (imported by hook packages).
+- **Task**: v1.14.0 -- Step 0 redesign: replace 2-subprocess analysis chain with prompt-gen-expert (LLM Call 1, captured) + orchestrator-agent (LLM Call 2, stderr streamed live). Templates stored in level3_execution/templates/. New call_streaming_script() helper with inherited stderr for real-time terminal output.
 - **Skill**: python-core
 - **Agent**: python-backend-engineer
-- **Date**: 2026-04-03
+- **Date**: 2026-04-04
 
 ## Dependency Notes
 

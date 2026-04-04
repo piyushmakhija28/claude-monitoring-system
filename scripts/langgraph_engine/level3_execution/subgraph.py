@@ -1,10 +1,18 @@
 """
-Level 3 SubGraph v2 - Integrated 15-Step Execution Pipeline (Step 0-14)
+Level 3 SubGraph v2 - Integrated Execution Pipeline (Steps 0, 2, 8-14)
 
 Bridge module that wraps the WORKFLOW.md-compliant level3_execution.py functions
 with proper orchestrator integration and logging.
 
-All 15 steps (Step 0-14) implemented with:
+CHANGE LOG (v1.13.0):
+  Removed Steps 1, 3, 4, 5, 6, 7 from the pipeline. These were collapsed into
+  Step 0's orchestration template LLM call. The new pipeline is:
+    Pre-0 -> Step 0 -> Step 8 -> Step 9 -> Steps 10-14
+
+  Step count: 15 steps -> 9 meaningful steps (Pre-0, Step 0, Steps 8-14)
+  LLM calls during planning: ~6 -> ~1 (~70% reduction in planning phase cost)
+
+Remaining steps (0, 2, 8-14) implemented with:
 - Proper logging via loguru
 - Time tracking
 - TOON object handling
@@ -170,8 +178,9 @@ def _write_step_log(
 # ---------------------------------------------------------------------------
 # RAG-eligible steps: these make LLM calls that can be short-circuited by RAG
 # ---------------------------------------------------------------------------
-# Steps 3,4,6 have no LLM; Steps 9-14 are unique per task; Step 10 is implementation
-_RAG_ELIGIBLE_STEPS = {0, 1, 2, 5, 7, 8}
+# Steps 8-14 are unique per task; Step 10 is implementation
+# Steps 3,4,6 (removed) had no LLM; Steps 1,5,7 (removed) collapsed into Step 0
+_RAG_ELIGIBLE_STEPS = {0, 2, 8}
 
 
 # ---------------------------------------------------------------------------
@@ -325,8 +334,8 @@ def _run_step(
             logger.debug(f"[STEP {step_number:02d}] RAG lookup failed (non-fatal): {rag_exc}")
 
     # --- Failure Prevention KB check (informational, non-blocking) ---
-    # Only for steps that run external commands/tools (Steps 0, 7, 8, 9, 10)
-    if step_number in {0, 7, 8, 9, 10}:
+    # Only for steps that run external commands/tools (Steps 0, 8, 9, 10)
+    if step_number in {0, 8, 9, 10}:
         try:
             kb_suggestions = state.get("failure_kb_suggestions") or []
             user_msg = state.get("user_message", "")
@@ -547,17 +556,10 @@ from .nodes import (  # noqa: F401,E402
     orchestration_pre_analysis_node,
     route_pre_analysis,
     route_to_closure_or_retry,
-    route_to_plan_or_breakdown,
     step0_0_project_context_node,
     step0_1_initial_callgraph_node,
     step0_task_analysis_node,
-    step1_plan_mode_decision_node,
     step2_plan_execution_node,
-    step3_task_breakdown_node,
-    step4_toon_refinement_node,
-    step5_skill_selection_node,
-    step6_skill_validation_node,
-    step7_final_prompt_node,
     step8_github_issue_node,
     step9_branch_creation_node,
     step10_implementation_note,

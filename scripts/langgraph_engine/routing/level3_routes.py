@@ -1,20 +1,33 @@
 """Level 3 routing functions - Execution pipeline conditional edges.
 
 Extracted from orchestrator.py. Controls routing within Level 3 steps:
-- Step 1 decision: plan mode vs direct execution
 - Step 11 review: pass/retry conditional loop
+
+CHANGE LOG (v1.13.0):
+  route_after_step1_decision removed -- Step 1 no longer exists in the graph.
+  Stub kept for backward-compat test imports.
 """
 
 from typing import Literal
 
+try:
+    from loguru import logger
+except ImportError:
+    import logging
+
+    logger = logging.getLogger(__name__)
+
 from ..flow_state import FlowState, StepKeys
 
 
-def route_after_step1_decision(state: FlowState) -> Literal["level3_step2", "level3_step3"]:
-    """Conditional routing: if plan required, execute Step 2; else skip to Step 3."""
-    if state.get(StepKeys.PLAN_REQUIRED, True):
-        return "level3_step2"
-    return "level3_step3"
+def route_after_step1_decision(state: FlowState) -> str:
+    """DEPRECATED (v1.13.0): Step 1 no longer exists in the graph.
+
+    Returns 'level3_step2' as a safe no-op default.
+    This stub preserves backward compatibility for any tests that import it.
+    """
+    logger.warning("[routing] route_after_step1_decision called but Step 1 no longer exists (v1.13.0)")
+    return "level3_step2"
 
 
 def route_after_step11_review(state: FlowState) -> Literal["level3_step12", "level3_step11_retry"]:
