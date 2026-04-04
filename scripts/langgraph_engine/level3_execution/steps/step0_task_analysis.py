@@ -1,5 +1,5 @@
 # DEPRECATED as of v1.14.0: superseded by step0_task_analysis_node() in
-# nodes/step_wrappers_0to4.py using prompt-gen-expert + orchestrator-agent chain.
+# nodes/step_wrappers_0to4.py using prompt_gen_expert_caller + orchestrator_agent_caller chain.
 # Kept for reference only. Do not call directly.
 
 """
@@ -77,7 +77,7 @@ def step0_task_analysis(state: FlowState) -> dict:
 
     # Run anti-hallucination enforcement before prompt generation (non-blocking)
     try:
-        ah_result = call_execution_script("anti-hallucination-enforcement", ["--enforce"])
+        ah_result = call_execution_script("anti_hallucination_enforcement", ["--enforce"])
         if DEBUG and ah_result.get("status") != "SCRIPT_NOT_FOUND":
             print(f"[L3-DEBUG] Anti-hallucination: {ah_result.get('status', 'unknown')}", file=sys.stderr)
     except Exception:
@@ -86,7 +86,7 @@ def step0_task_analysis(state: FlowState) -> dict:
     # Run task analysis
     args = [user_message] if user_message else []
     args.append(f"--context={json.dumps(context_data)}")
-    analysis_result = call_execution_script("prompt-generator", args, model_tier="fast")
+    analysis_result = call_execution_script("prompt_generator", args, model_tier="fast")
 
     task_type = analysis_result.get("task_type", "General Task")
     complexity = analysis_result.get("complexity", 5)
@@ -98,7 +98,7 @@ def step0_task_analysis(state: FlowState) -> dict:
     # PART B: TASK BREAKDOWN
     args = [user_message] if user_message else []
     args.extend([f"--task-type={task_type}"])
-    breakdown_result = call_execution_script("task-auto-analyzer", args, model_tier="fast")
+    breakdown_result = call_execution_script("task_auto_analyzer", args, model_tier="fast")
 
     if DEBUG:
         print(f"[L3] -> Step 0 Breakdown END: {breakdown_result.get('task_count', 1)} tasks", file=sys.stderr)

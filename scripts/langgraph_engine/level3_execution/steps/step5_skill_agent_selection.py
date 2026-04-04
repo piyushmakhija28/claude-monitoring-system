@@ -143,7 +143,7 @@ def step5_skill_agent_selection(state: FlowState) -> dict:
     if context_file:
         args.append(f"--context-file={context_file}")
 
-    result = call_execution_script("auto-skill-agent-selector", args, model_tier="balanced")
+    result = call_execution_script("auto_skill_agent_selector", args, model_tier="balanced")
 
     # Cleanup temp file
     if context_file:

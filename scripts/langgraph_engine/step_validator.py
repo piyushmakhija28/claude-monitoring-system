@@ -12,12 +12,13 @@ Return convention:
 """
 
 from typing import Any, Dict, List, Tuple
-from loguru import logger
 
+from loguru import logger
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _require_keys(d: Dict[str, Any], keys: List[str], prefix: str) -> List[str]:
     """Return error strings for any of 'keys' missing (None or absent) in dict d."""
@@ -47,6 +48,7 @@ def _non_empty_str(d: Dict[str, Any], key: str, prefix: str) -> List[str]:
 # ---------------------------------------------------------------------------
 # StepValidator class
 # ---------------------------------------------------------------------------
+
 
 class StepValidator:
     """Validates input and output dicts for all 14 Level 3 steps."""
@@ -253,7 +255,7 @@ class StepValidator:
         prefix = "Step6Output"
 
         if not isinstance(result.get("step6_skill_ready"), bool):
-            errors.append(f"{prefix}: 'step6_skill_ready' must be a boolean")
+            errors.append(f"{prefix}: 'step6_skill_ready' must be boolean")
 
         return _result(errors, prefix)
 
@@ -469,10 +471,7 @@ class StepValidator:
         prefix = "Step14Input"
 
         if not state.get("level3_status") and not state.get("step12_issue_closed"):
-            errors.append(
-                f"{prefix}: Missing level3_status or step12_issue_closed - "
-                "pipeline may not be complete"
-            )
+            errors.append(f"{prefix}: Missing level3_status or step12_issue_closed - " "pipeline may not be complete")
 
         return _result(errors, prefix)
 
@@ -496,11 +495,12 @@ class StepValidator:
 # Module-level helper
 # ---------------------------------------------------------------------------
 
+
 def _result(errors: List[str], label: str) -> Tuple[bool, List[str]]:
     """Standardise return and emit a single log line per validation call."""
-    valid = len(errors) == 0
-    if valid:
+    is_valid = len(errors) == 0
+    if is_valid:
         logger.debug(f"[StepValidator] {label}: PASS")
     else:
         logger.warning(f"[StepValidator] {label}: FAIL ({len(errors)} error(s)): {errors}")
-    return valid, errors
+    return is_valid, errors

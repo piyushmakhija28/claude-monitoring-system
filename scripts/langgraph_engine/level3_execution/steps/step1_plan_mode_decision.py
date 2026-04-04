@@ -47,7 +47,7 @@ def step1_plan_mode_decision(state: FlowState) -> dict:
     }
 
     args = ["--analyze", f"--context={json.dumps(context_data)}"]
-    result = call_execution_script("auto-plan-mode-suggester", args, model_tier="fast")
+    result = call_execution_script("auto_plan_mode_suggester", args, model_tier="fast")
 
     return {
         "step1_plan_required": result.get("plan_required", False),

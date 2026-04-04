@@ -36,13 +36,13 @@ from ..helpers import call_streaming_script
 
 
 def step0_task_analysis_node(state: FlowState) -> Dict[str, Any]:
-    """Step 0 v2: prompt-gen-expert -> orchestrator-agent chain.
+    """Step 0 v2: prompt_gen_expert -> orchestrator_agent chain.
 
-    Phase 1: calls prompt-gen-expert-caller (fast, captured stdout) to build
+    Phase 1: calls prompt_gen_expert_caller (fast, captured stdout) to build
     an orchestration prompt enriched with combined_complexity_score and
     CallGraph risk data. Uses claude CLI subprocess internally.
 
-    Phase 2: calls orchestrator-agent-caller (long-running, stderr streamed
+    Phase 2: calls orchestrator_agent_caller (long-running, stderr streamed
     live) with the orchestration prompt written to a temp file so the user
     sees real-time agent progress. Uses claude CLI subprocess internally.
 
@@ -83,7 +83,7 @@ def step0_task_analysis_node(state: FlowState) -> Dict[str, Any]:
 
     user_message = state.get("user_message", "") or os.environ.get("CURRENT_USER_MESSAGE", "")
 
-    # --- PHASE 1: prompt-gen-expert-caller (claude CLI subprocess) ---
+    # --- PHASE 1: prompt_gen_expert_caller (claude CLI subprocess) ---
     os.environ.setdefault("STEP0_PROMPT_GEN_TIMEOUT", "60")
     prompt_gen_args = [
         user_message,
@@ -105,7 +105,7 @@ def step0_task_analysis_node(state: FlowState) -> Dict[str, Any]:
         from ..helpers import call_execution_script as _call_execution_script  # noqa: PLC0415
 
     prompt_gen_raw = _call_execution_script(
-        "prompt-gen-expert-caller",
+        "prompt_gen_expert_caller",
         prompt_gen_args,
         model_tier="fast",
     )
@@ -114,11 +114,11 @@ def step0_task_analysis_node(state: FlowState) -> Dict[str, Any]:
     if not orchestration_prompt:
         # Fallback: use user_message directly
         orchestration_prompt = user_message
-        logger.warning("[v2] Step 0 prompt-gen-expert returned no orchestration_prompt; using raw task")
+        logger.warning("[v2] Step 0 prompt_gen_expert_caller returned no orchestration_prompt; using raw task")
     else:
-        logger.info("[v2] Step 0 prompt-gen-expert: orchestration_prompt length=%d", len(orchestration_prompt))
+        logger.info("[v2] Step 0 prompt_gen_expert_caller: orchestration_prompt length=%d", len(orchestration_prompt))
 
-    # --- PHASE 2: orchestrator-agent-caller (claude CLI subprocess, streaming stderr) ---
+    # --- PHASE 2: orchestrator_agent_caller (claude CLI subprocess, streaming stderr) ---
     orch_result: Dict[str, Any] = {}
     try:
         with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False, encoding="utf-8") as _tf:
@@ -134,15 +134,15 @@ def step0_task_analysis_node(state: FlowState) -> Dict[str, Any]:
             "--project-root=%s" % state.get("project_root", "."),
         ]
 
-        orch_result = call_streaming_script("orchestrator-agent-caller", orch_args)
+        orch_result = call_streaming_script("orchestrator_agent_caller", orch_args)
 
         if not orch_result.get("success", True):
             logger.warning(
-                "[v2] Step 0 orchestrator-agent-caller non-success: %s",
+                "[v2] Step 0 orchestrator_agent_caller non-success: %s",
                 orch_result.get("error", "unknown"),
             )
     except Exception as _orch_exc:
-        logger.warning("[v2] Step 0 orchestrator-agent-caller failed (fail-open): %s", _orch_exc)
+        logger.warning("[v2] Step 0 orchestrator_agent_caller failed (fail-open): %s", _orch_exc)
         orch_result = {"success": False, "error": str(_orch_exc)}
     finally:
         try:
@@ -190,7 +190,7 @@ def _map_step0_result_to_state(
     orchestration_prompt: str,
     orch_result: Dict[str, Any],
 ) -> Dict[str, Any]:
-    """Map orchestrator-agent-caller output to FlowState migration fields.
+    """Map orchestrator_agent_caller output to FlowState migration fields.
 
     Populates all fields that Steps 1, 3, 4, 5, 6, 7 previously wrote so that
     Steps 8-14 continue to receive the correct state keys regardless of which
@@ -198,8 +198,8 @@ def _map_step0_result_to_state(
 
     Args:
         state: Current pipeline state (read-only reference for fallback values).
-        orchestration_prompt: The prompt text produced by prompt-gen-expert-caller.
-        orch_result: Parsed JSON dict returned by orchestrator-agent-caller.
+        orchestration_prompt: The prompt text produced by prompt_gen_expert_caller.
+        orch_result: Parsed JSON dict returned by orchestrator_agent_caller.
 
     Returns:
         A flat dict of state updates ready to merge into FlowState.

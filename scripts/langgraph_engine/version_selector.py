@@ -25,9 +25,9 @@ Multiple specifiers can be joined with commas: ">=1.0.0,<2.0.0"
 from __future__ import annotations
 
 import re
-from typing import Dict, List, Optional, Tuple, Any
-from loguru import logger
+from typing import Any, Dict, List, Optional, Tuple
 
+from loguru import logger
 
 # ---------------------------------------------------------------------------
 # Version parsing
@@ -60,8 +60,7 @@ class Version:
     # Pre-release labels ranked lowest to highest relative to release
     _PRE_RANK: Dict[str, int] = {"dev": 0, "alpha": 1, "beta": 2, "rc": 3, "": 4, "post": 5}
 
-    def __init__(self, major: int = 0, minor: int = 0, patch: int = 0,
-                 pre: str = "", pre_num: int = 0):
+    def __init__(self, major: int = 0, minor: int = 0, patch: int = 0, pre: str = "", pre_num: int = 0):
         self.major = major
         self.minor = minor
         self.patch = patch
@@ -149,6 +148,7 @@ def parse_version(version_str: str) -> Version:
 # Compatibility checking
 # ---------------------------------------------------------------------------
 
+
 def check_compatibility(
     version_str: str,
     requirement: str,
@@ -231,6 +231,7 @@ def _check_single_specifier(version: Version, specifier: str) -> Tuple[bool, str
 # ---------------------------------------------------------------------------
 # Best version selection
 # ---------------------------------------------------------------------------
+
 
 def select_best_version(
     skill_name: str,
@@ -328,6 +329,7 @@ def select_best_version(
 # Compatibility matrix
 # ---------------------------------------------------------------------------
 
+
 def build_compatibility_matrix(
     skills: List[Dict[str, Any]],
 ) -> Dict[str, Any]:
@@ -397,9 +399,8 @@ def build_compatibility_matrix(
     if all_compatible:
         summary = f"All {len(skills)} skills are version-compatible"
     else:
-        summary = (
-            f"{len(conflicts)} version conflict(s) found among {len(skills)} skills: "
-            + ", ".join(f"{c['skill']}->{c['dep']}" for c in conflicts)
+        summary = f"{len(conflicts)} version conflict(s) found among {len(skills)} skills: " + ", ".join(
+            f"{c['skill']}->{c['dep']}" for c in conflicts
         )
 
     logger.info(f"[VersionSelector] Compatibility matrix: {summary}")
@@ -415,6 +416,7 @@ def build_compatibility_matrix(
 # ---------------------------------------------------------------------------
 # Deprecation handling
 # ---------------------------------------------------------------------------
+
 
 def handle_deprecated(
     skill_name: str,
@@ -503,10 +505,7 @@ def handle_deprecated(
     version_note = f" (version {version})" if version else ""
 
     if is_deprecated:
-        message = (
-            f"Skill '{skill_name}'{version_note} is deprecated "
-            f"[{deprecation_reason}]"
-        )
+        message = f"Skill '{skill_name}'{version_note} is deprecated " f"[{deprecation_reason}]"
         if replacement:
             message += f". Recommended replacement: '{replacement}'"
     else:
@@ -524,6 +523,7 @@ def handle_deprecated(
 # ---------------------------------------------------------------------------
 # Version set validation
 # ---------------------------------------------------------------------------
+
 
 def validate_version_set(
     skill_versions: Dict[str, str],
@@ -556,17 +556,16 @@ def validate_version_set(
             dep_version = skill_versions.get(dep_name)
 
             if dep_version is None:
-                violations.append({
-                    "skill": skill_name,
-                    "dep": dep_name,
-                    "has": "NOT INSTALLED",
-                    "requires": req,
-                    "reason": f"Dependency '{dep_name}' is not installed",
-                })
-                logger.warning(
-                    f"[VersionSelector] '{skill_name}' requires '{dep_name}' "
-                    f"but it is not installed"
+                violations.append(
+                    {
+                        "skill": skill_name,
+                        "dep": dep_name,
+                        "has": "NOT INSTALLED",
+                        "requires": req,
+                        "reason": f"Dependency '{dep_name}' is not installed",
+                    }
                 )
+                logger.warning(f"[VersionSelector] '{skill_name}' requires '{dep_name}' " f"but it is not installed")
                 continue
 
             ok, reason = check_compatibility(dep_version, req)
@@ -576,36 +575,33 @@ def validate_version_set(
                 satisfied.append(pair_str)
                 logger.debug(f"[VersionSelector] Satisfied: {pair_str}")
             else:
-                violations.append({
-                    "skill": skill_name,
-                    "dep": dep_name,
-                    "has": dep_version,
-                    "requires": req,
-                    "reason": reason,
-                })
-                logger.warning(
-                    f"[VersionSelector] Violation: {pair_str} - {reason}"
+                violations.append(
+                    {
+                        "skill": skill_name,
+                        "dep": dep_name,
+                        "has": dep_version,
+                        "requires": req,
+                        "reason": reason,
+                    }
                 )
+                logger.warning(f"[VersionSelector] Violation: {pair_str} - {reason}")
 
-    valid = len(violations) == 0
+    is_valid = len(violations) == 0
 
-    if valid:
+    if is_valid:
         report = f"All {len(satisfied)} version requirements satisfied"
     else:
         report = (
             f"{len(violations)} violation(s) out of "
             f"{len(satisfied) + len(violations)} requirements. "
             f"Violations: "
-            + "; ".join(
-                f"{v['skill']}->{v['dep']} (has {v['has']}, needs {v['requires']})"
-                for v in violations
-            )
+            + "; ".join(f"{v['skill']}->{v['dep']} (has {v['has']}, needs {v['requires']})" for v in violations)
         )
 
     logger.info(f"[VersionSelector] Validation: {report}")
 
     return {
-        "valid": valid,
+        "valid": is_valid,
         "violations": violations,
         "satisfied": satisfied,
         "report": report,

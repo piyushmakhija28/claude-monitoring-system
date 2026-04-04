@@ -471,14 +471,14 @@ def _evaluate_tests_exist_gate(
                 f"{stem.lower()}_test.py",
             }
 
-            found = any(c.lower() in test_file_names for c in candidates)
+            is_found = any(c.lower() in test_file_names for c in candidates)
 
             # Also check if the path itself appears in test_file_names
-            if not found:
+            if not is_found:
                 rel_mf = str(mf_path).replace("\\", "/").lower()
-                found = any(rel_mf in t for t in test_file_names)
+                is_found = any(rel_mf in t for t in test_file_names)
 
-            if found:
+            if is_found:
                 with_tests.append(str(mf))
             else:
                 without_tests.append(str(mf))

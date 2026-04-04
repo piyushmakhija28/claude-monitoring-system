@@ -32,8 +32,9 @@ Public API additions (acceptance criteria):
         Check whether a single task fits within the token budget.
 """
 
-from typing import List, Dict, Any, Tuple, Set, Optional
 from collections import defaultdict, deque
+from typing import Any, Dict, List, Optional, Set, Tuple
+
 from loguru import logger
 
 # ---------------------------------------------------------------------------
@@ -41,17 +42,18 @@ from loguru import logger
 # ---------------------------------------------------------------------------
 _EFFORT_TOKEN_COST: Dict[str, int] = {
     "trivial": 100,
-    "small":   300,
-    "medium":  700,
-    "large":  1500,
+    "small": 300,
+    "medium": 700,
+    "large": 1500,
     "complex": 2500,
-    "":        500,   # unknown effort - use conservative middle estimate
+    "": 500,  # unknown effort - use conservative middle estimate
 }
 
 
 # ---------------------------------------------------------------------------
 # Graph helpers
 # ---------------------------------------------------------------------------
+
 
 def build_dependency_graph(tasks: List[Dict[str, Any]]) -> Dict[Any, List[Any]]:
     """
@@ -99,7 +101,7 @@ def has_cycle(graph: Dict[Any, List[Any]]) -> bool:
         colour[node] = GRAY
         for neighbour in graph.get(node, []):
             if colour[neighbour] == GRAY:
-                return True   # Back-edge -> cycle
+                return True  # Back-edge -> cycle
             if colour[neighbour] == WHITE:
                 if _dfs(neighbour):
                     return True
@@ -116,6 +118,7 @@ def has_cycle(graph: Dict[Any, List[Any]]) -> bool:
 # ---------------------------------------------------------------------------
 # Completeness check
 # ---------------------------------------------------------------------------
+
 
 def covers_all_requirements(tasks: List[Dict[str, Any]], requirement: str = "") -> bool:
     """
@@ -139,10 +142,7 @@ def covers_all_requirements(tasks: List[Dict[str, Any]], requirement: str = "") 
     if not keywords:
         return True
 
-    combined_task_text = " ".join(
-        f"{t.get('name', '')} {t.get('description', '')}".lower()
-        for t in tasks
-    )
+    combined_task_text = " ".join(f"{t.get('name', '')} {t.get('description', '')}".lower() for t in tasks)
 
     uncovered = [kw for kw in keywords if kw not in combined_task_text]
     if uncovered:
@@ -155,14 +155,15 @@ def covers_all_requirements(tasks: List[Dict[str, Any]], requirement: str = "") 
 # Reachability check
 # ---------------------------------------------------------------------------
 
+
 def all_tasks_reachable(tasks: List[Dict[str, Any]]) -> bool:
     """
     Check that all tasks are reachable from the root set in a DAG traversal.
 
     "Reachable" here means: starting from tasks with no dependencies (roots),
     following dependency edges, we can visit every task in the list.
-    Orphan tasks — those neither depended upon by others nor reachable from
-    roots — indicate a structuring error.
+    Orphan tasks -- those neither depended upon by others nor reachable from
+    roots -- indicate a structuring error.
 
     Returns:
         True if all tasks are reachable, False otherwise.
@@ -243,6 +244,7 @@ def all_tasks_feasible(tasks: List[Dict[str, Any]]) -> bool:
 # Public aliases and extended checks (acceptance-criteria API)
 # ---------------------------------------------------------------------------
 
+
 def cycle_detect(tasks: List[Dict[str, Any]]) -> Tuple[bool, List[Any]]:
     """
     Detect whether the task dependency graph contains a cycle.
@@ -291,9 +293,7 @@ def cycle_detect(tasks: List[Dict[str, Any]]) -> Tuple[bool, List[Any]]:
         if colour[node] == WHITE:
             cycle_path = _dfs(node)
             if cycle_path is not None:
-                logger.error(
-                    f"[TaskValidator] Cycle detected in dependency graph: {cycle_path}"
-                )
+                logger.error(f"[TaskValidator] Cycle detected in dependency graph: {cycle_path}")
                 return True, list(cycle_path)
 
     logger.debug("[TaskValidator] No cycle detected in task dependency graph")
@@ -355,6 +355,7 @@ def validate_feasibility(
 # Main validation entry point
 # ---------------------------------------------------------------------------
 
+
 def validate_breakdown(
     tasks: List[Dict[str, Any]],
     requirement: str = "",
@@ -405,13 +406,11 @@ def validate_breakdown(
         errors.append("Some tasks are not feasible (missing name/title)")
         logger.error("[TaskValidator] Tasks missing name/title found")
 
-    valid = len(errors) == 0
+    is_valid = len(errors) == 0
 
-    if valid:
+    if is_valid:
         logger.info(f"[TaskValidator] Validation passed: {len(tasks)} tasks, all checks OK")
     else:
-        logger.warning(
-            f"[TaskValidator] Validation failed: {len(errors)} error(s): {errors}"
-        )
+        logger.warning(f"[TaskValidator] Validation failed: {len(errors)} error(s): {errors}")
 
-    return valid, errors
+    return is_valid, errors

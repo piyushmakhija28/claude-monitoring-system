@@ -61,7 +61,7 @@ Level 3: Execution (8 active steps: Pre-0, Step 0, Steps 8-14)
     |   |  v1.13: Step 0 = 2 subprocess calls (~30s planning)
     |   |  v1.14: Step 0 = 2 subprocess calls (claude CLI, ~15s planning)  <-- CURRENT
     |   |
-    |   |-- Call 1: prompt-gen-expert-caller  (~10s, stdout captured)
+    |   |-- Call 1: prompt_gen_expert_caller  (~10s, stdout captured)
     |   |     Reads: level3_execution/templates/orchestration_system_prompt.txt
     |   |     Injects into template:
     |   |       {user_requirements}          <- state["task_description"]
@@ -74,7 +74,7 @@ Level 3: Execution (8 active steps: Pre-0, Step 0, Steps 8-14)
     |   |     claude CLI generates: complete orchestration prompt (agents, phases, contracts)
     |   |     Stores: state["orchestration_prompt"]
     |   |
-    |   |-- Call 2: orchestrator-agent-caller  (~30-90s, stderr streamed live)
+    |   |-- Call 2: orchestrator_agent_caller  (~30-90s, stderr streamed live)
     |         Reads: state["orchestration_prompt"] via temp file
     |         Executes: full plan (solution-architect -> consensus -> agents -> QA)
     |         User sees in terminal (real-time, flush=True):
@@ -98,7 +98,7 @@ Level 3: Execution (8 active steps: Pre-0, Step 0, Steps 8-14)
 
 | Version | Active Steps | Planning LLM Calls | Planning Time | Key Change |
 |---------|-------------|-------------------|---------------|------------|
-| v1.12.0 | 15 | ~6 | ~75s | Original — Steps 0-7 each called LLM separately |
+| v1.12.0 | 15 | ~6 | ~75s | Original -- Steps 0-7 each called LLM separately |
 | v1.13.0 | 9 | ~2 (subprocess) | ~30s | Removed Steps 1,3,4,5,6,7 |
 | **v1.14.0** | **8** | **2 (subprocess)** | **~15s** | Step 0 = template fill + orchestrator (claude CLI subprocess) |
 
@@ -194,6 +194,8 @@ Level 3: Execution (8 active steps: Pre-0, Step 0, Steps 8-14)
 | Input Validator | src/mcp/input_validator.py | Null-byte strip, length limit, prompt injection detection |
 | Secrets Scanner | scripts/secrets_check.py | CI gate: 6 regex patterns, exit 1 on finding |
 | Pin Requirements | scripts/pin_requirements.py | Generates requirements.pinned.txt + requirements.bounds.txt |
+| PromptGen Caller | scripts/langgraph_engine/level3_execution/architecture/prompt_gen_expert_caller.py | Step 0 Call 1: fills orchestration template via claude CLI |
+| Orchestrator Caller | scripts/langgraph_engine/level3_execution/architecture/orchestrator_agent_caller.py | Step 0 Call 2: executes orchestration plan, streams live to terminal |
 
 ### MCP Servers (20 servers, 328 tools) -- All Extracted to Separate Repos
 
