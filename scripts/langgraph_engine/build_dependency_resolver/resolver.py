@@ -132,7 +132,6 @@ PYTHON_WELL_KNOWN = frozenset(
         "asyncpg",
         "influxdb",
         "elasticsearch",
-        "qdrant-client",
         "pinecone",
         "mcp",
         "fastmcp",

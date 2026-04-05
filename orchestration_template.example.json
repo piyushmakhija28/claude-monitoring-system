@@ -25,9 +25,9 @@
     },
     {
       "id": "T3",
-      "description": "Implement RAG pipeline using Qdrant for document Q&A",
+      "description": "Implement document processing pipeline with semantic search",
       "estimated_effort": "high",
-      "files": ["backend/rag_pipeline.py", "backend/vector_store.py"]
+      "files": ["backend/document_pipeline.py", "backend/search_service.py"]
     },
     {
       "id": "T4",
@@ -40,13 +40,13 @@
   "skill": "react-core",
   "agent": "react-engineer",
 
-  "skills": ["react-core", "fastapi-core", "rag-core", "cloud-security-core"],
+  "skills": ["react-core", "fastapi-core", "ai-agents-core", "cloud-security-core"],
   "agents": ["react-engineer", "python-backend-engineer", "ai-engineer", "cloud-engineer"],
 
   "execution_pattern": "parallel",
 
   "domains": ["frontend", "backend", "ai", "cloud", "security"],
-  "constraints": ["PostgreSQL", "AWS", "GDPR", "Qdrant vector DB", "Docker"],
+  "constraints": ["PostgreSQL", "AWS", "GDPR", "Docker"],
 
   "system_prompt": ""
 }

@@ -20,8 +20,6 @@ Organized into logical sections:
 CHANGE LOG (v1.15.0):
   Removed TOON fields: toon_integrity_ok, level1_context_toon, toon_schema_valid,
     toon_schema_errors, toon_version (TOON compression node removed from pipeline).
-  Removed RAG orchestration fields: rag_orchestration_hit, rag_orchestration_confidence,
-    rag_orchestration_cached_plan (orchestration-level RAG removed from pre-analysis).
 """
 
 from typing import Annotated, Any, Dict, List, Optional, TypedDict
@@ -277,6 +275,7 @@ class FlowState(TypedDict, total=False):
     step5_reasoning: str  # Why this skill/agent was chosen
     step5_error: Optional[str]
     step5_llm_query_needed: bool  # True if LLM needed to decide
+
     # Phase 2: DeepSeek Enhanced Selection
     step5_deepseek_mcp_reasoning: Optional[Dict]  # DeepSeek MCP analysis result
     step5_deepseek_skill_eval: Optional[Dict]  # DeepSeek skill/agent evaluation

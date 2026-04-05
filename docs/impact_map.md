@@ -19,7 +19,6 @@ Steps were removed in this order to avoid dangling edges:
 **Routing rewire sequence**:
 - `route_to_plan_or_breakdown` (Step 1 -> 2 or 3) stubbed as deprecated, returns `level3_step8`
 - `route_pre_analysis` template fast-path: was `level3_step6`, now `level3_step8`
-- `route_pre_analysis` RAG hit: was `level3_step5`, now `level3_step8`
 - New optional path: `level3_step0 -> level3_step2 -> level3_step8` (plan mode, conditional on PLAN_REQUIRED)
 - New default path: `level3_step0 -> level3_step8` (no-plan mode)
 
@@ -115,7 +114,7 @@ After the single LLM template call, `step0_task_analysis_node` populates migrati
 
 | Function | Location | Change |
 |----------|----------|--------|
-| `route_pre_analysis` | `nodes/orchestration.py` | Template fast-path: `level3_step6` → `level3_step8`. RAG hit: `level3_step5` → `level3_step8` |
+| `route_pre_analysis` | `nodes/orchestration.py` | Template fast-path: `level3_step6` → `level3_step8` |
 | `route_to_plan_or_breakdown` | `nodes/orchestration.py` | DEPRECATED — stubbed to return `level3_step8` for backward compat |
 | `route_after_step1_decision` | `routing/level3_routes.py` | DEPRECATED — stubbed to return `level3_step2` for backward compat |
 | `route_after_step0_to_step2_or_step8` | `orchestrator.py` | NEW — routes on `PLAN_REQUIRED`: True → `level3_step2`, False → `level3_step8` |
@@ -129,7 +128,7 @@ START
   -> level2_* (standards)
   -> level3_init
   -> level3_pre_analysis
-     -> [TEMPLATE FAST-PATH or RAG HIT] -> level3_step8
+     -> [TEMPLATE FAST-PATH] -> level3_step8
      -> [MISS] -> level3_step0_0 (project context)
         -> level3_step0_1 (initial callgraph)
            -> level3_step0 (task analysis + template + injections)
@@ -185,13 +184,13 @@ Step 2 (plan execution) is retained as an optional step (executes only when `PLA
 **Consequences**:
 - Positive: ~6 LLM calls → ~1 (planning phase). ~60-90 seconds saved per run. ~70% token cost reduction for planning phase.
 - Positive: Simpler pipeline graph — fewer nodes, fewer conditional edges, less failure surface.
-- Positive: Template fast-path and RAG hit now bypass Step 0 entirely and jump directly to Step 8 (was jumping to Steps 5 or 6, which no longer exist).
+- Positive: Template fast-path now bypasses Step 0 entirely and jumps directly to Step 8 (was jumping to Steps 5 or 6, which no longer exist).
 - Negative: Single LLM call must produce all planning outputs reliably. Template quality is critical — a badly formatted template output will fail all downstream field population.
 - Negative: If the template LLM call fails, fallback defaults may be less precise than what individual steps would have produced.
 - Risk: The migration field population uses `setdefault()` which means the template output takes precedence — if a new template produces unexpected field names, migration fields will use defaults, not template values. Solution: standardize template output schema.
 
 **Alternatives Rejected**:
-- Keep all steps, add RAG caching on each: rejected because even cache hits still require 6 round-trips to check the cache, adding latency without eliminating LLM calls.
+- Keep all steps, add per-step caching on each: rejected because even cache hits still require 6 round-trips to check the cache, adding latency without eliminating LLM calls.
 - Remove only Steps 5, 6, 7: rejected because the primary cost driver is the combined 6-call chain; partial removal yields insufficient savings.
 - Replace all steps with a single custom node (no template): rejected because the template approach decouples prompt optimization from pipeline code — the template can be updated by `prompt-generation-expert` without touching Python code.
 

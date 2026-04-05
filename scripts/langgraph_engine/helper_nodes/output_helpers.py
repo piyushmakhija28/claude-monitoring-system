@@ -6,8 +6,6 @@ the prompt, saves the execution log, and accumulates session info.
 CHANGE LOG (v1.15.0):
   Removed TOON log line from _save_pipeline_execution_log() Level 1 section
   (TOON compression node removed from pipeline).
-CHANGE LOG (v1.15.1):
-  Removed RAG session storage block from output_node() (RAG/Qdrant purge).
 """
 
 import sys

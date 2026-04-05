@@ -98,7 +98,7 @@ as a backward-compatibility contract and are therefore on the Skip List.
 The following names must NOT be renamed under any circumstances:
 
 ### MCP Tool Handler Methods (src/mcp/)
-- All methods decorated with `@mcp_tool_handler` in `session_mcp_server.py` and `vector_db_mcp_server.py`
+- All methods decorated with `@mcp_tool_handler` in `session_mcp_server.py`
 - These method names are part of the MCP protocol surface
 
 ### LangGraph Node Registration Strings

@@ -10,7 +10,7 @@
 
 Over 13 intensive development sessions with Claude Code (CLI), I built something that **no AI coding tool has done yet**: a complete, automated SDLC (Software Development Life Cycle) pipeline that takes a user's task from analysis to deployed, reviewed, merged code - with call graph intelligence driving every decision.
 
-This isn't a wrapper or a prompt template. It's a **15-step execution engine** that automates the full software engineering lifecycle: task analysis, planning with impact assessment, code generation with graph context, automated PR creation, AI-powered code review with breaking change detection, merge, and documentation - all orchestrated through LangGraph with RAG-powered decision caching.
+This isn't a wrapper or a prompt template. It's a **15-step execution engine** that automates the full software engineering lifecycle: task analysis, planning with impact assessment, code generation with graph context, automated PR creation, AI-powered code review with breaking change detection, merge, and documentation - all orchestrated through LangGraph.
 
 The key innovation: Claude doesn't just generate code - it **thinks like an engineer** by analyzing the call graph before every change, understanding ripple effects, and validating after every modification.
 
@@ -46,7 +46,7 @@ I built a 3-level LangGraph-based orchestration pipeline (7.6.0) that wraps arou
 - 574 classes, 3,783 methods analyzed via AST-based call graph
 - 213 Python files indexed with FQN (Fully Qualified Name) call edges
 - 12 MCP servers (124 tools) for Git, GitHub, sessions, policies, LLM, etc.
-- 15-step execution pipeline (Step 0-14) with RAG-powered decision caching
+- 15-step execution pipeline (Step 0-14) with graph-driven decision making
 - 148+ tests with zero failures
 
 **GitHub:** https://github.com/techdeveloper-org/claude-workflow-engine
@@ -97,8 +97,7 @@ PHASE 1: ANALYSIS (Steps 0-2)
 PHASE 2: PREPARATION (Steps 3-7)
   Step 3:  Task Breakdown - Validate tasks, map files to phases via CallGraph
   Step 4:  TOON Refinement - Clear old context, inject phase-scoped graph context
-  Step 5:  Skill & Agent Selection - RAG-powered matching (16 skills, 13 agents)
-           with cross-session learning from past decisions
+  Step 5:  Skill & Agent Selection - Template-driven matching (16 skills, 13 agents)
   Step 6:  Skill Validation - Download/verify skill definitions
   Step 7:  Final Prompt Generation - 3 files: system_prompt.txt, prompt.txt,
            user_message.txt with full context for implementation
@@ -132,8 +131,6 @@ PHASE 4: QUALITY & DELIVERY (Steps 11-14)
 3. **Quality gates are built in.** The review loop (Step 11) catches issues before merge. The CallGraph analysis catches breaking changes. The documentation step keeps docs in sync. This is what separates a prototype from production-grade engineering.
 
 4. **It's circular/self-improving.** Step 0 READS docs (SRS, README) for context. Step 13 WRITES/UPDATES those same docs after changes. Next task, Step 0 reads the UPDATED docs. This creates a continuously improving documentation cycle.
-
-5. **RAG enables cross-session learning.** Every pipeline decision is stored in Qdrant vector DB. Before making a new decision, the pipeline checks: "Have I seen a similar task before? What worked?" This means the pipeline gets smarter over time.
 
 ### What Anthropic Could Build Natively
 
@@ -413,7 +410,7 @@ The real opportunity is: **AI that does SOFTWARE ENGINEERING, not just coding.**
 - Planning before implementing (impact assessment)
 - Reviewing after changing (breaking change detection)
 - Documenting after shipping (auto-sync docs)
-- Learning from past decisions (RAG cross-session)
+- Learning from past decisions (template-driven orchestration)
 
 This is what my SDLC pipeline does. And this is what Claude Code could do natively - becoming not just the best AI code editor, but the **first AI software engineer**.
 
@@ -449,10 +446,9 @@ I'm open to working with Anthropic on:
 - **213 Python files** analyzed (263 total)
 - **148+ tests** with 0 failures
 - **12 MCP servers** with 124 tools
-- **15-step SDLC pipeline** (Step 0-14) with RAG caching
+- **15-step SDLC pipeline** (Step 0-14) with orchestration template
 - **13 UML diagram types** generated from call graph data
 - **49 policy definitions** governing pipeline behavior
-- **4 Qdrant vector DB collections** for cross-session learning
 - **16 skills, 13 agents** for task specialization
 
 ### SDLC Pipeline Coverage
@@ -461,7 +457,7 @@ I'm open to working with Anthropic on:
 | Requirements Analysis | Step 0 (read SRS/README) | Yes |
 | Planning | Steps 1-2 (plan mode + CallGraph impact) | Yes |
 | Design/Architecture | Steps 3-4 (breakdown + phase-scoped context) | Yes |
-| Tool/Skill Selection | Steps 5-6 (RAG-powered skill matching) | Yes |
+| Tool/Skill Selection | Steps 5-6 (template-driven skill matching) | Yes |
 | Prompt Engineering | Step 7 (3-file prompt generation) | Yes |
 | Issue Tracking | Step 8 (GitHub issue auto-create) | Yes |
 | Version Control | Step 9 (feature branch auto-create) | Yes |
@@ -480,7 +476,6 @@ I'm open to working with Anthropic on:
 - `level3_execution/subgraph.py` - 15-step SDLC pipeline with graph-driven Steps 2/3/4/10/11
 - `orchestrator.py` - Main LangGraph StateGraph (3-level pipeline)
 - `flow_state.py` - 100+ TypedDict fields tracking entire SDLC state
-- `rag_integration.py` - Vector DB decision caching for cross-session learning
 - `github_code_review.py` - 5-layer automated code review
 
 ### GitHub Repository

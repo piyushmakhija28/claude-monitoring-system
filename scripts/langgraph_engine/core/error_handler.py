@@ -15,9 +15,9 @@ state-update dicts that LangGraph node functions must return, avoiding ad-hoc
 dict literals scattered throughout node implementations.
 """
 
+import functools
 import sys
 import time
-import functools
 from typing import Any, Callable, Dict, Optional
 
 from .logger_factory import get_logger
@@ -28,6 +28,7 @@ logger = get_logger(__name__)
 # ---------------------------------------------------------------------------
 # node_error_handler
 # ---------------------------------------------------------------------------
+
 
 def node_error_handler(
     node_name: str,
@@ -58,6 +59,7 @@ def node_error_handler(
         def node_session_loader(state: FlowState) -> dict:
             ...
     """
+
     def decorator(func: Callable) -> Callable:
         @functools.wraps(func)
         def wrapper(state: Any, *args: Any, **kwargs: Any) -> Dict[str, Any]:
@@ -70,15 +72,15 @@ def node_error_handler(
             except Exception as exc:
                 duration = time.time() - start
                 error_msg = "%s: %s" % (type(exc).__name__, str(exc))
-                logger.error(
-                    "[%s] FAILED (%.0fms): %s" % (node_name, duration * 1000, error_msg)
-                )
+                logger.error("[%s] FAILED (%.0fms): %s" % (node_name, duration * 1000, error_msg))
                 if log_to_stderr:
                     print("[%s] FAILED: %s" % (node_name, error_msg), file=sys.stderr)
                 if fallback_result is not None:
                     return dict(fallback_result, error=error_msg)
                 return {"error": error_msg}
+
         return wrapper
+
     return decorator
 
 
@@ -86,12 +88,13 @@ def node_error_handler(
 # safe_execute
 # ---------------------------------------------------------------------------
 
+
 def safe_execute(operation_name: str, default: Any = None) -> Callable:
     """Decorator for non-critical operations that must never crash the pipeline.
 
     Silently catches all exceptions and returns the default value.  Intended
     for side-effect-only operations where a failure is acceptable: telemetry
-    writes, RAG storage, session memory saves, audit log appends.
+    writes, session memory saves, audit log appends.
 
     A DEBUG-level message is still emitted so failures are visible when
     debug logging is enabled.
@@ -109,6 +112,7 @@ def safe_execute(operation_name: str, default: Any = None) -> Callable:
         def write_telemetry(data: dict) -> None:
             ...
     """
+
     def decorator(func: Callable) -> Callable:
         @functools.wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
@@ -117,13 +121,16 @@ def safe_execute(operation_name: str, default: Any = None) -> Callable:
             except Exception as exc:
                 logger.debug("[%s] Non-fatal error: %s" % (operation_name, exc))
                 return default
+
         return wrapper
+
     return decorator
 
 
 # ---------------------------------------------------------------------------
 # NodeResult
 # ---------------------------------------------------------------------------
+
 
 class NodeResult:
     """Fluent builder for LangGraph node return dicts.

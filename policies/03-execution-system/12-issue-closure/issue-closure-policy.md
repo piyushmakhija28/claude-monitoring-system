@@ -22,7 +22,6 @@ Step 12 closes the GitHub issue created in Step 8 after implementation (Step 10)
 **Applies to:** Level 3: Execution System, Step 12
 **Predecessor:** Step 11 (Pull Request & Code Review)
 **Successor:** Step 13 (Documentation Update)
-**RAG Threshold:** 0.78
 
 ---
 

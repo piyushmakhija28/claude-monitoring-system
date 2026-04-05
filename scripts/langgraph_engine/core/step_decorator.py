@@ -29,14 +29,6 @@ infrastructure references) that is passed between the helper methods inside
 _execute_step_with_infra().  This keeps the factory function itself free of
 local variable soup and makes unit testing straightforward: callers can
 construct a StepExecutionContext with mock objects and call its methods directly.
-
-CHANGE LOG (v1.15.0):
-  _RAG_ELIGIBLE_STEPS constant removed.
-  try_rag_lookup() method removed from StepExecutionContext.
-  store_rag_decision() method removed from StepExecutionContext.
-  record_rag_hit_metric() method removed from StepExecutionContext.
-  RAG short-circuit block removed from _execute_step_with_infra() step 2.
-  Per-node RAG cache (Feature 2) fully removed from this module.
 """
 
 import functools

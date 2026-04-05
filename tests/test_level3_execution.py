@@ -4,17 +4,11 @@ Tests for Level 3 Execution Pipeline (level3_execution/subgraph.py)
 Tests _run_step wrapper, level3_init_node, individual step nodes,
 retry logic for step 8, and _build_retry_history_context.
 
-All external dependencies (LangGraph, RAG layer, CheckpointManager,
+All external dependencies (LangGraph, CheckpointManager,
 MetricsCollector, ErrorLogger, level3_execution step functions,
 loguru, subprocess) are mocked before import.
 
 ASCII-safe, UTF-8 encoded - Windows cp1252 compatible.
-
-CHANGE LOG (v1.15.0):
-  Removed test_run_step_rag_hit -- per-node RAG short-circuit removed from _run_step.
-  Removed test_run_step_rag_miss -- per-node RAG short-circuit removed from _run_step.
-  Removed _rag.rag_lookup_before_llm and _rag.rag_store_after_node stubs.
-  Removed rag_lookup_before_llm.return_value = None from setUp calls.
 """
 
 import sys

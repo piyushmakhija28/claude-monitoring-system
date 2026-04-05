@@ -39,15 +39,13 @@ level3_step0 -> level3_step8
 
 Current:
 - template_fast_path -> "level3_step6"
-- RAG hit -> "level3_step5"
 - miss -> "level3_step0_0"
 
 New:
 - template_fast_path -> "level3_step8"
-- RAG hit -> "level3_step8"
 - miss -> "level3_step0_0"
 
-Also update `orchestration.py:route_pre_analysis()` to return "level3_step8" for both fast-path cases.
+Also update `orchestration.py:route_pre_analysis()` to return "level3_step8" for the fast-path case.
 
 Update the `add_conditional_edges` call in `orchestrator.py` for `level3_pre_analysis`:
 ```python
@@ -177,8 +175,8 @@ In `step_wrappers_5to9.py`:
 #### Fields from Step 5 (step5_skill_selection_node)
 | Field | Written by | Read by Steps 8-14? | Action |
 |-------|-----------|---------------------|--------|
-| step5_skill | Step 5 | YES — output_node, session accumulation, RAG storage, voice flag | KEEP, populate from Step 0 template output |
-| step5_agent | Step 5 | YES — output_node, session accumulation, RAG storage | KEEP, populate from Step 0 template output |
+| step5_skill | Step 5 | YES — output_node, session accumulation, voice flag | KEEP, populate from Step 0 template output |
+| step5_agent | Step 5 | YES — output_node, session accumulation | KEEP, populate from Step 0 template output |
 | step5_skills | Step 5 | YES — output_node, session accumulation | KEEP, populate from Step 0 template output |
 | step5_agents | Step 5 | YES — output_node, session accumulation | KEEP, populate from Step 0 template output |
 | step5_skill_definition | Step 5 | YES — synthesize_prompt_with_flow_data() | KEEP, populate from Step 0 template output |
@@ -314,20 +312,16 @@ except Exception:
 
 ### orchestration.py - route_pre_analysis()
 
-Current:
+Current (at time of this impact map, pre-v1.15.0):
 ```python
 if state.get("template_fast_path"):
     return "level3_step6"
-if state.get("rag_orchestration_hit") and state.get("skip_architecture"):
-    return "level3_step5"
 return "level3_step0_0"
 ```
 
-New:
+New (after collapse, v1.13.0+):
 ```python
 if state.get("template_fast_path"):
-    return "level3_step8"
-if state.get("rag_orchestration_hit") and state.get("skip_architecture"):
     return "level3_step8"
 return "level3_step0_0"
 ```
@@ -480,7 +474,7 @@ The new pipeline path is: Pre-0 -> Step 0 -> Step 8 -> Step 9 -> Step 10 -> Step
 **Risks:**
 - Step 0 template must produce all required fields for Steps 8-14 compatibility
 - Migration fields (step5_skill, step7_execution_prompt, etc.) must be correctly populated
-- fast-path routing (template and RAG hit) now jumps to Step 8 instead of Step 5/6
+- Template fast-path routing now jumps to Step 8 instead of Step 5/6
 
 **Accepted Risks Mitigated By:**
 - All fields use state.setdefault() with safe defaults
@@ -507,11 +501,10 @@ Tests that will need updates (do NOT modify test files now - flag for qa-testing
 ## 10. REVISED PIPELINE FLOW (for CLAUDE.md update)
 
 ```
-Level 3: Execution (9 meaningful steps: Pre-0, Step 0, Steps 8-14)
-    |-- Pre-0: Orchestration Pre-Analysis (Template check + CallGraph scan + RAG lookup)
+Level 3: Execution (8 active steps: Pre-0, Step 0, Steps 8-14)
+    |-- Pre-0: Orchestration Pre-Analysis (Template check + CallGraph scan)
     |           Template provided -> skip Step 0, jump to Step 8 (~1 LLM call saved)
-    |           RAG hit (>=0.85) -> skip Step 0, jump to Step 8 (~1 LLM call saved)
-    |           RAG miss -> normal flow
+    |           Normal path -> continue to Step 0 with call graph data already in state
     |-- Step 0:  Task Analysis + Orchestration Template
     |            (complexity from Level 1 1-25 scale + CallGraph injection)
     |            (Single LLM call produces: skill, agent, tasks, prompt, model, plan_required)
@@ -524,5 +517,5 @@ Level 3: Execution (9 meaningful steps: Pre-0, Step 0, Steps 8-14)
     |-- Step 14: Final Summary
 ```
 
-Step count change: 15 steps -> 9 steps (removed: Step 1, 3, 4, 5, 6, 7 + 6 standards hooks)
+Step count change: 15 steps -> 8 steps (removed: Step 1, 3, 4, 5, 6, 7 + 6 standards hooks)
 LLM calls during planning: ~6 -> ~1 (Step 0 template call only)

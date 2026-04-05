@@ -23,7 +23,6 @@ Step 13 updates project documentation with execution insights, detected technolo
 **Applies to:** Level 3: Execution System, Step 13
 **Predecessor:** Step 12 (Issue Closure)
 **Successor:** Step 14 (Final Summary)
-**RAG Threshold:** 0.80
 
 ---
 

@@ -81,8 +81,8 @@ Engine does:
 | v1.12.0 | 15 | ~6 | ~75s | Original: Steps 0-7 each made separate LLM calls |
 | v1.13.0 | 9 | ~2 (subprocess) | ~30s | Removed Steps 1,3,4,5,6,7. Step 0 used 2 subprocess calls |
 | **v1.14.0** | **8** | **2 (subprocess)** | **~15s** | Step 0 redesigned: template fill + orchestrator (claude CLI subprocess with live stderr) |
-| **v1.15.0** | **8** | **2 (subprocess)** | **~15s** | TOON compression + orchestration RAG + per-node RAG removed |
-| **v1.15.1** | **8** | **2 (subprocess)** | **~15s** | Complete RAG/Qdrant purge -- all dead code, tests, docs, configs removed |
+| **v1.15.0** | **8** | **2 (subprocess)** | **~15s** | TOON compression removed from Level 1 |
+| **v1.15.1** | **8** | **2 (subprocess)** | **~15s** | Source cleanup: deprecated modules and associated tests, policy docs, and config entries removed |
 
 > **Template Fast-Path (unchanged from v1.8.0):** Pre-built orchestration prompt skips Step 0 entirely, jumps to Step 8. Drops planning time to ~0s.
 
@@ -648,7 +648,7 @@ policies/
 
 > **Version: 1.7.0** — All core features complete + full production readiness layer added (2026-03-28).
 
-### ✅ COMPLETE (v1.6.0)
+### COMPLETE (v1.6.0)
 
 | Component | Details |
 |-----------|---------|
@@ -663,7 +663,6 @@ policies/
 | **SonarQube Integration** | API-first scan, lightweight fallback, auto-fixer loop, result aggregator (Step 10) |
 | **Quality Gate** | 4-gate PR merge enforcement: coverage · SonarQube · tests · review |
 | **Test Generator** | Auto-generates unit tests via CallGraph. Python (pytest), Java (JUnit5), TS (Jest), Go (table-driven) |
-| **RAG Integration** | Qdrant, 4 collections, step-specific thresholds (0.75–0.90). Caches LLM decisions. |
 | **CallGraph Intelligence** | 578 classes, 3,985 methods. Impact analysis at Steps 2, 10, 11. 4 language parsers. |
 | **Hook System** | UserPromptSubmit · PreToolUse · PostToolUse · Stop. Blocks Write/Edit until L1+L2 done. |
 | **Policy System** | 63 policies, 9 standards-hook injection points across Level 3 |
@@ -671,7 +670,6 @@ policies/
 | **Token Optimization** | AST navigation, smart read, dedup — 60–85% savings |
 | **Session Management** | Chaining, TOON compression, archival, cross-session memory |
 | **Standards Enforcement** | Common + conditional Java + framework-specific |
-| **Cross-Session Learning** | RAG pattern detection + skill selection boost (Qdrant semantic search) |
 | **Modular Architecture** | 9 packages: core · state · routing · helper_nodes · diagrams · parsers · sonarqube · integrations · pipeline_builder |
 | **UML Diagram Generation** | 13 diagram types via Strategy Pattern. CallGraph as single data source. Mermaid/PlantUML/Kroki.io |
 | **Draw.io Diagram Support** | 12 diagram types, editable .drawio files, shareable URLs (no API key needed) |
@@ -687,34 +685,32 @@ policies/
 
 ---
 
-### ✅ RECENTLY COMPLETED (v1.7.0 — Production Readiness Sprint, 2026-03-28)
+### RECENTLY COMPLETED (v1.7.0 — Production Readiness Sprint, 2026-03-28)
 
 | Component | Details |
 |-----------|---------|
-| **Health & Readiness Endpoints** | `scripts/health_server.py` — stdlib HTTP server, `GET /health` + `GET /readiness` (Qdrant + key checks), daemon thread, zero langgraph_engine imports |
+| **Health & Readiness Endpoints** | `scripts/health_server.py` — stdlib HTTP server, `GET /health` + `GET /readiness` (API key checks), daemon thread, zero langgraph_engine imports |
 | **Kubernetes Manifests** | `k8s/` — Deployment (2 replicas, liveness/readiness probes), ConfigMap, Secret, ClusterIP Service, HPA (2-6 replicas, 70% CPU) |
-| **Qdrant Bootstrap Script** | `scripts/db_migrate.py` — idempotent collection creation + payload indexes, `--recreate` flag |
 | **Graceful Shutdown** | `scripts/3-level-flow.py` — SIGTERM/SIGINT handlers; writes interrupted flow-trace.json on shutdown |
-| **Prometheus Metrics** | `scripts/langgraph_engine/metrics_exporter.py` — 9 metrics (pipeline/step/RAG/LLM/MCP); `ENABLE_METRICS=1` to activate |
+| **Prometheus Metrics** | `scripts/langgraph_engine/metrics_exporter.py` — 9 metrics (pipeline/step/LLM/MCP); `ENABLE_METRICS=1` to activate |
 | **Structured JSON Logging** | `scripts/langgraph_engine/core/structured_logger.py` — loguru JSON sink, ContextVar session/step injection, `LOG_FORMAT=json` |
 | **OpenTelemetry Tracing** | `scripts/langgraph_engine/tracing.py` — OTLP/console exporter, `create_span()` context manager, `ENABLE_TRACING=1` |
 | **Sentry Error Tracking** | `scripts/langgraph_engine/error_tracking.py` — `capture_exception()` with step/session tags, no-op without SENTRY_DSN |
-| **RAG Cache Invalidation CLI** | `scripts/langgraph_engine/cache_invalidation.py` — purge by session/project/step/age via Qdrant filters |
 | **Secrets Validation** | `scripts/langgraph_engine/secrets_manager.py` — startup validation, rotation hints, optional AWS Secrets Manager |
 | **Rate Limiting** | `src/mcp/rate_limiter.py` — TokenBucket per client, 100/min tools, 10/min LLM, `ENABLE_RATE_LIMITING=1` |
 | **Input Validation** | `src/mcp/input_validator.py` — null-byte strip, length limits, 6-pattern prompt injection detection |
 | **Audit Logging** | `scripts/langgraph_engine/audit_logger.py` — append-only JSON, daily rotation, auto-redacts credentials in metadata |
 | **Secrets Scanner (CI Gate)** | `scripts/secrets_check.py` — scans scripts/ + src/, 6 regex patterns, exit 1 on finding; pre-commit hook ready |
 | **Requirements Pinning** | `scripts/pin_requirements.py` — generates `requirements.pinned.txt` + `requirements.bounds.txt` via pip show |
-| **Runbooks** | `docs/runbooks/` — STALE_GRAPH, RAG_MISS_RATE, LLM_PROVIDER_FAILURE |
-| **Architecture Decision Records** | `docs/adr/` — ADR-001 (Qdrant RAG), ADR-002 (Call Graph), ADR-003 (Multi-Provider Routing) |
+| **Runbooks** | `docs/runbooks/` — STALE_GRAPH, LLM_PROVIDER_FAILURE |
+| **Architecture Decision Records** | `docs/adr/` — ADR-001 (Call Graph), ADR-002 (Multi-Provider Routing) |
 | **OpenAPI Spec** | `docs/api/OPENAPI_SPEC.yaml` — OpenAPI 3.0.3 for /health, /readiness, /metrics |
 | **Deployment Guide** | `docs/DEPLOYMENT_GUIDE.md` — prerequisites, docker-compose, K8s apply order, 20+ env vars reference |
 | **Troubleshooting Guide** | `docs/TROUBLESHOOTING_GUIDE.md` — 15 failure modes with exact error messages and fixes |
 | **Security Tests** | `tests/test_secrets_manager.py`, `tests/test_audit_logger.py` — 27 tests covering happy path, error, redaction, concurrency |
-| **Integration Tests** | `tests/integration/test_mcp_servers_integration.py` — MCP tool schemas, RAG cross-project penalty, rate limiter, input validator |
-| **E2E Scenario Tests** | `tests/e2e/test_pipeline_scenarios.py` — RAG hit path, stale graph guard, hook mode routing, secrets validation |
-| **Load / Concurrency Tests** | `tests/load/test_concurrent_pipelines.py` — token bucket thread safety, session ID uniqueness (100 concurrent), cross-project RAG penalty math |
+| **Integration Tests** | `tests/integration/test_mcp_servers_integration.py` — MCP tool schemas, rate limiter, input validator |
+| **E2E Scenario Tests** | `tests/e2e/test_pipeline_scenarios.py` — template fast-path, stale graph guard, hook mode routing, secrets validation |
+| **Load / Concurrency Tests** | `tests/load/test_concurrent_pipelines.py` — token bucket thread safety, session ID uniqueness (100 concurrent) |
 | **Coverage Threshold Enforcement** | `.coveragerc` + `pytest.ini` created. CI enforces 50% minimum via `--cov-fail-under=50`. Threshold ratchets up as coverage improves. |
 | **Pre-commit Hooks** | `.pre-commit-config.yaml` — file hygiene, ruff, black, isort, secrets-check gate |
 
@@ -732,7 +728,7 @@ pip install -r requirements-optional.txt
 
 ---
 
-### 🔲 REMAINING
+### REMAINING
 
 #### Priority: MEDIUM
 
@@ -823,21 +819,21 @@ Generate:
   "version": "1.0",
   "task_type": "Feature",
   "complexity": 8,
-  "reasoning": "Multi-service app: React frontend + FastAPI backend + RAG pipeline + AWS infra. High complexity due to cross-service integration and GDPR compliance layer.",
+  "reasoning": "Multi-service app: React frontend + FastAPI backend + AI pipeline + AWS infra. High complexity due to cross-service integration and GDPR compliance layer.",
   "plan_required": true,
   "tasks": [
     {"id": "T1", "description": "FastAPI backend with PostgreSQL and JWT auth", "estimated_effort": "high"},
     {"id": "T2", "description": "React frontend with document upload UI and Q&A chat", "estimated_effort": "medium"},
-    {"id": "T3", "description": "RAG pipeline using Qdrant for document Q&A", "estimated_effort": "high"},
+    {"id": "T3", "description": "Document Q&A pipeline", "estimated_effort": "high"},
     {"id": "T4", "description": "AWS deployment with GDPR-compliant data handling", "estimated_effort": "medium"}
   ],
   "skill": "react-core",
   "agent": "react-engineer",
-  "skills": ["react-core", "fastapi-core", "rag-core", "cloud-security-core"],
+  "skills": ["react-core", "fastapi-core", "ai-core", "cloud-security-core"],
   "agents": ["react-engineer", "python-backend-engineer", "ai-engineer", "cloud-engineer"],
   "execution_pattern": "parallel",
   "domains": ["frontend", "backend", "ai", "cloud", "security"],
-  "constraints": ["PostgreSQL", "AWS", "GDPR", "Qdrant", "Docker"]
+  "constraints": ["PostgreSQL", "AWS", "GDPR", "Docker"]
 }
 ```
 
@@ -861,7 +857,7 @@ Injects into FlowState:
     step3_tasks_validated = [T1, T2, T3, T4]
     step5_skill        = "react-core"
     step5_agent        = "react-engineer"
-    step5_skills       = [react-core, fastapi-core, rag-core, cloud-security-core]
+    step5_skills       = [react-core, fastapi-core, ai-core, cloud-security-core]
     step5_agents       = [react-engineer, python-backend-engineer, ai-engineer, cloud-engineer]
     template_fast_path = True
     ↓
@@ -875,12 +871,11 @@ Step 10: Implementation                (1 LLM call — the only one)
 ...
 ```
 
-### Template vs RAG vs Full Pipeline
+### Template vs Full Pipeline
 
 | Mode | When | Steps Skipped | LLM Calls | Hook Time |
 |------|------|--------------|-----------|-----------|
 | **Template Fast-Path** | `--orchestration-template` provided | Step 0 (2 subprocess calls) | **0** | ~2s |
-| **RAG Hit** | Similar task run before (>=0.85 match) | Step 0 (2 subprocess calls) | **0** | ~3s |
 | **Full Pipeline** | New task, no template | None | **7-8** | ~60s |
 
 ### Template Fields Reference
@@ -933,7 +928,6 @@ No pipeline interruption. No crash. Just a warning and normal execution.
 - Python 3.8+
 - GitHub CLI (`gh`) installed and authenticated
 - Ollama (optional, for local GPU inference)
-- Qdrant (optional, for RAG vector storage)
 
 ### Installation
 
@@ -1015,7 +1009,6 @@ claude-workflow-engine/
 |   |   +-- pipeline_builder.py       # [v1.5] Builder: PipelineBuilder chainable API
 |   |   +-- orchestrator.py           # Main StateGraph pipeline
 |   |   +-- flow_state.py             # Compat shim -> state/ package
-|   |   +-- rag_integration.py        # Vector DB decision caching
 |   |   +-- call_graph_builder.py     # Compat shim -> parsers/ package
 |   |   +-- call_graph_analyzer.py    # Pipeline-ready analysis (impact, context, review)
 |   |   +-- uml_generators.py         # Compat shim -> diagrams/ package
@@ -1028,7 +1021,7 @@ claude-workflow-engine/
 |   +-- post-tool-tracker.py          # PostToolUse hook (shim -> post_tool_tracker/)
 |   +-- stop-notifier.py              # Stop hook (shim -> stop_notifier/)
 |
-+-- src/mcp/                          # In-engine copies of session-mgr + vector-db (repos are source of truth) + bridge (session_hooks)
++-- src/mcp/                          # In-engine copies of session-mgr (repo is source of truth) + bridge (session_hooks)
 +-- policies/                         # 63 policy definitions (62 .md + 1 .json)
 +-- tests/                            # 75 test files
 +-- docs/                             # 71 documentation files
@@ -1060,7 +1053,6 @@ claude-workflow-engine/
 | Call Graph | 578 classes, 3,985 methods, 4 languages (Python/Java/TS/Kotlin) |
 | UML Diagram Types | 13 (CallGraph-powered) |
 | Documentation Files | 71 |
-| RAG Collections | 4 (Qdrant vector DB) |
 | Supported Languages | 20+ |
 | Supported Frameworks | 15+ |
 | Quality Gates | 4 (SonarQube, coverage, breaking changes, tests) |
@@ -1081,7 +1073,7 @@ No other AI coding tool automates the full Software Development Life Cycle. Here
 | **Call graph analysis before changes** | Yes (Steps 2,3,4,10,11) | No | No | No | No |
 | **Impact analysis (what could break)** | Yes (danger zones, risk levels) | No | No | No | No |
 | **Phase-scoped context (focused, not broad)** | Yes (Step 4) | No | No | No | No |
-| **Skill/agent selection (16 skills, 13 agents)** | Yes (Step 5, RAG-powered) | No | No | No | No |
+| **Skill/agent selection (16 skills, 13 agents)** | Yes (Step 5, template-driven) | No | No | No | No |
 | **Auto GitHub issue creation** | Yes (Step 8) | No | No | No | No |
 | **Dual issue tracking (GitHub + Jira)** | Yes (configurable) | No | No | No | No |
 | **Figma design-to-code extraction** | Yes (configurable) | No | No | No | No |
@@ -1100,7 +1092,6 @@ No other AI coding tool automates the full Software Development Life Cycle. Here
 | **Coverage analysis (AST-based)** | Yes (risk-prioritized) | No | No | No | No |
 | **Quality gate enforcement** | Yes (4 gates, configurable) | No | No | No | No |
 | **Tool call optimization (60-85% savings)** | Yes (4-layer system) | No | No | No | No |
-| **Cross-session RAG learning** | Yes (Qdrant, 4 collections) | No | No | No | No |
 | **Multi-language standards (8 langs)** | Yes (34 rule files, 5,000+ lines) | No | No | No | No |
 | **Dependency resolution (5 build systems)** | Yes (Python/Java/Node/Go/Rust) | No | No | No | No |
 | **Smart user interaction** | Yes (6 step-specific Q&A) | No | No | No | No |
@@ -1690,7 +1681,7 @@ export CLAUDE_HOME=/path/to/your/.claude
 | **7.6.0** | 2026-03-18 | Call graph builder (class-level FQN, impact analysis, 47 tests), path standardization (30+ hardcoded paths removed, env var overrides) |
 | 7.5.0 | 2026-03-18 | UML diagram generation (13 types), 12th MCP server (uml-diagram, 15 tools), AST + LLM hybrid, call_graph_analyzer.py (4 pipeline functions) |
 | 7.5.0 | 2026-03-17 | Gap analysis fixes, all 49 policies complete, code graph analyzer, Level 1 integration |
-| 7.5.0 | 2026-03-16 | RAG integration, 11th MCP server (vector-db), cross-session learning, 109 tools |
+| 7.5.0 | 2026-03-16 | Vector DB integration, 11th MCP server, cross-session memory, 109 tools |
 | 7.4.0 | 2026-03-16 | Dynamic versioning, SRS rewrite, MCP health checks |
 | 7.3.0 | 2026-03-16 | 10 MCP servers (91 tools), hook migration to MCP imports |
 | 7.2.0 | 2026-03-15 | 7 design patterns, Anthropic API as 4th LLM provider |

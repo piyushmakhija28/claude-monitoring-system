@@ -4,14 +4,13 @@
 #
 # Services:
 #   engine  - The workflow orchestration pipeline (the main application)
-#   qdrant  - Vector database for RAG decision caching
 #   ollama  - Local LLM inference server (optional)
 #
 # Usage:
-#   Full stack (engine + Qdrant + Ollama):
+#   Full stack (engine + Ollama):
 #     docker compose up
 #
-#   Engine only (standalone, Qdrant disabled):
+#   Engine only (standalone):
 #     docker compose up engine
 #
 #   Run a specific task:
@@ -43,9 +42,6 @@ services:
     # Override or supplement specific environment variables here.
     # These take precedence over values in .env.
     environment:
-      # Point Qdrant client at the qdrant service when running as a compose stack.
-      QDRANT_HOST: qdrant
-      QDRANT_PORT: "6333"
       # Point Ollama client at the ollama service when running as a compose stack.
       OLLAMA_ENDPOINT: "http://ollama:11434"
       PYTHONUNBUFFERED: "1"
@@ -67,11 +63,7 @@ services:
       - session_logs:/app/logs
       - telemetry_data:/app/telemetry
 
-    # Qdrant must be healthy before the engine starts so that RAG initialisation
-    # succeeds on first boot rather than falling back to in-memory mode.
     depends_on:
-      qdrant:
-        condition: service_healthy
       ollama:
         condition: service_started
 
@@ -92,45 +84,6 @@ services:
         reservations:
           memory: 512m
           cpus: "0.25"
-
-  # ---------------------------------------------------------------------------
-  # qdrant: Vector database for RAG decision caching
-  # Stores past LangGraph node decisions for semantic similarity lookups.
-  # Collections: node_decisions, sessions, flow_traces, tool_calls
-  # ---------------------------------------------------------------------------
-  qdrant:
-    image: qdrant/qdrant:v1.9.2
-    container_name: claude-workflow-qdrant
-    restart: unless-stopped
-
-    ports:
-      # REST API port - accessible from the host for inspection
-      - "6333:6333"
-      # gRPC port (optional, used by qdrant-client when grpc is enabled)
-      - "6334:6334"
-
-    volumes:
-      # Persist vector collections across container restarts
-      - qdrant_storage:/qdrant/storage
-
-    environment:
-      QDRANT__SERVICE__GRPC_PORT: "6334"
-      # Uncomment to enable API key protection on the Qdrant REST API
-      # QDRANT__SERVICE__API_KEY: "your-qdrant-api-key"
-
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-
-    # Resource limits for the vector DB
-    deploy:
-      resources:
-        limits:
-          memory: 1g
-          cpus: "0.5"
 
   # ---------------------------------------------------------------------------
   # ollama: Local LLM inference server
@@ -166,12 +119,6 @@ services:
 # Named Volumes
 # =============================================================================
 volumes:
-  # Persists Qdrant collections (node_decisions, sessions, flow_traces, tool_calls)
-  # across container restarts. Data survives `docker compose down`.
-  # To wipe vector data: docker compose down -v
-  qdrant_storage:
-    driver: local
-
   # Persists Ollama model weights across container restarts.
   # Large volume: each model is 4-40 GB depending on parameter count.
   ollama_models:

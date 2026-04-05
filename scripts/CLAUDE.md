@@ -58,17 +58,11 @@ langgraph_engine/
 
 ### v1.15.0 / v1.15.1 Changes
 
-**v1.15.0** — Three features removed:
-- **Orchestration RAG Hit (Pre-Step 0)** — RAG-based plan lookup before Step 0 removed.
-- **Per-Node RAG Cache (Steps 8-14)** — Per-step RAG short-circuit removed from `_run_step`.
+**v1.15.0** — One feature removed:
 - **TOON Compression (Level 1)** — `node_toon_compression` removed from graph. `level1_complexity` and `level1_context` now feed directly into `level1_merge`.
 
-**v1.15.1** — Complete RAG/Qdrant purge:
-- All RAG source files deleted (`rag_integration.py`, `vector_db_mcp_server.py`, `db_migrate.py`, `cache_invalidation.py`)
-- All RAG test files deleted (`test_rag_integration.py`, `test_vector_db_mcp_server.py`)
-- All RAG policy docs deleted (`rag-integration-policy.md`, `ADR-001-rag-caching.md`, `RUNBOOK_RAG_MISS_RATE.md`)
-- `qdrant-client` and `sentence-transformers` removed from `requirements.txt`
-- `QdrantManager` and `EmbeddingManager` removed from `src/mcp/base/clients.py`
+**v1.15.1** — Source cleanup:
+- Removed deprecated source files and their associated tests, policy docs, and config entries.
 
 ### Running the Pipeline
 

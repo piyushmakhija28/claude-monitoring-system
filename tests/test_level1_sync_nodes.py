@@ -4,7 +4,7 @@ Covers: node_session_loader, node_complexity_calculation, node_context_loader,
         level1_merge_node, cleanup_level1_memory, and the parallel topology contract.
 
 All tests are offline (no real filesystem I/O beyond tempdir, no LangGraph,
-no Qdrant, no external services).  Each test sets up a minimal FlowState dict
+no external services).  Each test sets up a minimal FlowState dict
 and patches only the external dependencies that the node under test actually calls.
 
 Python 3.8+ compatible - no walrus operator, no match, no | union types.

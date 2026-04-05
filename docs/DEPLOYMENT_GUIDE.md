@@ -1,8 +1,8 @@
 # Deployment Guide
 
 **Project:** Claude Workflow Engine
-**Version:** 1.6.1
-**Last Updated:** 2026-03-27
+**Version:** 1.15.1
+**Last Updated:** 2026-04-04
 
 ---
 
@@ -56,22 +56,7 @@ cp .env.example .env
 
 Edit `.env` and fill in all required values (see Environment Variables section).
 
-### 5. Verify Qdrant storage directory
-
-```bash
-mkdir -p .qdrant_data
-python -c "from qdrant_client import QdrantClient; c = QdrantClient(path='.qdrant_data'); print('Qdrant OK')"
-```
-
-### 6. Download the embedding model
-
-```bash
-python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2'); print('Model OK')"
-```
-
-The model (~90 MB) is cached in `~/.cache/huggingface/` after first download.
-
-### 7. Run the test suite
+### 5. Run the test suite
 
 ```bash
 pytest tests/ -q --tb=short
@@ -79,13 +64,13 @@ pytest tests/ -q --tb=short
 
 All tests should pass before running the pipeline.
 
-### 8. Run the pipeline
+### 6. Run the pipeline
 
 ```bash
 # Hook mode (Steps 0-9 only — prompt generation and GitHub issue creation)
 python scripts/3-level-flow.py --task "add user profile endpoint"
 
-# Full mode (all 15 steps including implementation, PR, and closure)
+# Full mode (all 8 active steps including implementation, PR, and closure)
 CLAUDE_HOOK_MODE=0 python scripts/3-level-flow.py --task "fix authentication bug"
 ```
 
@@ -93,8 +78,7 @@ CLAUDE_HOOK_MODE=0 python scripts/3-level-flow.py --task "fix authentication bug
 
 ## Docker Compose (Local Development)
 
-A `docker-compose.yml` is provided for local development with Qdrant running
-as a sidecar service.
+A `docker-compose.yml` is provided for local development.
 
 ```bash
 # Start services
@@ -118,7 +102,6 @@ effect immediately without rebuilding the image.
 
 - Kubernetes 1.27+
 - 2 CPU cores, 4 GB RAM per pod
-- Persistent volume (1 GB) for Qdrant data
 
 ### Deployment manifest structure
 
@@ -129,7 +112,6 @@ k8s/
 +-- secret.yaml             # API keys (use Sealed Secrets or Vault in production)
 +-- deployment.yaml         # Main application pod
 +-- service.yaml            # ClusterIP for health/metrics endpoints
-+-- pvc.yaml                # PersistentVolumeClaim for .qdrant_data
 +-- hpa.yaml                # HorizontalPodAutoscaler (optional)
 ```
 
@@ -199,7 +181,7 @@ readinessProbe:
 
 ## Upgrading
 
-### Minor version upgrade (e.g., 1.6.0 -> 1.6.1)
+### Minor version upgrade (e.g., 1.15.0 -> 1.15.1)
 
 ```bash
 git pull origin main
@@ -212,17 +194,16 @@ No migration steps needed for patch versions.
 ### Major version upgrade
 
 1. Read `CHANGELOG.md` for breaking changes.
-2. Back up `.qdrant_data/` before upgrading (schema migrations may be needed).
-3. Run the upgrade:
+2. Run the upgrade:
    ```bash
    git pull origin main
    pip install -r requirements.txt --upgrade
    ```
-4. Run the migration script if provided:
+3. Run the migration script if provided:
    ```bash
-   python scripts/migrate.py --from 1.5.0 --to 1.6.0
+   python scripts/migrate.py --from 1.14.0 --to 1.15.0
    ```
-5. Run the full test suite:
+4. Run the full test suite:
    ```bash
    pytest tests/ -v
    ```
@@ -230,8 +211,6 @@ No migration steps needed for patch versions.
 ### Rollback
 
 ```bash
-git checkout v1.5.0
+git checkout v1.14.0
 pip install -r requirements.txt
 ```
-
-Restore `.qdrant_data/` from backup if the schema changed.

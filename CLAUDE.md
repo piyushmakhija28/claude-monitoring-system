@@ -100,8 +100,8 @@ Level 3: Execution (8 active steps: Pre-0, Step 0, Steps 8-14)
 | v1.12.0 | 15 | ~6 | ~75s | Original -- Steps 0-7 each called LLM separately |
 | v1.13.0 | 9 | ~2 (subprocess) | ~30s | Removed Steps 1,3,4,5,6,7 |
 | **v1.14.0** | **8** | **2 (subprocess)** | **~15s** | Step 0 = template fill + orchestrator (claude CLI subprocess) |
-| **v1.15.0** | **8** | **2 (subprocess)** | **~15s** | TOON compression removed from Level 1; orchestration RAG and per-node RAG removed |
-| **v1.15.1** | **8** | **2 (subprocess)** | **~15s** | Complete RAG/Qdrant purge -- all dead code, tests, docs, configs removed |
+| **v1.15.0** | **8** | **2 (subprocess)** | **~15s** | TOON compression removed from Level 1 |
+| **v1.15.1** | **8** | **2 (subprocess)** | **~15s** | Source cleanup: deprecated files removed |
 
 ### Directory Layout
 
@@ -411,7 +411,7 @@ See environment variables in `.env.example`:
 <!-- execution-insight- -->
 ## Latest Execution Insight
 
-- **Task**: v1.15.1 -- RAG/Qdrant purge: remove all dead code from rag_integration.py, vector_db_mcp_server.py, base/clients.py, skill_selection_criteria.py, orchestrator.py, output_helpers.py, tests, docs, policies, requirements.txt, .env.example
+- **Task**: v1.15.1 -- source cleanup: remove deprecated modules and associated tests, policy docs, and config entries
 - **Skill**: python-core
 - **Agent**: python-backend-engineer
 - **Date**: 2026-04-04

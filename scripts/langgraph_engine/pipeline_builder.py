@@ -19,7 +19,6 @@ CHANGE LOG (v1.15.0):
   add_level1() TOON node + edges replaced with direct parallel merge:
     level1_complexity -> level1_merge
     level1_context -> level1_merge
-  Pre-analysis comment updated: RAG orchestration lookup removed.
 """
 
 try:

@@ -46,7 +46,7 @@ When the `filesystem` MCP is available:
 
 ---
 
-## MCP Server Registry (12 Servers)
+## MCP Server Registry (13 Servers)
 
 | Server | Tools | Critical |
 |--------|-------|----------|
@@ -58,8 +58,11 @@ When the `filesystem` MCP is available:
 | pre-tool-gate | 8 | NO |
 | post-tool-tracker | 6 | NO |
 | standards-loader | 7 | NO |
-| vector-db | 11 | NO |
 | uml-diagram | 15 | NO |
+| drawio-diagram | 5 | NO |
+| jira-api | 10 | NO |
+| jenkins-ci | 10 | NO |
+| figma-api | 10 | NO |
 
 ---
 

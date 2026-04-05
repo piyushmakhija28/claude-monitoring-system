@@ -16,5 +16,3 @@ data:
   ENABLE_HEALTH_SERVER: "1"
   METRICS_PORT: "9090"
   HEALTH_PORT: "8080"
-  QDRANT_HOST: "qdrant-service"
-  QDRANT_PORT: "6333"

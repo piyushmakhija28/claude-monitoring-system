@@ -1,6 +1,6 @@
 """Prometheus metrics exporter for the Claude Workflow Engine pipeline.
 
-Exposes 9 metrics covering pipeline execution, step durations, RAG cache hits,
+Exposes 8 metrics covering pipeline execution, step durations,
 LLM inference, MCP tool calls, call graph rebuilds, and active pipeline count.
 
 The HTTP metrics server is started automatically when ENABLE_METRICS=1 is set
@@ -13,7 +13,6 @@ Usage::
         inc_pipeline_executions,
         observe_pipeline_duration,
         observe_step_duration,
-        inc_rag_hits,
         inc_llm_calls,
         inc_llm_tokens,
         inc_mcp_tool_calls,
@@ -73,12 +72,6 @@ if _HAS_PROMETHEUS:
         buckets=[1, 5, 10, 30, 60, 120],
     )
 
-    rag_hits_total = Counter(
-        "rag_hits_total",
-        "Total RAG cache hits that replaced LLM calls",
-        ["step_name"],
-    )
-
     llm_calls_total = Counter(
         "llm_calls_total",
         "Total LLM inference calls",
@@ -112,7 +105,6 @@ else:
     pipeline_executions_total = None  # type: ignore[assignment]
     pipeline_duration_seconds = None  # type: ignore[assignment]
     step_duration_seconds = None  # type: ignore[assignment]
-    rag_hits_total = None  # type: ignore[assignment]
     llm_calls_total = None  # type: ignore[assignment]
     llm_tokens_total = None  # type: ignore[assignment]
     mcp_tool_calls_total = None  # type: ignore[assignment]
@@ -140,12 +132,6 @@ def observe_step_duration(step_name: str, seconds: float) -> None:
     """Record the duration of a named pipeline step."""
     if _HAS_PROMETHEUS and step_duration_seconds is not None:
         step_duration_seconds.labels(step_name=step_name).observe(seconds)
-
-
-def inc_rag_hits(step_name: str = "unknown") -> None:
-    """Increment the RAG cache hit counter for a step."""
-    if _HAS_PROMETHEUS and rag_hits_total is not None:
-        rag_hits_total.labels(step_name=step_name).inc()
 
 
 def inc_llm_calls(provider: str = "unknown", model: str = "unknown") -> None:

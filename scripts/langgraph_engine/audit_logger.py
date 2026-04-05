@@ -25,7 +25,6 @@ AUDITABLE_OPERATIONS = {
     "github_issue_created",
     "branch_created",
     "pr_merged",
-    "rag_decision_stored",
     "secrets_validated",
     "rate_limit_hit",
 }

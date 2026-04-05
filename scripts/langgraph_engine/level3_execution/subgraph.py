@@ -18,14 +18,6 @@ CHANGE LOG (v1.14.0):
   already produces a comprehensive plan.
   Active steps: Pre-0, 0.0, 0.1, 0, 8, 9, [10-14] = 8 active steps.
 
-CHANGE LOG (v1.15.0):
-  Removed per-node RAG cache from _run_step():
-    - _RAG_ELIGIBLE_STEPS constant removed
-    - RAG lookup block before LLM call removed
-    - RAG store block after node completion removed
-    - rag_lookup_before_llm / rag_store_after_node imports removed
-  LLM call path in all step nodes is unchanged.
-
 Remaining steps (0, 8-14) implemented with:
 - Proper logging via loguru
 - Time tracking

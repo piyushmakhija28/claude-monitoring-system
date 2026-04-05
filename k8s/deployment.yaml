@@ -64,7 +64,7 @@ spec:
             timeoutSeconds: 5
             failureThreshold: 3
 
-          # Readiness probe: remove pod from Service endpoints until Qdrant is reachable
+          # Readiness probe: remove pod from Service endpoints until pipeline is ready
           readinessProbe:
             httpGet:
               path: /readiness

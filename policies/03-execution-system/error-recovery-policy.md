@@ -59,8 +59,7 @@ For LLM failures:
 ```
 Primary LLM (Ollama local)
     |-- FAIL --> Secondary LLM (Anthropic API)
-    |              |-- FAIL --> RAG cached result
-    |                            |-- FAIL --> Manual prompt (ask user)
+                    |-- FAIL --> Manual prompt (ask user)
 ```
 
 ### Strategy 3: Graceful Degradation
@@ -70,7 +69,6 @@ For non-critical features:
 | Feature | Degradation |
 |---------|-------------|
 | CallGraph analysis | Skip impact analysis, warn in review |
-| RAG lookup | Skip cache, always call LLM |
 | MCP discovery | Use known servers from config |
 | Standards enforcement | Skip linting, log warning |
 | UML generation | Skip diagrams, note in summary |

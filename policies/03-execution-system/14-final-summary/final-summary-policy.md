@@ -14,7 +14,6 @@ Step 14 is the terminal step of the pipeline. It generates a comprehensive execu
 
 **Input:** All step outputs aggregated from Steps 0-13
 **Output:** Summary dict, saved summary file, optional voice notification
-**RAG Threshold:** 0.75 (low stakes, summary generation)
 
 ---
 
@@ -62,8 +61,7 @@ ALWAYS saved to session folder as `execution-summary.txt`:
 Step 14 prints pipeline execution metrics to terminal:
 - Per-step execution times
 - Total pipeline duration
-- RAG hit/miss statistics
-- LLM calls saved by RAG
+- LLM call counts
 
 ---
 
@@ -104,9 +102,8 @@ Using {skill}. Issue created. PR merged. {N} files modified.
 After Step 14, the pipeline flows to `output_node` which:
 1. Synthesizes the comprehensive prompt from all step outputs
 2. Saves the execution log to session folder
-3. Calls RAG storage for cross-session learning
-4. Sends session accumulate via MCP
-5. Prints final pipeline status
+3. Sends session accumulate via MCP
+4. Prints final pipeline status
 
 ---
 

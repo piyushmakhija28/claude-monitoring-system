@@ -28,7 +28,7 @@ paths:
       summary: Liveness probe
       description: |
         Returns 200 if the process is alive and its core subsystems (LangGraph
-        state machine, Qdrant client, embedding model) are initialised.
+        state machine, LLM provider) are initialised.
 
         Used as a Kubernetes liveness probe. A non-200 response should trigger
         a container restart.
@@ -48,8 +48,7 @@ paths:
                 uptime_seconds: 3721
                 checks:
                   langgraph: ok
-                  qdrant: ok
-                  embedding_model: ok
+                  llm_provider: ok
         "503":
           description: One or more subsystems are unhealthy
           content:
@@ -58,7 +57,7 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
               example:
                 error: unhealthy
-                detail: "qdrant: connection refused at path .qdrant_data"
+                detail: "llm_provider: no provider reachable"
                 timestamp: "2026-03-27T12:00:00Z"
 
   /readiness:
@@ -111,12 +110,9 @@ paths:
 
         Key metrics exposed:
         - `pipeline_steps_total` - counter by step and status (success/failure)
-        - `rag_cache_hit_total` - RAG cache hits by step
-        - `rag_cache_miss_total` - RAG cache misses by step
         - `llm_calls_total` - LLM API calls by provider and model
         - `llm_latency_seconds` - histogram of LLM call latency
         - `call_graph_rebuild_total` - call graph rebuild events
-        - `qdrant_collection_points` - gauge of vector DB collection size by collection
       operationId: getMetrics
       tags:
         - Observability
@@ -132,10 +128,6 @@ paths:
                 # TYPE pipeline_steps_total counter
                 pipeline_steps_total{step="step0",status="success"} 42
                 pipeline_steps_total{step="step0",status="failure"} 1
-                # HELP rag_cache_hit_total RAG cache hits by step
-                # TYPE rag_cache_hit_total counter
-                rag_cache_hit_total{step="step0"} 17
-                rag_cache_miss_total{step="step0"} 25
                 # HELP llm_latency_seconds LLM call latency histogram
                 # TYPE llm_latency_seconds histogram
                 llm_latency_seconds_bucket{provider="anthropic",le="1.0"} 5
@@ -183,8 +175,7 @@ components:
             enum: [ok, degraded, error]
           example:
             langgraph: ok
-            qdrant: ok
-            embedding_model: ok
+            llm_provider: ok
 
     ReadinessResponse:
       type: object

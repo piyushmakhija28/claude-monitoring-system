@@ -161,11 +161,6 @@ class TestSystemHealthCheck:
         result = _parse(self.mod.check_system_health())
         assert "checkpoint_db" in result["components"]
 
-    def test_health_check_has_vector_db(self):
-        """Test health includes vector DB status."""
-        result = _parse(self.mod.check_system_health())
-        assert "vector_db" in result["components"]
-
     def test_health_check_overall_status(self):
         """Test overall status is HEALTHY or DEGRADED."""
         result = _parse(self.mod.check_system_health())

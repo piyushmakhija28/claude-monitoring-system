@@ -42,7 +42,7 @@ permissions:
 
 jobs:
 
-  # ─── Gate: Check if CI is enabled ──────────────────────────────────────────
+  # --- Gate: Check if CI is enabled ------------------------------------------
   # Reads ENABLE_CI repo variable. If false, all downstream jobs are skipped.
   check-enabled:
     name: Check CI flags
@@ -73,10 +73,10 @@ jobs:
             echo "coverage_enabled=${COV_FLAG:-true}" >> "$GITHUB_OUTPUT"
           fi
 
-  # ─── Job 1: Test ──────────────────────────────────────────────────────────
-  # Runs pytest across three Python versions using a matrix strategy.
+  # --- Job 1: Test -----------------------------------------------------------
+  # Runs pytest across two Python versions using a matrix strategy.
   # Full test run uses continue-on-error because some tests require external
-  # services (Qdrant, Ollama, GitHub API) that are not available in CI.
+  # services (Ollama, GitHub API) that are not available in CI.
   test:
     name: Test (Python ${{ matrix.python-version }})
     needs: check-enabled
@@ -110,7 +110,7 @@ jobs:
         run: pytest tests/ --tb=short -q --collect-only
 
       # Run the full test suite. continue-on-error=true because many tests
-      # require external services (Qdrant, GitHub token, Ollama endpoint)
+      # require external services (GitHub token, Ollama endpoint)
       # that are not available in CI.
       - name: Run tests
         continue-on-error: true
@@ -123,7 +123,7 @@ jobs:
         if: needs.check-enabled.outputs.coverage_enabled == 'true'
         run: pytest tests/ --tb=short -q --cov=scripts --cov=src --cov-report=term-missing --cov-fail-under=50
 
-  # ─── Job 2: Lint ──────────────────────────────────────────────────────────
+  # --- Job 2: Lint -----------------------------------------------------------
   # Runs ruff on scripts/ and src/ to catch syntax errors, undefined names,
   # and PEP 8 violations. Line-length (E501) is ignored per project style.
   lint:

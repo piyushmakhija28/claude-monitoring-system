@@ -20,7 +20,7 @@ error_handler
     standardised try/except, timing, and fallback result handling.
 
     safe_execute - decorator for non-critical side-effect operations that
-    must never crash the pipeline (telemetry, RAG writes, audit logs).
+    must never crash the pipeline (telemetry, audit logs, session saves).
 
     NodeResult - fluent builder for constructing LangGraph node return dicts.
 

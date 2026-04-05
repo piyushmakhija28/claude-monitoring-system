@@ -7,7 +7,7 @@ Covers:
   2. Level 1 Sync System scripts (scripts/architecture/01-sync-system/)
   3. Pre-tool Enforcer Level 1 / Level 2 blocking functions (scripts/pre-tool-enforcer.py)
 
-All tests are designed to pass without external dependencies (networkx, qdrant, etc.).
+All tests are designed to pass without external dependencies (networkx, etc.).
 Uses importlib.util for dynamic imports since the scripts are not proper packages.
 ASCII-only source (cp1252-safe for Windows). UTF-8 encoding.
 """
@@ -17,17 +17,13 @@ import sys
 from pathlib import Path
 from typing import Any, Dict
 
-import pytest
-
 # ---------------------------------------------------------------------------
 # Path helpers
 # ---------------------------------------------------------------------------
 
 REPO_ROOT = Path(__file__).parent.parent
 SYNC_SYSTEM_DIR = REPO_ROOT / "scripts" / "architecture" / "01-sync-system"
-CODE_GRAPH_DIR = (
-    REPO_ROOT / "scripts" / "architecture" / "03-execution-system" / "00-code-graph-analysis"
-)
+CODE_GRAPH_DIR = REPO_ROOT / "scripts" / "architecture" / "03-execution-system" / "00-code-graph-analysis"
 SCRIPTS_DIR = REPO_ROOT / "scripts"
 
 
@@ -148,6 +144,7 @@ class TestCodeGraphAnalyzerScoringRange:
 # session-pruner.py
 # ---------------------------------------------------------------------------
 
+
 class TestSessionPrunerImport:
     """Can import the prune_sessions function from session-pruner.py."""
 
@@ -187,6 +184,7 @@ class TestSessionPrunerEmptyDir:
 # ---------------------------------------------------------------------------
 # context-monitor.py
 # ---------------------------------------------------------------------------
+
 
 class TestContextMonitorImport:
     """Can import the estimate_context_usage function from context-monitor.py."""
@@ -246,6 +244,7 @@ class TestContextMonitorEmptySession:
 # pattern-detector.py
 # ---------------------------------------------------------------------------
 
+
 class TestPatternDetectorImport:
     """Can import the detect_patterns function from pattern-detector.py."""
 
@@ -272,14 +271,15 @@ class TestPatternDetectorCurrentProject:
 
         assert isinstance(patterns, list)
         # The project has Python files and/or pyproject.toml/requirements.txt
-        assert "python" in patterns, (
-            "Expected 'python' in detected patterns for this Python project, got: {}".format(patterns)
+        assert "python" in patterns, "Expected 'python' in detected patterns for this Python project, got: {}".format(
+            patterns
         )
 
 
 # ---------------------------------------------------------------------------
 # preference-tracker.py
 # ---------------------------------------------------------------------------
+
 
 class TestPreferenceTrackerImport:
     """Can import the track_preferences function from preference-tracker.py."""
@@ -389,9 +389,7 @@ class TestLevel1CheckNoTrace:
         hints, blocks = mod.check_level1_sync_complete("Write")
 
         # Fail-open: when session ID is missing, nothing should be blocked
-        assert blocks == [], (
-            "Expected no blocks when session ID is empty, got: {}".format(blocks)
-        )
+        assert blocks == [], "Expected no blocks when session ID is empty, got: {}".format(blocks)
 
     def test_level1_check_no_trace_via_none_trace(self, monkeypatch):
         """check_level1_sync_complete with valid session but None trace still fails open."""
@@ -404,9 +402,7 @@ class TestLevel1CheckNoTrace:
         hints, blocks = mod.check_level1_sync_complete("Write")
 
         # Fail-open: None trace must not block
-        assert blocks == [], (
-            "Expected no blocks when flow-trace is None, got: {}".format(blocks)
-        )
+        assert blocks == [], "Expected no blocks when flow-trace is None, got: {}".format(blocks)
 
 
 class TestLevel2CheckNoTrace:
@@ -420,9 +416,7 @@ class TestLevel2CheckNoTrace:
 
         hints, blocks = mod.check_level2_standards_complete("Write")
 
-        assert blocks == [], (
-            "Expected no blocks when session ID is empty, got: {}".format(blocks)
-        )
+        assert blocks == [], "Expected no blocks when session ID is empty, got: {}".format(blocks)
 
     def test_level2_check_no_trace_via_none_trace(self, monkeypatch):
         """check_level2_standards_complete with valid session but None trace still fails open."""
@@ -433,6 +427,4 @@ class TestLevel2CheckNoTrace:
 
         hints, blocks = mod.check_level2_standards_complete("Write")
 
-        assert blocks == [], (
-            "Expected no blocks when flow-trace is None, got: {}".format(blocks)
-        )
+        assert blocks == [], "Expected no blocks when flow-trace is None, got: {}".format(blocks)

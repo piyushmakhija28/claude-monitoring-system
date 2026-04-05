@@ -1,7 +1,7 @@
 # System Requirements Analysis
 
 **Project:** Claude Workflow Engine
-**Version:** 1.5.0
+**Version:** 1.15.1
 **Date:** 2026-03-21
 **Author:** Claude Workflow Engine Team
 
@@ -9,7 +9,7 @@
 
 ## Executive Summary
 
-Claude Workflow Engine is a LangGraph-based 4-level pipeline that automates the full Software Development Life Cycle (SDLC) — from task analysis to merged PR closure — using LLM inference, RAG-powered decision caching, AST-based call graph analysis, and 19 MCP servers (323 tools). It is the only AI tool that automates all 15 SDLC steps including GitHub Issues, branch creation, code review, PR merge, Jira tracking, Figma design-to-code, Jenkins CI/CD, SonarQube scanning, UML generation, and documentation updates.
+Claude Workflow Engine is a LangGraph-based 4-level pipeline that automates the full Software Development Life Cycle (SDLC) — from task analysis to merged PR closure — using LLM inference, template-driven orchestration, AST-based call graph analysis, and 13 MCP servers (295 tools). It is the only AI tool that automates all 8 active SDLC steps including GitHub Issues, branch creation, code review, PR merge, Jira tracking, Figma design-to-code, Jenkins CI/CD, SonarQube scanning, UML generation, and documentation updates.
 
 ---
 
@@ -17,12 +17,12 @@ Claude Workflow Engine is a LangGraph-based 4-level pipeline that automates the 
 
 ### 1. Purpose and Objectives
 
-Claude Workflow Engine automates software development lifecycle tasks that normally require human coordination across multiple tools (GitHub, Jira, Figma, Jenkins, SonarQube, Qdrant, LLM APIs). A developer provides a natural language task description; the engine handles everything from analysis to delivery.
+Claude Workflow Engine automates software development lifecycle tasks that normally require human coordination across multiple tools (GitHub, Jira, Figma, Jenkins, SonarQube, LLM APIs). A developer provides a natural language task description; the engine handles everything from analysis to delivery.
 
 The system aims to:
-- Automate the full 15-step SDLC pipeline from task intake to issue closure
+- Automate the full SDLC pipeline from task intake to issue closure
 - Enforce project-specific coding standards at every step via 63 policy files
-- Reduce LLM inference costs by 60-85% through RAG caching and token optimization
+- Reduce LLM inference costs by 60-85% through template-driven orchestration and token optimization
 - Support multi-project, multi-language codebases (20+ languages, 15+ frameworks)
 - Provide pluggable, extensible architecture so individual steps/levels can be added or removed
 
@@ -32,13 +32,13 @@ The system aims to:
 
 - Python 3.8+ pipeline execution on Windows/Linux/macOS
 - LangGraph StateGraph orchestration (Level -1 through Level 3)
-- 19 FastMCP servers (323 tools) for GitHub, Jira, Figma, Jenkins, Qdrant, etc.
-- RAG vector DB integration (Qdrant, 4 collections)
+- 13 FastMCP servers (295 tools) for GitHub, Jira, Figma, Jenkins, Git, LLM, etc.
+- Template-driven orchestration (single LLM call for full planning phase)
 - Hybrid LLM inference (Ollama → Claude CLI → Anthropic API → OpenAI API)
 - AST-based call graph analysis (Python/Java/TypeScript/Kotlin)
 - 13 UML diagram types (Mermaid + PlantUML + Kroki.io rendering)
 - Hook system (UserPromptSubmit, PreToolUse, PostToolUse, Stop)
-- Session management with TOON compression and cross-session RAG learning
+- Session management with TOON compression
 
 #### Excluded
 
@@ -52,7 +52,7 @@ The system aims to:
 - **Domain:** Software Development Automation / DevOps
 - **Target Users:** Solo developers, engineering teams using Claude Code CLI
 - **Deployment:** Local machine, triggered by Claude Code hooks on every user prompt
-- **Integration Points:** GitHub, Jira (Cloud+Server), Figma, Jenkins, SonarQube, Qdrant, Ollama, Anthropic API, OpenAI API
+- **Integration Points:** GitHub, Jira (Cloud+Server), Figma, Jenkins, SonarQube, Ollama, Anthropic API, OpenAI API
 
 ---
 
@@ -60,25 +60,19 @@ The system aims to:
 
 ### FR-1: 4-Level Pipeline Execution
 
-**Description:** Pipeline must execute 4 levels in order: Level -1 (Auto-Fix), Level 1 (Sync), Level 2 (Standards), Level 3 (15-Step Execution). Each level must be independently removable or bypassable.
+**Description:** Pipeline must execute 4 levels in order: Level -1 (Auto-Fix), Level 1 (Sync), Level 2 (Standards), Level 3 (8-Step Execution). Each level must be independently removable or bypassable.
 **Priority:** Critical
 **Status:** Implemented
 **Key Module:** `orchestrator.py`, `pipeline_builder.py`
 
-### FR-2: 15-Step SDLC Automation (Level 3)
+### FR-2: 8-Step SDLC Automation (Level 3)
 
-**Description:** Level 3 must execute all 15 steps (Step 0-14) with optional Hook Mode (Steps 0-9 only) via `CLAUDE_HOOK_MODE` env var.
+**Description:** Level 3 must execute 8 active steps (Pre-0, Step 0, Steps 8-14) with optional Hook Mode (Pre-0, Step 0, Steps 8-9 only) via `CLAUDE_HOOK_MODE` env var.
 
 | Step | Action |
 |------|--------|
-| Step 0 | Task analysis, complexity scoring (1-10), task type detection |
-| Step 1 | Plan mode decision (simple vs complex task) |
-| Step 2 | Plan execution with CallGraph impact analysis |
-| Step 3 | Task/phase breakdown + Figma component extraction |
-| Step 4 | TOON context refinement |
-| Step 5 | Skill & agent selection (RAG cross-session boost) |
-| Step 6 | Skill validation and download |
-| Step 7 | Final prompt generation (3 files) + Figma design tokens |
+| Pre-0 | Orchestration pre-analysis: CallGraph scan, template fast-path detection |
+| Step 0 | Task analysis + template fill (prompt_gen_expert_caller) + orchestration execution |
 | Step 8 | GitHub Issue + Jira Issue creation (dual, cross-linked) |
 | Step 9 | Branch creation (from Jira key if ENABLE_JIRA) |
 | Step 10 | Implementation + Jira "In Progress" + Figma "started" |
@@ -91,29 +85,21 @@ The system aims to:
 **Status:** Implemented
 **Key Module:** `level3_execution/subgraph.py`
 
-### FR-3: RAG Decision Caching
+### FR-3: AST-Based Call Graph Analysis
 
-**Description:** Every pipeline node must store its decision in Qdrant. Before LLM calls, the pipeline checks RAG for similar past decisions. If confidence >= step-specific threshold (0.75-0.90), RAG result replaces LLM call.
-**Priority:** High
-**Status:** Implemented
-**Key Module:** `rag_integration.py`
-**Collections:** `node_decisions`, `sessions`, `flow_traces`, `tool_calls`
-
-### FR-4: AST-Based Call Graph Analysis
-
-**Description:** Full class-level call graph supporting Python (AST), Java, TypeScript, Kotlin (regex). Used at Steps 2, 10, 11 for impact analysis, implementation context, and PR review.
+**Description:** Full class-level call graph supporting Python (AST), Java, TypeScript, Kotlin (regex). Used at Pre-0, Step 0, Step 10, and Step 11 for impact analysis, implementation context, and PR review.
 **Priority:** High
 **Status:** Implemented
 **Key Modules:** `parsers/` (Abstract Factory), `call_graph_builder.py`, `call_graph_analyzer.py`
 
-### FR-5: Integration Lifecycle Management
+### FR-4: Integration Lifecycle Management
 
 **Description:** All integrations follow Create → Update → Close lifecycle. Jira and Figma are toggled via env flags. Operations are non-blocking (failure of one integration does not stop others).
 
 | Integration | Flag | Lifecycle Steps |
 |-------------|------|----------------|
 | Jira | `ENABLE_JIRA=1` | Create (8), Branch (9), In Progress (10), In Review (11), Done (12) |
-| Figma | `ENABLE_FIGMA=1` | Extract (3), Inject tokens (7), Comment started (10), Review (11), Comment done (12) |
+| Figma | `ENABLE_FIGMA=1` | Extract (Step 0 template), Comment started (10), Review (11), Comment done (12) |
 | Jenkins | `ENABLE_JENKINS=1` | Trigger (10), Validate (11) |
 | SonarQube | `ENABLE_SONARQUBE=1` | Scan (10), Auto-fix loop |
 
@@ -121,7 +107,7 @@ The system aims to:
 **Status:** Implemented
 **Key Module:** `integrations/` (Abstract Factory + Template Method)
 
-### FR-6: Modular Pipeline Construction
+### FR-5: Modular Pipeline Construction
 
 **Description:** Pipeline must be constructable via `PipelineBuilder` chainable API. Individual levels must be addable/removable without modifying orchestrator.
 **Priority:** High
@@ -136,28 +122,28 @@ create_flow_graph(hook_mode=True)  # default: all 4 levels
 PipelineBuilder().add_level_minus1().add_level1().add_level3().build()
 ```
 
-### FR-7: 19 MCP Servers (323 Tools)
+### FR-6: 13 MCP Servers (295 Tools)
 
-**Description:** All external service operations (GitHub, Jira, Figma, Jenkins, Qdrant, Git, LLM, etc.) must be accessible as MCP tools registered in `~/.claude/settings.json`.
+**Description:** All external service operations (GitHub, Jira, Figma, Jenkins, Git, LLM, etc.) must be accessible as MCP tools registered in `~/.claude/settings.json`.
 **Priority:** High
 **Status:** Implemented
 **Key Location:** `src/mcp/`
 
-### FR-8: Multi-Project Standards Enforcement
+### FR-7: Multi-Project Standards Enforcement
 
 **Description:** Level 2 must auto-detect project type (language, framework) and load appropriate coding standards from 63 policy files.
 **Priority:** High
 **Status:** Implemented
 **Key Module:** `subgraphs/level2_standards.py`
 
-### FR-9: Hybrid LLM Inference
+### FR-8: Hybrid LLM Inference
 
 **Description:** LLM calls must follow fallback chain: Ollama (local GPU) → Claude CLI → Anthropic API → OpenAI API. Model selection must be complexity-based.
 **Priority:** High
 **Status:** Implemented
 **Key Module:** `scripts/langgraph_engine/llm_call.py`
 
-### FR-10: Hook System
+### FR-9: Hook System
 
 **Description:** Pipeline must integrate with Claude Code's 4 hook types (UserPromptSubmit, PreToolUse, PostToolUse, Stop) for automated trigger and enforcement.
 **Priority:** High
@@ -170,9 +156,9 @@ PipelineBuilder().add_level_minus1().add_level1().add_level3().build()
 
 ### NFR-1: Performance
 
-- **Hook Mode target:** Steps 0-9 complete in < 60 seconds
-- **Full Mode target:** Steps 0-14 complete in < 170 seconds
-- **RAG cache hit:** Reduces LLM call time by 70-90%
+- **Hook Mode target:** Pre-0 + Step 0 + Steps 8-9 complete in < 60 seconds
+- **Full Mode target:** All 8 active steps complete in < 170 seconds
+- **Template fast-path:** Bypasses Step 0 entirely, jumps directly to Step 8
 - **Token savings:** 60-85% reduction via AST navigation + dedup
 - **Status:** Implemented
 
@@ -232,16 +218,16 @@ User Prompt
     |
     +-- Level -1: Auto-Fix (Unicode, encoding, path checks)
     |
-    +-- Level 1:  Context Sync (session, complexity, TOON compression)
+    +-- Level 1:  Context Sync (session, complexity scoring)
     |
     +-- Level 2:  Standards (project detection, policy loading)
     |
-    +-- Level 3:  Execution (15-step SDLC pipeline)
+    +-- Level 3:  Execution (8-step SDLC pipeline)
             |
-            +-- RAG lookup (Qdrant) before each LLM call
-            +-- CallGraph analysis at Steps 2, 10, 11
+            +-- Pre-0: CallGraph pre-analysis + template fast-path detection
+            +-- Step 0: Template fill + orchestration execution (2 subprocess calls)
             +-- Integration lifecycle (Jira/Figma/Jenkins/SonarQube)
-            +-- MCP tool calls (19 servers, 323 tools)
+            +-- MCP tool calls (13 servers, 295 tools)
 ```
 
 ### Technology Stack
@@ -251,9 +237,8 @@ User Prompt
 | Orchestration | LangGraph | 0.2.0+ | Stateful graph execution with conditional routing |
 | LLM Framework | LangChain | 0.1.0+ | LLM abstraction, prompt templates |
 | MCP Protocol | FastMCP (mcp) | 1.0+ | Stdio JSON-RPC tool protocol |
-| Vector DB | Qdrant | 1.7+ | RAG decision caching, semantic search |
 | Language | Python | 3.8+ | Primary implementation language |
-| Testing | pytest | 7.0+ | 69 test files, 1,608 passing tests |
+| Testing | pytest | 7.0+ | 75 test files, 1,608 passing tests |
 | AST Analysis | Python ast | stdlib | Call graph extraction for Python |
 
 ### Package Architecture (v1.5.0 Modularization)
@@ -274,12 +259,12 @@ User Prompt
 
 ## Implementation Status
 
-### Completed Features (v1.5.0)
+### Completed Features (v1.15.1)
 
 - [x] 4-Level pipeline (Level -1, 1, 2, 3)
-- [x] 15-step SDLC automation
-- [x] 19 MCP servers (323 tools)
-- [x] RAG decision caching (Qdrant, 4 collections)
+- [x] 8-step active SDLC automation (Pre-0, Step 0, Steps 8-14)
+- [x] 13 MCP servers (295 tools)
+- [x] Template-driven orchestration (single planning LLM call)
 - [x] Hybrid LLM inference (4 providers, GPU-first)
 - [x] AST call graph analysis (4 languages)
 - [x] 13 UML diagram types
@@ -315,7 +300,7 @@ User Prompt
 ### Unit Testing
 
 - Framework: pytest
-- Test files: 69+
+- Test files: 75
 - Passing: 1,608 tests
 - Coverage target: 70%+
 
@@ -324,11 +309,9 @@ User Prompt
 - Full pipeline integration tests at `tests/integration/`
 - MCP server tests: `pytest tests/test_*mcp*.py`
 - CallGraph tests: `pytest tests/test_call_graph_builder.py tests/test_call_graph_analyzer.py`
-- RAG tests: `pytest tests/test_rag_integration.py`
 
 ### Known Failing Tests (Pre-existing)
 
-- `tests/test_vector_db_mcp_server.py` — requires live Qdrant instance (infra dependency)
 - `tests/test_recovery_handler.py::test_save_step_checkpoint_success` — pre-existing fixture issue
 
 ---
@@ -355,7 +338,6 @@ User Prompt
 
 | Risk | Impact | Probability | Mitigation |
 |------|--------|-------------|-----------|
-| Qdrant unavailable | Medium | Medium | RAG skipped, LLM fallback used directly |
 | All LLM providers fail | High | Low | 4-provider fallback chain; pipeline halts gracefully |
 | Jira/Figma API unavailable | Low | Medium | Non-blocking; pipeline continues without that integration |
 | Large codebase exceeds CallGraph limits | Medium | Low | MAX_FILES=300, MAX_FILE_SIZE_KB=100 in `parsers/config.py` |
@@ -363,5 +345,5 @@ User Prompt
 
 ---
 
-**Last Updated:** 2026-03-21
+**Last Updated:** 2026-04-05
 **Next Review:** 2026-06-21

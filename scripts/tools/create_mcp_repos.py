@@ -1,5 +1,5 @@
 """
-create_mcp_repos.py - Automates creation of 21 individual MCP repos under techdeveloper-org.
+create_mcp_repos.py - Automates creation of individual MCP repos under techdeveloper-org.
 
 Each repo:
   - Contains the MCP server file (as server.py)
@@ -109,38 +109,6 @@ SERVERS = [
         "engine_dep": False,
     },
     {
-        "repo": "mcp-vector-db",
-        "file": "vector_db_mcp_server.py",
-        "description": "Qdrant-based semantic vector storage for workflow RAG (Retrieval-Augmented Generation). Stores tool calls, sessions, flow traces, and per-node LLM decisions as embeddings. Enables semantic search to reuse past decisions and skip redundant LLM calls (60-85% inference savings).",
-        "tools": [
-            ("vector_index_tool_call", "Index a tool call record with semantic embedding"),
-            ("vector_index_session", "Index a session summary for cross-session retrieval"),
-            ("vector_index_flow_trace", "Index a pipeline flow trace for pattern matching"),
-            ("vector_search_similar", "Semantic search across tool_calls collection"),
-            ("vector_search_sessions", "Semantic search across sessions collection"),
-            ("vector_search_traces", "Semantic search across flow_traces collection"),
-            ("vector_get_collection_stats", "Get Qdrant collection stats (count, disk, RAM)"),
-            ("vector_delete_collection", "Delete a collection and all its vectors"),
-            ("vector_health_check", "Check Qdrant server and embedding model health"),
-            ("vector_bulk_index", "Bulk-index a list of records efficiently"),
-            ("vector_index_node_decision", "Index a LangGraph node decision for RAG cache"),
-        ],
-        "env_vars": [
-            ("QDRANT_HOST", "Qdrant server host (default: localhost)"),
-            ("QDRANT_PORT", "Qdrant server port (default: 6333)"),
-            ("QDRANT_API_KEY", "Qdrant Cloud API key (optional, for cloud deployment)"),
-            ("EMBEDDING_MODEL", "Sentence-transformers model (default: all-MiniLM-L6-v2)"),
-        ],
-        "benefits": [
-            "Semantic search finds similar past decisions even when wording differs",
-            "Node decision caching saves 5-8 LLM calls per session on warm runs",
-            "All 4 collections (tool_calls, sessions, flow_traces, node_decisions) in one server",
-            "Local Qdrant — no external cloud dependency, data stays on-premise",
-        ],
-        "pip_deps": ["mcp", "fastmcp", "qdrant-client", "sentence-transformers"],
-        "engine_dep": False,
-    },
-    {
         "repo": "mcp-figma",
         "file": "figma_mcp_server.py",
         "description": "Figma design file operations via REST API for design-to-code workflows. Fetches file metadata, nodes, styles, components, design tokens (colors/typography/spacing), frame layouts, and exports. Adds implementation comments. Uses stdlib urllib only — no heavy SDK dependency.",
@@ -172,7 +140,7 @@ SERVERS = [
     {
         "repo": "mcp-policy-enforcement",
         "file": "enforcement_mcp_server.py",
-        "description": "Policy enforcement, compliance tracking, and comprehensive system health monitoring. Tracks enforcement status per session, logs tool usage, verifies compliance with required workflow steps, records flow traces, and provides multi-layer health checks (MCPs, databases, vector DB, LLM providers, disk).",
+        "description": "Policy enforcement, compliance tracking, and comprehensive system health monitoring. Tracks enforcement status per session, logs tool usage, verifies compliance with required workflow steps, records flow traces, and provides multi-layer health checks (MCPs, databases, LLM providers, disk).",
         "tools": [
             ("check_enforcement_status", "Check current policy enforcement status for session"),
             ("enforce_policy_step", "Mark a policy step as enforced/completed"),
@@ -184,7 +152,7 @@ SERVERS = [
             ("get_flow_trace_summary", "Get execution flow trace summary for session"),
             ("check_module_health", "Check health of a specific pipeline module"),
             ("check_all_mcp_servers_health", "Health-check all registered MCP servers in parallel"),
-            ("check_system_health", "Full system health: MCPs + DB + vector DB + LLM + disk"),
+            ("check_system_health", "Full system health: MCPs + DB + LLM + disk"),
         ],
         "env_vars": [
             ("CLAUDE_SESSION_DIR", "Session storage directory"),
@@ -195,7 +163,7 @@ SERVERS = [
             "Parallel MCP health checks complete in <2s (concurrent.futures ThreadPool)",
             "Flow trace gives full visibility into which pipeline steps ran",
             "Compliance gate prevents partial workflow executions from polluting state",
-            "System health aggregates 5 subsystems into a single dashboard call",
+            "System health aggregates subsystems into a single dashboard call",
         ],
         "pip_deps": ["mcp", "fastmcp"],
         "engine_dep": False,
@@ -468,7 +436,6 @@ build/
 *.log
 *.jsonl
 sessions/
-.qdrant/
 """
 
 
@@ -872,7 +839,7 @@ Shared base infrastructure package for all `techdeveloper-org` MCP servers.
 
 ## Overview
 
-`mcp-base` provides reusable OOP foundations that eliminate boilerplate across all 20 custom
+`mcp-base` provides reusable OOP foundations that eliminate boilerplate across all custom
 MCP servers. Every MCP server in the `techdeveloper-org` ecosystem includes a copy of this
 package for self-contained deployment.
 
@@ -887,7 +854,7 @@ package for self-contained deployment.
 | `response.py` | Builder | `MCPResponse` fluent builder + `success()` / `error()` helpers |
 | `decorators.py` | Decorator | `@mcp_tool_handler` — eliminates 109 identical try/except blocks |
 | `persistence.py` | Repository | `AtomicJsonStore`, `JsonlAppender`, `SessionIdResolver` |
-| `clients.py` | Singleton/Lazy | `GitRepoClient`, `GitHubApiClient`, `QdrantManager`, `EmbeddingManager` |
+| `clients.py` | Singleton/Lazy | `GitRepoClient`, `GitHubApiClient` |
 
 ### Shared Utilities
 
@@ -931,7 +898,7 @@ from mcp_base.decorators import mcp_tool_handler
 - **Builder** — `MCPResponse.ok().data("key", val).message("done").build()`
 - **Decorator** — `@mcp_tool_handler` wraps all tools with consistent error handling
 - **Repository** — `AtomicJsonStore` for safe concurrent JSON file access
-- **Singleton/Lazy** — `LazyClient` for shared resource initialization (Qdrant, GitHub, Git)
+- **Singleton/Lazy** — `LazyClient` for shared resource initialization (GitHub, Git)
 
 ---
 
@@ -940,8 +907,6 @@ from mcp_base.decorators import mcp_tool_handler
 - Python 3.8+
 - `gitpython` (for `GitRepoClient`)
 - `PyGithub` (for `GitHubApiClient`)
-- `qdrant-client` (for `QdrantManager`)
-- `sentence-transformers` (for `EmbeddingManager`)
 
 Install only what you need based on which clients your server uses.
 
@@ -969,7 +934,7 @@ Private — techdeveloper-org
 
 ## What This Package Provides
 
-Reusable OOP foundations for all 20 custom MCP servers in the techdeveloper-org ecosystem.
+Reusable OOP foundations for all custom MCP servers in the techdeveloper-org ecosystem.
 Eliminates duplicated boilerplate across servers.
 
 ## Package: mcp_base/
@@ -977,7 +942,7 @@ Eliminates duplicated boilerplate across servers.
 - `response.py` — MCPResponse builder + success()/error() convenience functions
 - `decorators.py` — @mcp_tool_handler decorator (replaces 109 try/except blocks)
 - `persistence.py` — AtomicJsonStore, JsonlAppender, SessionIdResolver
-- `clients.py` — LazyClient, GitRepoClient, GitHubApiClient, QdrantManager, EmbeddingManager
+- `clients.py` — LazyClient, GitRepoClient, GitHubApiClient
 - `__init__.py` — Public API re-exports
 
 ## Shared Utilities
@@ -996,7 +961,7 @@ To update shared code: edit here, then re-copy to affected server repos.
 """
     write_file(repo_dir / "CLAUDE.md", claude_md)
     write_file(repo_dir / ".gitignore", GITIGNORE)
-    write_file(repo_dir / "requirements.txt", "gitpython\nPyGithub\nqdrant-client\nsentence-transformers\n")
+    write_file(repo_dir / "requirements.txt", "gitpython\nPyGithub\n")
 
     # Git init + commit
     if not (repo_dir / ".git").exists():

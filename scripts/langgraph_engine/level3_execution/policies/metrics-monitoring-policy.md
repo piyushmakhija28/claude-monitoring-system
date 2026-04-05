@@ -28,7 +28,6 @@ Collected after each of the 15 steps (0-14):
 | `step_tokens_in` | int | LLM input tokens (if LLM called) |
 | `step_tokens_out` | int | LLM output tokens (if LLM called) |
 | `step_model_used` | str | Model ID (e.g., "ollama/qwen2.5-coder:7b") |
-| `step_rag_hit` | bool | Whether RAG cache was used |
 | `step_error` | str | Error message (if failed) |
 
 ### Per-Session Metrics
@@ -41,7 +40,6 @@ Aggregated at session completion (Step 14 or Stop hook):
 | `total_tokens` | int | Sum of all LLM tokens |
 | `total_steps_executed` | int | Count of non-skipped steps |
 | `total_steps_failed` | int | Count of failed steps |
-| `rag_hit_rate` | float | % of eligible steps that used RAG cache |
 | `final_status` | str | "OK", "PARTIAL", "FAILED" |
 
 ### LLM Provider Metrics
@@ -87,8 +85,7 @@ Each step appends a line to `~/.claude/logs/telemetry/{session_id}.jsonl`:
   "status": "success",
   "model": "ollama/qwen2.5-coder:7b",
   "tokens_in": 500,
-  "tokens_out": 150,
-  "rag_hit": true
+  "tokens_out": 150
 }
 ```
 
@@ -131,7 +128,6 @@ Per-step JSON in `session_dir/step-logs/step-{NN}.json`:
 | Step duration | > 30s | > 120s |
 | Total session duration | > 5 min | > 15 min |
 | LLM error rate | > 10% | > 30% |
-| RAG hit rate (mature) | < 30% | < 10% |
 | Token usage per session | > 10K | > 50K |
 
 ---

@@ -22,7 +22,6 @@ Step 4 enriches the initial TOON (Token-Optimized Object Notation) created durin
 **Applies to:** Level 3: Execution System, Step 4
 **Predecessor:** Step 3 (Task/Phase Breakdown)
 **Successor:** Step 5 (Skill & Agent Selection)
-**RAG Threshold:** 0.82 (default)
 
 ---
 

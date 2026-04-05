@@ -9,12 +9,6 @@ CHANGE LOG (v1.13.0):
   (previously routed to "level3_step6" and "level3_step5").
   Steps 5-7 no longer exist in the graph; Step 8 is the new post-Step-0 target.
   route_to_plan_or_breakdown removed (Step 1 no longer exists in graph).
-
-CHANGE LOG (v1.15.0):
-  Removed RAG orchestration lookup from orchestration_pre_analysis_node.
-  Removed rag_orchestration_hit, rag_orchestration_confidence,
-  rag_orchestration_cached_plan state writes and route_pre_analysis RAG branch.
-  Call graph scan and template fast-path remain intact.
 """
 import sys
 from pathlib import Path

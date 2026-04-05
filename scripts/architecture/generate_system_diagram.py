@@ -5,7 +5,7 @@ Generates a professional draw.io diagram showing the entire system:
   - 4 pipeline levels (Level -1 through Level 3)
   - All 15 execution steps with routing decisions
   - External integrations (GitHub, Jira, Figma, Jenkins, SonarQube)
-  - Supporting systems (RAG/Qdrant, CallGraph, MCP servers, Hook scripts)
+  - Supporting systems (CallGraph, MCP servers, Hook scripts)
   - Hook Mode vs Full Mode execution paths
 
 Output: docs/drawio/system-architecture.drawio
@@ -220,21 +220,20 @@ def build():
     jenk_id = rsys(325, "Jenkins  [ENABLE_JENKINS=1]\nTrigger Build / Poll Queue", "#FFE6CC", "#D79B00")
     rsys(380, "SonarQube  [ENABLE_SONARQUBE=1]\nQuality Gate / Scan", "#F8CECC", "#B85450")
     llm_id = rsys(450, "LLM Providers (4)\nOllama / Anthropic / OpenAI / Groq", "#E1D5E7", "#9673A6")
-    rag_id = rsys(505, "Qdrant Vector DB\n4 Collections (RAG Cache)", "#E1D5E7", "#9673A6")
-    cg_id = rsys(555, "CallGraph Engine\nPython/Java/TS/Kotlin (578 cls)", "#E1D5E7", "#9673A6")
-    rsys(615, "14 MCP Servers  (295 tools)\nAll registered in settings.json", "#F0F0F0", "#666666")
+    cg_id = rsys(505, "CallGraph Engine\nPython/Java/TS/Kotlin (578 cls)", "#E1D5E7", "#9673A6")
+    rsys(555, "14 MCP Servers  (295 tools)\nAll registered in settings.json", "#F0F0F0", "#666666")
 
     # Separator label
-    C.append(section_label(RX, 668, R_W, 18, "\u2015\u2015  Hook Layer  \u2015\u2015"))
-    rsys(690, "pre-tool-enforcer.py\nBlocks Write/Edit until L1/L2 done", "#FDEBD0", "#D79B00")
-    rsys(745, "post-tool-tracker.py\nProgress / GitHub / Skill Enforce", "#FDEBD0", "#D79B00")
-    rsys(800, "stop-notifier.py\nSession save on stop", "#FDEBD0", "#D79B00")
+    C.append(section_label(RX, 610, R_W, 18, "\u2015\u2015  Hook Layer  \u2015\u2015"))
+    rsys(632, "pre-tool-enforcer.py\nBlocks Write/Edit until L1/L2 done", "#FDEBD0", "#D79B00")
+    rsys(687, "post-tool-tracker.py\nProgress / GitHub / Skill Enforce", "#FDEBD0", "#D79B00")
+    rsys(742, "stop-notifier.py\nSession save on stop", "#FDEBD0", "#D79B00")
 
-    C.append(section_label(RX, 860, R_W, 18, "\u2015\u2015  Output  \u2015\u2015"))
-    out_md = rsys(882, "docs/uml/*.md\nMermaid diagrams (13 types)", "#F0F0F0", "#666666")
-    out_dio = rsys(937, "docs/drawio/*.drawio\nProfessional draw.io (12 types)", "#D5E8D4", "#82B366")
-    out_prm = rsys(992, "prompts/\nsystem + user + assistant (3 files)", "#E1D5E7", "#9673A6")
-    out_log = rsys(1047, "~/.claude/logs/\nsessions / telemetry / errors", "#F0F0F0", "#666666")
+    C.append(section_label(RX, 800, R_W, 18, "\u2015\u2015  Output  \u2015\u2015"))
+    out_md = rsys(822, "docs/uml/*.md\nMermaid diagrams (13 types)", "#F0F0F0", "#666666")
+    out_dio = rsys(877, "docs/drawio/*.drawio\nProfessional draw.io (12 types)", "#D5E8D4", "#82B366")
+    out_prm = rsys(932, "prompts/\nsystem + user + assistant (3 files)", "#E1D5E7", "#9673A6")
+    out_log = rsys(987, "~/.claude/logs/\nsessions / telemetry / errors", "#F0F0F0", "#666666")
 
     # ------------------------------------------------------------------
     # MAIN COLUMN  x=60..1200
@@ -297,37 +296,20 @@ def build():
     u_id, uc2 = step_node(MX + 10, L1Y + 34, 148, 42, "Unicode Fix\nUTF-8 / Windows", "#FFF2CC", "#D79B00")
     e_id, ec2 = step_node(MX + 178, L1Y + 34, 148, 42, "Encoding Fix\nASCII-only .py", "#FFF2CC", "#D79B00")
     wp_id, wc = step_node(MX + 346, L1Y + 34, 148, 42, "WinPath Fix\nBackslash check", "#FFF2CC", "#D79B00")
-    lm_id, lmc = step_node(MX + 514, L1Y + 34, 110, 42, "Merge", "#FFF2CC", "#D79B00")
-    C.extend([uc2, ec2, wc, lmc])
+    lm1_merge_id, lmc = step_node(MX + 524, L1Y + 34, 100, 42, "Merge", "#FFF2CC", "#D79B00")
+    ask_id, akc = step_node(MX + 654, L1Y + 34, 130, 42, "Ask Fix?\n(user choice)", "#FFFFFF", "#D79B00")
+    fix_id, fxc = step_node(MX + 814, L1Y + 34, 110, 42, "Auto Fix\n(apply patch)", "#FFD580", "#D79B00")
+    ok_out_id, okc = step_node(MX + 954, L1Y + 88, 110, 32, "OK\n(proceed)", "#D5E8D4", "#82B366")
+    C.extend([uc2, ec2, wc, lmc, akc, fxc, okc])
+    C.append(arrow(graph_id, u_id, "", FLOW_ARROW))
     C.append(arrow(u_id, e_id, "", FLOW_ARROW))
     C.append(arrow(e_id, wp_id, "", FLOW_ARROW))
-    C.append(arrow(wp_id, lm_id, "", FLOW_ARROW))
-
-    d1_id, d1c = diamond(MX + 648, L1Y + 30, 110, 50, "Issues?", "#FFFFFF", "#D79B00")
-    C.append(d1c)
-    C.append(arrow(lm_id, d1_id, "", FLOW_ARROW))
-
-    fix_id, fixc = step_node(MX + 780, L1Y + 34, 130, 42, "Auto-Fix\n(retry \u2264 3)", "#F8CECC", "#B85450")
-    ask_id, askc = step_node(MX + 930, L1Y + 34, 130, 42, "Ask User\n(skip option)", "#F8CECC", "#B85450")
-    C.extend([fixc, askc])
-    C.append(arrow(d1_id, fix_id, "[issues]", FLOW_ARROW))
-    C.append(arrow(d1_id, ask_id, "[ask]", DASHED_ARROW))
-    C.append(arrow(ask_id, fix_id, "[auto-fix]", DASHED_ARROW))
-    # Retry back arrow (up and left)
-    C.append(
-        arrow_pts(
-            MX + 846,
-            L1Y + 34,
-            MX + 10,
-            L1Y + 28,
-            "retry",
-            "endArrow=classic;endFill=1;html=1;strokeColor=#B85450;strokeWidth=1;dashed=1;"
-            "entryX=0;entryY=0;exitX=0.5;exitY=0;edgeStyle=orthogonalEdgeStyle;",
-        )
-    )
-
-    # "OK" arrow down from diamond handled by falling through to Level 1
-    ok_out_id = d1_id  # source for "OK" path
+    C.append(arrow(wp_id, lm1_merge_id, "", FLOW_ARROW))
+    C.append(arrow(lm1_merge_id, ask_id, "[issues found]", OPT_ARROW))
+    C.append(arrow(lm1_merge_id, ok_out_id, "[OK]", FLOW_ARROW))
+    C.append(arrow(ask_id, fix_id, "[yes]", FLOW_ARROW))
+    C.append(arrow(ask_id, ok_out_id, "[skip]", OPT_ARROW))
+    C.append(arrow(fix_id, u_id, "retry \u2191", BACK_ARROW))
 
     # ---- LEVEL 1 ZONE ----
     L2Y = L1Y + 165
@@ -358,17 +340,6 @@ def build():
     C.append(arrow(m1_id, cl_id, "", FLOW_ARROW))
     # Level -1 -> Level 1 entry
     C.append(arrow(ok_out_id, sess_id, "[OK]", FLOW_ARROW))
-    # Level 1 -> RAG
-    C.append(
-        arrow_pts(
-            MX + 870,
-            L2Y + 55,
-            RX,
-            505 + 21,
-            "",
-            "endArrow=open;endSize=8;html=1;strokeColor=#9673A6;strokeWidth=1;dashed=1;",
-        )
-    )
 
     # ---- LEVEL 2 ZONE ----
     L3Y = L2Y + 140
@@ -449,22 +420,20 @@ def build():
     # Row 1: Step 0.0, 0.1, Step 0
     s00_id = step(MX + 10, cur_y, 190, 42, "Step 0.0\nLoad README/CHANGELOG/AUTHORS")
     s01_id = step(MX + 215, cur_y, 190, 42, "Step 0.1\nSnapshot CallGraph (baseline)")
-    s0_id = step(MX + 420, cur_y, 230, 42, "Step 0  Task Analysis\n[LLM \u2192 RAG] task_type / complexity", "#E8D5F5")
+    s0_id = step(MX + 420, cur_y, 230, 42, "Step 0  Task Analysis\n[LLM] task_type / complexity", "#E8D5F5")
     C.append(arrow(oc_id, s00_id, "", FLOW_ARROW))
     C.append(arrow(s00_id, s01_id, "", FLOW_ARROW))
     C.append(arrow(s01_id, s0_id, "", FLOW_ARROW))
     extern_link(s01_id, cg_id, "build()")
     extern_link(s0_id, llm_id, "task_type")
-    extern_link(s0_id, rag_id, "lookup/store")
     cur_y += s_gap
 
     # Step 1
     sh1_id = step(MX + 10, cur_y, 145, 42, "Standards Hook\n(inject L2 context)")
-    s1_id = step(MX + 170, cur_y, 220, 42, "Step 1  Plan Decision\n[LLM \u2192 RAG]  plan_required?", "#E8D5F5")
+    s1_id = step(MX + 170, cur_y, 220, 42, "Step 1  Plan Decision\n[LLM]  plan_required?", "#E8D5F5")
     C.append(arrow(s0_id, sh1_id, "", FLOW_ARROW))
     C.append(arrow(sh1_id, s1_id, "", FLOW_ARROW))
     extern_link(s1_id, llm_id)
-    extern_link(s1_id, rag_id)
 
     d_plan_id = step(MX + 410, cur_y, 110, 42, "Plan\nRequired?", "#FFFFFF", "#9673A6")  # diamond-ish
     C.append(arrow(s1_id, d_plan_id, "", FLOW_ARROW))
@@ -497,10 +466,9 @@ def build():
 
     # Step 5
     s5_id = step(
-        MX + 10, cur_y, 260, 42, "Step 5  Skill & Agent Selection\n[RAG cross-session boost]  skill + agent", "#E8D5F5"
+        MX + 10, cur_y, 260, 42, "Step 5  Skill & Agent Selection\n[LLM cross-session boost]  skill + agent", "#E8D5F5"
     )
     C.append(arrow(s4_id, s5_id, "", FLOW_ARROW))
-    extern_link(s5_id, rag_id, "semantic search")
     cur_y += s_gap
 
     # Step 6
@@ -514,7 +482,7 @@ def build():
         cur_y,
         280,
         42,
-        "Step 7  Final Prompt Generation\n[LLM \u2192 RAG]  3 files + [Figma tokens if ENABLE_FIGMA]",
+        "Step 7  Final Prompt Generation\n[LLM]  3 files + [Figma tokens if ENABLE_FIGMA]",
         "#E8D5F5",
     )
     C.append(arrow(s6_id, s7_id, "", FLOW_ARROW))
@@ -558,7 +526,7 @@ def build():
             MX + 870,
             hook_exit_y,
             RX,
-            1047 + 21,
+            987 + 21,
             "",
             "endArrow=open;endSize=8;html=1;strokeColor=#1e3a5f;strokeWidth=2;dashed=1;",
         )
@@ -691,7 +659,7 @@ def build():
         )
     )
     legend_items = [
-        (MX + 10, leg_y + 30, "#E8D5F5", "#9673A6", "LLM + RAG eligible step"),
+        (MX + 10, leg_y + 30, "#E8D5F5", "#9673A6", "LLM eligible step"),
         (MX + 210, leg_y + 30, "#C9B3D4", "#6A4080", "Full Mode only (Steps 10-14)"),
         (MX + 430, leg_y + 30, "#F8CECC", "#B85450", "Retry / error path"),
         (MX + 10, leg_y + 55, "#D5E8D4", "#82B366", "Integration optional (ENABLE_* flag)"),

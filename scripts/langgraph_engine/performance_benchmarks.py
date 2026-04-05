@@ -4,7 +4,7 @@ Performance Benchmarks - Step timing, aggregate metrics, and benchmark history.
 Provides:
 - PipelineBenchmark class for per-run metric collection
 - Benchmark decorator for step timing
-- Aggregate metrics per pipeline run (step durations, total time, RAG/cache hit rate)
+- Aggregate metrics per pipeline run (step durations, total time, cache hit rate)
 - Benchmark results saved to ~/.claude/logs/benchmarks/
 - Summary table for Step 14 output
 
@@ -12,17 +12,19 @@ Windows-safe: ASCII only (cp1252 compatible).
 """
 
 import json
-import time
 import logging
-from pathlib import Path
+import time
 from datetime import datetime
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
 try:
     import sys as _sys
+
     _sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
     from utils.path_resolver import get_benchmarks_dir
+
     _BENCHMARKS_DIR = get_benchmarks_dir()
 except ImportError:
     _BENCHMARKS_DIR = Path.home() / ".claude" / "logs" / "benchmarks"
@@ -34,9 +36,8 @@ class PipelineBenchmark:
     def __init__(self, session_id="", benchmark_dir=None):
         self.session_id = session_id
         self.start_time = time.time()
-        self.steps = {}  # step_number -> {duration, status, rag_hit, ...}
+        self.steps = {}  # step_number -> {duration, status, cache_hit, ...}
         self.total_llm_calls = 0
-        self.total_rag_hits = 0
         self.total_cache_hits = 0
 
         if benchmark_dir:
@@ -44,15 +45,13 @@ class PipelineBenchmark:
         else:
             self.benchmark_dir = _BENCHMARKS_DIR
 
-    def record_step(self, step, duration, status="SUCCESS",
-                    rag_hit=False, cache_hit=False, llm_calls=0):
+    def record_step(self, step, duration, status="SUCCESS", cache_hit=False, llm_calls=0):
         """Record metrics for a completed step.
 
         Args:
             step: Step number (0-14).
             duration: Execution time in seconds.
-            status: "SUCCESS", "FAILED", "TIMEOUT", "RAG_HIT".
-            rag_hit: Whether RAG cache was used.
+            status: "SUCCESS", "FAILED", "TIMEOUT".
             cache_hit: Whether LLM cache was hit.
             llm_calls: Number of LLM calls made.
         """
@@ -60,14 +59,11 @@ class PipelineBenchmark:
             "step": step,
             "duration_ms": round(duration * 1000, 1),
             "status": status,
-            "rag_hit": rag_hit,
             "cache_hit": cache_hit,
             "llm_calls": llm_calls,
             "timestamp": datetime.now().isoformat(),
         }
 
-        if rag_hit:
-            self.total_rag_hits += 1
         if cache_hit:
             self.total_cache_hits += 1
         self.total_llm_calls += llm_calls
@@ -76,21 +72,14 @@ class PipelineBenchmark:
         """Generate aggregate summary of pipeline performance.
 
         Returns dict with total_time, step_count, avg_step_time,
-        success_rate, rag_hit_rate, etc.
+        success_rate, etc.
         """
         total_time = time.time() - self.start_time
         step_count = len(self.steps)
-        success_count = sum(
-            1 for s in self.steps.values() if s["status"] == "SUCCESS"
-        )
+        success_count = sum(1 for s in self.steps.values() if s["status"] == "SUCCESS")
 
-        step_durations = [
-            s["duration_ms"] for s in self.steps.values()
-        ]
-        avg_step_ms = (
-            sum(step_durations) / len(step_durations)
-            if step_durations else 0
-        )
+        step_durations = [s["duration_ms"] for s in self.steps.values()]
+        avg_step_ms = sum(step_durations) / len(step_durations) if step_durations else 0
         max_step = max(step_durations) if step_durations else 0
         slowest_step = None
         if step_durations:
@@ -99,30 +88,17 @@ class PipelineBenchmark:
                     slowest_step = step_num
                     break
 
-        rag_eligible = sum(
-            1 for s in self.steps.values()
-            if s["step"] in {0, 1, 2, 5, 7, 8}
-        )
-
         return {
             "session_id": self.session_id,
             "total_time_s": round(total_time, 2),
             "total_time_ms": round(total_time * 1000, 1),
             "step_count": step_count,
             "success_count": success_count,
-            "success_rate": (
-                round(success_count / step_count * 100, 1)
-                if step_count > 0 else 0
-            ),
+            "success_rate": (round(success_count / step_count * 100, 1) if step_count > 0 else 0),
             "avg_step_ms": round(avg_step_ms, 1),
             "max_step_ms": round(max_step, 1),
             "slowest_step": slowest_step,
             "total_llm_calls": self.total_llm_calls,
-            "total_rag_hits": self.total_rag_hits,
-            "rag_hit_rate": (
-                round(self.total_rag_hits / rag_eligible * 100, 1)
-                if rag_eligible > 0 else 0
-            ),
             "total_cache_hits": self.total_cache_hits,
             "steps": dict(self.steps),
             "timestamp": datetime.now().isoformat(),
@@ -144,26 +120,23 @@ class PipelineBenchmark:
             "  Steps Run:      %d" % summary["step_count"],
             "  Success Rate:   %.1f%%" % summary["success_rate"],
             "  Avg Step Time:  %.0f ms" % summary["avg_step_ms"],
-            "  Slowest Step:   Step %s (%.0f ms)" % (
-                summary["slowest_step"], summary["max_step_ms"]
-            ),
+            "  Slowest Step:   Step %s (%.0f ms)" % (summary["slowest_step"], summary["max_step_ms"]),
             "  LLM Calls:      %d" % summary["total_llm_calls"],
-            "  RAG Hit Rate:   %.1f%%" % summary["rag_hit_rate"],
             "  Cache Hits:     %d" % summary["total_cache_hits"],
             "",
             "-" * 60,
-            "  Step  | Duration  | Status   | RAG  | Cache",
+            "  Step  | Duration  | Status   | Cache",
             "-" * 60,
         ]
 
         for step_num in sorted(self.steps.keys()):
             data = self.steps[step_num]
             lines.append(
-                "  %2d    | %7.0f ms | %-8s | %-4s | %s" % (
+                "  %2d    | %7.0f ms | %-8s | %s"
+                % (
                     step_num,
                     data["duration_ms"],
                     data["status"],
-                    "Y" if data["rag_hit"] else "-",
                     "Y" if data["cache_hit"] else "-",
                 )
             )
@@ -183,14 +156,10 @@ class PipelineBenchmark:
 
             summary = self.get_summary()
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = "benchmark_%s_%s.json" % (
-                timestamp, self.session_id[:16] if self.session_id else "none"
-            )
+            filename = "benchmark_%s_%s.json" % (timestamp, self.session_id[:16] if self.session_id else "none")
             filepath = self.benchmark_dir / filename
 
-            filepath.write_text(
-                json.dumps(summary, indent=2), encoding="utf-8"
-            )
+            filepath.write_text(json.dumps(summary, indent=2), encoding="utf-8")
 
             logger.info("Benchmark saved: %s", filepath)
             return str(filepath)

@@ -34,10 +34,6 @@ CHANGE LOG (v1.15.0):
   TOON compression node removed from Level 1 graph.
   level1_complexity and level1_context now feed level1_merge directly (parallel).
   node_toon_compression import removed.
-
-CHANGE LOG (v1.15.1):
-  RAG/Qdrant purge: removed VECTOR DB RAG session storage block from output_node.
-  rag_integration import removed.
 """
 
 import sys

@@ -15,11 +15,11 @@ Windows-safe: ASCII only (cp1252 compatible).
 """
 
 import json
+import os
 import re
 import sys
-import os
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -31,6 +31,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 # Helpers
 # ===========================================================================
 
+
 def _write_json(path, data):
     """Write dict as JSON to path."""
     path.write_text(json.dumps(data), encoding="utf-8")
@@ -40,6 +41,7 @@ def _write_json(path, data):
 # SessionIDGenerator tests
 # ===========================================================================
 
+
 class TestSessionIDGenerator:
     """Tests for SessionIDGenerator.generate_session_id()."""
 
@@ -47,22 +49,23 @@ class TestSessionIDGenerator:
     def _import_module(self, tmp_path):
         """Import SessionIDGenerator with filesystem redirected to tmp_path."""
         # Patch policy_tracking_helper before importing session-id-generator
-        with patch.dict("sys.modules", {
-            "policy_tracking_helper": MagicMock(
-                record_policy_execution=MagicMock(return_value=True),
-                record_sub_operation=MagicMock(return_value={}),
-                get_session_id=MagicMock(return_value="unknown"),
-            )
-        }):
+        with patch.dict(
+            "sys.modules",
+            {
+                "policy_tracking_helper": MagicMock(
+                    record_policy_execution=MagicMock(return_value=True),
+                    record_sub_operation=MagicMock(return_value={}),
+                    get_session_id=MagicMock(return_value="unknown"),
+                )
+            },
+        ):
             # Re-import after patching to avoid import-time side effects
             import importlib
             import importlib.util
 
             spec = importlib.util.spec_from_file_location(
                 "session_id_generator",
-                Path(__file__).resolve().parent.parent
-                / "scripts"
-                / "session-id-generator.py",
+                Path(__file__).resolve().parent.parent / "scripts" / "session-id-generator.py",
             )
             mod = importlib.util.module_from_spec(spec)
             # Patch home() so all file I/O goes to tmp_path
@@ -82,9 +85,7 @@ class TestSessionIDGenerator:
         sid = gen.generate_session_id("SESSION")
         assert sid.startswith("SESSION-"), "ID must start with 'SESSION-'"
         pattern = r"^SESSION-\d{8}-\d{6}-[A-Z0-9]{4}$"
-        assert re.match(pattern, sid), (
-            "ID must match SESSION-YYYYMMDD-HHMMSS-XXXX but got: %s" % sid
-        )
+        assert re.match(pattern, sid), "ID must match SESSION-YYYYMMDD-HHMMSS-XXXX but got: %s" % sid
 
     def test_session_id_unique(self):
         """Two generated IDs are different (collision is extremely unlikely)."""
@@ -116,6 +117,7 @@ class TestSessionIDGenerator:
 # MetricsEmitter tests
 # ===========================================================================
 
+
 class TestMetricsEmitter:
     """Tests for metrics-emitter.py emit/read functions."""
 
@@ -129,9 +131,7 @@ class TestMetricsEmitter:
 
         spec = importlib.util.spec_from_file_location(
             "metrics_emitter",
-            Path(__file__).resolve().parent.parent
-            / "scripts"
-            / "metrics-emitter.py",
+            Path(__file__).resolve().parent.parent / "scripts" / "metrics-emitter.py",
         )
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
@@ -146,7 +146,7 @@ class TestMetricsEmitter:
         if not self.metrics_file.exists():
             return []
         lines = self.metrics_file.read_text(encoding="utf-8").splitlines()
-        return [json.loads(l) for l in lines if l.strip()]
+        return [json.loads(line) for line in lines if line.strip()]
 
     def test_emit_hook_execution(self):
         """emit_hook_execution writes a record to the metrics file."""
@@ -220,6 +220,7 @@ class TestMetricsEmitter:
 # PolicyTrackingHelper tests
 # ===========================================================================
 
+
 class TestPolicyTrackingHelper:
     """Tests for policy_tracking_helper.py record/read functions."""
 
@@ -228,22 +229,17 @@ class TestPolicyTrackingHelper:
         """Import policy_tracking_helper; redirect home to tmp_path."""
         self.tmp_path = tmp_path
         with patch("pathlib.Path.home", return_value=tmp_path):
-            import policy_tracking_helper as pth
             # Re-bind home in the module's namespace
             import importlib
+
+            import policy_tracking_helper as pth
+
             importlib.reload(pth)
         self.pth = pth
         yield
 
     def _session_dir(self, session_id):
-        return (
-            self.tmp_path
-            / ".claude"
-            / "memory"
-            / "logs"
-            / "sessions"
-            / session_id
-        )
+        return self.tmp_path / ".claude" / "memory" / "logs" / "sessions" / session_id
 
     def test_record_policy_execution_returns_true(self):
         """record_policy_execution returns True on success."""
@@ -322,6 +318,7 @@ class TestPolicyTrackingHelper:
 # ProjectSession tests
 # ===========================================================================
 
+
 class TestProjectSession:
     """Tests for project_session.py get/read session functions."""
 
@@ -330,7 +327,9 @@ class TestProjectSession:
         """Import project_session; redirect home to tmp_path."""
         self.tmp_path = tmp_path
         import importlib
+
         import project_session as ps
+
         with patch("pathlib.Path.home", return_value=tmp_path):
             importlib.reload(ps)
         self.ps = ps
@@ -350,15 +349,12 @@ class TestProjectSession:
 
     def test_read_session_id_from_mock_file(self, tmp_path):
         """read_session_id returns the stored session ID from a JSON file."""
-        session_file = (
-            tmp_path / ".claude" / "memory" / ".current-session.json"
-        )
+        session_file = tmp_path / ".claude" / "memory" / ".current-session.json"
         session_file.parent.mkdir(parents=True, exist_ok=True)
-        _write_json(session_file, {
-            "current_session_id": "SESSION-20260101-080000-WXYZ"
-        })
+        _write_json(session_file, {"current_session_id": "SESSION-20260101-080000-WXYZ"})
         with patch("pathlib.Path.home", return_value=tmp_path):
             import importlib
+
             importlib.reload(self.ps)
             sid = self.ps.read_session_id()
         assert sid == "SESSION-20260101-080000-WXYZ"
@@ -367,19 +363,19 @@ class TestProjectSession:
         """read_session_id returns empty string when session file is absent."""
         with patch("pathlib.Path.home", return_value=tmp_path):
             import importlib
+
             importlib.reload(self.ps)
             sid = self.ps.read_session_id()
         assert sid == ""
 
     def test_read_session_id_returns_empty_for_non_session_prefix(self, tmp_path):
         """read_session_id returns empty for IDs not starting with SESSION-."""
-        session_file = (
-            tmp_path / ".claude" / "memory" / ".current-session.json"
-        )
+        session_file = tmp_path / ".claude" / "memory" / ".current-session.json"
         session_file.parent.mkdir(parents=True, exist_ok=True)
         _write_json(session_file, {"current_session_id": "TASK-20260101-080000-WXYZ"})
         with patch("pathlib.Path.home", return_value=tmp_path):
             import importlib
+
             importlib.reload(self.ps)
             sid = self.ps.read_session_id()
         assert sid == ""
@@ -388,6 +384,7 @@ class TestProjectSession:
 # ===========================================================================
 # IdePaths tests
 # ===========================================================================
+
 
 class TestIdePaths:
     """Tests for ide_paths.py path resolution functions."""
@@ -403,7 +400,9 @@ class TestIdePaths:
         }
         with patch.dict(os.environ, env_patch, clear=False):
             import importlib
+
             import ide_paths as ip
+
             importlib.reload(ip)
             self.ip = ip
         yield
@@ -416,9 +415,7 @@ class TestIdePaths:
     def test_get_install_base_standalone_mode(self):
         """In standalone mode, install base is ~/.claude."""
         result = self.ip.get_install_base()
-        assert result.name == ".claude", (
-            "Standalone install base must end in .claude, got %s" % result
-        )
+        assert result.name == ".claude", "Standalone install base must end in .claude, got %s" % result
 
     def test_get_data_base_standalone_mode(self):
         """In standalone mode, data base is ~/.claude."""
@@ -433,7 +430,9 @@ class TestIdePaths:
         """is_ide_mode returns True when CLAUDE_IDE_INSTALL_DIR is set."""
         with patch.dict(os.environ, {"CLAUDE_IDE_INSTALL_DIR": str(tmp_path)}):
             import importlib
+
             import ide_paths as ip2
+
             importlib.reload(ip2)
             assert ip2.is_ide_mode() is True
 
@@ -446,6 +445,7 @@ class TestIdePaths:
 # ===========================================================================
 # Release tests
 # ===========================================================================
+
 
 class TestRelease:
     """Tests for release.py bump_version and read_version."""
@@ -511,6 +511,7 @@ class TestRelease:
 # PipelineBenchmark tests
 # ===========================================================================
 
+
 class TestPipelineBenchmark:
     """Tests for PipelineBenchmark in performance_benchmarks.py."""
 
@@ -520,15 +521,13 @@ class TestPipelineBenchmark:
         self.tmp_path = tmp_path
         sys.path.insert(
             0,
-            str(
-                Path(__file__).resolve().parent.parent
-                / "scripts"
-                / "langgraph_engine"
-            ),
+            str(Path(__file__).resolve().parent.parent / "scripts" / "langgraph_engine"),
         )
         try:
             import importlib
+
             import performance_benchmarks as pb
+
             importlib.reload(pb)
             self.pb = pb
         finally:
@@ -563,9 +562,12 @@ class TestPipelineBenchmark:
         summary = bench.get_summary()
         assert isinstance(summary, dict)
         for key in (
-            "step_count", "success_count", "success_rate",
-            "avg_step_ms", "max_step_ms", "total_llm_calls",
-            "total_rag_hits", "rag_hit_rate"
+            "step_count",
+            "success_count",
+            "success_rate",
+            "avg_step_ms",
+            "max_step_ms",
+            "total_llm_calls",
         ):
             assert key in summary, "Missing key: %s" % key
 
@@ -609,45 +611,21 @@ class TestPipelineBenchmark:
         bench = self._make_bench()
         bench.record_step(step=0, duration=0.1, status="SUCCESS")
         bench.save()
-        history = self.pb.PipelineBenchmark.load_history(
-            benchmark_dir=self.tmp_path
-        )
+        history = self.pb.PipelineBenchmark.load_history(benchmark_dir=self.tmp_path)
         assert isinstance(history, list)
         assert len(history) >= 1
 
     def test_load_history_empty_for_missing_dir(self, tmp_path):
         """load_history returns empty list when directory does not exist."""
         missing = tmp_path / "nonexistent"
-        history = self.pb.PipelineBenchmark.load_history(
-            benchmark_dir=missing
-        )
+        history = self.pb.PipelineBenchmark.load_history(benchmark_dir=missing)
         assert history == []
-
-    def test_rag_hit_tracking(self):
-        """RAG hits are tracked and reflected in rag_hit_rate."""
-        bench = self._make_bench()
-        # Step 0 and 1 are RAG-eligible (both in {0,1,2,5,7,8})
-        bench.record_step(step=0, duration=0.1, status="RAG_HIT", rag_hit=True)
-        bench.record_step(step=1, duration=0.2, status="SUCCESS", rag_hit=False)
-        assert bench.total_rag_hits == 1
-        summary = bench.get_summary()
-        # rag_eligible = 2 steps (0 and 1 are both in {0,1,2,5,7,8})
-        assert summary["total_rag_hits"] == 1
-        assert summary["rag_hit_rate"] == pytest.approx(50.0, abs=1)
-
-    def test_rag_hit_rate_zero_when_no_eligible_steps(self):
-        """rag_hit_rate is 0 when no RAG-eligible steps have been recorded."""
-        bench = self._make_bench()
-        # Steps 3, 4, 6 are NOT in the eligible set {0,1,2,5,7,8}
-        bench.record_step(step=3, duration=0.5, status="SUCCESS")
-        bench.record_step(step=4, duration=0.3, status="SUCCESS")
-        summary = bench.get_summary()
-        assert summary["rag_hit_rate"] == 0
 
 
 # ===========================================================================
 # MetricsDashboard tests
 # ===========================================================================
+
 
 class TestMetricsDashboard:
     """Tests for MetricsDashboard in metrics_dashboard.py."""
@@ -658,14 +636,12 @@ class TestMetricsDashboard:
         self.tmp_path = tmp_path
         sys.path.insert(
             0,
-            str(
-                Path(__file__).resolve().parent.parent
-                / "scripts"
-                / "langgraph_engine"
-            ),
+            str(Path(__file__).resolve().parent.parent / "scripts" / "langgraph_engine"),
         )
         import importlib
+
         import metrics_dashboard as md
+
         importlib.reload(md)
         self.md = md
         yield
@@ -692,20 +668,17 @@ class TestMetricsDashboard:
             {
                 "session_id": "S1",
                 "total_time_s": 12.5,
-                "rag_hit_rate": 50.0,
                 "total_llm_calls": 3,
                 "steps": {
                     "0": {
                         "step": 0,
                         "duration_ms": 200.0,
                         "status": "SUCCESS",
-                        "rag_hit": False,
                     },
                     "1": {
                         "step": 1,
                         "duration_ms": 300.0,
                         "status": "SUCCESS",
-                        "rag_hit": True,
                     },
                 },
             }
@@ -725,27 +698,23 @@ class TestMetricsDashboard:
         benchmarks = [
             {
                 "total_time_s": 10.0,
-                "rag_hit_rate": 0.0,
                 "total_llm_calls": 2,
                 "steps": {
                     "0": {
                         "step": 0,
                         "duration_ms": 100.0,
                         "status": "SUCCESS",
-                        "rag_hit": False,
                     }
                 },
             },
             {
                 "total_time_s": 20.0,
-                "rag_hit_rate": 100.0,
                 "total_llm_calls": 4,
                 "steps": {
                     "0": {
                         "step": 0,
                         "duration_ms": 200.0,
                         "status": "SUCCESS",
-                        "rag_hit": True,
                     }
                 },
             },
@@ -761,20 +730,17 @@ class TestMetricsDashboard:
         benchmarks = [
             {
                 "total_time_s": 5.0,
-                "rag_hit_rate": 0.0,
                 "total_llm_calls": 1,
                 "steps": {
                     "0": {
                         "step": 0,
                         "duration_ms": 50.0,
                         "status": "SUCCESS",
-                        "rag_hit": False,
                     },
                     "1": {
                         "step": 1,
                         "duration_ms": 50.0,
                         "status": "FAILED",
-                        "rag_hit": False,
                     },
                 },
             }
@@ -813,14 +779,12 @@ class TestMetricsDashboard:
         benchmarks = [
             {
                 "total_time_s": 8.0,
-                "rag_hit_rate": 33.0,
                 "total_llm_calls": 2,
                 "steps": {
                     "0": {
                         "step": 0,
                         "duration_ms": 120.0,
                         "status": "SUCCESS",
-                        "rag_hit": False,
                     }
                 },
             }
@@ -835,14 +799,12 @@ class TestMetricsDashboard:
         benchmarks = [
             {
                 "total_time_s": 5.0,
-                "rag_hit_rate": 0.0,
                 "total_llm_calls": 1,
                 "steps": {
                     "0": {
                         "step": 0,
                         "duration_ms": 80.0,
                         "status": "SUCCESS",
-                        "rag_hit": False,
                     }
                 },
             }
