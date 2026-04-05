@@ -481,10 +481,7 @@ def main():
         if os.environ.get("CLAUDE_DRY_RUN") == "1":
             print("\n=== DRY RUN COMPLETE ===")
             print(f"Task Type: {result.get('step0_task_type', 'N/A')}")
-            print(f"Complexity: {result.get('step0_complexity', 'N/A')}/10")
-            print(f"Plan: {result.get('step2_plan_status', 'N/A')}")
-            print(f"Skill: {result.get('step5_skill', 'N/A')}")
-            print(f"Agent: {result.get('step5_agent', 'N/A')}")
+            print(f"Complexity: {result.get('step0_complexity', 'N/A')}/25")
             print(f"Prompt saved to: {result.get('step7_system_prompt_file', 'N/A')}")
             print("===")
             print("GitHub issue, implementation, PR, review, docs SKIPPED (--dry-run)")

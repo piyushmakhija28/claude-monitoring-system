@@ -1,9 +1,9 @@
 # Claude Workflow Engine - Project Context
 
 **Project:** Claude Workflow Engine
-**Version:** 1.15.1
+**Version:** 1.15.2
 **Type:** LangGraph Orchestration Pipeline with Call Graph Intelligence + Template Fast-Path
-**Last Updated:** 2026-04-04
+**Last Updated:** 2026-04-05
 
 ---
 
@@ -102,6 +102,7 @@ Level 3: Execution (8 active steps: Pre-0, Step 0, Steps 8-14)
 | **v1.14.0** | **8** | **2 (subprocess)** | **~15s** | Step 0 = template fill + orchestrator (claude CLI subprocess) |
 | **v1.15.0** | **8** | **2 (subprocess)** | **~15s** | TOON compression removed from Level 1 |
 | **v1.15.1** | **8** | **2 (subprocess)** | **~15s** | Source cleanup: deprecated files removed |
+| **v1.15.2** | **8** | **2 (subprocess)** | **~15s** | Exhaustive artifact purge: TOON/plan-mode/skill-selection removed; prompt_gen bug fixes |
 
 ### Directory Layout
 
@@ -154,7 +155,7 @@ Level 3: Execution (8 active steps: Pre-0, Step 0, Steps 8-14)
 |-----------|----------|---------|
 | Orchestrator | scripts/langgraph_engine/orchestrator.py | Main StateGraph pipeline |
 | Flow State | scripts/langgraph_engine/flow_state.py | Backward-compat shim -> re-exports from state/ |
-| State Package | scripts/langgraph_engine/state/ | FlowState, StepKeys, reducers, ToonObject, optimizer |
+| State Package | scripts/langgraph_engine/state/ | FlowState, StepKeys, reducers, WorkflowContextOptimizer |
 | Core Package | scripts/langgraph_engine/core/ | LazyLoader, get_logger, node_error_handler, NodeResult, create_step_node |
 | Routing Package | scripts/langgraph_engine/routing/ | All routing functions split by level |
 | Helper Nodes | scripts/langgraph_engine/helper_nodes/ | Helper node functions split by concern |
@@ -167,7 +168,6 @@ Level 3: Execution (8 active steps: Pre-0, Step 0, Steps 8-14)
 | Level 1 | scripts/langgraph_engine/level1_sync/ | Session/context sync (canonical). Outputs: `complexity_score` [1-10] (simple heuristic), `combined_complexity_score` [1-25] (simple x 0.3 + graph x 0.7 after linear scaling). **Note: `combined_complexity_score` is on a 1-25 scale -- do NOT treat it as 1-10.** |
 | Level 2 | scripts/langgraph_engine/level2_standards/ | Standards loading (canonical) |
 | Level 3 | scripts/langgraph_engine/level3_execution/subgraph.py | 8-step active execution (Pre-0, Step 0, Steps 8-14) -- ACTIVE (nodes in level3_execution/nodes/) |
-| Level 3 v1 steps | scripts/langgraph_engine/level3_execution/steps/ | v1 steps (DEPRECATED) |
 | Pre-Analysis Node | scripts/langgraph_engine/level3_execution/subgraph.py | orchestration_pre_analysis_node: CallGraph scan before Step 0; template fast-path detection |
 | Hooks | scripts/pre-tool-enforcer.py, post-tool-tracker.py | Tool enforcement |
 | Call Graph Builder | scripts/langgraph_engine/call_graph_builder.py | AST-based FQN call stack (compat shim -> parsers/) |
@@ -195,7 +195,7 @@ Level 3: Execution (8 active steps: Pre-0, Step 0, Steps 8-14)
 | PromptGen Caller | scripts/langgraph_engine/level3_execution/architecture/prompt_gen_expert_caller.py | Step 0 Call 1: fills orchestration template via claude CLI |
 | Orchestrator Caller | scripts/langgraph_engine/level3_execution/architecture/orchestrator_agent_caller.py | Step 0 Call 2: executes orchestration plan, streams live to terminal |
 
-### MCP Servers (14 servers, 295 tools) -- All Extracted to Separate Repos
+### MCP Servers (13 servers, 295 tools) -- All Extracted to Separate Repos
 
 All 13 MCP servers have been extracted to individual private repos under
 [`techdeveloper-org`](https://github.com/orgs/techdeveloper-org/repositories)
@@ -405,16 +405,16 @@ See environment variables in `.env.example`:
 
 ---
 
-**Last Updated:** 2026-04-04
+**Last Updated:** 2026-04-05
 
 
 <!-- execution-insight- -->
 ## Latest Execution Insight
 
-- **Task**: v1.15.1 -- source cleanup: remove deprecated modules and associated tests, policy docs, and config entries
+- **Task**: v1.15.2 -- exhaustive artifact purge: TOON/plan-mode/skill-selection removal, prompt_gen bug fixes, docs sync
 - **Skill**: python-core
 - **Agent**: python-backend-engineer
-- **Date**: 2026-04-04
+- **Date**: 2026-04-05
 
 ## Dependency Notes
 

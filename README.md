@@ -2,7 +2,7 @@
 
 **The first AI tool that follows full SDLC** - from task analysis to merged PR, automatically.
 
-**Version:** 1.15.1 | **Status:** Alpha | **Last Updated:** 2026-04-04
+**Version:** 1.15.2 | **Status:** Alpha | **Last Updated:** 2026-04-05
 
 ---
 
@@ -83,6 +83,7 @@ Engine does:
 | **v1.14.0** | **8** | **2 (subprocess)** | **~15s** | Step 0 redesigned: template fill + orchestrator (claude CLI subprocess with live stderr) |
 | **v1.15.0** | **8** | **2 (subprocess)** | **~15s** | TOON compression removed from Level 1 |
 | **v1.15.1** | **8** | **2 (subprocess)** | **~15s** | Source cleanup: deprecated modules and associated tests, policy docs, and config entries removed |
+| **v1.15.2** | **8** | **2 (subprocess)** | **~15s** | Exhaustive artifact purge: TOON/plan-mode/skill-selection removed; prompt_gen bug fixes (argparse + /25 scale) |
 
 > **Template Fast-Path (unchanged from v1.8.0):** Pre-built orchestration prompt skips Step 0 entirely, jumps to Step 8. Drops planning time to ~0s.
 
@@ -654,7 +655,7 @@ policies/
 |-----------|---------|
 | **8-Step Active Pipeline** | All active steps produce real output (Pre-0, Step 0, Steps 8-14). Steps 1-7 consolidated into Step 0 (v1.13-v1.14). |
 | **4-Level Architecture** | Level -1 → Level 1 → Level 2 → Level 3, fully operational |
-| **20 MCP Servers** | 328 tools — all 20 in separate repos under [techdeveloper-org](https://github.com/orgs/techdeveloper-org/repositories); 2 also keep in-engine copies in `src/mcp/` |
+| **13 MCP Servers** | 295 tools — all 13 in separate repos under [techdeveloper-org](https://github.com/orgs/techdeveloper-org/repositories); 1 also keeps an in-engine copy in `src/mcp/` |
 | **LLM Provider Routing** | Official Anthropic SDK (auto-retry, typed errors). 4 providers: Ollama · Anthropic · Claude CLI · OpenAI. Specific provider → Ollama fallback by default. |
 | **GitHub Integration** | Issue, branch, PR, merge, review loop (Steps 8–12) |
 | **Jira Integration** | Dual issue tracking, full lifecycle: Create→InProgress→InReview→Done (Steps 8–12) |
@@ -1042,9 +1043,9 @@ claude-workflow-engine/
 | Metric | Value |
 |--------|-------|
 | Pipeline Levels | 4 (Level -1, 1, 2, 3) |
-| Execution Steps | 15 (Step 0 - Step 14) |
-| MCP Servers | 20 (328 tools) — all in separate repos under [techdeveloper-org](https://github.com/orgs/techdeveloper-org/repositories) |
-| MCP Tools | 328 |
+| Execution Steps | 8 (Pre-0, Step 0, Steps 8-14) |
+| MCP Servers | 13 (295 tools) — all in separate repos under [techdeveloper-org](https://github.com/orgs/techdeveloper-org/repositories) |
+| MCP Tools | 295 |
 | LangGraph Engine Modules | 90+ (root modules + 9 canonical packages, no shim layer) |
 | Policy Files | 63 (62 .md + 1 .json) |
 | Standards Files | 34 |
@@ -1674,6 +1675,7 @@ export CLAUDE_HOME=/path/to/your/.claude
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| **v1.15.2** | 2026-04-05 | Exhaustive artifact purge: TOON/plan-mode/skill-selection all deleted. prompt_gen_expert_caller.py argparse fix (--complexity=N form) + /10 -> /25 display. Stale test files removed. Policy dirs cleaned. |
 | **v1.14.0** | 2026-04-04 | Step 0 redesign: 2 claude CLI subprocess calls (prompt-gen-expert + orchestrator-agent). Template stored in `level3_execution/templates/`. `call_streaming_script()` helper with inherited stderr for real-time terminal output. Step 2 (Plan Mode) removed. Planning time: ~75s -> ~15s. |
 | **v1.13.0** | 2026-04-03 | Level 3 simplification: removed Steps 1,3,4,5,6,7. Pipeline 15 steps -> 9 steps. Step 0 collapsed all planning into 1 template call. `docs/impact_map.md` architecture blueprint created. |
 | **v1.12.0** | 2026-04-03 | scripts/ root cleanup: organized 31 files into setup/ (9), bin/ (5), tools/ (17). Path references updated across cli.py, step14, shell scripts. |

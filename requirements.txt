@@ -37,7 +37,6 @@ python-dotenv==1.0.1        # Environment variable management
 psutil>=5.9.8               # System monitoring
 loguru>=0.7.0               # Structured logging
 rich>=13.0.0                # Beautiful terminal output (progress bars, colors, tables)
-toons>=0.5.3                # TOON schema support
 watchdog>=3.0.0             # File system watcher (standards hot-reload)
 
 # ============================================================================

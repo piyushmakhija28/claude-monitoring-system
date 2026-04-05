@@ -1,9 +1,9 @@
 # Claude Workflow Engine - Scripts Directory Context
 
 **Project:** Claude Workflow Engine
-**Version:** 1.15.1
+**Version:** 1.15.2
 **Type:** LangGraph Orchestration Pipeline
-**Last Updated:** 2026-04-04
+**Last Updated:** 2026-04-05
 
 > For full project context, architecture, and development guidelines see the root `CLAUDE.md`.
 
@@ -30,12 +30,12 @@ This directory contains the pipeline entry point, hook scripts, and the core `la
 | `/CHANGELOG.md` | Full project changelog (root) |
 | `/SRS.md` | System Requirements Specification (root) |
 
-### langgraph_engine/ Package Structure (v1.15.0)
+### langgraph_engine/ Package Structure (v1.15.2)
 
 ```
 langgraph_engine/
 +-- core/           # Cross-cutting: LazyLoader, ErrorHandler, NodeResult, create_step_node
-+-- state/          # FlowState, StepKeys, reducers, ToonObject, WorkflowContextOptimizer
++-- state/          # FlowState, StepKeys, reducers, WorkflowContextOptimizer
 +-- routing/        # Routing functions split by pipeline level
 +-- helper_nodes/   # Helper node functions split by concern
 +-- diagrams/       # Strategy Pattern: DiagramFactory + 13 UML generators
@@ -48,7 +48,6 @@ langgraph_engine/
 +-- call_graph_builder.py # Compat shim -> parsers/
 +-- level_minus1/        # Level -1 package (policies/)
 +-- level1_sync/         # Level 1 package (3 modules + policies/ + architecture/)
-+--                      # NOTE: toon_compression.py remains on disk (deprecated, not imported)
 +-- level2_standards/    # Level 2 package (2 modules + policies/ + architecture/)
 +-- level3_execution/    # Level 3 package (subgraph.py + nodes/ + sonarqube/ + policies/ + architecture/)
 |   +-- subgraph.py      # v2 subgraph builder (canonical entry point)
@@ -56,13 +55,18 @@ langgraph_engine/
 +-- [60+ shared modules] # Cross-level utilities (LLM, caching, metrics, git, etc.)
 ```
 
-### v1.15.0 / v1.15.1 Changes
+### v1.15.0 / v1.15.1 / v1.15.2 Changes
 
 **v1.15.0** — One feature removed:
 - **TOON Compression (Level 1)** — `node_toon_compression` removed from graph. `level1_complexity` and `level1_context` now feed directly into `level1_merge`.
 
 **v1.15.1** — Source cleanup:
 - Removed deprecated source files and their associated tests, policy docs, and config entries.
+
+**v1.15.2** — Exhaustive artifact purge:
+- All TOON/plan-mode/skill-selection artifacts deleted (toon_compression.py, toon_schema.py, toon_models.py, toon_format.py, steps/).
+- `prompt_gen_expert_caller.py` argparse bug fixed (--complexity=N form) + display changed from /10 to /25.
+- Stale test files removed. Policy dirs cleaned.
 
 ### Running the Pipeline
 
@@ -108,4 +112,4 @@ PipelineBuilder().add_level_minus1().add_level1().add_my_level().build()
 
 ---
 
-**Last Updated:** 2026-04-04
+**Last Updated:** 2026-04-05

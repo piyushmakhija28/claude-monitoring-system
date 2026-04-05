@@ -37,12 +37,13 @@ Usage:
 """
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Any
+from typing import Any, Dict, List, Optional
 
 try:
     from loguru import logger
 except ImportError:
     import logging
+
     logger = logging.getLogger(__name__)
 
 
@@ -50,16 +51,17 @@ except ImportError:
 # Explanation dataclass
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class DecisionExplanation:
     """Structured explanation for a pipeline decision."""
 
-    decision_type: str              # plan / skill / approach
-    decision_made: str              # Short label for the decision taken
-    primary_reason: str             # Single sentence explaining the main driver
+    decision_type: str  # plan / skill / approach
+    decision_made: str  # Short label for the decision taken
+    primary_reason: str  # Single sentence explaining the main driver
     supporting_evidence: List[str] = field(default_factory=list)
     alternatives_considered: List[str] = field(default_factory=list)
-    confidence: int = 0             # 0-100
+    confidence: int = 0  # 0-100
     extra: Dict[str, Any] = field(default_factory=dict)
 
     @property
@@ -98,9 +100,9 @@ class DecisionExplanation:
 # ---------------------------------------------------------------------------
 
 # Complexity thresholds that drive the plan decision
-COMPLEXITY_PLAN_THRESHOLD = 6        # Score >= this triggers plan mode
-TASK_COUNT_PLAN_THRESHOLD = 3        # >= this many sub-tasks triggers plan mode
-FILE_COUNT_PLAN_THRESHOLD = 4        # >= this many files triggers plan mode
+COMPLEXITY_PLAN_THRESHOLD = 6  # Score >= this triggers plan mode
+TASK_COUNT_PLAN_THRESHOLD = 3  # >= this many sub-tasks triggers plan mode
+FILE_COUNT_PLAN_THRESHOLD = 4  # >= this many files triggers plan mode
 
 # Capability score thresholds for skill selection confidence
 SKILL_HIGH_CONFIDENCE = 85
@@ -110,6 +112,7 @@ SKILL_MEDIUM_CONFIDENCE = 65
 # ---------------------------------------------------------------------------
 # DecisionExplainer
 # ---------------------------------------------------------------------------
+
 
 class DecisionExplainer:
     """Generates human-readable explanations for all pipeline decisions.
@@ -157,20 +160,17 @@ class DecisionExplainer:
             # Build evidence
             if task_complexity >= COMPLEXITY_PLAN_THRESHOLD:
                 evidence.append(
-                    f"Task complexity score is {task_complexity}/10 "
-                    f"(threshold: {COMPLEXITY_PLAN_THRESHOLD})"
+                    f"Task complexity score is {task_complexity}/10 " f"(threshold: {COMPLEXITY_PLAN_THRESHOLD})"
                 )
                 confidence += 10
             if task_count >= TASK_COUNT_PLAN_THRESHOLD:
                 evidence.append(
-                    f"Task breaks down into {task_count} sub-tasks "
-                    f"(threshold: {TASK_COUNT_PLAN_THRESHOLD})"
+                    f"Task breaks down into {task_count} sub-tasks " f"(threshold: {TASK_COUNT_PLAN_THRESHOLD})"
                 )
                 confidence += 5
             if files_affected >= FILE_COUNT_PLAN_THRESHOLD:
                 evidence.append(
-                    f"{files_affected} files expected to be affected "
-                    f"(threshold: {FILE_COUNT_PLAN_THRESHOLD})"
+                    f"{files_affected} files expected to be affected " f"(threshold: {FILE_COUNT_PLAN_THRESHOLD})"
                 )
                 confidence += 5
 
@@ -189,26 +189,20 @@ class DecisionExplainer:
                     "would risk missed requirements or conflicting changes."
                 )
 
-            alternatives.append(
-                "Direct implementation (skipped - too risky without a plan)"
-            )
-            alternatives.append(
-                "Partial planning (skipped - full plan needed given complexity)"
-            )
+            alternatives.append("Direct implementation (skipped - too risky without a plan)")
+            alternatives.append("Partial planning (skipped - full plan needed given complexity)")
 
         else:
             decision_label = "Direct implementation (planning skipped)"
 
             if task_complexity < COMPLEXITY_PLAN_THRESHOLD:
                 evidence.append(
-                    f"Task complexity score is {task_complexity}/10 "
-                    f"(below threshold {COMPLEXITY_PLAN_THRESHOLD})"
+                    f"Task complexity score is {task_complexity}/10 " f"(below threshold {COMPLEXITY_PLAN_THRESHOLD})"
                 )
                 confidence += 10
             if task_count < TASK_COUNT_PLAN_THRESHOLD:
                 evidence.append(
-                    f"Task involves {task_count} sub-task(s) "
-                    f"(below threshold {TASK_COUNT_PLAN_THRESHOLD})"
+                    f"Task involves {task_count} sub-task(s) " f"(below threshold {TASK_COUNT_PLAN_THRESHOLD})"
                 )
                 confidence += 5
 
@@ -221,14 +215,12 @@ class DecisionExplainer:
                     "Direct implementation is efficient and sufficient."
                 )
 
-            alternatives.append(
-                "Full planning mode (considered but not needed for this complexity)"
-            )
+            alternatives.append("Full planning mode (considered but not needed for this complexity)")
 
         if model_used:
             evidence.append(f"Decision made by: {model_used}")
         if user_message_snippet:
-            evidence.append(f"Task summary: \"{_truncate(user_message_snippet, 80)}\"")
+            evidence.append(f'Task summary: "{_truncate(user_message_snippet, 80)}"')
 
         confidence = min(100, confidence)
 
@@ -317,23 +309,16 @@ class DecisionExplainer:
 
         # Evidence
         if selected_score > 0:
-            evidence.append(
-                f"Capability match score: {selected_score}/100"
-            )
+            evidence.append(f"Capability match score: {selected_score}/100")
         if task_description:
-            evidence.append(f"Task requirements: \"{_truncate(task_description, 80)}\"")
+            evidence.append(f'Task requirements: "{_truncate(task_description, 80)}"')
         if len(candidate_skills) > 1:
-            evidence.append(
-                f"Evaluated {len(candidate_skills)} candidate skill(s)"
-            )
+            evidence.append(f"Evaluated {len(candidate_skills)} candidate skill(s)")
         if llm_query_used:
             evidence.append("LLM consulted to break scoring tie between candidates")
         if missing_capabilities:
             missing_str = ", ".join(missing_capabilities[:3])
-            evidence.append(
-                f"Gaps in coverage: {missing_str} "
-                "(handled by general implementation)"
-            )
+            evidence.append(f"Gaps in coverage: {missing_str} " "(handled by general implementation)")
 
         # Alternatives
         for skill in candidate_skills:
@@ -341,16 +326,12 @@ class DecisionExplainer:
                 continue
             alt_score = capability_scores.get(skill, 0)
             if alt_score > 0:
-                alternatives.append(
-                    f"{skill} (score: {alt_score}/100 - ranked lower)"
-                )
+                alternatives.append(f"{skill} (score: {alt_score}/100 - ranked lower)")
             else:
                 alternatives.append(f"{skill} (evaluated but score unavailable)")
 
         if not selected_skill:
-            alternatives.append(
-                "Waiting for matching skill to be added to registry"
-            )
+            alternatives.append("Waiting for matching skill to be added to registry")
 
         return DecisionExplanation(
             decision_type="skill",
@@ -433,13 +414,9 @@ class DecisionExplainer:
             suffix = f" (+{len(files_to_modify) - 4} more)" if len(files_to_modify) > 4 else ""
             evidence.append(f"Files targeted: {fnames}{suffix}")
         if risk_level != "LOW":
-            evidence.append(
-                f"Risk assessment: {risk_level} - additional review recommended"
-            )
+            evidence.append(f"Risk assessment: {risk_level} - additional review recommended")
         if task_description:
-            evidence.append(
-                f"Requirement: \"{_truncate(task_description, 80)}\""
-            )
+            evidence.append(f'Requirement: "{_truncate(task_description, 80)}"')
 
         # Alternatives
         for alt in alternatives_evaluated:
@@ -474,45 +451,21 @@ class DecisionExplainer:
             state: FlowState dict (or any dict with pipeline fields).
 
         Returns:
-            Dict with keys "plan", "skill", "approach" (where available).
+            Dict with key "approach" (where available).
+            Note: "plan" and "skill" keys removed -- Steps 1-7 removed in v1.13.
         """
         explanations: Dict[str, DecisionExplanation] = {}
 
-        # Plan decision
-        plan_required = state.get("step1_plan_required")
-        if plan_required is not None:
-            decision = state.get("step1_decision") or {}
-            explanations["plan"] = self.explain_plan_decision(
-                plan_required=bool(plan_required),
-                task_complexity=state.get("complexity_score", 5),
-                task_count=state.get("step3_task_count", 1),
-                files_affected=len(state.get("step2_files_affected") or []),
-                reasoning=decision.get("reasoning", state.get("step2_reasoning", "")),
-                model_used=state.get("step2_selected_model", ""),
-                user_message_snippet=state.get("user_message", "")[:100],
-            )
-
-        # Skill selection
-        selected_skill = state.get("step5_skill", "")
-        if selected_skill or state.get("step5_reasoning"):
-            explanations["skill"] = self.explain_skill_selection(
-                selected_skill=selected_skill,
-                task_description=state.get("user_message", "")[:120],
-                selection_reasoning=state.get("step5_reasoning", ""),
-                llm_query_used=bool(state.get("step5_llm_query_needed")),
-            )
-
-        # Approach decision
-        if state.get("step2_plan") or state.get("step2_phases"):
-            phases = state.get("step2_phases") or []
-            approach_label = phases[0].get("name", "Structured implementation") if phases else "Structured implementation"
+        # Approach decision (derived from orchestrator result)
+        orchestrator_result = state.get("orchestrator_result", "")
+        if orchestrator_result:
             explanations["approach"] = self.explain_approach_decision(
-                approach=approach_label,
+                approach="Orchestrator-driven implementation",
                 task_description=state.get("user_message", "")[:120],
                 framework=state.get("detected_framework", ""),
                 standards_applied=bool(state.get("standards_applied_step10")),
-                files_to_modify=state.get("step2_files_affected", []),
-                reasoning=state.get("step2_plan", "")[:200],
+                files_to_modify=[],
+                reasoning=str(orchestrator_result)[:200],
             )
 
         return explanations
@@ -521,6 +474,7 @@ class DecisionExplainer:
 # ---------------------------------------------------------------------------
 # Utility
 # ---------------------------------------------------------------------------
+
 
 def _truncate(text: str, max_len: int) -> str:
     """Truncate text to max_len characters, appending '...' if truncated."""

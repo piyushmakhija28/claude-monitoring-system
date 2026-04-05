@@ -1,12 +1,9 @@
 """WorkflowContextOptimizer - Smart context compression for LLM efficiency.
 
-Keeps full outputs in workflow_memory, but sends TOON-formatted data to LLM.
 Uses smart filtering and compression to minimize tokens while maintaining info flow.
 """
 
-from typing import Dict, List, Optional, TYPE_CHECKING
-
-from .toon_format import ToonObject
+from typing import TYPE_CHECKING, Dict, List, Optional
 
 if TYPE_CHECKING:
     from .state_definition import FlowState
@@ -15,7 +12,6 @@ if TYPE_CHECKING:
 class WorkflowContextOptimizer:
     """Optimizes context passing between workflow steps.
 
-    Keeps full outputs in workflow_memory, but sends TOON-formatted data to LLM.
     Uses smart filtering and compression to minimize tokens while maintaining info flow.
     """
 
@@ -51,38 +47,38 @@ class WorkflowContextOptimizer:
 
     @staticmethod
     def compress_task_list(tasks: List[Dict]) -> Dict:
-        """Compress task list for Step 1->2 transition using TOON format.
+        """Compress task list for Level 1->2 transition.
 
         Full: [{"id": 1, "name": "x", "description": "...", "dependencies": []}]
-        TOON: {"_toon": true, "essential": {"count": N, "critical": [...]}}
+        Compressed: {"_schema": "task_list", "essential": {"count": N, ...}}
         """
         if not tasks:
             essential = {"count": 0, "summary": "No tasks"}
-            return ToonObject.create("task_list", essential, memory_key="step1_tasks")
+            return {"_schema": "task_list", "essential": essential, "_memory_key": "step1_tasks"}
 
         essential = {
             "count": len(tasks),
-            "summary": f"{len(tasks)} tasks identified",
+            "summary": "%d tasks identified" % len(tasks),
             "critical_tasks": [t.get("name", "Unknown") for t in tasks[:3]],
-            "task_types": list(set(t.get("type", "unknown") for t in tasks))
+            "task_types": list(set(t.get("type", "unknown") for t in tasks)),
         }
 
-        return ToonObject.create("task_list", essential, tasks, memory_key="step1_tasks")
+        return {"_schema": "task_list", "essential": essential, "_memory_key": "step1_tasks"}
 
     @staticmethod
     def compress_context_status(context_data: Dict) -> Dict:
-        """Compress context status for Level 1->2 transition using TOON format.
+        """Compress context status for Level 1->2 transition.
 
         Full: {"metadata": {...}, "loaded_files": [...], ...}
-        TOON: {"_toon": true, "essential": {"status": "OK", "pct": 85, ...}}
+        Compressed: {"_schema": "context_status", "essential": {"status": "OK", "pct": 85, ...}}
         """
         essential = {
             "status": "OK" if context_data.get("context_loaded") else "PENDING",
             "usage_pct": context_data.get("context_percentage", 0),
-            "threshold_exceeded": context_data.get("context_threshold_exceeded", False)
+            "threshold_exceeded": context_data.get("context_threshold_exceeded", False),
         }
 
-        return ToonObject.create("context_status", essential, context_data, memory_key="level1_context")
+        return {"_schema": "context_status", "essential": essential, "_memory_key": "level1_context"}
 
     @staticmethod
     def build_optimized_context(state: "FlowState") -> Dict:
@@ -102,7 +98,7 @@ class WorkflowContextOptimizer:
         # Level -1 outcome (minimal)
         optimized["level_minus1"] = {
             "status": state.get("level_minus1_status", "UNKNOWN"),
-            "auto_fixes_applied": len(state.get("auto_fix_applied", []))
+            "auto_fixes_applied": len(state.get("auto_fix_applied", [])),
         }
 
         # Level 1 outcome (summary only)
@@ -113,9 +109,9 @@ class WorkflowContextOptimizer:
                     {
                         "context_loaded": state.get("context_loaded"),
                         "context_percentage": state.get("context_percentage"),
-                        "context_threshold_exceeded": state.get("context_threshold_exceeded")
+                        "context_threshold_exceeded": state.get("context_threshold_exceeded"),
                     }
-                )
+                ),
             }
 
         # Level 2 outcome (summary only)
@@ -123,16 +119,13 @@ class WorkflowContextOptimizer:
             optimized["level2"] = {
                 "status": state.get("level2_status"),
                 "standards_active": state.get("standards_count", 0),
-                "is_java": state.get("is_java_project", False)
+                "is_java": state.get("is_java_project", False),
             }
 
         # Level 3 step context (only what's needed for next step)
         current_step = WorkflowContextOptimizer._find_current_level3_step(state)
         if current_step:
-            optimized["current_step"] = {
-                "name": current_step.get("name"),
-                "step_number": current_step.get("order")
-            }
+            optimized["current_step"] = {"name": current_step.get("name"), "step_number": current_step.get("order")}
 
         return optimized
 
@@ -153,6 +146,7 @@ class WorkflowContextOptimizer:
 
         # Update memory size estimate
         import json
+
         try:
             size_kb = len(json.dumps(state["workflow_memory"]).encode()) / 1024
             state["workflow_memory_size_kb"] = size_kb

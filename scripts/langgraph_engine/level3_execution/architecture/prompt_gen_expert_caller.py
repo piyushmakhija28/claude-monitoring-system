@@ -40,7 +40,8 @@ def _parse_args(argv):
 
     Supported flags:
       --task-description <str>
-      --complexity-score <int>
+      --complexity-score <int>        (space-separated)
+      --complexity-score=<int>        (equals form)
       --call-graph-json <json-string>
       --runtime-context-json <json-string>
     """
@@ -63,6 +64,12 @@ def _parse_args(argv):
             except ValueError:
                 args["complexity_score"] = 5
             i += 2
+        elif token.startswith("--complexity-score="):
+            try:
+                args["complexity_score"] = int(token.split("=", 1)[1])
+            except ValueError:
+                args["complexity_score"] = 5
+            i += 1
         elif token == "--call-graph-json" and i + 1 < len(argv):
             args["call_graph_json"] = argv[i + 1]
             i += 2
@@ -111,14 +118,15 @@ def _build_filled_prompt(template, args):
 
     runtime_block = json.dumps(runtime_context, indent=2, ensure_ascii=True)
 
+    # combined_complexity_score is on a 1-25 scale (not 1-10)
     complexity = args["complexity_score"]
-    if complexity <= 3:
+    if complexity <= 8:
         tier = "low"
-    elif complexity <= 7:
+    elif complexity <= 16:
         tier = "medium"
     else:
         tier = "high"
-    complexity_display = str(complexity) + "/10 (" + tier + ")"
+    complexity_display = str(complexity) + "/25 (" + tier + ")"
 
     filled = template
     filled = filled.replace("{user_requirements}", args["task_description"])
