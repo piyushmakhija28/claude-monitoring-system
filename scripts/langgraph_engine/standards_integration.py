@@ -18,11 +18,10 @@ Priority ordering used by conflict resolution (from standard_selector.py):
 Uses ErrorLogger from error_logger.py for audit trail.
 """
 
-from typing import List, Dict, Any
+from typing import Any, Dict, List
 
 from .error_logger import ErrorLogger
 from .flow_state import FlowState
-
 
 # ============================================================================
 # INTEGRATION POINTS REGISTRY
@@ -97,14 +96,15 @@ STANDARDS_INTEGRATION_POINTS = {
 # STANDARDS LOADER HELPER
 # ============================================================================
 
+
 def load_standards(state: FlowState) -> Dict[str, Any]:
     """Load applicable standards from FlowState.
 
-    Aggregates all standards data loaded by Level 2 nodes into a single
+    Aggregates all standards data from FlowState into a single
     dict for use by integration hooks. Includes:
-    - Tool optimization rules (from level2_tool_optimization node)
-    - Spring Boot patterns (from level2_java_standards node)
-    - Merged rules from standards selector (from level2_select_standards node)
+    - Tool optimization rules (from tool_optimization_rules state field)
+    - Spring Boot patterns (from spring_boot_patterns state field)
+    - Merged rules from standards selector (from standards_merged_rules state field)
     - Framework detection result (from standard_selector.detect_framework)
 
     Args:
@@ -138,10 +138,7 @@ def load_standards(state: FlowState) -> Dict[str, Any]:
     # Derive project_type from multiple sources (most specific wins)
     is_java = state.get("is_java_project", False)
     detected_framework = state.get("detected_framework", "")
-    selection_project_type = (
-        (standards_selection or {}).get("project_type", "")
-        if standards_selection else ""
-    )
+    selection_project_type = (standards_selection or {}).get("project_type", "") if standards_selection else ""
 
     # Use selection result when available (most accurate), else fall back to is_java flag
     if selection_project_type:
@@ -169,6 +166,7 @@ def load_standards(state: FlowState) -> Dict[str, Any]:
 # INTEGRATION HOOK IMPLEMENTATIONS
 # ============================================================================
 
+
 def apply_standards_at_step(step: int, state: FlowState) -> FlowState:
     """Apply standards at a specific pipeline step.
 
@@ -191,11 +189,8 @@ def apply_standards_at_step(step: int, state: FlowState) -> FlowState:
         return state
 
     import os
-    session_id = (
-        state.get("session_id")
-        or os.environ.get("CURRENT_SESSION_ID", "")
-        or "unknown-session"
-    )
+
+    session_id = state.get("session_id") or os.environ.get("CURRENT_SESSION_ID", "") or "unknown-session"
     logger = ErrorLogger(session_id)
 
     logger.log_decision(
@@ -243,6 +238,7 @@ def apply_standards_at_step(step: int, state: FlowState) -> FlowState:
 # ============================================================================
 # STEP-SPECIFIC HOOK IMPLEMENTATIONS
 # ============================================================================
+
 
 def _apply_step1_standards(
     state: FlowState,
@@ -390,9 +386,7 @@ def _apply_step5_standards(
             break  # Only one mismatch message per skill
 
     if not validation_warnings:
-        validation_info.append(
-            f"Skill '{selected_skill}' is compatible with {project_type}/{framework} project"
-        )
+        validation_info.append(f"Skill '{selected_skill}' is compatible with {project_type}/{framework} project")
 
     updates["step5_standards_validation"] = {
         "passed": len(validation_warnings) == 0,
@@ -413,7 +407,8 @@ def _apply_step5_standards(
         check_name="Skill/Standards compatibility",
         passed=len(validation_warnings) == 0,
         details=(
-            "; ".join(validation_warnings) if validation_warnings
+            "; ".join(validation_warnings)
+            if validation_warnings
             else f"Skill '{selected_skill}' compatible with {project_type}/{framework}"
         ),
     )
@@ -495,6 +490,7 @@ def _apply_step13_standards(
 # INTERNAL HELPERS
 # ============================================================================
 
+
 def _build_planning_constraints(
     project_type: str,
     standards: Dict[str, Any],
@@ -553,13 +549,15 @@ def _build_review_checklist(
         # Tool optimization check
         tool_rules = standards.get("tool_optimization", {})
         if tool_rules:
-            checklist.append({
-                "check": "tool_optimization_compliant",
-                "description": (
-                    f"Read calls respect {tool_rules.get('read_max_lines', 500)} line limit; "
-                    f"Grep calls use head_limit <= {tool_rules.get('grep_max_results', 100)}"
-                ),
-            })
+            checklist.append(
+                {
+                    "check": "tool_optimization_compliant",
+                    "description": (
+                        f"Read calls respect {tool_rules.get('read_max_lines', 500)} line limit; "
+                        f"Grep calls use head_limit <= {tool_rules.get('grep_max_results', 100)}"
+                    ),
+                }
+            )
 
     elif project_type == "java":
         checklist += [

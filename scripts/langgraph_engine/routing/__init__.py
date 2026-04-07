@@ -9,15 +9,11 @@ CHANGE LOG (v1.15.0):
   for backward-compat test imports only.
 """
 
-from .level1_routes import route_context_threshold
-from .level2_routes import route_standards_loading
 from .level3_routes import route_after_step11_review
 from .level_minus1_routes import route_after_level_minus1, route_after_level_minus1_user_choice
 
 __all__ = [
     "route_after_level_minus1",
     "route_after_level_minus1_user_choice",
-    "route_context_threshold",
-    "route_standards_loading",
     "route_after_step11_review",
 ]

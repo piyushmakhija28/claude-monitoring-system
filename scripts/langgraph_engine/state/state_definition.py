@@ -188,7 +188,7 @@ class FlowState(TypedDict, total=False):
     mcp_error: Optional[str]  # Error message if initialization failed
     mcp_auto_routing_enabled: Optional[bool]  # Enable AUTO-ROUTE in hook (true if filesystem available)
 
-    # Standards selector result (level2_select_standards_node output)
+    # Standards selector result (populated by standard_selector.py at runtime)
     standards_selection: Optional[Dict]  # {project_type, framework, total_loaded, conflicts_detected, merged_rules}
     standards_merged_rules: Optional[Dict]  # Conflict-resolved merged rules from all standards sources
     detected_framework: Optional[str]  # Framework detected by standard_selector (flask/django/spring-boot/react/etc.)

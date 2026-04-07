@@ -3,12 +3,11 @@ Orchestrator - Main StateGraph for 3-level flow execution.
 
 LangGraph 1.0.10 Implementation: Flattened graph (no subgraph nesting)
 
-This StateGraph wires together all 3 levels with conditional routing:
+This StateGraph wires together 3 levels (Level -1, Level 1, Level 3) with conditional routing:
 1. Level -1 (auto-fix) - blocking checkpoint
 2. Level 1 (sync, 4 parallel context tasks)
-3. Level 2 (standards, conditional Java routing)
-4. Level 3 (9-step execution)
-5. Output node - writes flow-trace.json
+3. Level 3 (execution, 8 active steps: Pre-0, 0.0, 0.1, 0, 8-14)
+4. Output node - writes flow-trace.json
 
 Note: LangGraph 1.0.10 doesn't support add_graph() nesting, so we flatten
 all nodes into one graph. This works fine - the graph structure is still clear
@@ -40,6 +39,14 @@ CHANGE LOG (v1.15.2):
   The function body was never implemented in subgraph.py (comment stub only).
   Hook mode: level3_step9 -> level3_output (direct edge, no merge node).
   Full mode: level3_step14 -> level3_output (direct edge, no merge node).
+
+CHANGE LOG (v1.16.0):
+  Level 2 Standards Loader scripts fully removed.
+  Pipeline now flows: level1_cleanup -> level3_init directly.
+  Rules/policies are loaded directly from policies/ directory on disk.
+  Removed imports: level2_standards, standard_selector.
+  Removed local functions: route_context_threshold, route_standards_loading,
+    level2_select_standards_node, emergency_archive, optimize_context_after_level2.
 """
 
 import sys
@@ -73,14 +80,6 @@ from .level1_sync import (
     node_context_loader,
     node_session_loader,
 )
-from .level2_standards import (
-    detect_project_type,
-    level2_merge_node,
-    node_common_standards,
-    node_java_standards,
-    node_mcp_plugin_discovery,
-    node_tool_optimization_standards,
-)
 from .level3_execution.subgraph import (
     level3_init_node,
     orchestration_pre_analysis_node,
@@ -107,24 +106,7 @@ from .level_minus1 import (
 
 # Level -1 routing functions (canonical definitions live in routing/)
 from .routing import route_after_level_minus1, route_after_level_minus1_user_choice
-from .standard_selector import select_standards
 from .standards_integration import apply_standards_at_step
-
-
-def route_context_threshold(state: FlowState) -> Literal["level2_emergency_archive", "level2_common_standards"]:
-    """Route based on context usage threshold."""
-    if state.get(StepKeys.CONTEXT_THRESHOLD_EXCEEDED):
-        return "level2_emergency_archive"
-    return "level2_common_standards"
-
-
-def route_standards_loading(state: FlowState) -> Literal["level2_java_standards", "level2_merge"]:
-    """Route based on project type (Java detection)."""
-    detect_project_type(state)
-    if state.get(StepKeys.IS_JAVA_PROJECT):
-        return "level2_java_standards"
-    return "level2_merge"
-
 
 # REMOVED (v1.14.0): route_after_step0_to_step2_or_step8 -- Step 2 removed from pipeline.
 #   Step 0 now routes directly to Step 8.
@@ -152,55 +134,14 @@ def step11_retry_increment_node(state: FlowState) -> dict:
 
 
 # ============================================================================
-# SIMPLE HELPER NODES
-# ============================================================================
-
-
-def emergency_archive(state: FlowState) -> dict:
-    """Emergency archival when context threshold exceeded.
-
-    Runs as part of the Level 1 -> Level 2 transition. If context usage
-    is below threshold, this is a no-op pass-through. If above 95%,
-    triggers aggressive cleanup and logs a warning.
-    """
-    updates = {}
-    context_pct = state.get(StepKeys.CONTEXT_PERCENTAGE, 0)
-
-    if context_pct >= 95:
-        existing_warnings = state.get(StepKeys.WARNINGS) or []
-        warnings = list(existing_warnings) + [
-            "EMERGENCY: Context usage at %.1f%% - archiving old sessions to free memory" % context_pct
-        ]
-        updates[StepKeys.WARNINGS] = warnings
-        updates["emergency_archive_triggered"] = True
-
-        # Best-effort: trigger session pruning
-        try:
-            import sys as _sys_ea
-
-            _sys_ea.path.insert(0, str(Path(__file__).resolve().parent.parent / "architecture"))
-            from importlib import import_module
-
-            _pruner_spec = import_module("session-pruner") if False else None
-        except Exception:
-            pass
-
-        print("[EMERGENCY ARCHIVE] Context at %.1f%% - archive triggered" % context_pct, file=sys.stderr)
-    else:
-        updates["emergency_archive_triggered"] = False
-
-    return updates
-
-
-# ============================================================================
 # CONTEXT OPTIMIZATION NODES - Smart context compression between levels
 # ============================================================================
 
 
 def optimize_context_after_level1(state: FlowState) -> dict:
-    """Optimize context after Level 1 completes before passing to Level 2.
+    """Optimize context after Level 1 completes before passing to Level 3.
 
-    Stores full Level 1 output in workflow_memory, passes only summary to Level 2.
+    Stores full Level 1 output in workflow_memory, passes only summary to Level 3.
     This keeps context clean while preserving full data for fallback/debugging.
     """
     # Store full level 1 output
@@ -213,30 +154,6 @@ def optimize_context_after_level1(state: FlowState) -> dict:
     }
 
     state = WorkflowContextOptimizer.store_step_output(state, "level1_output", level1_output)
-
-    # Build optimized context for Level 2
-    optimized = WorkflowContextOptimizer.build_optimized_context(state)
-    state["workflow_context_optimized"] = optimized
-
-    return state
-
-
-def optimize_context_after_level2(state: FlowState) -> dict:
-    """Optimize context after Level 2 before Level 3 execution.
-
-    Stores standards info in memory, passes only summary to Level 3.
-    """
-    # Store full level 2 output
-    level2_output = {
-        StepKeys.STANDARDS_LOADED: state.get(StepKeys.STANDARDS_LOADED),
-        StepKeys.STANDARDS_COUNT: state.get(StepKeys.STANDARDS_COUNT),
-        StepKeys.JAVA_STANDARDS_LOADED: state.get(StepKeys.JAVA_STANDARDS_LOADED),
-        StepKeys.SPRING_BOOT_PATTERNS: state.get(StepKeys.SPRING_BOOT_PATTERNS, {}),
-        StepKeys.TOOL_OPTIMIZATION_RULES: state.get(StepKeys.TOOL_OPTIMIZATION_RULES, {}),
-        StepKeys.TOOL_OPTIMIZATION_LOADED: state.get(StepKeys.TOOL_OPTIMIZATION_LOADED, False),
-    }
-
-    state = WorkflowContextOptimizer.store_step_output(state, "level2_output", level2_output)
 
     # Build optimized context for Level 3
     optimized = WorkflowContextOptimizer.build_optimized_context(state)
@@ -294,84 +211,6 @@ def save_workflow_memory(state: FlowState) -> dict:
     return {}
 
 
-# ============================================================================
-# LEVEL 2: STANDARDS SELECTOR NODE
-# Runs after common/Java standards are loaded, before context optimization.
-# Uses standard_selector.py to auto-detect project type + framework and load
-# all applicable standards (custom > team > framework > language priority).
-# ============================================================================
-
-
-def level2_select_standards_node(state: FlowState) -> dict:
-    """Level 2 node: auto-select and load all applicable project standards.
-
-    Runs select_standards() which detects project type/framework and loads
-    standards from all sources in priority order (custom=4 > team=3 > framework=2
-    > language=1), resolving conflicts so the highest-priority source wins.
-
-    Outputs written to FlowState:
-      standards_selection       - full selection result including traceability
-      standards_merged_rules    - conflict-resolved merged rules dict
-      detected_framework        - framework name for downstream routing
-      standards_selection_error - error string (non-fatal, execution continues)
-
-    Integration hooks (standards_hook_step10/13) consume the standards_selection
-    data to inject step-specific context/constraints/checklists.
-    """
-    updates: dict = {}
-
-    try:
-        project_root = state.get(StepKeys.PROJECT_ROOT, ".")
-        session_id = state.get(StepKeys.SESSION_ID, "unknown")
-
-        # select_standards() internally calls detect_project_type() + detect_framework()
-        # and loads all sources with conflict resolution
-        full_selection = select_standards(project_root, session_id)
-
-        updates["standards_selection"] = {
-            "project_type": full_selection["project_type"],
-            "framework": full_selection["framework"],
-            "total_loaded": full_selection["total_loaded"],
-            "conflicts_detected": len(full_selection["conflicts"]),
-            "merged_rules": full_selection["merged_rules"],
-            "traceability": full_selection.get("traceability", {}),
-            "priority_chain": "custom(4) > team(3) > framework(2) > language(1)",
-        }
-
-        # Make merged rules available at top-level for quick access by integration hooks
-        merged = full_selection.get("merged_rules", {})
-        if merged:
-            updates["standards_merged_rules"] = merged
-
-        # Expose detected framework for downstream nodes
-        updates["detected_framework"] = full_selection["framework"]
-
-        existing_pipeline = state.get(StepKeys.PIPELINE) or []
-        updates[StepKeys.PIPELINE] = list(existing_pipeline) + [
-            {
-                "node": "level2_select_standards",
-                "project_type": full_selection["project_type"],
-                "framework": full_selection["framework"],
-                "standards_loaded": full_selection["total_loaded"],
-                "conflicts": len(full_selection["conflicts"]),
-                "priority_chain": "custom(4) > team(3) > framework(2) > language(1)",
-                "traceability_keys": list(full_selection.get("traceability", {}).keys()),
-            }
-        ]
-
-    except Exception as exc:
-        updates["standards_selection_error"] = str(exc)
-        existing_pipeline = state.get(StepKeys.PIPELINE) or []
-        updates[StepKeys.PIPELINE] = list(existing_pipeline) + [
-            {
-                "node": "level2_select_standards",
-                "error": str(exc),
-            }
-        ]
-
-    return updates
-
-
 # REMOVED (v1.13.0): apply_integration_step1 -- Step 1 no longer in graph
 # REMOVED (v1.14.0): apply_integration_step2 -- Step 2 removed from pipeline
 # REMOVED (v1.13.0): apply_integration_step3 -- Step 3 no longer in graph
@@ -379,6 +218,9 @@ def level2_select_standards_node(state: FlowState) -> dict:
 # REMOVED (v1.13.0): apply_integration_step5 -- Step 5 no longer in graph
 # REMOVED (v1.13.0): apply_integration_step6 -- Step 6 no longer in graph
 # REMOVED (v1.13.0): apply_integration_step7 -- Step 7 no longer in graph
+# REMOVED (v1.16.0): level2_select_standards_node -- Level 2 fully removed
+# REMOVED (v1.16.0): emergency_archive -- Level 2 node removed
+# REMOVED (v1.16.0): optimize_context_after_level2 -- Level 2 context node removed
 
 
 def apply_integration_step10(state: FlowState) -> dict:
@@ -657,13 +499,13 @@ def _save_pipeline_execution_log(state: FlowState, final_status: str) -> None:
         log_lines.append(f"- Cache Hit: {state.get(StepKeys.CONTEXT_CACHE_HIT, False)}")
         log_lines.append("")
 
-        # Level 2
-        log_lines.append("## Level 2: Standards")
+        # Level 2 (removed v1.16.0 -- log retained for historical visibility; fields will be empty)
+        log_lines.append("## Level 2: Standards (removed v1.16.0)")
         log_lines.append(f"- Standards Loaded: {state.get(StepKeys.STANDARDS_COUNT, 0)}")
         log_lines.append(f"- Framework Detected: {state.get(StepKeys.DETECTED_FRAMEWORK, 'unknown')}")
         log_lines.append(f"- MCP Discovered: {state.get(StepKeys.MCP_DISCOVERED_COUNT, 0)}")
         log_lines.append(f"- Tool Rules: {'Loaded' if state.get(StepKeys.TOOL_OPTIMIZATION_LOADED) else 'Missing'}")
-        log_lines.append(f"- Status: {state.get(StepKeys.LEVEL2_STATUS, 'unknown')}")
+        log_lines.append(f"- Status: {state.get(StepKeys.LEVEL2_STATUS, 'n/a (removed)')}")
         log_lines.append("")
 
         # Level 3 Steps (v1.14.0: Steps 1-7 removed; Step 0 routes directly to Step 8)
@@ -753,7 +595,7 @@ def create_flow_graph(hook_mode: bool = False):
 
     Args:
         hook_mode: If True, skip Steps 10-14 (GitHub workflow) for fast
-                   UserPromptSubmit hook execution. Only runs Levels -1/1/2
+                   UserPromptSubmit hook execution. Only runs Levels -1/1
                    and Steps 0/8/9 (analysis + prompt generation + issue + branch).
                    Steps 10-14 can be triggered separately after Claude has context.
 
@@ -779,6 +621,13 @@ def create_flow_graph(hook_mode: bool = False):
         level3_merge node removed (level3_merge_node was a comment stub, never
         implemented). Hook mode: level3_step9 -> level3_output directly.
         Full mode: level3_step14 -> level3_output directly.
+
+    CHANGE LOG (v1.16.0):
+        Level 2 Standards Loader nodes fully removed from graph.
+        Direct bridge added: level1_cleanup -> level3_init.
+        Removed nodes: level2_emergency_archive, level2_common_standards,
+          level2_java_standards, level2_tool_optimization, level2_mcp_discovery,
+          level2_merge, level2_select_standards, level2_optimize_context.
     """
     if not _LANGGRAPH_AVAILABLE:
         raise RuntimeError(
@@ -860,59 +709,17 @@ def create_flow_graph(hook_mode: bool = False):
     graph.add_edge("level1_merge", "level1_cleanup")
 
     # ========================================================================
-    # LEVEL 2: STANDARDS SYSTEM (conditional Java routing)
-    # ========================================================================
-    graph.add_node("level2_emergency_archive", emergency_archive)
-    graph.add_node("level2_common_standards", node_common_standards)
-    graph.add_node("level2_java_standards", node_java_standards)
-    graph.add_node("level2_tool_optimization", node_tool_optimization_standards)
-    graph.add_node("level2_mcp_discovery", node_mcp_plugin_discovery)
-    graph.add_node("level2_merge", level2_merge_node)
-
-    # Route from Level 1 cleanup to Level 2
-    # Emergency archive check happens inside common_standards node start
-    # Tool optimization and MCP discovery run in parallel
-    graph.add_edge("level1_cleanup", "level2_emergency_archive")
-    graph.add_edge("level1_cleanup", "level2_tool_optimization")
-    graph.add_edge("level1_cleanup", "level2_mcp_discovery")
-
-    # Emergency archive always routes to common standards
-    # (archive is a no-op if context usage is below threshold)
-    graph.add_edge("level2_emergency_archive", "level2_common_standards")
-
-    # Common standards check for Java
-    graph.add_conditional_edges(
-        "level2_common_standards",
-        route_standards_loading,
-        {
-            "level2_java_standards": "level2_java_standards",
-            "level2_merge": "level2_merge",
-        },
-    )
-
-    # Java standards, tool optimization, and MCP discovery all merge
-    graph.add_edge("level2_java_standards", "level2_merge")
-    graph.add_edge("level2_tool_optimization", "level2_merge")
-    graph.add_edge("level2_mcp_discovery", "level2_merge")
-
-    # Standards selector: auto-detect project type + framework, load all standards
-    graph.add_node("level2_select_standards", level2_select_standards_node)
-    graph.add_edge("level2_merge", "level2_select_standards")
-
-    # Optimize context after Level 2 (compress for Level 3 consumption)
-    graph.add_node("level2_optimize_context", optimize_context_after_level2)
-    graph.add_edge("level2_select_standards", "level2_optimize_context")
-
-    # ========================================================================
     # LEVEL 3: EXECUTION SYSTEM - 9-STEP PIPELINE (v1.13.0 CONSOLIDATED)
     #
     # Active steps: Pre-0, 0.0, 0.1, 0, 8, 9, [10-14 full mode]
     # Steps 1, 3, 4, 5, 6, 7 removed -- outputs merged into Step 0 template call.
+    # Level 2 removed (v1.16.0) -- direct bridge: level1_cleanup -> level3_init
     # ========================================================================
 
     # Bridge node: session_path -> session_dir
+    # Direct connection: Level 1 cleanup -> Level 3 init (Level 2 removed in v1.16.0)
     graph.add_node("level3_init", level3_init_node)
-    graph.add_edge("level2_optimize_context", "level3_init")
+    graph.add_edge("level1_cleanup", "level3_init")
 
     # Pre-analysis gate: call graph scan
     # Template fast-path (--orchestration-template): jumps directly to level3_step8

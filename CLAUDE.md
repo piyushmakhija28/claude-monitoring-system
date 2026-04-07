@@ -1,7 +1,7 @@
 # Claude Workflow Engine - Project Context
 
 **Project:** Claude Workflow Engine
-**Version:** 1.15.3
+**Version:** 1.16.0
 **Type:** LangGraph Orchestration Pipeline with Call Graph Intelligence + Template Fast-Path
 **Last Updated:** 2026-04-06
 
@@ -37,7 +37,7 @@ Level 1: Sync (session + parallel [complexity, context] -> merge)
     |     Outputs: combined_complexity_score [1-25] (simple x 0.3 + graph x 0.7)
     |     NOTE: combined_complexity_score is on a 1-25 scale -- do NOT treat as 1-10
     |
-Level 2: Standards (common + conditional Java + tool opt + MCP discovery)
+Level 2: (NO-OP -- rules loaded directly from policies/ on disk; no pipeline nodes)
     |
 Level 3: Execution (8 active steps: Pre-0, Step 0, Steps 8-14)
     |
@@ -104,6 +104,7 @@ Level 3: Execution (8 active steps: Pre-0, Step 0, Steps 8-14)
 | **v1.15.1** | **8** | **2 (subprocess)** | **~15s** | Source cleanup: deprecated files removed |
 | **v1.15.2** | **8** | **2 (subprocess)** | **~15s** | Exhaustive artifact purge: TOON/plan-mode/skill-selection removed; prompt_gen bug fixes |
 | **v1.15.3** | **8** | **2 (subprocess)** | **~15s** | Dead LLM provider purge: Ollama, NPU, GPU, OpenAI, DeepSeek, inference_router removed; 2-provider chain only (claude_cli + anthropic) |
+| **v1.16.0** | **8** | **2 (subprocess)** | **~15s** | Level 2 script purge: all level2_standards/ Python removed; level1_cleanup routes directly to level3_init; policies/ .md files retained |
 
 ### Directory Layout
 
@@ -121,7 +122,8 @@ Level 3: Execution (8 active steps: Pre-0, Step 0, Steps 8-14)
 |   |   +-- pipeline_builder.py       # Builder Pattern: PipelineBuilder chainable API
 |   |   +-- level_minus1/            # [v1.9] Level -1 Auto-Fix package (nodes, merge, recovery, policies/)
 |   |   +-- level1_sync/             # [v1.11] Level 1 Sync package (10 modules + policies/ + architecture/)
-|   |   +-- level2_standards/        # [v1.11] Level 2 Standards package (7 modules + policies/ + architecture/)
+|   |   +-- level2_standards/        # Level 2 Standards package -- policies/ only (all Python scripts removed v1.16.0)
+|   |   +-- level2_standards/policies/    # Coding standards policy files (.md) -- read directly at runtime
 |   |   +-- level3_execution/        # [v1.11] Level 3 Execution package (20+ modules + nodes/ + subgraph.py + sonarqube/ + policies/ + architecture/)
 |   |   +-- [60+ shared modules]     # Cross-level: LLM, caching, metrics, git, state, etc.
 |   +-- architecture/                 # generate_system_diagram.py (shared utility)
@@ -411,7 +413,7 @@ See environment variables in `.env.example`:
 <!-- execution-insight- -->
 ## Latest Execution Insight
 
-- **Task**: v1.15.3 -- dead LLM provider purge: Ollama/NPU/GPU/OpenAI/DeepSeek/inference_router removed; 2-provider chain (claude_cli + anthropic)
+- **Task**: v1.16.0 -- Level 2 script purge: all level2_standards/ Python removed; level1_cleanup routes to level3_init directly
 - **Skill**: python-core
 - **Agent**: python-backend-engineer
 - **Date**: 2026-04-06

@@ -168,28 +168,6 @@ def check_level1_sync_complete(tool_name):
     return [], [msg]
 
 
-def check_level2_standards_complete(tool_name):
-    if tool_name not in BLOCKED_WHILE_CHECKPOINT_PENDING:
-        return [], []
-    sid = get_current_session_id()
-    if not sid:
-        return [], []
-    trace = _load_raw_flow_trace()
-    if trace is None:
-        return [], []  # Fail-open: no trace yet
-    l2_done = _pipeline_step_present(trace, "LEVEL_2_STANDARDS")
-    if l2_done:
-        return [], []
-    msg = (
-        "[PRE-TOOL BLOCKED] Level 2 Standards have not loaded!\n"
-        "  Session  : " + sid + "\n"
-        "  Tool     : " + tool_name + " is BLOCKED until Level 2 finishes.\n"
-        "  Missing  : LEVEL_2_STANDARDS\n"
-        "  Action   : Wait for 3-level-flow.py to finish Level 2 Standards."
-    )
-    return [], [msg]
-
-
 def check_bash(command):
     """Backward-compat: check_bash(command) -> (hints, blocks)."""
     _pol_bash = getattr(_core_mod, "_pol_bash", None)

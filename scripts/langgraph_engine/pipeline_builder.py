@@ -9,7 +9,6 @@ Usage:
         PipelineBuilder()
         .add_level_minus1()
         .add_level1()
-        .add_level2()
         .add_level3(hook_mode=True)
         .build()
     )
@@ -25,6 +24,13 @@ CHANGE LOG (v1.15.2):
   level3_merge was a comment stub in subgraph.py, never implemented.
   Hook mode: level3_step9 -> level3_output (direct edge).
   Full mode: level3_step14 -> level3_output (direct edge).
+
+CHANGE LOG (v1.16.0):
+  Level 2 (standards system) removed from pipeline.
+  add_level2() method deleted.
+  add_level3() bridge edge changed: level1_cleanup -> level3_init.
+  Required levels set updated: level2 removed.
+  Default build chain: add_level_minus1().add_level1().add_level3(...).
 """
 
 try:
@@ -38,13 +44,7 @@ from .checkpointer import CheckpointerManager
 from .flow_state import FlowState
 
 # Helper nodes
-from .helper_nodes import (
-    emergency_archive,
-    level2_select_standards_node,
-    optimize_context_after_level2,
-    output_node,
-    step11_retry_increment_node,
-)
+from .helper_nodes import output_node, step11_retry_increment_node
 
 # Standards integration hook functions
 from .helper_nodes.standards_helpers import apply_integration_step10, apply_integration_step13
@@ -56,15 +56,6 @@ from .level1_sync import (
     node_complexity_calculation,
     node_context_loader,
     node_session_loader,
-)
-
-# Level 2 nodes
-from .level2_standards import (
-    level2_merge_node,
-    node_common_standards,
-    node_java_standards,
-    node_mcp_plugin_discovery,
-    node_tool_optimization_standards,
 )
 
 # Level 3 nodes (v2 active)
@@ -95,12 +86,7 @@ from .level_minus1 import (
 )
 
 # Routing functions
-from .routing import (
-    route_after_level_minus1,
-    route_after_level_minus1_user_choice,
-    route_after_step11_review,
-    route_standards_loading,
-)
+from .routing import route_after_level_minus1, route_after_level_minus1_user_choice, route_after_step11_review
 
 
 class PipelineBuilder:
@@ -110,7 +96,7 @@ class PipelineBuilder:
     Call build() to compile and return the runnable graph.
 
     Methods are chainable:
-        graph = PipelineBuilder().add_level_minus1().add_level1().add_level2().add_level3().build()
+        graph = PipelineBuilder().add_level_minus1().add_level1().add_level3().build()
 
     Raises:
         RuntimeError: If LangGraph is not installed when build() is called.
@@ -213,58 +199,6 @@ class PipelineBuilder:
         return self
 
     # =========================================================================
-    # LEVEL 2: STANDARDS SYSTEM
-    # =========================================================================
-
-    def add_level2(self) -> "PipelineBuilder":
-        """Wire Level 2 standards loading nodes and edges.
-
-        From level1_cleanup: three parallel paths (emergency_archive, tool_opt, mcp_discovery)
-        then conditional Java routing, merge, standards selector, context optimize.
-        """
-        g = self._graph
-
-        # Nodes
-        g.add_node("level2_emergency_archive", emergency_archive)
-        g.add_node("level2_common_standards", node_common_standards)
-        g.add_node("level2_java_standards", node_java_standards)
-        g.add_node("level2_tool_optimization", node_tool_optimization_standards)
-        g.add_node("level2_mcp_discovery", node_mcp_plugin_discovery)
-        g.add_node("level2_merge", level2_merge_node)
-        g.add_node("level2_select_standards", level2_select_standards_node)
-        g.add_node("level2_optimize_context", optimize_context_after_level2)
-
-        # From Level 1 cleanup: three parallel entry points
-        g.add_edge("level1_cleanup", "level2_emergency_archive")
-        g.add_edge("level1_cleanup", "level2_tool_optimization")
-        g.add_edge("level1_cleanup", "level2_mcp_discovery")
-
-        # Emergency archive is a no-op pass-through when context < 95%
-        g.add_edge("level2_emergency_archive", "level2_common_standards")
-
-        # Conditional: common_standards -> java_standards | merge
-        g.add_conditional_edges(
-            "level2_common_standards",
-            route_standards_loading,
-            {
-                "level2_java_standards": "level2_java_standards",
-                "level2_merge": "level2_merge",
-            },
-        )
-
-        # All three parallel paths converge at merge
-        g.add_edge("level2_java_standards", "level2_merge")
-        g.add_edge("level2_tool_optimization", "level2_merge")
-        g.add_edge("level2_mcp_discovery", "level2_merge")
-
-        # merge -> standards selector -> context optimize
-        g.add_edge("level2_merge", "level2_select_standards")
-        g.add_edge("level2_select_standards", "level2_optimize_context")
-
-        self._levels_added.append("level2")
-        return self
-
-    # =========================================================================
     # LEVEL 3: EXECUTION PIPELINE (v1.14.0: Pre-0, Step 0, Steps 8-14)
     # =========================================================================
 
@@ -288,13 +222,15 @@ class PipelineBuilder:
         v1.15.2: level3_merge node removed (was a comment stub, never implemented).
           Hook mode: level3_step9 -> level3_output (direct edge).
           Full mode: level3_step14 -> level3_output (direct edge).
+
+        v1.16.0: Level 2 removed. Bridge edge changed to level1_cleanup -> level3_init.
         """
         self._hook_mode = hook_mode
         g = self._graph
 
-        # Bridge node: session_path -> session_dir
+        # Bridge node: level1_cleanup -> level3_init (v1.16.0: Level 2 removed)
         g.add_node("level3_init", level3_init_node)
-        g.add_edge("level2_optimize_context", "level3_init")
+        g.add_edge("level1_cleanup", "level3_init")
 
         # Pre-analysis gate: call graph scan
         # Template fast-path (--orchestration-template): jumps directly to level3_step8
@@ -405,12 +341,12 @@ class PipelineBuilder:
         Raises:
             RuntimeError: If not all required levels were added before build().
         """
-        required = {"level_minus1", "level1", "level2", "level3"}
+        required = {"level_minus1", "level1", "level3"}
         missing = required - set(self._levels_added)
         if missing:
             raise RuntimeError(
                 f"Cannot build pipeline: missing levels {sorted(missing)}. "
-                "Call add_level_minus1(), add_level1(), add_level2(), add_level3() first."
+                "Call add_level_minus1(), add_level1(), add_level3() first."
             )
 
         try:
@@ -439,4 +375,4 @@ def create_flow_graph(hook_mode: bool = False):
     Returns:
         Compiled LangGraph runnable (CompiledStateGraph).
     """
-    return PipelineBuilder().add_level_minus1().add_level1().add_level2().add_level3(hook_mode=hook_mode).build()
+    return PipelineBuilder().add_level_minus1().add_level1().add_level3(hook_mode=hook_mode).build()

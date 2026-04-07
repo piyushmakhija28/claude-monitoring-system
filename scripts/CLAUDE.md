@@ -1,7 +1,7 @@
 # Claude Workflow Engine - Scripts Directory Context
 
 **Project:** Claude Workflow Engine
-**Version:** 1.15.2
+**Version:** 1.16.0
 **Type:** LangGraph Orchestration Pipeline
 **Last Updated:** 2026-04-05
 
@@ -30,7 +30,7 @@ This directory contains the pipeline entry point, hook scripts, and the core `la
 | `/CHANGELOG.md` | Full project changelog (root) |
 | `/SRS.md` | System Requirements Specification (root) |
 
-### langgraph_engine/ Package Structure (v1.15.2)
+### langgraph_engine/ Package Structure (v1.16.0)
 
 ```
 langgraph_engine/
@@ -48,7 +48,7 @@ langgraph_engine/
 +-- call_graph_builder.py # Compat shim -> parsers/
 +-- level_minus1/        # Level -1 package (policies/)
 +-- level1_sync/         # Level 1 package (3 modules + policies/ + architecture/)
-+-- level2_standards/    # Level 2 package (2 modules + policies/ + architecture/)
++-- level2_standards/    # Level 2 package -- policies/ only (Python scripts removed v1.16.0)
 +-- level3_execution/    # Level 3 package (subgraph.py + nodes/ + sonarqube/ + policies/ + architecture/)
 |   +-- subgraph.py      # v2 subgraph builder (canonical entry point)
 |   +-- nodes/           # v2 step wrapper nodes (orchestration, pre_nodes, step_wrappers_*)
@@ -67,6 +67,17 @@ langgraph_engine/
 - All TOON/plan-mode/skill-selection artifacts deleted (toon_compression.py, toon_schema.py, toon_models.py, toon_format.py, steps/).
 - `prompt_gen_expert_caller.py` argparse bug fixed (--complexity=N form) + display changed from /10 to /25.
 - Stale test files removed. Policy dirs cleaned.
+
+### v1.16.0 Changes
+
+**v1.16.0** — Level 2 script purge:
+- All Python scripts in `level2_standards/` deleted (nodes.py, helpers.py, routing.py, subgraph.py, mcp_plugin_loader.py, standards_schema.py, architecture/*.py, __init__.py).
+- Compat shims `mcp_plugin_loader.py` and `standards_schema.py` deleted.
+- `routing/level2_routes.py` deleted.
+- `tests/test_level2_standards.py` deleted.
+- Level 2 helper nodes removed from `helper_nodes/` (emergency_archive, optimize_context_after_level2, level2_select_standards_node).
+- Pipeline re-wired: `level1_cleanup` → `level3_init` directly (no Level 2 graph nodes).
+- `level2_standards/policies/` retained — .md policy files read directly at runtime.
 
 ### Running the Pipeline
 

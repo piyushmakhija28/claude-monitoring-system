@@ -183,7 +183,6 @@ _pol_tb = _load_submodule(os.path.join("policies", "task_breakdown.py"), "polici
 _pol_ss = _load_submodule(os.path.join("policies", "skill_selection.py"), "policies")
 _pol_cr = _load_submodule(os.path.join("policies", "context_read.py"), "policies")
 _pol_l1 = _load_submodule(os.path.join("policies", "level1_sync.py"), "policies")
-_pol_l2 = _load_submodule(os.path.join("policies", "level2_standards.py"), "policies")
 _pol_bash = _load_submodule(os.path.join("policies", "bash_commands.py"), "policies")
 _pol_uni = _load_submodule(os.path.join("policies", "python_unicode.py"), "policies")
 _pol_grep = _load_submodule(os.path.join("policies", "grep_opt.py"), "policies")
@@ -203,7 +202,6 @@ _new_check_task_breakdown_pending = _pol_tb.check_task_breakdown_pending
 _new_check_skill_selection_pending = _pol_ss.check_skill_selection_pending
 _new_check_context_read_complete = _pol_cr.check_context_read_complete
 _new_check_level1_sync_complete = _pol_l1.check_level1_sync_complete
-_new_check_level2_standards_complete = _pol_l2.check_level2_standards_complete
 _new_check_bash_commands = _pol_bash.check_bash_commands
 _new_check_python_unicode = _pol_uni.check_python_unicode
 _new_check_grep_opt = _pol_grep.check_grep_opt
@@ -326,25 +324,6 @@ def check_level1_sync_complete(tool_name):
         msg = (
             "[PRE-TOOL BLOCKED] Level 1 Sync has not completed!\n"
             "  Tool: " + tool_name + " blocked until Level 1 runs.\n"
-            "  Action: Run the 3-level flow pipeline first."
-        )
-        return [], [msg]
-    return [], []
-
-
-def check_level2_standards_complete(tool_name):
-    if tool_name not in BLOCKED_WHILE_CHECKPOINT_PENDING:
-        return [], []
-    sid = get_current_session_id()
-    if not sid:
-        return [], []
-    trace = _load_raw_flow_trace()
-    if not trace:
-        return [], []
-    if not _pipeline_step_present(trace, "level2"):
-        msg = (
-            "[PRE-TOOL BLOCKED] Level 2 Standards have not loaded!\n"
-            "  Tool: " + tool_name + " blocked until Level 2 runs.\n"
             "  Action: Run the 3-level flow pipeline first."
         )
         return [], [msg]
@@ -488,7 +467,6 @@ _BLOCKING_POLICIES = [
     ("skill_selection", check_skill_selection_pending),
     ("context_read", check_context_read_complete),
     ("level1_sync", check_level1_sync_complete),
-    ("level2_standards", check_level2_standards_complete),
     ("python_unicode", check_python_unicode),
     ("bash_commands", check_bash_commands),
     ("grep_opt", check_grep_opt),
