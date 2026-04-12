@@ -119,10 +119,25 @@ def step0_task_analysis_node(state: FlowState) -> Dict[str, Any]:
         logger.info("[v2] Step 0 prompt_gen_expert_caller: orchestration_prompt length=%d", len(orchestration_prompt))
 
     # --- PHASE 2: orchestrator_agent_caller (claude CLI subprocess, streaming stderr) ---
+    _EXECUTION_WRAPPER = (
+        "You are orchestrator-agent. Below is a fully generated orchestration prompt "
+        "with a MULTI-AGENT PROMPT BUNDLE containing per-agent execution prompts.\n\n"
+        "YOUR EXECUTION PROTOCOL:\n"
+        "1. Break down the task into multiple TODOs from the orchestration plan below.\n"
+        "2. Each TODO must carry its full context from this prompt — do not lose detail.\n"
+        "3. Execute TODOs in parallel where the plan allows (respect Parallel Groups "
+        "and Sequential Chain from the EXECUTION SUMMARY).\n"
+        "4. For each TODO, use the corresponding agent's prompt from the "
+        "MULTI-AGENT PROMPT BUNDLE verbatim — do not rewrite or summarize it.\n"
+        "5. Apply MODEL FALLBACK PROTOCOL: sonnet -> opus -> escalate to user on rate limits.\n\n"
+        "--- BEGIN ORCHESTRATION PROMPT ---\n\n"
+    )
+    _full_prompt = _EXECUTION_WRAPPER + orchestration_prompt + "\n\n--- END ORCHESTRATION PROMPT ---"
+
     orch_result: Dict[str, Any] = {}
     try:
         with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False, encoding="utf-8") as _tf:
-            _tf.write(orchestration_prompt)
+            _tf.write(_full_prompt)
             _prompt_file = _tf.name
 
         if DEBUG:
