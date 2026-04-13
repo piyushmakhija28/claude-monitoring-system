@@ -1,4 +1,3 @@
-# ruff: noqa: F821
 """parsers/call_graph_builder_legacy.py - Legacy CallGraphBuilder class.
 
 Extracted from call_graph_builder.py. Contains the builder orchestrator
@@ -6,14 +5,33 @@ and public convenience functions.
 
 Windows-safe: ASCII only.
 """
+
 import ast
 import logging
 import os
+import re
 from pathlib import Path
 
-from .graph_model import CallGraph
+from .graph_model import CallGraph, make_call_edge, make_class_node, make_method_node
+from .python_parser import _CallGraphVisitor
 
 logger = logging.getLogger(__name__)
+
+
+class _RegexVisitor(object):
+    """Minimal visitor shape used by the legacy Java/TS/Kotlin regex parsers.
+
+    Mirrors the shape of _CallGraphVisitor (classes/methods/edges lists
+    plus filepath/rel_path) so graph.add_file_results() can consume it
+    uniformly regardless of source language.
+    """
+
+    def __init__(self, filepath, rel_path):
+        self.filepath = filepath
+        self.rel_path = rel_path
+        self.classes = []
+        self.methods = []
+        self.edges = []
 
 
 def _safe_avg(values):

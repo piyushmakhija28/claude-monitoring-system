@@ -814,8 +814,15 @@ def extract_phase_subgraph(snapshot, phase_files):
     empty = {
         "nodes": {"classes": [], "methods": []},
         "edges": [],
-        "stats": {"methods_in_scope": 0, "edges_in_scope": 0, "files_in_scope": 0},
+        "stats": {
+            "methods_in_scope": 0,
+            "methods_in_phase": 0,
+            "edges_in_scope": 0,
+            "files_in_scope": 0,
+            "classes_in_scope": 0,
+        },
         "phase_files": list(phase_files) if phase_files else [],
+        "expanded_files": [],
     }
 
     if not snapshot or not phase_files:
