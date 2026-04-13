@@ -10,6 +10,37 @@ ASCII-only (cp1252-safe for Windows).
 """
 
 import json
+import logging
+import os
+
+logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Transitive call-path exploration limits
+# ---------------------------------------------------------------------------
+# compute_call_paths() previously hard-coded max_depth=15 and max_paths=200
+# which silently truncated analysis of any call chain longer than 15 hops.
+# Issue #207 raised the defaults and made both configurable via env vars so
+# operators can tune per project without editing source.
+#   CLAUDE_CG_MAX_DEPTH  (default 30) — deeper covers most real codebases
+#   CLAUDE_CG_MAX_PATHS  (default 500) — permits wider fanout capture
+# Callers may also pass explicit max_depth / max_paths kwargs which override
+# the env defaults for a single call.
+
+
+def _env_int(name, default):
+    """Parse an int env var; fall back to default on missing/invalid value."""
+    raw = os.environ.get(name)
+    if not raw:
+        return default
+    try:
+        return int(raw)
+    except (ValueError, TypeError):
+        return default
+
+
+DEFAULT_MAX_DEPTH = _env_int("CLAUDE_CG_MAX_DEPTH", 30)
+DEFAULT_MAX_PATHS = _env_int("CLAUDE_CG_MAX_PATHS", 500)
 
 # =========================================================================
 # Node / Edge factory helpers
@@ -257,17 +288,36 @@ class CallGraph:
     # Analysis
     # ------------------------------------------------------------------
 
-    def compute_call_paths(self, max_depth=15, max_paths=200):
+    def compute_call_paths(self, max_depth=None, max_paths=None):
         """Compute all call paths from entry points.
 
         Entry points are methods/functions not called by any other method.
 
+        Args:
+            max_depth: Maximum path depth to explore. Defaults to
+                DEFAULT_MAX_DEPTH (30, overridable via CLAUDE_CG_MAX_DEPTH
+                env var). Paths longer than this are truncated.
+            max_paths: Maximum number of paths to emit. Defaults to
+                DEFAULT_MAX_PATHS (500, overridable via CLAUDE_CG_MAX_PATHS
+                env var). Emission stops once this many paths have been
+                collected and a warning is logged.
+
         Returns list of path dicts:
         [{"id": "path_N", "path": [fqn1, fqn2, ...], "depth": N,
           "total_complexity": N}]
+
+        Previously hard-coded at max_depth=15, max_paths=200 — issue #207
+        raised the defaults and made them configurable so deep call chains
+        in larger codebases are no longer silently truncated.
         """
         if self._call_paths is not None:
             return self._call_paths
+
+        # Resolve limits (explicit args override env defaults)
+        if max_depth is None:
+            max_depth = DEFAULT_MAX_DEPTH
+        if max_paths is None:
+            max_paths = DEFAULT_MAX_PATHS
 
         edges = self.get_edges()
 
@@ -330,6 +380,16 @@ class CallGraph:
                         if callee not in self.methods:
                             continue  # skip unresolved
                         stack.append((callee, path + [callee], depth + 1))
+
+        # Emit a warning when exploration hit a hard cap so operators know
+        # their results may be truncated. Keeps silent truncation visible
+        # without changing the return shape.
+        if path_id >= max_paths:
+            logger.warning(
+                "compute_call_paths: hit max_paths=%d limit; results truncated. "
+                "Increase via CLAUDE_CG_MAX_PATHS env var or pass max_paths kwarg.",
+                max_paths,
+            )
 
         self._call_paths = paths
         return paths
