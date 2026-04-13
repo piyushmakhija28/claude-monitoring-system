@@ -354,50 +354,66 @@ kubectl apply -f k8s/secret.yaml -f k8s/configmap.yaml \
 
 ## Known Issues & Production Readiness
 
-**Current production readiness: ~60%.** Infrastructure is solid (health server, metrics, tracing, audit log, secrets manager all implemented), but the test suite currently reports **701 passed / 113 failed / 38 errors** (80.5% pass rate) — below the 95%+ bar required for production.
+**Current production readiness: ~85%.** Infrastructure is solid (health server, metrics, tracing, audit log, secrets manager all implemented) AND the test suite is now green: **793 passed / 0 failed / 0 errors / 46 skipped / 11 xfailed (100% pass rate of runnable tests)**. The main remaining gap is integration verification at runtime and one tracked backend bug.
 
-**Root cause:** Recent refactor commits (v1.15.0 → v1.16.1) deleted or moved several modules (TOON schema, UML refactor, MCP servers → separate repos, Level 2 purge, timeout wrapper API changes) but the corresponding test files were not updated. Almost all failures are tests referencing deleted code, not production regressions.
+### Recently Fixed (batch closed 2026-04-13)
 
-### Open Issues (Ship-Blockers)
+Ten GitHub issues closed in a single cleanup sprint. Most failures were tests referencing code deleted in the v1.15.0 → v1.16.1 refactors; the remaining 5 were production bugs hidden by `# ruff: noqa: F821` suppressors:
 
-| # | Issue | Tests Affected | Severity | Category |
-|---|-------|---------------:|----------|----------|
-| [#200](../../issues/200) | 33 tests reference deleted `langgraph_engine.toon_schema` + `subgraphs` (v1.15.2 purge) | 33 | CRITICAL | test |
-| [#201](../../issues/201) | 40 tests reference deleted `UMLAstAnalyzer` class (diagrams/ Strategy refactor) | 40 | CRITICAL | test |
-| [#202](../../issues/202) | 37 MCP tests reference deleted `src/mcp/*_mcp_server.py` (servers moved to techdeveloper-org) | 37 | HIGH | test |
-| [#203](../../issues/203) | 16 tests reference deleted `scripts/session-id-generator.py` + `metrics-emitter.py` | 16 | HIGH | test |
-| [#204](../../issues/204) | 10 `call_graph_analyzer` tests use stale stats key `methods_in_phase` (renamed to `methods_in_scope`) | 10 | MEDIUM | test |
-| [#205](../../issues/205) | 7 `level3_robustness` tests import removed `timeout_wrapper.fallback_step2` | 7 | MEDIUM | test |
-| [#206](../../issues/206) | 3 `test_new_components` tests reference removed `check_level2_standards_complete` (v1.16.0 Level 2 purge) | 3 | MEDIUM | test |
-| [#207](../../issues/207) | `graph_model.compute_call_paths` hard `max_depth=15` cap — truncates call-graph analysis | pipeline | HIGH | backend |
-| [#208](../../issues/208) | Python 3.13 `DeprecationWarning: __package__ != __spec__.parent` in `hooks/pre_tool_enforcer/policies/*.py` | pipeline | MEDIUM | scripts |
-| [#209](../../issues/209) | Deferred build_dependency_resolver defects D9–D16 (parser edge cases) | — | MEDIUM | enhancement |
-| [#210](../../issues/210) | Miscellaneous test failures (e2e stale guard, retry history, BDR self-test, pre_tool_enforcer) | 6 | MEDIUM | test |
+| # | Issue | Resolution | Commit |
+|---|-------|-----------|--------|
+| [#200](../../issues/200) | 33 TOON/subgraphs tests | Deleted 6 stale test classes; kept 3 with current APIs | `fab770b` |
+| [#201](../../issues/201) | 40 UML tests referencing deleted `UMLAstAnalyzer` | Fixed missing imports in `diagrams/legacy_generator.py` + wrong `call_graph_builder` path — 67/67 pass | `98e226c` |
+| [#202](../../issues/202) | 37 MCP integration tests | Added `pytest.mark.skip` pointing to separate techdeveloper-org repos | `8b198b8` |
+| [#203](../../issues/203) | 16 root_scripts tests with stale paths | Updated paths to `scripts/tools/` and added `hooks/` to sys.path | `ae43b3c` |
+| [#204](../../issues/204) | 10 call_graph_analyzer tests | Fixed 2 production bugs: missing `methods_in_phase` key in empty fallback + missing `_CallGraphVisitor` import hidden by noqa — 34/34 pass | `e03bbf6` |
+| [#205](../../issues/205) | 7 level3_robustness tests | Rewrote `TestStepTimeout` for current active step set (Pre-0, Step 0, Steps 8-14) | `2bd8fd1` |
+| [#206](../../issues/206) | 3 Level 2 enforcement tests | Deleted test classes (Level 2 purged in v1.16.0) | `c7bab58` |
+| [#207](../../issues/207) | `compute_call_paths` max_depth=15 hard cap | Parameterized via `CLAUDE_CG_MAX_DEPTH` / `CLAUDE_CG_MAX_PATHS` env vars, defaults raised to 30 / 500 + truncation WARNING log. **This is the second half of the original "call graph depth not what I expect" complaint — both halves are now resolved.** | `bbef042` |
+| [#208](../../issues/208) | Python 3.13 `__package__` deprecation | Fixed hooks `_load_submodule` — removed manual `__package__` assignment and `submodule_search_locations=[]` hint | `396e758` |
+| [#210](../../issues/210) | 6 miscellaneous failures | Fixed each individually; uncovered broken Step 10/11 functions (tracked in [#211](../../issues/211)) | `02e93ab` |
 
-**Total:** 11 open issues tracking 152 failing tests + 2 non-test correctness issues.
+Also earlier: **[commit `f27cae0`]** `build_dependency_resolver` — 11 defects fixed (D1–D8, D12, D14, D15). New `registries.py` leaf module. 82 new tests, 75.4% coverage on the module. This was the **first half** of the call-graph depth complaint; `f27cae0` + `bbef042` together resolve it completely.
 
-### Recently Fixed
+### Recurring Pattern — `# ruff: noqa: F821`
 
-- **[commit `f27cae0`]** build_dependency_resolver — 11 defects fixed (D1 critical no-op at caller site, D2 wrong edge dedup schema, D3 missing FQN namespacing, D4 unbounded filesystem scan, D5 unbounded rglob, D6 circular import, D7 setattr cache invalidation, D8 discarded delta tracking, D12 O(N²) classification, D14 sys.path-polluting import chain, D15 detect_build_system single-match). New `registries.py` leaf module. 82 new tests, 75.4% coverage on the module. **This was the first half of the original "call graph depth not what I expect" complaint** — see [#207](../../issues/207) for the second half.
+Four separate production bugs were uncovered during this cleanup, all hidden by a file-level `# ruff: noqa: F821` suppressor that masked `NameError` at runtime:
+
+1. `build_dependency_resolver/resolver.py` — 4 missing parsers imports (`f27cae0`)
+2. `parsers/call_graph_builder_legacy.py` — missing `_CallGraphVisitor` + 4 Java/TS/Kotlin helpers (`e03bbf6`)
+3. `level3_execution/nodes/step_wrappers_10_11.py` — missing `_run_step`, `get_infra`, plus 2 genuinely undefined functions ([#211](../../issues/211), `02e93ab`)
+4. `diagrams/legacy_generator.py` — missing `UMLAstAnalyzer` (`98e226c`)
+
+**Lesson:** `# ruff: noqa: F821` is not a safe default — it silently hides real `NameError` bugs. A repo-wide audit for remaining suppressors is recommended.
+
+### Still Open
+
+| # | Issue | Severity | Category |
+|---|-------|----------|----------|
+| [#209](../../issues/209) | Deferred build_dependency_resolver defects D9, D10, D11, D13, D16 (parser edge cases for Cargo, Gradle, pyproject, PEP 508 requirements, network classification) | MEDIUM | enhancement — tracking |
+| [#211](../../issues/211) | `step_wrappers_10_11.py` references undefined `step10_implementation_execution` + `step11_pull_request_review` — Steps 10/11 silently fall back to ERROR status in production | HIGH | backend |
+
+#211 is the most significant remaining gap: Steps 10 (Implementation Execution) and 11 (PR + Code Review) are no-ops in production because the inner execution functions were removed in a prior refactor and never restored. The outer wrappers catch the `NameError` via `_run_step` and return the fallback_result. Fixing #211 requires locating or reimplementing the deleted execution logic.
 
 ### Production Readiness Checklist
 
 | Check | Status | Note |
 |-------|--------|------|
-| Test suite ≥ 95% pass | 🔴 80.5% | Blocked by issues #200–#206 |
-| No test collection errors | 🔴 38 errors | Mostly deleted-module imports |
-| Call graph pipeline verified | 🟡 Partial | `build_dependency_resolver` fixed; `call_graph_analyzer` tests blocked on #204 |
-| UML pipeline verified | 🔴 Broken | Blocked by #201 |
-| MCP integration verified | 🔴 Broken | Blocked by #202 |
-| Depth issue fully resolved | 🟡 Half done | First half fixed in `f27cae0`; second half tracked in #207 |
-| Python 3.13 compat | 🟡 Warnings | Tracked in #208 |
-| Python 3.14 ready | 🔴 Not yet | #208 will become hard ImportError |
+| Test suite ≥ 95% pass | 🟢 100% | 793/793 runnable tests pass |
+| No test collection errors | 🟢 0 errors | — |
+| Call graph pipeline verified | 🟢 Verified | `build_dependency_resolver` + `call_graph_analyzer` + `graph_model.compute_call_paths` all green |
+| UML pipeline verified | 🟢 Verified | 67/67 UML tests pass |
+| MCP integration verified | 🟡 Skipped | Tests should live in each separate repo under techdeveloper-org |
+| Depth issue fully resolved | 🟢 Fully fixed | Both halves resolved (`f27cae0` + `bbef042`) |
+| Python 3.13 compat | 🟢 Clean | No DeprecationWarnings from hooks |
+| Python 3.14 ready | 🟢 Ready | Forward-compatible with 3.14 |
 | Health + metrics + tracing | 🟢 Implemented | Code exists; runtime verification pending |
 | Secrets manager + audit log | 🟢 Implemented | Code exists; runtime verification pending |
 | Kubernetes manifests | 🟢 Present | `k8s/` directory with deployment, service, HPA |
 | CI pipeline | 🟡 Manual-only | `workflow_dispatch` only per `.github/workflows/` |
+| Step 10/11 production path | 🔴 Broken | [#211](../../issues/211) — silent fallback to ERROR status |
 
-**To reach production-ready:** fix the 11 open issues in priority order (CRITICAL → HIGH → MEDIUM), re-run full test suite, target ≥ 95% pass rate.
+**To reach production-ready:** fix [#211](../../issues/211) (restore Step 10/11 execution functions). The other open issue ([#209](../../issues/209)) is parser edge-case cleanup that does not block shipping.
 
 ---
 
