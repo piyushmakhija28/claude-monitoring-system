@@ -34,269 +34,25 @@ All public functions are fail-safe (catch all exceptions and return safe fallbac
 Uses standard logging (not loguru). ASCII-only source. Python 3.8+ compatible.
 """
 
-# ruff: noqa: F821
-
 import logging
 from pathlib import Path
 from typing import Any, Dict, List
 
+# D6: Well-known external dependency sets moved to registries.py leaf module.
+# Helper functions live in parsers.py; imported here at top level so static
+# analysis (ruff) can see the call graph — previously hidden by a noqa: F821
+# suppressor which masked 4 NameError bugs at runtime.
+from .parsers import (
+    _build_question,
+    _classify_dep,
+    _dir_has_code,
+    _find_local_source,
+    _import_call_graph_builder,
+    _merge_sub_graph,
+    _parse_raw_deps,
+)
+
 logger = logging.getLogger(__name__)
-
-# ---------------------------------------------------------------------------
-# Well-known external dependency sets
-# ---------------------------------------------------------------------------
-
-PYTHON_WELL_KNOWN = frozenset(
-    [
-        "flask",
-        "django",
-        "fastapi",
-        "sqlalchemy",
-        "alembic",
-        "celery",
-        "redis",
-        "pymongo",
-        "motor",
-        "psycopg2",
-        "aiohttp",
-        "httpx",
-        "requests",
-        "urllib3",
-        "boto3",
-        "botocore",
-        "pydantic",
-        "marshmallow",
-        "pytest",
-        "unittest",
-        "mock",
-        "coverage",
-        "mypy",
-        "pylint",
-        "flake8",
-        "black",
-        "isort",
-        "setuptools",
-        "wheel",
-        "pip",
-        "virtualenv",
-        "numpy",
-        "pandas",
-        "scipy",
-        "matplotlib",
-        "sklearn",
-        "tensorflow",
-        "torch",
-        "keras",
-        "transformers",
-        "langchain",
-        "langgraph",
-        "anthropic",
-        "loguru",
-        "structlog",
-        "python-dotenv",
-        "pydantic-settings",
-        "uvicorn",
-        "gunicorn",
-        "starlette",
-        "typer",
-        "click",
-        "rich",
-        "jinja2",
-        "werkzeug",
-        "itsdangerous",
-        "markupsafe",
-        "cryptography",
-        "paramiko",
-        "fabric",
-        "ansible",
-        "docker",
-        "kubernetes",
-        "boto",
-        "google-cloud",
-        "azure",
-        "stripe",
-        "twilio",
-        "sendgrid",
-        "pillow",
-        "lxml",
-        "beautifulsoup4",
-        "scrapy",
-        "selenium",
-        "playwright",
-        "sqlmodel",
-        "tortoise-orm",
-        "databases",
-        "aiosqlite",
-        "aiomysql",
-        "asyncpg",
-        "influxdb",
-        "elasticsearch",
-        "pinecone",
-        "mcp",
-        "fastmcp",
-        "httpcore",
-        "certifi",
-        "charset-normalizer",
-        "packaging",
-        "tomli",
-        "tomllib",
-        "yaml",
-        "pyyaml",
-        "toml",
-    ]
-)
-
-JAVA_WELL_KNOWN = frozenset(
-    [
-        "org.springframework",
-        "org.hibernate",
-        "org.apache",
-        "com.google",
-        "com.fasterxml.jackson",
-        "junit",
-        "org.mockito",
-        "org.slf4j",
-        "ch.qos.logback",
-        "log4j",
-        "commons-lang",
-        "commons-io",
-        "commons-collections",
-        "guava",
-        "lombok",
-        "javax",
-        "jakarta",
-        "io.micronaut",
-        "io.quarkus",
-        "org.projectlombok",
-        "net.sf",
-        "org.bouncycastle",
-        "io.netty",
-        "com.squareup",
-        "okhttp3",
-        "retrofit2",
-        "com.zaxxer",
-        "mysql",
-        "postgresql",
-        "h2database",
-        "flyway",
-        "liquibase",
-        "mapstruct",
-        "modelmapper",
-    ]
-)
-
-NODE_WELL_KNOWN = frozenset(
-    [
-        "express",
-        "koa",
-        "hapi",
-        "fastify",
-        "nest",
-        "next",
-        "nuxt",
-        "react",
-        "vue",
-        "angular",
-        "svelte",
-        "webpack",
-        "vite",
-        "rollup",
-        "babel",
-        "typescript",
-        "eslint",
-        "prettier",
-        "jest",
-        "mocha",
-        "chai",
-        "sinon",
-        "supertest",
-        "axios",
-        "got",
-        "node-fetch",
-        "lodash",
-        "ramda",
-        "moment",
-        "dayjs",
-        "date-fns",
-        "uuid",
-        "bcrypt",
-        "jsonwebtoken",
-        "passport",
-        "helmet",
-        "cors",
-        "morgan",
-        "body-parser",
-        "multer",
-        "sharp",
-        "jimp",
-        "socket.io",
-        "ws",
-        "mongoose",
-        "sequelize",
-        "typeorm",
-        "prisma",
-        "knex",
-        "objection",
-        "redis",
-        "ioredis",
-        "amqplib",
-        "kafkajs",
-        "dotenv",
-        "yargs",
-        "commander",
-        "chalk",
-        "ora",
-        "inquirer",
-        "nodemon",
-        "pm2",
-    ]
-)
-
-GO_WELL_KNOWN = frozenset(
-    [
-        "github.com/gin-gonic",
-        "github.com/gorilla",
-        "github.com/labstack",
-        "github.com/go-chi",
-        "github.com/stretchr",
-        "github.com/sirupsen",
-        "go.uber.org",
-        "github.com/pkg/errors",
-        "github.com/spf13",
-        "github.com/google",
-        "google.golang.org",
-        "golang.org/x",
-    ]
-)
-
-RUST_WELL_KNOWN = frozenset(
-    [
-        "serde",
-        "tokio",
-        "actix-web",
-        "axum",
-        "warp",
-        "rocket",
-        "reqwest",
-        "hyper",
-        "tonic",
-        "prost",
-        "diesel",
-        "sqlx",
-        "anyhow",
-        "thiserror",
-        "log",
-        "tracing",
-        "clap",
-        "structopt",
-        "chrono",
-        "uuid",
-        "rand",
-        "regex",
-        "rayon",
-        "crossbeam",
-    ]
-)
 
 # ---------------------------------------------------------------------------
 # 1. detect_build_system
@@ -357,12 +113,26 @@ def detect_build_system(project_root: Any) -> Dict[str, Any]:
                     build_system = system
                 detected_files.extend(found)
 
+        # D15: collect all detected system names (plural) for multi-build-file projects
+        all_systems: List[str] = []
+        for system, filenames in checks:
+            for fname in filenames:
+                if (root / fname).is_file():
+                    if system not in all_systems:
+                        all_systems.append(system)
+                    break
+
         logger.debug("[BuildDepResolver] detect_build_system: system=%s files=%s", build_system, detected_files)
-        return {"build_system": build_system, "build_files": detected_files, "error": None}
+        return {
+            "build_system": build_system,  # singular: primary system (backward compat)
+            "build_systems": all_systems,  # plural: all detected systems (D15)
+            "build_files": detected_files,
+            "error": None,
+        }
 
     except Exception as exc:
         logger.exception("[BuildDepResolver] detect_build_system failed")
-        return {"build_system": "unknown", "build_files": [], "error": str(exc)}
+        return {"build_system": "unknown", "build_systems": [], "build_files": [], "error": str(exc)}
 
 
 # ---------------------------------------------------------------------------
@@ -401,8 +171,6 @@ def parse_dependencies(project_root: Any) -> Dict[str, Any]:
         needs_user_input: List[Dict] = []
 
         for dep in raw_deps:
-            from .parsers import _classify_dep  # lazy import to avoid circular
-
             classification = _classify_dep(root, dep, build_system)
             if classification == "internal":
                 internal.append(dep)
@@ -582,15 +350,12 @@ def enhance_call_graph(
                 "error": "graph is None",
             }
 
-        # Snapshot before state
+        # Snapshot before state (D8: capture class/method counts for delta tracking)
         before_stats = graph.get_stats() if hasattr(graph, "get_stats") else {}
         before_resolved = before_stats.get("resolved_edges", 0)
         before_total = before_stats.get("total_call_edges", 1)
-        before_stats.get("total_classes", 0)
-        before_stats.get("total_methods", 0)
-
-        new_classes = 0
-        new_methods = 0
+        before_classes = before_stats.get("total_classes", 0)
+        before_methods = before_stats.get("total_methods", 0)
 
         for dep_info in resolved_deps:
             sub_graph = dep_info.get("graph")
@@ -599,24 +364,30 @@ def enhance_call_graph(
             dep_name = dep_info.get("name", "?")
             try:
                 _merge_sub_graph(graph, sub_graph, dep_name)
-                sub_stats = sub_graph.get_stats() if hasattr(sub_graph, "get_stats") else {}
-                new_classes += sub_stats.get("total_classes", 0)
-                new_methods += sub_stats.get("total_methods", 0)
             except Exception as merge_exc:
                 logger.warning("[BuildDepResolver] merge failed for '%s': %s", dep_name, merge_exc)
 
-        # Invalidate caches before re-resolution
+        # Invalidate caches before re-resolution (D7: use delattr, not setattr None)
         for attr in ("_call_paths", "_impact_map", "_resolved_edges"):
             if hasattr(graph, attr):
-                setattr(graph, attr, None)
+                try:
+                    delattr(graph, attr)
+                except AttributeError:
+                    pass  # Already removed or slot-based -- safe to ignore
 
         # Re-run edge resolution
-        if hasattr(graph, "resolve_edges"):
+        if not hasattr(graph, "resolve_edges"):
+            logger.warning("[BuildDepResolver] graph has no resolve_edges method -- skipping re-resolution")
+        else:
             graph.resolve_edges()
 
         after_stats = graph.get_stats() if hasattr(graph, "get_stats") else {}
         after_resolved = after_stats.get("resolved_edges", 0)
         after_total = after_stats.get("total_call_edges", 1)
+
+        # D8: compute actual deltas from before/after graph stats
+        new_classes = after_stats.get("total_classes", 0) - before_classes
+        new_methods = after_stats.get("total_methods", 0) - before_methods
 
         before_pct = (before_resolved / max(before_total, 1)) * 100.0
         after_pct = (after_resolved / max(after_total, 1)) * 100.0

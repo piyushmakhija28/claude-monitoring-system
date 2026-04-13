@@ -16,7 +16,14 @@ from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
-from .resolver import GO_WELL_KNOWN, JAVA_WELL_KNOWN, NODE_WELL_KNOWN, PYTHON_WELL_KNOWN, RUST_WELL_KNOWN  # noqa: E402
+from .registries import (  # noqa: E402
+    GO_WELL_KNOWN,
+    JAVA_WELL_KNOWN,
+    NODE_WELL_KNOWN,
+    NODE_WELL_KNOWN_NORMALIZED,
+    PYTHON_WELL_KNOWN_NORMALIZED,
+    RUST_WELL_KNOWN_NORMALIZED,
+)
 
 
 def _parse_raw_deps(
@@ -385,15 +392,15 @@ def _classify_dep(root: Path, dep: Dict, build_system: str) -> str:
         dep["hint_path"] = str(local_path)
         return "internal"
 
-    # Check well-known external sets
+    # Check well-known external sets (O(1) normalized set lookups -- D12)
     if build_system in ("python-pip", "python-pyproject", "python-setup", "python-pipenv"):
         clean = name.replace("-", "").replace("_", "").lower()
-        for known in PYTHON_WELL_KNOWN:
-            if clean == known.replace("-", "").replace("_", "").lower():
-                return "external_known"
+        if clean in PYTHON_WELL_KNOWN_NORMALIZED:
+            return "external_known"
 
     elif build_system == "maven":
         group = dep.get("_group_id", "").lower()
+        # Prefix check still requires iteration (no normalized form for prefix match)
         for known in JAVA_WELL_KNOWN:
             if group.startswith(known.lower()):
                 return "external_known"
@@ -405,11 +412,15 @@ def _classify_dep(root: Path, dep: Dict, build_system: str) -> str:
                 return "external_known"
 
     elif build_system == "npm":
+        # O(1) exact match; prefix "@scope/" still needs linear scan
+        if name in NODE_WELL_KNOWN_NORMALIZED:
+            return "external_known"
         for known in NODE_WELL_KNOWN:
-            if name == known.lower() or name.startswith(f"@{known.lower()}"):
+            if name.startswith("@" + known.lower()):
                 return "external_known"
 
     elif build_system == "go":
+        # Prefix check requires iteration; plain stdlib names are O(1) branch
         for known in GO_WELL_KNOWN:
             if name.startswith(known.lower()):
                 return "external_known"
@@ -418,9 +429,9 @@ def _classify_dep(root: Path, dep: Dict, build_system: str) -> str:
             return "external_known"
 
     elif build_system == "cargo":
-        for known in RUST_WELL_KNOWN:
-            if name == known.lower():
-                return "external_known"
+        clean = name.replace("-", "").replace("_", "").lower()
+        if clean in RUST_WELL_KNOWN_NORMALIZED:
+            return "external_known"
 
     # Short names without path separators are likely external but ambiguous
     if len(name) <= 3 or ("/" not in name and "." not in name and ":" not in name):
@@ -431,7 +442,14 @@ def _classify_dep(root: Path, dep: Dict, build_system: str) -> str:
 
 
 def _find_local_source(root: Path, dep_name: str) -> Optional[Path]:
-    """Try to locate a local source directory for a dependency name."""
+    """Try to locate a local source directory for a dependency name.
+
+    Search is restricted to subtrees of ``root`` by default.
+    Set env var BDR_ALLOW_PARENT_SEARCH=1 to also search root.parent
+    (not recommended -- can cause false positives and slow scans).
+    """
+    import os
+
     # Normalize: replace hyphens/dots with underscores for directory lookup
     candidates = [
         dep_name,
@@ -446,29 +464,82 @@ def _find_local_source(root: Path, dep_name: str) -> Optional[Path]:
             candidates.append(suffix)
             candidates.append(suffix.replace("-", "_"))
 
-    search_dirs = [root, root / "src", root / "lib", root / "packages", root / "modules", root / "vendor", root.parent]
+    search_dirs = [root, root / "src", root / "lib", root / "packages", root / "modules", root / "vendor"]
+
+    # Parent search gated behind env var to prevent accidental filesystem crawling
+    if os.environ.get("BDR_ALLOW_PARENT_SEARCH") == "1":
+        search_dirs.append(root.parent)
 
     for search_dir in search_dirs:
         if not search_dir.exists():
             continue
         for cand in candidates:
             candidate_path = search_dir / cand
-            if candidate_path.is_dir() and _dir_has_code(candidate_path):
-                return candidate_path
+            # Symlink guard: resolve to real path and ensure it stays under root
+            if candidate_path.is_dir():
+                try:
+                    real = candidate_path.resolve()
+                    root_real = root.resolve()
+                    # Accept path only if it is under the project root (or parent if allowed)
+                    if not str(real).startswith(str(root_real)):
+                        if os.environ.get("BDR_ALLOW_PARENT_SEARCH") != "1":
+                            logger.debug(
+                                "[BuildDepResolver] _find_local_source: skipping symlink outside root: %s",
+                                candidate_path,
+                            )
+                            continue
+                except Exception:
+                    continue
+                if _dir_has_code(candidate_path):
+                    return candidate_path
 
     return None
 
 
-def _dir_has_code(path: Path) -> bool:
-    """Return True if the directory contains at least one source file."""
+def _dir_has_code_uncached(path_str: str) -> bool:
+    """Bounded BFS implementation for _dir_has_code. Called via lru_cache wrapper."""
+    import collections
+
     code_extensions = {".py", ".java", ".kt", ".js", ".ts", ".go", ".rs", ".scala"}
+    max_depth = 4
+    max_files_scanned = 1000
+    files_scanned = 0
+
+    # BFS queue items: (directory_path, current_depth)
+    queue = collections.deque([(Path(path_str), 0)])
+
     try:
-        for child in path.rglob("*"):
-            if child.suffix.lower() in code_extensions:
-                return True
+        while queue:
+            current_dir, depth = queue.popleft()
+            if depth > max_depth:
+                continue
+            try:
+                for child in current_dir.iterdir():
+                    files_scanned += 1
+                    if files_scanned > max_files_scanned:
+                        return False
+                    if child.is_file() and child.suffix.lower() in code_extensions:
+                        return True
+                    if child.is_dir() and not child.is_symlink():
+                        queue.append((child, depth + 1))
+            except PermissionError:
+                continue
     except Exception:
         pass
     return False
+
+
+import functools  # noqa: E402
+
+
+@functools.lru_cache(maxsize=1024)
+def _dir_has_code(path: Path) -> bool:
+    """Return True if the directory contains at least one source file.
+
+    Uses bounded BFS (max_depth=4, max_files=1000) to avoid hanging on
+    deep or symlinked directory trees. Results are memoized via lru_cache.
+    """
+    return _dir_has_code_uncached(str(path))
 
 
 def _detect_maven_project_group(root: Path) -> Optional[str]:
@@ -538,8 +609,75 @@ def _build_question(
 # ---------------------------------------------------------------------------
 
 
+def _rewrite_subgraph_fqns(sub_graph: Any, prefix: str) -> None:
+    """Namespace all FQNs in sub_graph with ``prefix`` to prevent collisions.
+
+    Rewrites keys in nodes, classes, methods dicts and from/to/caller/callee
+    fields in each edge. The prefix used is ``dep::<dep_name>::``.
+
+    This is a mutating operation -- call before merging into main_graph.
+    """
+    dep_prefix = prefix + "::"
+
+    def _prefixed(fqn: str) -> str:
+        if fqn and not fqn.startswith("dep::"):
+            return dep_prefix + fqn
+        return fqn
+
+    # Rewrite nodes
+    if hasattr(sub_graph, "nodes") and isinstance(sub_graph.nodes, dict):
+        original_keys = list(sub_graph.nodes.keys())
+        for key in original_keys:
+            new_key = _prefixed(key)
+            if new_key != key:
+                sub_graph.nodes[new_key] = sub_graph.nodes.pop(key)
+
+    # Rewrite classes
+    if hasattr(sub_graph, "classes") and isinstance(sub_graph.classes, dict):
+        original_keys = list(sub_graph.classes.keys())
+        for key in original_keys:
+            new_key = _prefixed(key)
+            if new_key != key:
+                sub_graph.classes[new_key] = sub_graph.classes.pop(key)
+
+    # Rewrite methods
+    if hasattr(sub_graph, "methods") and isinstance(sub_graph.methods, dict):
+        original_keys = list(sub_graph.methods.keys())
+        for key in original_keys:
+            new_key = _prefixed(key)
+            if new_key != key:
+                sub_graph.methods[new_key] = sub_graph.methods.pop(key)
+
+    # Rewrite edge endpoint fields (support both caller/callee and from/to schemas)
+    if hasattr(sub_graph, "edges") and isinstance(sub_graph.edges, list):
+        for edge in sub_graph.edges:
+            for field in ("caller", "callee", "from", "to"):
+                if field in edge and edge[field]:
+                    edge[field] = _prefixed(edge[field])
+
+
 def _merge_sub_graph(main_graph: Any, sub_graph: Any, dep_name: str) -> None:
-    """Merge nodes, classes, methods, and edges from sub_graph into main_graph."""
+    """Merge nodes, classes, methods, and edges from sub_graph into main_graph.
+
+    Applies FQN namespacing (D3) before merging to prevent collisions with
+    main graph entries. Uses canonical edge dedup key (from, to, type) that
+    supports both caller/callee and from/to edge schemas (D2).
+
+    Invariant: main graph FQNs must NOT start with 'dep::' (they are owned
+    by the main project). Sub-graph FQNs are rewritten to 'dep::<name>::'.
+    """
+    # D3: namespace sub-graph FQNs before merging
+    _rewrite_subgraph_fqns(sub_graph, "dep::" + dep_name)
+
+    # Invariant check: main graph should not contain dep:: entries already
+    if hasattr(main_graph, "nodes") and isinstance(main_graph.nodes, dict):
+        dep_nodes = [k for k in main_graph.nodes if k.startswith("dep::")]
+        if dep_nodes:
+            logger.debug(
+                "[BuildDepResolver] main_graph already has %d dep:: nodes before merge",
+                len(dep_nodes),
+            )
+
     # Merge nodes dict
     if hasattr(main_graph, "nodes") and hasattr(sub_graph, "nodes"):
         for fqn, node in sub_graph.nodes.items():
@@ -558,20 +696,23 @@ def _merge_sub_graph(main_graph: Any, sub_graph: Any, dep_name: str) -> None:
             if fqn not in main_graph.methods:
                 main_graph.methods[fqn] = method
 
-    # Merge edges list (avoid duplicates via set of tuples)
+    # Merge edges list (D2: canonical dedup key uses from/to/type to support
+    # both caller/callee schema and from/to schema sub-graphs)
     if hasattr(main_graph, "edges") and hasattr(sub_graph, "edges"):
         existing_keys: set = set()
         for edge in main_graph.edges:
-            caller = edge.get("caller", "")
-            callee = edge.get("callee", "")
-            existing_keys.add((caller, callee))
+            src = edge.get("from", edge.get("caller", ""))
+            dst = edge.get("to", edge.get("callee", ""))
+            etype = edge.get("type", "call")
+            existing_keys.add((src, dst, etype))
 
         for edge in sub_graph.edges:
-            caller = edge.get("caller", "")
-            callee = edge.get("callee", "")
-            if (caller, callee) not in existing_keys:
+            src = edge.get("from", edge.get("caller", ""))
+            dst = edge.get("to", edge.get("callee", ""))
+            etype = edge.get("type", "call")
+            if (src, dst, etype) not in existing_keys:
                 main_graph.edges.append(edge)
-                existing_keys.add((caller, callee))
+                existing_keys.add((src, dst, etype))
 
     # Merge files set
     if hasattr(main_graph, "files") and hasattr(sub_graph, "files"):
@@ -586,58 +727,16 @@ def _merge_sub_graph(main_graph: Any, sub_graph: Any, dep_name: str) -> None:
 
 
 def _import_call_graph_builder(root: Path) -> Optional[Any]:
-    """Import CallGraphBuilder using 4 fallback strategies.
+    """Import CallGraphBuilder from the canonical package location.
 
-    1. Relative package import (langgraph_engine.call_graph_builder)
-    2. Sibling module import (call_graph_builder)
-    3. sys.path manipulation + import
-    4. importlib.util with absolute path
+    Single strategy: langgraph_engine.call_graph_builder package import.
+    sys.path manipulation and importlib.util hacks removed (D14) --
+    they mask import errors and can silently load stale .pyc files.
     """
-    # Strategy 1: package import
     try:
         from langgraph_engine.call_graph_builder import CallGraphBuilder
 
         return CallGraphBuilder
-    except ImportError:
-        pass
-
-    # Strategy 2: sibling import (same directory)
-    try:
-        from call_graph_builder import CallGraphBuilder
-
-        return CallGraphBuilder
-    except ImportError:
-        pass
-
-    # Strategy 3: sys.path manipulation
-    try:
-        import sys
-
-        engine_dir = str(Path(__file__).parent)
-        if engine_dir not in sys.path:
-            sys.path.insert(0, engine_dir)
-        from call_graph_builder import CallGraphBuilder
-
-        return CallGraphBuilder
-    except ImportError:
-        pass
-
-    # Strategy 4: importlib.util with absolute path
-    try:
-        import importlib.util
-
-        module_path = Path(__file__).parent / "call_graph_builder.py"
-        if not module_path.exists():
-            # Try relative to project root
-            module_path = root / "scripts" / "langgraph_engine" / "call_graph_builder.py"
-        if module_path.exists():
-            spec = importlib.util.spec_from_file_location("call_graph_builder", str(module_path))
-            if spec and spec.loader:
-                mod = importlib.util.module_from_spec(spec)
-                spec.loader.exec_module(mod)
-                return getattr(mod, "CallGraphBuilder", None)
-    except Exception as exc:
-        logger.debug("[BuildDepResolver] importlib strategy failed: %s", exc)
-
-    logger.warning("[BuildDepResolver] All 4 CallGraphBuilder import strategies failed")
-    return None
+    except ImportError as exc:
+        logger.warning("[BuildDepResolver] CallGraphBuilder import failed: %s", exc)
+        return None

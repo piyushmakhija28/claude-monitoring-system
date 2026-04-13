@@ -83,11 +83,15 @@ def step10_implementation_note(state: FlowState) -> Dict[str, Any]:
                     len(suggested_tests),
                 )
         # Resolve project dependencies for better graph coverage
+        # D1: guard-and-skip -- resolve_and_enhance requires a valid graph object,
+        # not None. Only call when pre_change_graph is a non-None object.
         try:
             from ..build_dependency_resolver import resolve_and_enhance
 
-            if call_context.get("call_graph_available") and pre_change_graph:
-                _dep_result = resolve_and_enhance(project_root, None)
+            if call_context.get("call_graph_available") and pre_change_graph is not None:
+                _dep_result = resolve_and_enhance(project_root, pre_change_graph)
+            else:
+                logger.debug("[v2] Step 10 dependency resolution skipped: pre_change_graph is None")
         except Exception as e:
             logger.debug("[v2] Step 10 dependency resolution skipped: %s", e)
     except Exception as e:
