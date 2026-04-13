@@ -132,6 +132,10 @@ class TestCheckpointerManager:
 # ============================================================================
 
 
+@pytest.mark.skip(
+    reason="enforcement_mcp_server.py moved to techdeveloper-org/mcp-enforcement; "
+    "tests should live in that repo — see issue #202"
+)
 class TestSystemHealthCheck:
     """Tests for check_system_health in enforcement MCP server."""
 
@@ -173,6 +177,10 @@ class TestSystemHealthCheck:
 # ============================================================================
 
 
+@pytest.mark.skip(
+    reason="standards_loader_mcp_server.py moved to techdeveloper-org/mcp-standards-loader; "
+    "tests should live in that repo — see issue #202"
+)
 class TestDynamicStandardsReload:
     """Tests for reload_standards in standards_loader MCP server."""
 

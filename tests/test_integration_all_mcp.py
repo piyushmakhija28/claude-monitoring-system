@@ -4,6 +4,21 @@ Tests cross-server scenarios, import health, and tool function signatures.
 Does NOT require running MCP servers - imports functions directly.
 
 Windows-safe: ASCII only (cp1252 compatible).
+
+HISTORICAL NOTE (issue #202):
+  This test file predates the MCP server extraction. All 13 MCP servers
+  have since been moved to separate repos under techdeveloper-org:
+    mcp-git-ops, mcp-github-api, mcp-enforcement, mcp-token-optimizer,
+    mcp-pre-tool-gate, mcp-post-tool-tracker, mcp-standards-loader,
+    mcp-uml-diagram, mcp-drawio-diagram, mcp-jira-api, mcp-jenkins-ci,
+    mcp-figma
+  Only session-mgr retains an in-engine copy at src/mcp/session_mcp_server.py
+  (the other 12 server.py files are gone). These integration tests should
+  be moved INTO each corresponding MCP server repo as the test owner.
+
+  This module-level skip stops the entire file from running in the
+  claude-workflow-engine test suite. Re-enable for session-mgr tests by
+  moving them to a dedicated tests/test_session_mcp_integration.py file.
 """
 
 import importlib.util
@@ -15,6 +30,13 @@ from pathlib import Path
 import pytest
 
 _MCP_DIR = Path(__file__).parent.parent / "src" / "mcp"
+
+# Module-level skip — 12 of 13 MCP server files no longer live in-engine.
+# See issue #202 and CLAUDE.md for the repo extraction history.
+pytestmark = pytest.mark.skip(
+    reason="MCP servers moved to separate repos under techdeveloper-org; "
+    "integration tests should follow — see issue #202"
+)
 
 
 def _load_module(name, file_path):
