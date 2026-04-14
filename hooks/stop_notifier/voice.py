@@ -2,14 +2,12 @@
 Windows-safe: ASCII only.
 """
 
-# ruff: noqa: F821
-
 import json
 import subprocess
 import sys
 from datetime import datetime
 
-from .helpers import delete_flag, log_s, read_flag_message
+from .helpers import MEMORY_BASE, VOICE_ENABLED, VOICE_SCRIPT, delete_flag, log_s, read_flag_message
 
 
 def get_current_session_id():

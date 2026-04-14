@@ -2,10 +2,9 @@
 Windows-safe: ASCII only.
 """
 
-# ruff: noqa: F821
-
 import json
 import os
+import subprocess
 import sys
 from pathlib import Path
 

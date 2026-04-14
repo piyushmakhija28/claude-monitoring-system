@@ -2,16 +2,30 @@
 Windows-safe: ASCII only.
 """
 
-# ruff: noqa: F821
-
 import json
 import os
 import sys
+import time
 from datetime import datetime
 
-from .helpers import get_current_session_id, log_s, read_hook_stdin
+from .helpers import (
+    _HOOK_START,
+    FLAG_DIR,
+    MEMORY_BASE,
+    SESSION_START_FLAG,
+    SESSION_START_FLAG_PID,
+    TASK_COMPLETE_FLAG,
+    TASK_COMPLETE_FLAG_PID,
+    WORK_DONE_FLAG,
+    WORK_DONE_FLAG_PID,
+    emit_hook_execution,
+    log_s,
+    read_hook_stdin,
+)
 from .post_impl import _create_pr_from_pipeline_data, _run_post_implementation_steps
 from .voice import (
+    _get_session_issues_file,
+    get_current_session_id,
     get_session_start_default,
     get_session_summary_for_voice,
     get_task_complete_default,
