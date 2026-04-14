@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# ruff: noqa: F821
 """
 Script Name: stop-notifier.py
 Version: 4.3.0 (Static messages only, Ollama removed)

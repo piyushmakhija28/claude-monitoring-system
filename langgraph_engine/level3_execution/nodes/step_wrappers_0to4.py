@@ -1,4 +1,3 @@
-# ruff: noqa: F821
 """Level 3 v2 step node wrapper.
 
 Extracted from level3_execution/subgraph.py for modularity.
@@ -16,6 +15,7 @@ CHANGE LOG (v1.14.0):
   already produces a comprehensive plan. step2_plan_execution_node kept as
   deprecated no-op for backward compatibility with test imports.
 """
+
 import os
 from pathlib import Path
 from typing import Any, Dict

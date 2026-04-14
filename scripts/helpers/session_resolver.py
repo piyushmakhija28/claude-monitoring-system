@@ -1,4 +1,3 @@
-# ruff: noqa: F821
 """helpers/session_resolver.py - Shared session ID resolution.
 
 Common logic for resolving the current Claude Code session ID,
@@ -11,6 +10,7 @@ Session resolution order:
 
 Windows-safe: ASCII only, no Unicode characters.
 """
+
 import json
 import os
 from pathlib import Path

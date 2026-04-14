@@ -1,4 +1,3 @@
-# ruff: noqa: F821
 """Level 3 v2 step node wrapper.
 
 Extracted from level3_execution/subgraph.py for modularity.
@@ -10,6 +9,7 @@ CHANGE LOG (v1.13.0):
   Steps 5-7 no longer exist in the graph; Step 8 is the new post-Step-0 target.
   route_to_plan_or_breakdown removed (Step 1 no longer exists in graph).
 """
+
 import sys
 from pathlib import Path
 from typing import Any, Dict
