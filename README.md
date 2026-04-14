@@ -462,7 +462,7 @@ Key environment variables (see `.env.example` for full list):
 ## Roadmap
 
 ### v1.17.0 — Code Quality & Open Source Readiness
-- [ ] Remove all remaining `# ruff: noqa: F821` file-level suppressors; convert to targeted inline suppressors or fix missing imports
+- [x] Remove all remaining `# ruff: noqa: F821` file-level suppressors; convert to targeted inline suppressors or fix missing imports — closed #212 #213 #214 #215 #216 #217
 - [ ] Make all 13 MCP server repos public under [techdeveloper-org](https://github.com/orgs/techdeveloper-org/repositories)
 - [ ] Add GitHub Discussions for community Q&A
 
