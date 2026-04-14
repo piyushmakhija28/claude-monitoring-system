@@ -29,8 +29,6 @@ Usage:
     url = get_shareable_url(xml)
 """
 
-# ruff: noqa: F821
-
 import logging
 
 logger = logging.getLogger(__name__)

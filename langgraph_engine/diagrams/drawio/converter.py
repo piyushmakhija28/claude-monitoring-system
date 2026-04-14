@@ -2,9 +2,78 @@
 Windows-safe: ASCII only.
 """
 
-# ruff: noqa: F821
+try:
+    from loguru import logger
+except ImportError:
+    import logging
 
-from .xml_helpers import _edge, _edge_points, _esc, _IDGen, _vertex, _vertex_child, _wrap_mxfile
+    logger = logging.getLogger(__name__)
+
+from .xml_helpers import (
+    S_ABST_HDR,
+    S_ACT_ACTION,
+    S_ACT_ARROW,
+    S_ACT_DIAMOND,
+    S_ACT_FINAL,
+    S_ACT_FORK,
+    S_ACT_INIT,
+    S_AGGREGATE,
+    S_ASSOCIATE,
+    S_CLASS_DIV,
+    S_CLASS_HDR,
+    S_CLASS_ROW,
+    S_COMM_MSG,
+    S_COMM_OBJ,
+    S_COMP_BOX,
+    S_COMP_DEP,
+    S_COMP_PROV,
+    S_COMPOSE,
+    S_CS_CLASS,
+    S_CS_PART,
+    S_CS_PORT,
+    S_DEP_COMP,
+    S_DEP_CONN,
+    S_DEP_DEVICE,
+    S_DEP_NODE,
+    S_DEPEND,
+    S_IFACE_HDR,
+    S_INHERIT,
+    S_IO_ARROW,
+    S_IO_DECISION,
+    S_IO_FINAL,
+    S_IO_INIT,
+    S_IO_REF,
+    S_LIFELINE,
+    S_MSG_ASYNC,
+    S_MSG_RETURN,
+    S_MSG_SYNC,
+    S_OBJ_DIV,
+    S_OBJ_HDR,
+    S_OBJ_LINK,
+    S_OBJ_ROW,
+    S_PKG_BOX,
+    S_PKG_IMPORT,
+    S_REALIZE,
+    S_ST_ARROW,
+    S_ST_BOX,
+    S_ST_COMP,
+    S_ST_FINAL,
+    S_ST_INIT,
+    S_ST_SELF,
+    S_UC_ACTOR,
+    S_UC_ASSOC,
+    S_UC_CASE,
+    S_UC_EXTEND,
+    S_UC_INCL,
+    S_UC_SYSTEM,
+    _edge,
+    _edge_points,
+    _esc,
+    _IDGen,
+    _vertex,
+    _vertex_child,
+    _wrap_mxfile,
+)
 
 
 class DrawioConverter:
