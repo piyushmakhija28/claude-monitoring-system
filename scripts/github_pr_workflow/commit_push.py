@@ -2,15 +2,13 @@
 Windows-safe: ASCII only.
 """
 
-# ruff: noqa: F821
-
 import os
 import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
 
-from .git_ops import _load_issues_mapping, _log, _save_issues_mapping
+from .git_ops import GH_TIMEOUT, _load_issues_mapping, _log, _save_issues_mapping
 
 
 def _has_changes(repo_root: str) -> bool:

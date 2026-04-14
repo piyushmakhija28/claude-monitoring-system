@@ -2,8 +2,6 @@
 Windows-safe: ASCII only.
 """
 
-# ruff: noqa: F821
-
 import os
 import subprocess
 import sys
@@ -11,7 +9,16 @@ from datetime import datetime
 from pathlib import Path
 
 from .commit_push import _commit_session_changes, _create_pull_request, _push_branch
-from .git_ops import _get_current_branch, _get_issue_numbers, _get_repo_root, _load_issues_mapping, _log
+from .git_ops import (
+    GH_TIMEOUT,
+    _get_current_branch,
+    _get_issue_numbers,
+    _get_repo_root,
+    _load_issues_mapping,
+    _load_session_summary,
+    _log,
+    _save_issues_mapping,
+)
 from .review import _auto_review_pr, _load_flow_trace, _smart_code_review
 
 

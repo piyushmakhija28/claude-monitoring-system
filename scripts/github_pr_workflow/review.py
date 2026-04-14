@@ -2,14 +2,12 @@
 Windows-safe: ASCII only.
 """
 
-# ruff: noqa: F821
-
 import json
 import subprocess
 import sys
 from pathlib import Path
 
-from .git_ops import _log
+from .git_ops import GH_TIMEOUT, MEMORY_BASE, SESSION_STATE_FILE, _get_session_id, _log
 
 
 def _load_flow_trace():
