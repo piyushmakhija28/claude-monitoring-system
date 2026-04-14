@@ -7,6 +7,7 @@
 [![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
 [![Status](https://img.shields.io/badge/Status-Alpha-orange)]()
 [![Tests](https://img.shields.io/badge/Tests-36%20files-brightgreen)](tests/)
+[![Discussions](https://img.shields.io/badge/Discussions-GitHub-blueviolet)](../../discussions)
 
 ---
 
@@ -417,10 +418,10 @@ python scripts/secrets_check.py
 
 ## Roadmap
 
-### v1.17.0 — Code Quality & Open Source Readiness
+### ~~v1.17.0~~ v1.17.0 — Code Quality & Open Source Readiness ✓ Complete
 - [x] Remove all `# ruff: noqa: F821` file-level suppressors — fixed in #212 #213 #214 #215 #216
-- [ ] Make all 13 MCP server repos public
-- [ ] Add GitHub Discussions for community Q&A
+- [x] All 13 MCP server repos made public under [techdeveloper-org](https://github.com/orgs/techdeveloper-org/repositories)
+- [x] GitHub Discussions enabled — [join the conversation](../../discussions)
 
 ### v1.18.0 — Runtime Verification
 - [ ] End-to-end test: Hook Mode (Pre-0 → Step 0 → Steps 8-9)
