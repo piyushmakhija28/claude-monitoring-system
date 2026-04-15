@@ -423,10 +423,23 @@ python scripts/secrets_check.py
 - [x] All 13 MCP server repos made public under [techdeveloper-org](https://github.com/orgs/techdeveloper-org/repositories)
 - [x] GitHub Discussions enabled — [join the conversation](../../discussions)
 
-### v1.18.0 — Runtime Verification
-- [ ] End-to-end test: Hook Mode (Pre-0 → Step 0 → Steps 8-9)
-- [ ] End-to-end test: Full Mode (all 8 active steps)
-- [ ] Runtime verification: health server, Prometheus metrics, OpenTelemetry tracing
+### v1.18.0 — Runtime Verification ✓ Core Complete
+- [x] `langgraph_engine/runtime_verification/` package — 7 files (contracts, verifier, decorators, invariants, schema_verifier, report, __init__)
+- [x] `@verify_node(contract)` decorator — non-invasive, zero signature changes, NullVerifier no-op when disabled
+- [x] `NodeContract` DSL — PreconditionSpec, PostconditionSpec, InvariantSpec, Violation dataclasses
+- [x] `RuntimeVerifier` singleton + `NullVerifier` Null Object — opt-in via `ENABLE_RUNTIME_VERIFICATION=0` default
+- [x] Level transition guards — `level_minus1→level1`, `level1→level3`, `pre_analysis→step0`, `step0→step8`
+- [x] FlowState extended — `verification_report` + `verification_violations` keys added
+- [x] Quality Gate extended — Gate 5 (`verification_gate`) reads report; strict mode halts on CRITICAL
+- [x] Node contract registry — 3 contracts wired (`orchestration_pre_analysis_node`, `prompt_gen_expert_caller`, `orchestrator_agent_caller`)
+- [x] `pipeline_builder.py` — `@verify_node` applied to eligible LangGraph nodes
+- [x] Step 14 — `build_report()` called at pipeline end; writes `verification_report` to FlowState
+- [x] Schema verifier wired — `verify_orchestration_prompt()` + `verify_orchestrator_result()` in Step 0 subprocess callers
+- [x] 34 unit tests — `test_runtime_verifier` (15), `test_level_transition_guards` (8), `test_schema_verifier` (7), `test_quality_gate_verification` (4)
+- [x] ADR-003, ADR-004, ADR-005 — architecture decisions documented
+- [ ] End-to-end test: Hook Mode (Pre-0 → Step 0 → Steps 8-9) with `ENABLE_RUNTIME_VERIFICATION=1`
+- [ ] End-to-end test: Full Mode (all 8 active steps) with `ENABLE_RUNTIME_VERIFICATION=1`
+- [ ] Runtime verification exposure: `/health` endpoint, Prometheus `verification_violations_total` counter, OpenTelemetry spans around `verify_node`
 
 ### v1.19.0 — CI & Distribution
 - [ ] Enable automatic CI on push to `main` (currently `workflow_dispatch` only)
@@ -460,4 +473,4 @@ Key rules:
 
 ---
 
-**Version:** 1.16.1 | **Last Updated:** 2026-04-14
+**Version:** 1.18.0 | **Last Updated:** 2026-04-15
