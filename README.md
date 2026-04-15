@@ -3,7 +3,7 @@
 > Automate your entire software development lifecycle — from task to merged PR — using Claude AI.
 
 [![Version](https://img.shields.io/badge/Version-1.19.0-blue)](CHANGELOG.md)
-[![Python](https://img.shields.io/badge/Python-3.9%2B-green)](https://python.org)
+[![Python](https://img.shields.io/badge/Python-3.10%2B-green)](https://python.org)
 [![PyPI](https://img.shields.io/badge/PyPI-claude--workflow--engine-orange)](https://pypi.org/project/claude-workflow-engine/)
 [![CI](https://github.com/techdeveloper-org/claude-workflow-engine/actions/workflows/ci.yml/badge.svg)](https://github.com/techdeveloper-org/claude-workflow-engine/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
@@ -43,7 +43,7 @@ Most AI coding tools generate code and stop there. This engine does what a full 
 
 ### Prerequisites
 
-- Python 3.9+
+- Python 3.10+
 - [Claude Code CLI](https://claude.ai/code) installed and authenticated
 - `ANTHROPIC_API_KEY` set in your environment
 - `GITHUB_TOKEN` with repo permissions
@@ -522,18 +522,9 @@ If you are building an integration or have used the engine with an automation pl
 
 ## Roadmap
 
-### Past Releases
-
 See [CHANGELOG.md](CHANGELOG.md) for the complete version history.
 
-| Version | Highlight |
-|---------|-----------|
-| [v1.19.0](CHANGELOG.md#1190---2026-04-15) | CI auto-trigger on push/PR, PyPI packaging, 32 offline integration tests |
-| [v1.18.0](CHANGELOG.md#1180---2026-04-14) | Runtime Verification package, `/health` exposure, Prometheus counter, OTel spans |
-| [v1.17.0](CHANGELOG.md#1170---2026-04-10) | Open source readiness, F821 audit clean, 13 MCP repos public, GitHub Discussions |
-| [v1.16.1](CHANGELOG.md#1161---2026-04-07) | Diagram output restructure, `UML_OUTPUT_DIR` / `DRAWIO_OUTPUT_DIR` env vars |
-
-### Next
+### Upcoming
 
 - GitHub App install flow (no manual `GITHUB_TOKEN` setup)
 - Web dashboard for pipeline run history
