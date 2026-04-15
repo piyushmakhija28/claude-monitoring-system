@@ -1,7 +1,8 @@
 """Prometheus metrics exporter for the Claude Workflow Engine pipeline.
 
-Exposes 8 metrics covering pipeline execution, step durations,
-LLM inference, MCP tool calls, call graph rebuilds, and active pipeline count.
+Exposes 9 metrics covering pipeline execution, step durations,
+LLM inference, MCP tool calls, call graph rebuilds, active pipeline count,
+and runtime verification contract violations.
 
 The HTTP metrics server is started automatically when ENABLE_METRICS=1 is set
 in the environment.  All metric functions degrade gracefully to no-ops when
@@ -100,6 +101,12 @@ if _HAS_PROMETHEUS:
         "active_pipelines",
         "Number of pipeline instances currently executing",
     )
+
+    verification_violations_total = Counter(
+        "verification_violations_total",
+        "Total runtime verification contract violations observed",
+        ["level", "node"],
+    )
 else:
     # Sentinel objects so callers never need to guard with _HAS_PROMETHEUS checks
     pipeline_executions_total = None  # type: ignore[assignment]
@@ -110,6 +117,7 @@ else:
     mcp_tool_calls_total = None  # type: ignore[assignment]
     call_graph_rebuild_total = None  # type: ignore[assignment]
     active_pipelines = None  # type: ignore[assignment]
+    verification_violations_total = None  # type: ignore[assignment]
 
 # ---------------------------------------------------------------------------
 # Public convenience functions (always safe to call)
@@ -166,6 +174,17 @@ def set_active_pipelines(count: int) -> None:
     """Set the gauge for active pipeline instances."""
     if _HAS_PROMETHEUS and active_pipelines is not None:
         active_pipelines.set(count)
+
+
+def inc_verification_violations(level: str = "ERROR", node: str = "unknown") -> None:
+    """Increment the runtime verification violations counter.
+
+    Args:
+        level: Violation severity (CRITICAL, ERROR, or WARNING).
+        node:  Node name where the violation occurred.
+    """
+    if _HAS_PROMETHEUS and verification_violations_total is not None:
+        verification_violations_total.labels(level=level, node=node).inc()
 
 
 # ---------------------------------------------------------------------------

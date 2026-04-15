@@ -175,6 +175,17 @@ class RuntimeVerifier:
                 from_level,
                 to_level,
             )
+            if os.getenv("ENABLE_METRICS", "0") == "1":
+                try:
+                    from langgraph_engine.metrics_exporter import inc_verification_violations  # noqa: PLC0415
+
+                    for violation in violations:
+                        inc_verification_violations(
+                            level=violation.get("severity", "ERROR"),
+                            node=guard_node,
+                        )
+                except ImportError:
+                    pass
         return violations
 
     def build_report(self) -> VerificationReport:

@@ -431,10 +431,10 @@ See environment variables in `.env.example`:
 <!-- execution-insight- -->
 ## Latest Execution Insight
 
-- **Task**: v1.18.0 -- Runtime Verification package implementation
+- **Task**: v1.18.0 -- Runtime Verification observability exposure (health endpoint, Prometheus counter, OTel spans)
 - **Skill**: python-core
 - **Agent**: python-backend-engineer
-- **Date**: 2026-04-14
+- **Date**: 2026-04-15
 
 ## Dependency Notes
 

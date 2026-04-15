@@ -40,6 +40,63 @@ def _check_anthropic_key():
     return bool(key)
 
 
+def _count_by_severity(violations):
+    # type: (list) -> dict
+    """Count violations grouped by severity string.
+
+    Args:
+        violations: List of violation dicts, each containing a 'severity' key.
+
+    Returns:
+        Dict with keys CRITICAL, ERROR, WARNING and integer counts.
+    """
+    counts = {"CRITICAL": 0, "ERROR": 0, "WARNING": 0}
+    for v in violations:
+        sev = v.get("severity", "ERROR")
+        if sev in counts:
+            counts[sev] += 1
+    return counts
+
+
+def _collect_verification_snapshot():
+    # type: () -> dict
+    """Collect current runtime verification state for the health endpoint.
+
+    Uses a lazy import of RuntimeVerifier inside the function body so this
+    module never acquires a top-level langgraph_engine dependency.
+
+    Returns:
+        Dict with enabled flag, contracts_registered, nodes_verified,
+        violations_total, and violations_by_severity breakdown.
+    """
+    _ZERO = {
+        "enabled": False,
+        "strict": False,
+        "contracts_registered": 0,
+        "nodes_verified": 0,
+        "violations_total": 0,
+        "violations_by_severity": {"CRITICAL": 0, "ERROR": 0, "WARNING": 0},
+    }
+    if os.environ.get("ENABLE_RUNTIME_VERIFICATION", "0") != "1":
+        return _ZERO
+    try:
+        from langgraph_engine.runtime_verification.verifier import RuntimeVerifier  # noqa: PLC0415
+    except ImportError:
+        return _ZERO
+    verifier = RuntimeVerifier.get_instance()
+    if not isinstance(verifier, RuntimeVerifier):
+        return _ZERO
+    violations = getattr(verifier, "_violations", [])
+    return {
+        "enabled": True,
+        "strict": os.environ.get("STRICT_RUNTIME_VERIFICATION", "0") == "1",
+        "contracts_registered": len(getattr(verifier, "_registry", {})),
+        "nodes_verified": len(getattr(verifier, "_verified_nodes", [])),
+        "violations_total": len(violations),
+        "violations_by_severity": _count_by_severity(violations),
+    }
+
+
 # ---------------------------------------------------------------------------
 # HTTP request handler
 # ---------------------------------------------------------------------------
@@ -76,6 +133,7 @@ class _HealthHandler(BaseHTTPRequestHandler):
             "version": _VERSION,
             "service": _SERVICE_NAME,
             "timestamp": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "verification": _collect_verification_snapshot(),
         }
         self._send_json(200, payload)
 

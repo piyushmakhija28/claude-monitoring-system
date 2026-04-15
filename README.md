@@ -423,7 +423,7 @@ python scripts/secrets_check.py
 - [x] All 13 MCP server repos made public under [techdeveloper-org](https://github.com/orgs/techdeveloper-org/repositories)
 - [x] GitHub Discussions enabled — [join the conversation](../../discussions)
 
-### v1.18.0 — Runtime Verification ✓ Core Complete
+### v1.18.0 — Runtime Verification ✓ Complete
 - [x] `langgraph_engine/runtime_verification/` package — 7 files (contracts, verifier, decorators, invariants, schema_verifier, report, __init__)
 - [x] `@verify_node(contract)` decorator — non-invasive, zero signature changes, NullVerifier no-op when disabled
 - [x] `NodeContract` DSL — PreconditionSpec, PostconditionSpec, InvariantSpec, Violation dataclasses
@@ -439,7 +439,7 @@ python scripts/secrets_check.py
 - [x] ADR-003, ADR-004, ADR-005 — architecture decisions documented
 - [ ] End-to-end test: Hook Mode (Pre-0 → Step 0 → Steps 8-9) with `ENABLE_RUNTIME_VERIFICATION=1`
 - [ ] End-to-end test: Full Mode (all 8 active steps) with `ENABLE_RUNTIME_VERIFICATION=1`
-- [ ] Runtime verification exposure: `/health` endpoint, Prometheus `verification_violations_total` counter, OpenTelemetry spans around `verify_node`
+- [x] Runtime verification exposure: `/health` endpoint (`verification` snapshot block), Prometheus `verification_violations_total` counter (9th metric, labels: `level`/`node`), OpenTelemetry spans around `verify_node` (`runtime_verification.verify_node`, 4 attributes)
 
 ### v1.19.0 — CI & Distribution
 - [ ] Enable automatic CI on push to `main` (currently `workflow_dispatch` only)
