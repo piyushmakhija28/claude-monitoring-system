@@ -43,7 +43,7 @@ Most AI coding tools generate code and stop there. This engine does what a full 
 
 ### Prerequisites
 
-- Python 3.8+
+- Python 3.9+
 - [Claude Code CLI](https://claude.ai/code) installed and authenticated
 - `ANTHROPIC_API_KEY` set in your environment
 - `GITHUB_TOKEN` with repo permissions
@@ -452,6 +452,63 @@ python scripts/secrets_check.py
 - [x] Integration test suite — 32 offline tests in `tests/integration/` using `responses` mock library; covers full GitHub PR lifecycle (issue → branch → PR → merge → close)
 - [x] PyPI publish — `pyproject.toml` (hatchling, PEP 621), `MANIFEST.in`, `.github/workflows/publish.yml` fires on GitHub Release; `pip install claude-workflow-engine`
 - [x] `langgraph_engine/__init__.py` — `__version__ = "1.19.0"` added; `sync-version.py` extended to keep it in sync
+
+### v1.19.0 — One-Time Setup Checklist (do these once after merge)
+
+> These steps activate the CI and PyPI features shipped in v1.19.0.
+> Nothing runs automatically until secrets are configured.
+
+**Step 1 — Add `PYPI_TOKEN` secret (required for PyPI publish)**
+1. Go to [pypi.org](https://pypi.org) → Account Settings → API Tokens → Add API Token
+2. Scope: entire account (first publish) or project `claude-workflow-engine` (after first publish)
+3. Copy the token (shown only once)
+4. GitHub repo → Settings → Secrets and Variables → Actions → New repository secret
+   - Name: `PYPI_TOKEN`
+   - Value: paste the token
+
+**Step 2 — Verify `ANTHROPIC_API_KEY` secret exists**
+- GitHub repo → Settings → Secrets → Actions → confirm `ANTHROPIC_API_KEY` is present
+- Value can be the real key or any non-empty string (integration tests use offline mocks)
+
+**Step 3 — Enable CI via repo variable**
+- GitHub repo → Settings → Variables → Actions → New repository variable
+  - Name: `ENABLE_CI`
+  - Value: `true`
+- Without this, the `check-enabled` gate skips all CI jobs
+
+**Step 4 — Trigger first PyPI publish**
+- GitHub repo → Releases → Draft a new Release
+- Tag: `v1.19.0`, title: `v1.19.0 — CI & Distribution`
+- Publish the release → `publish.yml` fires automatically → package appears on PyPI in ~2 min
+
+**Step 5 — Verify CI is working**
+- Push any `.py` change to `main` → Actions tab → CI workflow should run automatically
+- Or: Actions → CI → Run workflow (manual trigger still works)
+- Expected: secrets_check → unit tests → integration tests → coverage — all green
+
+**Step 6 — Run integration tests locally (optional)**
+```bash
+pip install -r requirements-dev.txt
+pytest tests/integration/ -m integration -v
+# Expected: 32 passed in ~0.3s (fully offline, no GitHub token needed)
+```
+
+**Files added in v1.19.0 (reference)**
+
+| File | Purpose |
+|------|---------|
+| `.github/workflows/ci.yml` | Auto-CI on push/PR to main |
+| `.github/workflows/publish.yml` | PyPI publish on GitHub Release |
+| `pyproject.toml` | Package metadata (hatchling, PEP 621) |
+| `MANIFEST.in` | sdist asset inclusion (policies/, rules/, templates/) |
+| `requirements-dev.txt` | Dev deps: responses, pytest-cov, ruff |
+| `tests/integration/conftest.py` | Mock GitHub API fixtures (responses library) |
+| `tests/integration/test_github_integration.py` | 27 offline endpoint tests |
+| `tests/integration/test_github_pr_workflow.py` | 5 lifecycle tests (issue→PR→close) |
+| `langgraph_engine/__init__.py` | `__version__ = "1.19.0"` added |
+| `scripts/tools/sync-version.py` | Extended to sync `__version__` on bumps |
+
+---
 
 ### Future
 - GitHub App install flow (no manual `GITHUB_TOKEN` setup)
