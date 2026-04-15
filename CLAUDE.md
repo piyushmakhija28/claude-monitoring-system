@@ -1,9 +1,9 @@
 # Claude Workflow Engine - Project Context
 
 **Project:** Claude Workflow Engine
-**Version:** 1.18.0
+**Version:** 1.19.1
 **Type:** LangGraph Orchestration Pipeline with Call Graph Intelligence + Template Fast-Path
-**Last Updated:** 2026-04-07
+**Last Updated:** 2026-04-15
 
 ---
 
@@ -21,7 +21,7 @@ Claude Workflow Engine is a 3-level LangGraph-based orchestration pipeline for a
 | **Primary Location** | langgraph_engine/ |
 | **MCP Servers** | 13 servers -- all in separate repos under [techdeveloper-org](https://github.com/orgs/techdeveloper-org/repositories); 1 also keeps an in-engine copy in `src/mcp/` |
 | **Total Python Files** | 304+ |
-| **Test Files** | 74 |
+| **Test Files** | 77 |
 | **Call Graph** | 578 classes, 3,985 methods, 4 languages (Python/Java/TS/Kotlin) |
 
 ---
@@ -146,7 +146,7 @@ Level 3: Execution (8 active steps: Pre-0, Step 0, Steps 8-14)
 +-- policies/                         # All pipeline policies organized by level (00-auto-fix, 01-sync, 02-standards, 03-execution, testing)
 |   +-- testing/                      # Testing policies (unchanged)
 +-- src/mcp/                          # In-engine copy of session-mgr (repo is source of truth) + bridge (session_hooks, base/)
-+-- tests/                            # 75 test files
++-- tests/                            # 78 test files
 +-- docs/                             # 69 documentation files
 +-- uml/                              # Auto-generated UML diagrams (13 types)
 +-- drawio/                           # Auto-generated draw.io diagrams (13 types)
@@ -326,7 +326,7 @@ Figma Lifecycle (ENABLE_FIGMA=1):
 
 ### Code Style
 
-- **Language:** Python 3.8+
+- **Language:** Python 3.10+
 - **Encoding:** UTF-8, ASCII-only (cp1252 safe for Windows)
 - **Format:** Follow PEP 8 conventions
 - **Testing:** All new code requires tests
@@ -425,13 +425,13 @@ See environment variables in `.env.example`:
 
 ---
 
-**Last Updated:** 2026-04-06
+**Last Updated:** 2026-04-15
 
 
 <!-- execution-insight- -->
 ## Latest Execution Insight
 
-- **Task**: v1.18.0 -- Runtime Verification observability exposure (health endpoint, Prometheus counter, OTel spans)
+- **Task**: v1.19.1 -- Fix CI failures (Python 3.9 mcp conflict, flask import error), commit missing e2e/integration tests, README roadmap cleanup
 - **Skill**: python-core
 - **Agent**: python-backend-engineer
 - **Date**: 2026-04-15
@@ -440,4 +440,4 @@ See environment variables in `.env.example`:
 
 - `TTS>=0.22.0` (Coqui TTS) moved to `requirements-optional.txt` -- conflicts with `networkx>=3.1` via `gruut==2.2.3` transitive dep.
 - Install voice notifications separately: `pip install -r requirements-optional.txt`
-- CI auto-trigger disabled -- workflow runs on `workflow_dispatch` only (manual trigger via GitHub Actions UI).
+- CI auto-triggers on push/PR to `main`; Python matrix is `["3.10","3.11"]` (mcp>=1.0.0 requires Python>=3.10).

@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.19.1] - 2026-04-15
+
+### Fixed — CI Failures
+
+- **Python 3.9 dependency conflict** — `mcp>=1.0.0` requires Python>=3.10; CI matrix updated from `["3.9","3.11"]` to `["3.10","3.11"]`; `pyproject.toml` `requires-python` updated from `>=3.9` to `>=3.10`; Python 3.9 classifier removed
+- **Python 3.11 collection error** — `tests/test_session.py` was a misplaced Flask scratch script from the `claude-insight` project (not a pytest file, imported `flask` which is not installed); deleted
+- **4 untracked test files** — `tests/e2e/conftest.py`, `tests/e2e/test_full_mode_runtime_verification.py`, `tests/e2e/test_hook_mode_runtime_verification.py`, `tests/integration/test_runtime_verification_integration.py` were documented in CHANGELOG v1.18.0 as added but never committed; now committed
+
+### Changed
+
+- **README roadmap** — removed redundant "Past Releases" summary table (full history already in CHANGELOG); renamed "Next" to "Upcoming"; updated Python badge and prerequisites from 3.9+ to 3.10+
+
+### Files Changed
+
+| File | Change |
+|------|--------|
+| `.github/workflows/ci.yml` | Python matrix: `["3.9","3.11"]` → `["3.10","3.11"]` |
+| `pyproject.toml` | `requires-python = ">=3.9"` → `">=3.10"`; removed 3.9 classifier |
+| `tests/test_session.py` | Deleted (misplaced Flask script, not a pytest file) |
+| `tests/e2e/conftest.py` | Added (was untracked since v1.18.0) |
+| `tests/e2e/test_full_mode_runtime_verification.py` | Added (was untracked since v1.18.0) |
+| `tests/e2e/test_hook_mode_runtime_verification.py` | Added (was untracked since v1.18.0) |
+| `tests/integration/test_runtime_verification_integration.py` | Added (was untracked since v1.18.0) |
+| `README.md` | Python badge + prerequisites updated to 3.10+; roadmap cleanup |
+
+---
+
 ## [1.19.0] - 2026-04-15
 
 ### Added — CI & Distribution
