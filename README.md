@@ -100,27 +100,63 @@ python scripts/3-level-flow.py \
 
 ### What happens when you run it
 
-```
-Input:  "Fix the login timeout bug"
+```mermaid
+flowchart TD
+    IN(["`**Input:** _Fix the login timeout bug_`"])
 
-Level -1  Auto-Fix        Unicode check, encoding fix, path normalization
-Level 1   Context Sync    Session load + parallel [complexity, context] → merge
-                          Output: combined_complexity_score [1-25 scale]
-Level 2   (NO-OP)         Policies are .md files read directly from policies/ at runtime
-Level 3   Execution
-  Pre-0   Pre-Analysis    Call graph scan → hot_nodes, danger_zones, complexity_boost
-  Step 0  Task Analysis   2 claude CLI subprocess calls (~15s total)
-            Call 1          prompt_gen_expert_caller fills orchestration template
-            Call 2          orchestrator_agent_caller executes full plan (streamed live)
-  Step 8  Issue & Branch  GitHub Issue created; Jira Issue (if ENABLE_JIRA=1)
-  Step 9  Branch          Branch from Jira key (feature/PROJ-123) or issue number
-  Step 10 Implement       Code written; call graph snapshot; Jira → "In Progress"
-  Step 11 PR + Review     PR opened; call graph diff; Jira → "In Review"
-  Step 12 Close           GitHub + Jira issue closed; Figma "complete" comment
-  Step 13 Docs + UML      Documentation updated; 13 UML diagram types generated
-  Step 14 Summary         Final report + optional voice notification
+    LM1["**Level -1 · Auto-Fix**
+    Unicode check · encoding fix · path normalization"]
 
-Total: ~15s planning, ~120s full pipeline
+    L1["**Level 1 · Context Sync**
+    Session load + parallel complexity & context extraction
+    → combined_complexity_score **[1–25 scale]**"]
+
+    L2["**Level 2 · Standards (NO-OP)**
+    Policies read directly from policies/ — zero overhead"]
+
+    P0["**Pre-0 · Pre-Analysis**
+    CallGraph scan → hot_nodes, danger_zones, complexity_boost"]
+
+    subgraph S0["**Step 0 · Task Analysis** (~15s)"]
+        direction LR
+        C1["Call 1: prompt_gen_expert_caller
+        fills orchestration template"]
+        C2["Call 2: orchestrator_agent_caller
+        executes full plan · streamed live"]
+        C1 --> C2
+    end
+
+    S8["**Step 8** · GitHub Issue created
+    + Jira Issue _(if ENABLE_JIRA=1)_"]
+    S9["**Step 9** · Branch
+    feature/PROJ-123 or issue number"]
+    S10["**Step 10** · Implement
+    code written · call graph snapshot · Jira → In Progress"]
+    S11["**Step 11** · PR + Review
+    PR opened · call graph diff · Jira → In Review"]
+    S12["**Step 12** · Close
+    GitHub + Jira closed · Figma complete comment"]
+    S13["**Step 13** · Docs + UML
+    docs updated · 13 UML diagram types generated"]
+    S14["**Step 14** · Summary
+    final report + optional voice notification"]
+
+    OUT(["`**Done** — ~15s planning · ~120s full pipeline`"])
+
+    IN --> LM1 --> L1 --> L2 --> P0 --> S0 --> S8 --> S9 --> S10 --> S11 --> S12 --> S13 --> S14 --> OUT
+
+    style LM1 fill:#f3e8ff,stroke:#a855f7
+    style L1  fill:#e0f2fe,stroke:#0284c7
+    style L2  fill:#fef9c3,stroke:#ca8a04
+    style P0  fill:#f0fdf4,stroke:#16a34a
+    style S0  fill:#dcfce7,stroke:#16a34a
+    style S8  fill:#eff6ff,stroke:#2563eb
+    style S9  fill:#eff6ff,stroke:#2563eb
+    style S10 fill:#fef3c7,stroke:#d97706
+    style S11 fill:#fef3c7,stroke:#d97706
+    style S12 fill:#f0fdf4,stroke:#16a34a
+    style S13 fill:#f0fdf4,stroke:#16a34a
+    style S14 fill:#f0fdf4,stroke:#16a34a
 ```
 
 ---
