@@ -43,17 +43,41 @@ IN_PROGRESS_TRANSITIONS = ["In Progress", "Start Progress", "Begin Work", "Worki
 
 
 def _is_jira_enabled() -> bool:
-    """Check if Jira integration is enabled via environment."""
+    """Check if Jira integration is enabled (JSON config > env var)."""
+    try:
+        from langgraph_engine.core.config_loader import get_section
+
+        section = get_section("jira")
+        if section:
+            return str(section.get("enabled", "0")).strip().lower() in ("1", "true", "yes", "on")
+    except ImportError:
+        pass
     return os.environ.get("ENABLE_JIRA", "0") == "1"
 
 
 def _get_jira_project() -> str:
-    """Get default Jira project key."""
+    """Get default Jira project key (JSON config > env var)."""
+    try:
+        from langgraph_engine.core.config_loader import get_section
+
+        section = get_section("jira")
+        if section.get("default_project"):
+            return str(section["default_project"])
+    except ImportError:
+        pass
     return os.environ.get("JIRA_DEFAULT_PROJECT", "")
 
 
 def _is_jira_configured() -> bool:
-    """Return True when all required Jira env vars are present."""
+    """Return True when all required Jira config values are present."""
+    try:
+        from langgraph_engine.core.config_loader import get_section
+
+        section = get_section("jira")
+        if section:
+            return all(section.get(k) for k in ("url", "user", "api_token"))
+    except ImportError:
+        pass
     return all(os.environ.get(k) for k in ("JIRA_URL", "JIRA_USER", "JIRA_API_TOKEN"))
 
 

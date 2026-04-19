@@ -108,7 +108,9 @@ class JenkinsIntegration(AbstractIntegration):
 
     def _ssl_context(self) -> Optional[ssl.SSLContext]:
         """Return an SSL context that skips verification when configured."""
-        verify = os.environ.get("JENKINS_VERIFY_SSL", "true").strip().lower()
+        verify = (
+            (self._config.get("jenkins_verify_ssl") or os.environ.get("JENKINS_VERIFY_SSL", "true")).strip().lower()
+        )
         if verify == "false":
             ctx = ssl.create_default_context()
             ctx.check_hostname = False

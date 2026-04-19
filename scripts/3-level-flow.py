@@ -48,6 +48,16 @@ if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
 # ============================================================================
+# CONFIG LOADER - JSON config -> os.environ (before any imports that read env)
+# ============================================================================
+try:
+    from langgraph_engine.core.config_loader import load_workflow_config
+
+    load_workflow_config()
+except Exception:
+    pass  # config file missing or malformed — env vars still work as fallback
+
+# ============================================================================
 # IMPORTS & SETUP
 # ============================================================================
 
