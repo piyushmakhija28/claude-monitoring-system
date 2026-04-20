@@ -118,23 +118,17 @@ def step0_task_analysis_node(state: FlowState) -> Dict[str, Any]:
     else:
         logger.info("[v2] Step 0 prompt_gen_expert_caller: orchestration_prompt length=%d", len(orchestration_prompt))
 
-    # --- PHASE 2: orchestrator_agent_caller (claude CLI subprocess, streaming stderr) ---
-    _EXECUTION_WRAPPER = (
+    # --- PHASE 2: todo_decomposer -> execute_todo_list (per-TODO orchestrator calls) ---
+    _full_prompt = (
         "You are orchestrator-agent. Below is a fully generated orchestration prompt "
         "with a MULTI-AGENT PROMPT BUNDLE containing per-agent execution prompts.\n\n"
-        "YOUR EXECUTION PROTOCOL:\n"
-        "1. Break down the task into multiple TODOs from the orchestration plan below.\n"
-        "2. Each TODO must carry its full context from this prompt -- do not lose detail.\n"
-        "3. Execute TODOs in parallel where the plan allows (respect Parallel Groups "
-        "and Sequential Chain from the EXECUTION SUMMARY).\n"
-        "4. For each TODO, use the corresponding agent's prompt from the "
-        "MULTI-AGENT PROMPT BUNDLE verbatim -- do not rewrite or summarize it.\n"
-        "5. Apply MODEL FALLBACK PROTOCOL: sonnet -> opus -> escalate to user on rate limits.\n\n"
         "--- BEGIN ORCHESTRATION PROMPT ---\n\n"
+        + orchestration_prompt
+        + "\n\n--- END ORCHESTRATION PROMPT ---"
     )
-    _full_prompt = _EXECUTION_WRAPPER + orchestration_prompt + "\n\n--- END ORCHESTRATION PROMPT ---"
 
     orch_result: Dict[str, Any] = {}
+    _prompt_file = ""
     try:
         with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False, encoding="utf-8") as _tf:
             _tf.write(_full_prompt)
@@ -143,27 +137,62 @@ def step0_task_analysis_node(state: FlowState) -> Dict[str, Any]:
         if DEBUG:
             logger.debug("[v2] Step 0 orchestration prompt written to %s", _prompt_file)
 
-        orch_args = [
+        # Step 2a: decompose orchestration prompt into TODO list
+        _decomp_args = [
             "--orchestration-prompt-file=%s" % _prompt_file,
-            "--session-dir=%s" % state.get("session_dir", ""),
-            "--project-root=%s" % state.get("project_root", "."),
+            "--complexity-score=%s" % complexity_score,
         ]
+        _decomp_raw: Dict[str, Any] = {}
+        try:
+            import importlib as _il2
 
-        orch_result = call_streaming_script("orchestrator_agent_caller", orch_args)
+            _helpers_mod2 = _il2.import_module("langgraph_engine.level3_execution.helpers")
+            _call_exec = _helpers_mod2.call_execution_script
+        except Exception:
+            from ..helpers import call_execution_script as _call_exec  # noqa: PLC0415
 
-        if not orch_result.get("success", True):
-            logger.warning(
-                "[v2] Step 0 orchestrator_agent_caller non-success: %s",
-                orch_result.get("error", "unknown"),
-            )
+        try:
+            _decomp_raw = _call_exec("todo_decomposer", _decomp_args, model_tier="fast")
+        except Exception as _decomp_exc:
+            logger.warning("[v2] Step 0 todo_decomposer failed (fail-open): %s", _decomp_exc)
+            _decomp_raw = {"status": "FALLBACK", "todo_list": []}
+
+        _todo_list = _decomp_raw.get("todo_list", [])
+        logger.info("[v2] Step 0 todo_decomposer: %d todos", len(_todo_list))
+
+        # Step 2b: execute each TODO via orchestrator_agent_caller
+        _todo_results = []
+        if _todo_list:
+            try:
+                from ..architecture.todo_executor import execute_todo_list as _exec_todos  # noqa: PLC0415
+
+                _todo_results = _exec_todos(state, _todo_list, step_number=0)
+            except Exception as _exec_exc:
+                logger.warning("[v2] Step 0 execute_todo_list failed (fail-open): %s", _exec_exc)
+                _todo_results = []
+
+        # Step 2c: merge todo results into orch_result
+        _merged_output = "\n\n".join(
+            str(r.get("result", {}).get("llm_response", "") or r.get("error", ""))
+            for r in _todo_results
+        )
+        orch_result = {
+            "success": True,
+            "todo_list": _todo_list,
+            "todo_results": _todo_results,
+            "llm_response": _merged_output,
+            "agent_output": {"merged_from_todos": len(_todo_results)},
+        }
+
     except Exception as _orch_exc:
-        logger.warning("[v2] Step 0 orchestrator_agent_caller failed (fail-open): %s", _orch_exc)
+        logger.warning("[v2] Step 0 orchestrator block failed (fail-open): %s", _orch_exc)
         orch_result = {"success": False, "error": str(_orch_exc)}
     finally:
-        try:
-            Path(_prompt_file).unlink(missing_ok=True)
-        except Exception:
-            pass
+        if _prompt_file:
+            try:
+                Path(_prompt_file).unlink(missing_ok=True)
+            except Exception:
+                pass
 
     # --- Build result from orchestrator output + migration fields ---
     result = _map_step0_result_to_state(state, orchestration_prompt, orch_result)
@@ -175,6 +204,8 @@ def step0_task_analysis_node(state: FlowState) -> Dict[str, Any]:
     result["step0_complexity_injected"] = complexity_score
     result["orchestration_prompt"] = orchestration_prompt
     result["orchestrator_result"] = orch_result
+    result["todo_list"] = orch_result.get("todo_list", [])
+    result["todo_results"] = orch_result.get("todo_results", [])
 
     # Apply call graph complexity boost from orchestration_pre_analysis_node
     # (legacy boost path -- pre_analysis uses 1-10 scale boost on top of step0_complexity)

@@ -30,16 +30,15 @@ logger = logging.getLogger(__name__)
 
 
 def _import_builder():
-    """Lazy import of call_graph_builder.  Returns module or None."""
+    """Lazy import of call_graph_builder.  Returns (module, error_str) tuple."""
     try:
         import importlib
 
-        # Import call_graph_builder as a package module to support relative imports
         mod = importlib.import_module("langgraph_engine.call_graph_builder")
-        return mod
+        return mod, None
     except Exception as exc:
         logger.warning("call_graph_builder import failed: %s", exc)
-        return None
+        return None, str(exc)
 
 
 # ---------------------------------------------------------------------------
@@ -231,7 +230,7 @@ def analyze_impact_before_change(
             call_graph_available - bool
     """
     try:
-        mod = _import_builder()
+        mod, _imp_err = _import_builder()
         if mod is None:
             return _fallback(
                 extra={
@@ -242,6 +241,7 @@ def analyze_impact_before_change(
                     "safe_change_zones": [],
                     "danger_zones": [],
                     "cross_file_deps": [],
+                    "failure_reason": "import_failed: " + (_imp_err or "unknown"),
                     "summary": "Call graph unavailable - could not import builder.",
                 }
             )
@@ -396,7 +396,7 @@ def get_implementation_context(
             call_graph_available       - bool
     """
     try:
-        mod = _import_builder()
+        mod, _imp_err = _import_builder()
         if mod is None:
             return _fallback(
                 extra={
@@ -405,6 +405,7 @@ def get_implementation_context(
                     "cross_file_dependencies": {},
                     "suggested_test_scope": [],
                     "stats": {"total_classes": 0, "total_methods": 0, "max_depth": 0},
+                    "failure_reason": "import_failed: " + (_imp_err or "unknown"),
                 }
             )
 
@@ -555,7 +556,7 @@ def review_change_impact(
             call_graph_available - bool
     """
     try:
-        mod = _import_builder()
+        mod, _imp_err = _import_builder()
         if mod is None:
             return _fallback(
                 extra={
@@ -567,6 +568,7 @@ def review_change_impact(
                     "max_call_depth": 0,
                     "risk_assessment": "safe",
                     "summary": "Call graph unavailable - could not import builder.",
+                    "failure_reason": "import_failed: " + (_imp_err or "unknown"),
                 }
             )
 
@@ -769,13 +771,13 @@ def snapshot_call_graph(project_root):
         call_paths), or {"call_graph_available": False} on failure.
     """
     try:
-        mod = _import_builder()
+        mod, _imp_err = _import_builder()
         if mod is None:
-            return {"call_graph_available": False}
+            return {"call_graph_available": False, "failure_reason": "import_failed: " + (_imp_err or "unknown")}
 
         graph = mod.build_call_graph(project_root)
         if graph is None:
-            return {"call_graph_available": False}
+            return {"call_graph_available": False, "failure_reason": "build_call_graph() returned None for root: " + str(project_root)}
 
         result = graph.to_dict()
         result["call_graph_available"] = True
@@ -1154,16 +1156,17 @@ def get_orchestration_context(task_description="", project_root=""):
         "skip_phases": [],
         "complexity_boost": 0,
         "call_graph_available": False,
+        "failure_reason": "",
     }
     try:
         root = str(project_root) if project_root else "."
-        mod = _import_builder()
+        mod, _imp_err = _import_builder()
         if mod is None:
-            return _empty
+            return {**_empty, "failure_reason": "import_failed: " + (_imp_err or "unknown")}
 
         graph = mod.build_call_graph(root)
         if graph is None:
-            return _empty
+            return {**_empty, "failure_reason": "build_call_graph() returned None for root: " + root}
 
         impact_map = graph.compute_impact_map()
 
@@ -1243,7 +1246,7 @@ def get_orchestration_context(task_description="", project_root=""):
 
     except Exception as exc:
         logger.debug("get_orchestration_context failed: %s", exc)
-        return _empty
+        return {**_empty, "failure_reason": type(exc).__name__ + ": " + str(exc)}
 
 
 # ---------------------------------------------------------------------------

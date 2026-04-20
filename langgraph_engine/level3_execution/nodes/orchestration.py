@@ -140,8 +140,22 @@ def orchestration_pre_analysis_node(state: FlowState) -> Dict[str, Any]:
                 "[PRE-ANALYSIS] CallGraph: hot=%d leaf=%d complexity_boost=%+d" % (hot_count, leaf_count, boost),
                 file=sys.stderr,
             )
+        else:
+            reason = graph_ctx.get("failure_reason") or "unknown reason"
+            logger.warning("[v2] CallGraph UNAVAILABLE: %s", reason)
+            print(
+                "[PRE-ANALYSIS] WARNING: CallGraph failed -- %s\n"
+                "  -> Pipeline continues but call-graph intelligence is DISABLED for this run." % reason,
+                file=sys.stderr,
+            )
     except Exception as cg_exc:
-        logger.debug("[v2] Pre-analysis call graph scan skipped: %s", cg_exc)
+        logger.warning("[v2] Pre-analysis call graph scan raised: %s", cg_exc)
+        print(
+            "[PRE-ANALYSIS] WARNING: CallGraph scan raised %s: %s\n"
+            "  -> Pipeline continues but call-graph intelligence is DISABLED for this run."
+            % (type(cg_exc).__name__, cg_exc),
+            file=sys.stderr,
+        )
 
     print("[PRE-ANALYSIS] running full pipeline", file=sys.stderr)
 

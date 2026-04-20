@@ -1,0 +1,20 @@
+{
+  "session": "step0-todo-decomposition-enhancement",
+  "created": "2026-04-20",
+  "todo_list": [
+    {"id": "todo_001", "title": "solution-architect: Architecture Blueprint", "agent": "solution-architect", "phase": "A", "status": "completed"},
+    {"id": "todo_002", "title": "consensus-agent: Validate Blueprint", "agent": "consensus-agent", "phase": "A", "status": "completed"},
+    {"id": "todo_003", "title": "python-backend-engineer: B1+B2+B4 (todo_decomposer, todo_executor, routing fix)", "agent": "python-backend-engineer", "phase": "B", "status": "completed"},
+    {"id": "todo_004", "title": "ai-engineer: B3 (FlowState + subgraph wiring)", "agent": "ai-engineer", "phase": "B", "status": "completed"},
+    {"id": "todo_005", "title": "qa-testing-agent: Tests + regression check", "agent": "qa-testing-agent", "phase": "C", "status": "completed"}
+  ],
+  "completed_todos": ["todo_001", "todo_002", "todo_003", "todo_004", "todo_005"],
+  "current_todo_index": 5,
+  "todo_results": {
+    "todo_001": {"status": "SUCCESS", "agent": "solution-architect"},
+    "todo_002": {"status": "APPROVED_WITH_CONDITIONS", "agent": "consensus-agent", "conditions_resolved": "Option A sidecar, resume from file, checkpoint_manager Optional"},
+    "todo_003": {"status": "SUCCESS", "agent": "python-backend-engineer+claude-direct", "files": ["todo_decomposer.py", "todo_executor.py", "state_definition.py +4 fields"]},
+    "todo_004": {"status": "SUCCESS", "agent": "ai-engineer", "files": ["step_wrappers_0to4.py lines 121-166 replaced + todo_list/todo_results injected"]},
+    "todo_005": {"status": "SUCCESS", "agent": "qa-testing-agent", "files": ["tests/test_todo_decomposition.py"], "tests": "27 passed / 0 failed / 0 errored"}
+  }
+}
